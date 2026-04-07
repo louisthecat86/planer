@@ -1,0 +1,23 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-deps
+.packages
+.pub-cache/
+.pub/
+build/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Pods/
+
+# Local files
+*.iml
+*.lock
+*.log
+.DS_Store
+android/.gradle/
+android/captures/
+
+# Generated
+.idea/
+.vscode/
