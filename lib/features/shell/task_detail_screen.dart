@@ -49,7 +49,9 @@ class TaskDetailScreen extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   snapshot.error.toString(),
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -94,7 +96,7 @@ class TaskDetailScreen extends ConsumerWidget {
                           ),
                           Chip(
                             label: Text(_statusLabel(task.status)),
-                            backgroundColor: statusColor.withOpacity(0.14),
+                            backgroundColor: statusColor.withValues(alpha: 0.14),
                             labelStyle: TextStyle(color: statusColor),
                           ),
                         ],
@@ -214,7 +216,7 @@ class _TaskDetailData {
 }
 
 class _DetailBadge extends StatelessWidget {
-  const _DetailBadge({required this.icon, required this.label, super.key});
+  const _DetailBadge({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -222,15 +224,15 @@ class _DetailBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      avatar: Icon(icon, size: 16, color: Colors.grey.shade700),
+      avatar: Icon(icon, size: 16, color: Theme.of(context).colorScheme.onSurfaceVariant),
       label: Text(label),
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     );
   }
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value, super.key});
+  const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;

@@ -7,7 +7,7 @@ analyzer:
     - "database.dart"
     - "home_screen.dart"
     - "abteilungen.dart"
-    - "test/widget_test.dart"
+    - "home_screen_new.dart"
   language:
     strict-casts: true
     strict-inference: true

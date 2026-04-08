@@ -8,9 +8,9 @@ class BackupManagementScreen extends ConsumerWidget {
   final AppDatabase database;
 
   const BackupManagementScreen({
+    super.key,
     required this.database,
-    Key? key,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -174,13 +174,13 @@ class BackupManagementScreen extends ConsumerWidget {
             Text(
               'Fehler beim Laden der Backups',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18),
+              style: const TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(
               error.toString(),
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],
         ),

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../constants/abteilungen.dart';
 import '../services/department_capacity_service.dart';
 
 final departmentCapacityNotifierProvider =
@@ -29,7 +28,7 @@ class DepartmentCapacityNotifier
     final updated = Map<String, double>.from(current)
       ..[abteilung] = minutes.clamp(60, 1440);
 
-    state = AsyncValue.loading();
+    state = const AsyncValue.loading();
     try {
       await DepartmentCapacityService.saveCapacities(updated);
       state = AsyncValue.data(updated);

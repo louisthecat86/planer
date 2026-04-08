@@ -7,13 +7,19 @@ import '../../core/providers/personnel_provider.dart';
 import '../../core/services/personnel_service.dart';
 
 class PersonnelPlanningSection extends ConsumerWidget {
-  const PersonnelPlanningSection({required this.db, super.key});
+  const PersonnelPlanningSection({required this.db, required this.selectedDate, super.key});
 
   final AppDatabase db;
+  final DateTime selectedDate;
 
   Future<List<ProductionTask>> _loadActiveTasks() async {
+    final startOfDay = selectedDate;
+    final startOfNextDay = selectedDate.add(const Duration(days: 1));
+
     return (db.select(db.productionTasks)
           ..where((tbl) => tbl.deletedAt.isNull())
+          ..where((tbl) => tbl.datum.isBiggerOrEqualValue(startOfDay))
+          ..where((tbl) => tbl.datum.isSmallerThanValue(startOfNextDay))
           ..where((tbl) => tbl.status.isNotIn(const ['storniert'])))
         .get();
   }
@@ -21,7 +27,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final planState = ref.watch(personnelPlanNotifierProvider);
-    final today = DateTime.now();
+    final today = selectedDate;
 
     return planState.when(
       data: (plan) => FutureBuilder<List<ProductionTask>>(
@@ -36,12 +42,12 @@ class PersonnelPlanningSection extends ConsumerWidget {
 
           if (snapshot.hasError) {
             return Card(
-              color: Colors.red.shade50,
+              color: Theme.of(context).colorScheme.errorContainer,
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Text(
                   'Fehler beim Laden der Personalplanung: ${snapshot.error}',
-                  style: const TextStyle(color: Colors.red),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
               ),
             );
@@ -163,7 +169,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
                                 employees: plan.employees,
                                 onDelete: () => ref
                                     .read(personnelPlanNotifierProvider.notifier)
-                                    .removeVacation(vacation.id),
+                                  .removeVacation(vacation.id),
                               ))
                           .toList(),
                     ),
@@ -178,12 +184,12 @@ class PersonnelPlanningSection extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (error, stackTrace) => Card(
-        color: Colors.red.shade50,
+        color: Theme.of(context).colorScheme.errorContainer,
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Text(
             'Fehler beim Laden der Personalplanung: $error',
-            style: const TextStyle(color: Colors.red),
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
           ),
         ),
       ),
@@ -245,7 +251,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
               if (formKey.currentState?.validate() != true) return;
               Navigator.pop(context, true);
             },
-            child: const Text('Speichern'),
+                child: const Text('Speichern'),
           ),
         ],
       ),
@@ -390,7 +396,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
 }
 
 class _InfoBadge extends StatelessWidget {
-  const _InfoBadge({required this.label, required this.value, required this.icon, super.key});
+  const _InfoBadge({required this.label, required this.value, required this.icon});
 
   final String label;
   final String value;
@@ -399,9 +405,9 @@ class _InfoBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Chip(
-      avatar: Icon(icon, size: 18, color: Colors.black54),
+      avatar: Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
       label: Text('$label: $value'),
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     );
   }
 }
@@ -435,7 +441,7 @@ class _DepartmentStaffStatus {
 }
 
 class _DepartmentStaffCard extends StatelessWidget {
-  const _DepartmentStaffCard({required this.status, super.key});
+  const _DepartmentStaffCard({required this.status});
 
   final _DepartmentStaffStatus status;
 
@@ -493,7 +499,7 @@ class _DepartmentStaffCard extends StatelessWidget {
 }
 
 class _MiniStatChip extends StatelessWidget {
-  const _MiniStatChip({required this.label, required this.value, super.key});
+  const _MiniStatChip({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -502,7 +508,7 @@ class _MiniStatChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Chip(
       label: Text('$label: $value'),
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
     );
   }
 }
@@ -512,7 +518,6 @@ class _VacationRow extends StatelessWidget {
     required this.vacation,
     required this.employees,
     required this.onDelete,
-    super.key,
   });
 
   final VacationEntry vacation;
@@ -530,8 +535,7 @@ class _VacationRow extends StatelessWidget {
       child: ListTile(
         title: Text(employee.name),
         subtitle: Text(
-          '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}' +
-              (vacation.reason.isNotEmpty ? ' • ${vacation.reason}' : ''),
+          '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}${vacation.reason.isNotEmpty ? ' • ${vacation.reason}' : ''}',
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline),

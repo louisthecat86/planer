@@ -83,7 +83,10 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
               const Text(
                 'Willkommen beim Produktionsplaner. Lade optional ein Backup oder gehe direkt zur App.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.black54),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 40),
               ElevatedButton.icon(
@@ -115,7 +118,7 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
               ),
               const SizedBox(height: 24),
               Container(
-                margin: EdgeInsets.zero,
+                margin: const EdgeInsets.zero,
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   border: Border.all(color: Colors.blue.shade200),

@@ -7,7 +7,7 @@ import '../constants/abteilungen.dart';
 
 class PersonnelService {
   static const String _fileName = 'personnel_plan.json';
-  static final _uuid = Uuid();
+  static const _uuid = Uuid();
 
   static Future<File> _getPlanFile() async {
     final appDocDir = await getApplicationDocumentsDirectory();
