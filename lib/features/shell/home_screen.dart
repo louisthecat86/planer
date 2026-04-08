@@ -584,7 +584,7 @@ class _TaskPlannerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(14),
-      onTap: () => context.pushNamed('taskDetail', params: {'taskId': item.task.id}),
+      onTap: () => context.pushNamed('taskDetail', pathParameters: {'taskId': item.task.id}),
       child: Card(
         margin: const EdgeInsets.only(bottom: 12),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

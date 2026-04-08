@@ -42,7 +42,7 @@ class ProduktionPlanerApp extends ConsumerWidget {
           path: '/task/:taskId',
           name: 'taskDetail',
           builder: (context, state) {
-            final taskId = state.params['taskId'];
+            final taskId = state.pathParameters['taskId'];
             return TaskDetailScreen(
               database: db,
               taskId: taskId ?? '',

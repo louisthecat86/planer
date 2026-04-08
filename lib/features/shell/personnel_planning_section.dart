@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/personnel_provider.dart';
+import '../../core/services/personnel_service.dart';
 
 class PersonnelPlanningSection extends ConsumerWidget {
   const PersonnelPlanningSection({required this.db, super.key});

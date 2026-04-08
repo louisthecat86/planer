@@ -268,7 +268,7 @@ class BackupService {
       final product = Product.fromJson(p);
       await db.into(db.products).insert(
             product.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => ProductsCompanion(
                 artikelbezeichnung: Value(product.artikelbezeichnung),
                 beschreibung: Value(product.beschreibung),
@@ -286,7 +286,7 @@ class BackupService {
       final material = RawMaterial.fromJson(m);
       await db.into(db.rawMaterials).insert(
             material.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => RawMaterialsCompanion(
                 name: Value(material.name),
                 artikelnummer: Value(material.artikelnummer),
@@ -308,7 +308,7 @@ class BackupService {
       final step = ProductStep.fromJson(s);
       await db.into(db.productSteps).insert(
             step.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => ProductStepsCompanion(
                 productId: Value(step.productId),
                 reihenfolge: Value(step.reihenfolge),
@@ -334,7 +334,7 @@ class BackupService {
       final productRawMaterial = ProductRawMaterial.fromJson(item);
       await db.into(db.productRawMaterials).insert(
             productRawMaterial.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => ProductRawMaterialsCompanion(
                 productId: Value(productRawMaterial.productId),
                 rawMaterialId: Value(productRawMaterial.rawMaterialId),
@@ -354,7 +354,7 @@ class BackupService {
       final batch = RawMaterialBatche.fromJson(b);
       await db.into(db.rawMaterialBatches).insert(
             batch.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => RawMaterialBatchesCompanion(
                 rawMaterialId: Value(batch.rawMaterialId),
                 chargennummer: Value(batch.chargennummer),
@@ -394,7 +394,7 @@ class BackupService {
               updatedAt: Value(task.updatedAt),
               deletedAt: task.deletedAt == null ? const Value.absent() : Value(task.deletedAt),
             ),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => ProductionTasksCompanion(
                 productId: Value(task.productId),
                 mengeKg: Value(task.mengeKg),
@@ -427,7 +427,7 @@ class BackupService {
       final run = ProductionRun.fromJson(r);
       await db.into(db.productionRuns).insert(
             run.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => ProductionRunsCompanion(
                 taskId: Value(run.taskId),
                 tatsaechlicheDauerMinuten: Value(run.tatsaechlicheDauerMinuten),
@@ -450,7 +450,7 @@ class BackupService {
       final dep = TaskDependency.fromJson(d);
       await db.into(db.taskDependencies).insert(
             dep.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => TaskDependenciesCompanion(
                 fromTaskId: Value(dep.fromTaskId),
                 toTaskId: Value(dep.toTaskId),
@@ -468,7 +468,7 @@ class BackupService {
       final orderItem = OrderListItem.fromJson(item);
       await db.into(db.orderListItems).insert(
             orderItem.toCompanion(true),
-            onConflict: DoUpdateSet(
+            onConflict: DoUpdate(
               (old) => OrderListItemsCompanion(
                 rawMaterialId: Value(orderItem.rawMaterialId),
                 wocheStartDatum: Value(orderItem.wocheStartDatum),
