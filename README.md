@@ -11,9 +11,9 @@ aus einer einzigen Flutter-Codebase.
 - Lokale SQLite-Datenbank via [drift](https://drift.simonbinder.eu/)
 - Komplettes Datenmodell für Produkte, Rezepturen, Rohwaren, Chargen (HACCP),
   Produktions-Aufträge, Ist-Erfassung und Bestellliste
-- Alle Tabellen sync-vorbereitet (UUID-IDs, `updated_at`, Soft-Delete)
-- Paralleles Supabase-Schema unter `supabase/schema.sql` für Phase 6
-- GitHub-Actions-CI mit Analyse, Codegen und Android-APK-Build
+- Alle Tabellen offline- und backup-fähig vorbereitet (UUID-IDs, `updated_at`, Soft-Delete)
+- GitHub-Actions-CI mit Analyse, Codegen, Android-APK-Build und Desktop-Builds
+- Backup-Paketfunktion: exportiert `*.planerbackup` als Gesamtpaket für späteren Import
 
 Phase 1a hat **noch keine** Stammdaten-UI — das folgt in Phase 1b.
 
@@ -28,7 +28,7 @@ Phase 1a hat **noch keine** Stammdaten-UI — das folgt in Phase 1b.
 | 3  | Abhängigkeits-Visualisierung zwischen Abteilungen | offen |
 | 4  | Rohwaren-Bedarfsrechnung (MRP) + Bestellliste | offen |
 | 5  | Quality of life, Export, Drucken | offen |
-| 6  | Supabase-Sync für Multi-Device-Betrieb | offen |
+| 6  | Backup/Restore + optionaler Sync-Ansatz | offen |
 
 ## Projektstruktur
 
@@ -54,11 +54,9 @@ lib/
 │
 └── shared/                        Wiederverwendbare Widgets und Utils
 
-supabase/
-└── schema.sql                     Postgres-Schema parallel zum drift-Schema
-
 .github/workflows/
-└── flutter.yml                    CI: Analyse + APK-Build
+├── flutter.yml                    CI: Analyse + APK-Build
+└── desktop_build.yml              CI: Desktop-Builds für Linux/Windows/macOS
 ```
 
 ## Entwicklungs-Setup
@@ -87,14 +85,12 @@ laufen lassen, sonst ist `database.g.dart` veraltet.
 
 ## Architektur-Prinzipien
 
-- **Offline-first**: Die App ist ohne Internet voll funktionsfähig. Sync ist
-  ein additives Feature für Phase 6, kein Fundament.
-- **UUIDs statt Auto-Increment**: Vermeidet ID-Kollisionen beim späteren
-  Sync zwischen Geräten.
+- **Offline-first**: Die App ist ohne Internet voll funktionsfähig. Backup ist das zentrale Sicherungsmodell.
+- **UUIDs statt Auto-Increment**: Vermeidet ID-Kollisionen bei späteren Datenimporten.
 - **Soft-Delete überall**: `deleted_at IS NULL`-Filter in jeder Query.
-  Harte Löschungen sind mit Multi-Device-Sync nicht sauber abbildbar.
-- **updated_at diszipliniert pflegen**: In jedem Repository-Write manuell
-  neu setzen. Ist die Grundlage für last-write-wins beim Sync.
+  Harte Löschungen sind risikoreich für Datenintegrität.
+- **updated_at diszipliniert pflegen**: In jedem Repository-Write manuell neu setzen.
+  Das unterstützt konsistente Änderungsinformationen und zukünftige Konfliktlösungen.
 - **Clean Architecture pro Feature**: `data/` (Drift-Queries), `domain/`
   (reine Dart-Logik, testbar), `presentation/` (Flutter-Widgets).
 - **Lernlogik ist Statistik, keine KI**: Mittelwerte und Standardabweichung
