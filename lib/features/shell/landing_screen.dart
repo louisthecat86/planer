@@ -80,7 +80,7 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Willkommen beim Produktionsplaner. Lade optional ein Backup oder gehe direkt zur App.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
