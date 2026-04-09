@@ -215,7 +215,7 @@ void main() {
     return;
   }
 
-  final outPath = 'stammdaten_vorlage.xlsx';
+  const outPath = 'stammdaten_vorlage.xlsx';
   File(outPath).writeAsBytesSync(bytes);
   print('✅ Excel-Vorlage erstellt: $outPath');
   print('');
