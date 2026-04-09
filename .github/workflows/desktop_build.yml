@@ -49,6 +49,9 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
+      - name: Code generation (drift, riverpod)
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
 
@@ -79,6 +82,9 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
+      - name: Code generation (drift, riverpod)
+        run: dart run build_runner build --delete-conflicting-outputs
+
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
 
@@ -108,6 +114,9 @@ jobs:
 
       - name: Pub get
         run: flutter pub get
+
+      - name: Code generation (drift, riverpod)
+        run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Enable macOS desktop
         run: flutter config --enable-macos-desktop
