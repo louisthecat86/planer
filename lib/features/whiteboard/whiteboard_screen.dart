@@ -173,17 +173,18 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.chevron_left),
-          tooltip: 'Vorheriger Tag',
-          onPressed: _previousDay,
-        ),
+        leading: const BackButton(),
         title: Text(
           'KW $kw · $weekdayName ${date.day}.${date.month}.${date.year}',
           style: const TextStyle(fontSize: 15),
         ),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Vorheriger Tag',
+            onPressed: _previousDay,
+          ),
           IconButton(
             icon: const Icon(Icons.today),
             tooltip: 'Heute',

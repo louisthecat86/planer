@@ -60,22 +60,22 @@ class AppDatabase extends _$AppDatabase {
         onUpgrade: (m, from, to) async {
           if (from < 2) {
             // Products: neue Spalten
-            await customStatement('ALTER TABLE products ADD COLUMN verpackungsart TEXT');
-            await customStatement('ALTER TABLE products ADD COLUMN gebinde_groesse_kg REAL');
-            await customStatement('ALTER TABLE products ADD COLUMN haltbarkeit_tage INTEGER');
-            await customStatement('ALTER TABLE products ADD COLUMN gesamt_ausbeute_faktor REAL');
-            await customStatement('ALTER TABLE products ADD COLUMN mindest_vorlaufzeit_tage INTEGER');
-            await customStatement('ALTER TABLE products ADD COLUMN planungsgruppe TEXT');
+            await _addColumnIfNotExists('products', 'verpackungsart', 'TEXT');
+            await _addColumnIfNotExists('products', 'gebinde_groesse_kg', 'REAL');
+            await _addColumnIfNotExists('products', 'haltbarkeit_tage', 'INTEGER');
+            await _addColumnIfNotExists('products', 'gesamt_ausbeute_faktor', 'REAL');
+            await _addColumnIfNotExists('products', 'mindest_vorlaufzeit_tage', 'INTEGER');
+            await _addColumnIfNotExists('products', 'planungsgruppe', 'TEXT');
 
             // ProductSteps: neue Spalten
-            await customStatement('ALTER TABLE product_steps ADD COLUMN ausbeute_faktor REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN wartezeit_minuten REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN min_chargen_kg REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN max_chargen_kg REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN kerntemperatur_ziel REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN raumtemperatur_max REAL');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN maschine TEXT');
-            await customStatement('ALTER TABLE product_steps ADD COLUMN maschinen_einstellungen_json TEXT');
+            await _addColumnIfNotExists('product_steps', 'ausbeute_faktor', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'wartezeit_minuten', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'min_chargen_kg', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'max_chargen_kg', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'kerntemperatur_ziel', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'raumtemperatur_max', 'REAL');
+            await _addColumnIfNotExists('product_steps', 'maschine', 'TEXT');
+            await _addColumnIfNotExists('product_steps', 'maschinen_einstellungen_json', 'TEXT');
           }
         },
         beforeOpen: (details) async {
@@ -118,6 +118,21 @@ class AppDatabase extends _$AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_order_list_woche '
       'ON order_list_items(woche_start_datum)',
     );
+  }
+
+  /// Fügt eine Spalte nur hinzu, wenn sie noch nicht existiert.
+  /// Verhindert Fehler bei wiederholter Migration.
+  Future<void> _addColumnIfNotExists(
+    String table,
+    String column,
+    String type,
+  ) async {
+    final result = await customSelect(
+      "SELECT COUNT(*) AS cnt FROM pragma_table_info('$table') WHERE name = '$column'",
+    ).getSingle();
+    if (result.read<int>('cnt') == 0) {
+      await customStatement('ALTER TABLE $table ADD COLUMN $column $type');
+    }
   }
 }
 
