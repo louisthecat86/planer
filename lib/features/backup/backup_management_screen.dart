@@ -83,13 +83,13 @@ class BackupManagementScreen extends ConsumerWidget {
         // Backup-Liste
         Expanded(
           child: backups.isEmpty
-              ? Center(
+              ? const Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.backup_outlined, size: 64, color: Colors.grey),
-                      const SizedBox(height: 16),
-                      const Text('Keine Backups vorhanden'),
+                      Icon(Icons.backup_outlined, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('Keine Backups vorhanden'),
                     ],
                   ),
                 )
@@ -174,7 +174,7 @@ class BackupManagementScreen extends ConsumerWidget {
             const Text(
               'Fehler beim Laden der Backups',
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 18),
+              style: TextStyle(fontSize: 18),
             ),
             const SizedBox(height: 8),
             Text(
