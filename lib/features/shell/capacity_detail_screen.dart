@@ -247,7 +247,7 @@ class _DepartmentCapacityCard extends ConsumerWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: LinearProgressIndicator(
-                value: _ratio > 1 ? 1 : _ratio,
+                value: _ratio > 1.0 ? 1.0 : _ratio,
                 backgroundColor: Colors.grey.shade200,
                 color: _barColor,
                 minHeight: 12,

@@ -95,7 +95,7 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
               final tasks = snapshot.data
                       ?.where((item) =>
                           _selectedAbteilung == null ||
-                          item.abteilung == _selectedAbteilung)
+                          item.abteilung == _selectedAbteilung,)
                       .toList() ??
                   [];
 
