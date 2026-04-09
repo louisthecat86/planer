@@ -136,7 +136,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
         ),
       );
 
-      ref.invalidate(weeklyTasksProvider);
+      ref.invalidate(dailyTasksProvider);
 
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

@@ -1,20 +1,26 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 
 // ---------------------------------------------------------------------------
-// Wochen-Auswahl
+// Datums-Auswahl
 // ---------------------------------------------------------------------------
 
-/// Montag der aktuell ausgewählten Woche (00:00 Uhr lokal).
-final selectedWeekStartProvider = StateProvider<DateTime>((ref) {
+/// Das aktuell angezeigte Datum (Tagesansicht).
+final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
-  final monday = now.subtract(Duration(days: now.weekday - 1));
-  return DateTime(monday.year, monday.month, monday.day);
+  return DateTime(now.year, now.month, now.day);
 });
+
+/// Montag der Woche des gewählten Datums (abgeleitet).
+DateTime mondayOfWeek(DateTime date) {
+  final d = date.subtract(Duration(days: date.weekday - 1));
+  return DateTime(d.year, d.month, d.day);
+}
 
 // ---------------------------------------------------------------------------
 // Whiteboard-Task-Modell
@@ -32,24 +38,30 @@ class WhiteboardTask {
   final String produktName;
   final String artikelnummer;
 
-  /// Spaltenindex: 0=Mo, 1=Di, 2=Mi, 3=Do, 4=Fr, 5=Sonstiges (Sa/So).
-  int get spalte {
-    final wd = task.datum.weekday; // 1=Mo … 7=So
-    return (wd >= 1 && wd <= 5) ? wd - 1 : 5;
-  }
-
   Abteilung get abteilungEnum => Abteilung.fromDbValue(task.abteilung);
+
+  /// Startzeit als Minuten seit Mitternacht (oder null).
+  int? get startMinutes {
+    final sz = task.startZeit;
+    if (sz == null || sz.isEmpty) return null;
+    final parts = sz.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return h * 60 + m;
+  }
 }
 
 // ---------------------------------------------------------------------------
-// Daten laden
+// Tages-Tasks laden
 // ---------------------------------------------------------------------------
 
-/// Alle nicht-stornierten Tasks der gewählten Woche mit Produktinfos.
-final weeklyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
+/// Alle nicht-stornierten Tasks des gewählten Tages mit Produktinfos.
+final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
   final db = ref.watch(databaseProvider);
-  final weekStart = ref.watch(selectedWeekStartProvider);
-  final weekEnd = weekStart.add(const Duration(days: 7));
+  final date = ref.watch(selectedDateProvider);
+  final nextDay = date.add(const Duration(days: 1));
 
   final query = db.select(db.productionTasks).join([
     innerJoin(
@@ -58,8 +70,8 @@ final weeklyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
     ),
   ])
     ..where(db.productionTasks.deletedAt.isNull())
-    ..where(db.productionTasks.datum.isBiggerOrEqualValue(weekStart))
-    ..where(db.productionTasks.datum.isSmallerThanValue(weekEnd))
+    ..where(db.productionTasks.datum.isBiggerOrEqualValue(date))
+    ..where(db.productionTasks.datum.isSmallerThanValue(nextDay))
     ..where(db.productionTasks.status.isNotIn(const ['storniert']));
 
   final rows = await query.get();
@@ -74,3 +86,62 @@ final weeklyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
     );
   }).toList();
 });
+
+// ---------------------------------------------------------------------------
+// Produkt planen: Tasks aus ProductSteps erzeugen
+// ---------------------------------------------------------------------------
+
+/// Erzeugt für jedes [ProductStep] eines Produkts einen [ProductionTask]
+/// und verkettet sie über [parentTaskId].
+///
+/// Die Startzeiten werden sequenziell gesetzt, mit 15 min Puffer.
+Future<void> createTasksFromProduct({
+  required AppDatabase db,
+  required String productId,
+  required double mengeKg,
+  required DateTime datum,
+}) async {
+  const uuid = Uuid();
+
+  final steps = await (db.select(db.productSteps)
+        ..where((s) => s.productId.equals(productId))
+        ..where((s) => s.deletedAt.isNull())
+        ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+      .get();
+
+  if (steps.isEmpty) return;
+
+  String? previousTaskId;
+  int offsetMinutes = 4 * 60; // Start bei 04:00
+
+  for (final step in steps) {
+    final taskId = uuid.v4();
+
+    // Dauer skalieren: fix_zeit + basis_dauer * (menge / basis_menge)
+    final fixZeit = step.fixZeitMinuten ?? 0.0;
+    final scaledDauer =
+        fixZeit + step.basisDauerMinuten * (mengeKg / step.basisMengeKg);
+    final dauer = scaledDauer.roundToDouble();
+
+    final hh = (offsetMinutes ~/ 60).toString().padLeft(2, '0');
+    final mm = (offsetMinutes % 60).toString().padLeft(2, '0');
+    final startZeit = '$hh:$mm';
+
+    await db.into(db.productionTasks).insert(
+          ProductionTasksCompanion.insert(
+            id: taskId,
+            productId: productId,
+            mengeKg: mengeKg,
+            datum: datum,
+            abteilung: step.abteilung,
+            geplanteDauerMinuten: dauer,
+            geplanteMitarbeiter: step.basisMitarbeiter,
+            startZeit: Value(startZeit),
+            parentTaskId: Value(previousTaskId),
+          ),
+        );
+
+    previousTaskId = taskId;
+    offsetMinutes += dauer.toInt() + 15; // 15 min Puffer
+  }
+}
