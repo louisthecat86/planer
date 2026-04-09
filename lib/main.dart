@@ -5,7 +5,7 @@ import 'app.dart';
 
 void main() {
   runApp(
-    ProviderScope(
+    const ProviderScope(
       child: ProduktionPlanerApp(),
     ),
   );

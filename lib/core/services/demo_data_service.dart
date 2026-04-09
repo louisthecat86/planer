@@ -58,7 +58,7 @@ class DemoDataService {
           artikelnummer: Value(p.$2),
           artikelbezeichnung: Value(p.$3),
           beschreibung: Value(p.$4),
-        ));
+        ),);
       }
 
       // ── Rohwaren ──────────────────────────────────────────────
@@ -78,7 +78,7 @@ class DemoDataService {
           artikelnummer: Value(m.$3),
           einheit: Value(m.$4),
           lieferant: Value(m.$5),
-        ));
+        ),);
       }
 
       // ── Rezepturen ────────────────────────────────────────────
@@ -97,7 +97,7 @@ class DemoDataService {
           productId: Value(r.$1),
           rawMaterialId: Value(r.$2),
           mengeProKgProdukt: Value(r.$3),
-        ));
+        ),);
       }
 
       // ── Produktionsschritte ───────────────────────────────────
@@ -184,7 +184,7 @@ class DemoDataService {
         basisMengeKg: Value(s.$2),
         basisDauerMinuten: Value(s.$3),
         basisMitarbeiter: Value(s.$4),
-      ));
+      ),);
     }
   }
 
@@ -209,7 +209,7 @@ class DemoDataService {
       geplanteDauerMinuten: Value(dauerMin),
       geplanteMitarbeiter: Value(mitarbeiter),
       status: Value(status),
-    ));
+    ),);
   }
 
   static Future<void> _insertBatch(
@@ -229,6 +229,6 @@ class DemoDataService {
       mengeInitial: Value(mengeInitial),
       mengeAktuell: Value(mengeAktuell),
       einheit: Value(einheit),
-    ));
+    ),);
   }
 }

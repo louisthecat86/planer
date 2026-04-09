@@ -561,8 +561,9 @@ class _TaskPlannerSectionState extends ConsumerState<_TaskPlannerSection> {
                 }
 
                 final tasks = snapshot.data
-                        ?.where((item) => _selectedAbteilung == null ||
-                            item.abteilung == _selectedAbteilung)
+                        ?.where((item) =>
+                            _selectedAbteilung == null ||
+                            item.abteilung == _selectedAbteilung,)
                         .toList() ??
                     [];
 

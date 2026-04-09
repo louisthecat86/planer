@@ -76,7 +76,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
                 .where((vacation) =>
                     employeesByDept[abteilung.dbValue]
                         ?.any((employee) => employee.id == vacation.employeeId) ??
-                    false)
+                    false,)
                 .length;
             final availableStaff = (totalStaff - absentStaff).clamp(0, totalStaff).toInt();
             final plannedDemand = taskEmployeesByDept[abteilung.dbValue] ?? 0;
@@ -171,7 +171,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
                                 onDelete: () => ref
                                     .read(personnelPlanNotifierProvider.notifier)
                                   .removeVacation(vacation.id),
-                              ))
+                              ),)
                           .toList(),
                     ),
                 ],
@@ -227,13 +227,13 @@ class PersonnelPlanningSection extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedDepartment,
+                initialValue: selectedDepartment,
                 decoration: const InputDecoration(labelText: 'Abteilung'),
                 items: Abteilung.values
                     .map((abteilung) => DropdownMenuItem(
                           value: abteilung.dbValue,
                           child: Text(abteilung.anzeigeName),
-                        ))
+                        ),)
                     .toList(),
                 onChanged: (value) {
                   if (value != null) selectedDepartment = value;
@@ -318,13 +318,13 @@ class PersonnelPlanningSection extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  value: selectedEmployeeId,
+                  initialValue: selectedEmployeeId,
                   decoration: const InputDecoration(labelText: 'Mitarbeiter'),
                   items: plan.employees
                       .map((employee) => DropdownMenuItem(
                             value: employee.id,
                             child: Text(employee.name),
-                          ))
+                          ),)
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {

@@ -124,11 +124,11 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
                   border: Border.all(color: Colors.blue.shade200),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
+                child: const Padding(
+                  padding: EdgeInsets.all(18),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
