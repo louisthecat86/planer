@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/database/database.dart';
+import 'task_detail_sheet.dart';
 import 'whiteboard_provider.dart';
 
 // ---------------------------------------------------------------------------
@@ -15,8 +16,15 @@ const _kLabelWidth = 130.0;
 const _kMinCellWidth = 155.0;
 const _kMinCellHeight = 120.0;
 const _kHeaderHeight = 44.0;
+const _kTimelineHeight = 36.0;
+const _kCapacityBarHeight = 6.0;
 const _kCardWidth = 140.0;
 const _dayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sonstiges'];
+
+/// Arbeitszeit-Konstanten (04:00 – 17:00).
+const _kWorkStartHour = 4;
+const _kWorkEndHour = 17;
+const _kWorkMinutes = (_kWorkEndHour - _kWorkStartHour) * 60; // 780 min
 
 /// ISO-8601-Kalenderwoche (in Deutschland üblich).
 int _isoWeekNumber(DateTime date) {
@@ -168,6 +176,10 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
           tasks: tasks,
           weekStart: weekStart,
           onMoveTask: _moveTask,
+          onTapTask: (wbTask) async {
+            final changed = await showTaskDetailSheet(context, ref, wbTask);
+            if (changed) ref.invalidate(weeklyTasksProvider);
+          },
         ),
       ),
     );
@@ -183,11 +195,13 @@ class _WhiteboardGrid extends StatelessWidget {
     required this.tasks,
     required this.weekStart,
     required this.onMoveTask,
+    required this.onTapTask,
   });
 
   final List<WhiteboardTask> tasks;
   final DateTime weekStart;
   final Future<void> Function(WhiteboardTask, Abteilung, int) onMoveTask;
+  final void Function(WhiteboardTask) onTapTask;
 
   @override
   Widget build(BuildContext context) {
@@ -208,6 +222,7 @@ class _WhiteboardGrid extends StatelessWidget {
           child: Column(
             children: [
               _buildHeader(context, cellWidth, todayDate),
+              _buildTimelineRow(context, cellWidth),
               Expanded(
                 child: SingleChildScrollView(
                   physics: const ClampingScrollPhysics(),
@@ -301,6 +316,46 @@ class _WhiteboardGrid extends StatelessWidget {
     );
   }
 
+  // ---- Zeitachse-Zeile (04:00 – 17:00) ----
+
+  Widget _buildTimelineRow(BuildContext context, double cellWidth) {
+    return Container(
+      height: _kTimelineHeight,
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.shade300),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _kLabelWidth,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: Text(
+                'Zeit',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ),
+          ),
+          for (var col = 0; col < 6; col++)
+            SizedBox(
+              width: cellWidth,
+              child: _TimelineCell(
+                cellWidth: cellWidth,
+                tasks: tasks.where((t) => t.spalte == col).toList(),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   // ---- Abteilungs-Zeile ----
 
   Widget _buildDepartmentRow(
@@ -309,6 +364,9 @@ class _WhiteboardGrid extends StatelessWidget {
     double cellWidth,
     DateTime todayDate,
   ) {
+    // Kapazität pro Tag: _kWorkMinutes (780 min).
+    final deptTasks = tasks.where((t) => t.abteilungEnum == abt).toList();
+
     return IntrinsicHeight(
       child: Container(
         constraints: const BoxConstraints(minHeight: _kMinCellHeight),
@@ -320,7 +378,7 @@ class _WhiteboardGrid extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Label links
+            // Label links + Kapazitätsbalken
             SizedBox(
               width: _kLabelWidth,
               child: Container(
@@ -332,30 +390,41 @@ class _WhiteboardGrid extends StatelessWidget {
                   ),
                   color: abt.farbe.withValues(alpha: 0.06),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    CircleAvatar(
-                      radius: 14,
-                      backgroundColor: abt.farbe,
-                      child: Text(
-                        abt.kurzcode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: abt.farbe,
+                          child: Text(
+                            abt.kurzcode,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            abt.anzeigeName,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        abt.anzeigeName,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                    const SizedBox(height: 6),
+                    _DeptCapacityBar(
+                      tasks: deptTasks,
+                      capacityMinutes: _kWorkMinutes.toDouble(),
                     ),
                   ],
                 ),
@@ -375,6 +444,7 @@ class _WhiteboardGrid extends StatelessWidget {
                           (t) => t.abteilungEnum == abt && t.spalte == col,)
                       .toList(),
                   onMoveTask: onMoveTask,
+                  onTapTask: onTapTask,
                 ),
               ),
           ],
@@ -395,6 +465,7 @@ class _WhiteboardCell extends StatelessWidget {
     required this.isToday,
     required this.tasks,
     required this.onMoveTask,
+    required this.onTapTask,
   });
 
   final Abteilung abteilung;
@@ -402,6 +473,7 @@ class _WhiteboardCell extends StatelessWidget {
   final bool isToday;
   final List<WhiteboardTask> tasks;
   final Future<void> Function(WhiteboardTask, Abteilung, int) onMoveTask;
+  final void Function(WhiteboardTask) onTapTask;
 
   @override
   Widget build(BuildContext context) {
@@ -448,7 +520,10 @@ class _WhiteboardCell extends StatelessWidget {
                             opacity: 0.30,
                             child: _TaskCard(task: task),
                           ),
-                          child: _TaskCard(task: task),
+                          child: GestureDetector(
+                            onTap: () => onTapTask(task),
+                            child: _TaskCard(task: task),
+                          ),
                         ),
                       ),
                   ],
@@ -578,6 +653,164 @@ class _TaskCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Zeitachse-Zelle (04:00–17:00 Stundenraster mit Task-Blöcken)
+// ---------------------------------------------------------------------------
+
+class _TimelineCell extends StatelessWidget {
+  const _TimelineCell({
+    required this.cellWidth,
+    required this.tasks,
+  });
+
+  final double cellWidth;
+  final List<WhiteboardTask> tasks;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          left: BorderSide(color: Colors.grey.shade200, width: 0.5),
+        ),
+      ),
+      child: CustomPaint(
+        size: Size(cellWidth, _kTimelineHeight),
+        painter: _TimelinePainter(tasks: tasks),
+      ),
+    );
+  }
+}
+
+class _TimelinePainter extends CustomPainter {
+  _TimelinePainter({required this.tasks});
+
+  final List<WhiteboardTask> tasks;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final bgPaint = Paint()..color = Colors.grey.shade100;
+    canvas.drawRect(Offset.zero & size, bgPaint);
+
+    // Stundenlinien zeichnen.
+    final linePaint = Paint()
+      ..color = Colors.grey.shade300
+      ..strokeWidth = 0.5;
+    final textStyle = TextStyle(fontSize: 8, color: Colors.grey.shade500);
+
+    for (var h = _kWorkStartHour; h <= _kWorkEndHour; h += 2) {
+      final x = _hourToX(h.toDouble(), size.width);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
+
+      final tp = TextPainter(
+        text: TextSpan(text: '${h.toString().padLeft(2, '0')}', style: textStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x + 2, 1));
+    }
+
+    // Task-Blöcke einzeichnen.
+    for (final task in tasks) {
+      final startMin = _parseStartMinutes(task.task.startZeit);
+      if (startMin == null) continue;
+
+      final endMin = startMin + task.task.geplanteDauerMinuten;
+      final x1 = _hourToX(startMin / 60.0, size.width);
+      final x2 = _hourToX(endMin / 60.0, size.width);
+
+      final color = task.abteilungEnum.farbe;
+      final blockPaint = Paint()..color = color.withValues(alpha: 0.5);
+      final rect = Rect.fromLTRB(
+        x1.clamp(0.0, size.width),
+        4,
+        x2.clamp(0.0, size.width),
+        size.height - 4,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(3)),
+        blockPaint,
+      );
+    }
+  }
+
+  double _hourToX(double hour, double width) {
+    return ((hour - _kWorkStartHour) / (_kWorkEndHour - _kWorkStartHour)) *
+        width;
+  }
+
+  int? _parseStartMinutes(String? startZeit) {
+    if (startZeit == null || startZeit.isEmpty) return null;
+    final parts = startZeit.split(':');
+    if (parts.length != 2) return null;
+    final h = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    if (h == null || m == null) return null;
+    return h * 60 + m;
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimelinePainter old) =>
+      tasks.length != old.tasks.length;
+}
+
+// ---------------------------------------------------------------------------
+// Kapazitätsbalken pro Abteilung (Woche gesamt)
+// ---------------------------------------------------------------------------
+
+class _DeptCapacityBar extends StatelessWidget {
+  const _DeptCapacityBar({
+    required this.tasks,
+    required this.capacityMinutes,
+  });
+
+  final List<WhiteboardTask> tasks;
+  final double capacityMinutes;
+
+  @override
+  Widget build(BuildContext context) {
+    // Summe der geplanten Minuten über die Woche, pro Arbeitstag.
+    final totalUsed = tasks.fold<double>(
+      0.0,
+      (sum, t) => sum + t.task.geplanteDauerMinuten,
+    );
+    // 5 Arbeitstage × Tageskapazität.
+    final weeklyCapacity = capacityMinutes * 5;
+    final ratio = weeklyCapacity > 0
+        ? (totalUsed / weeklyCapacity).clamp(0.0, 1.5)
+        : 0.0;
+
+    final color = ratio > 1.0
+        ? Colors.red
+        : ratio > 0.75
+            ? Colors.orange
+            : Colors.green;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: ratio > 1.0 ? 1.0 : ratio,
+            backgroundColor: Colors.grey.shade200,
+            color: color,
+            minHeight: _kCapacityBarHeight,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${(ratio * 100).toStringAsFixed(0)}%',
+          style: TextStyle(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 }
