@@ -104,7 +104,7 @@ class ExcelImportService {
     final fehler = <String>[];
 
     int artikelNeu = 0;
-    final int artikelAktualisiert = 0;
+    const int artikelAktualisiert = 0;
 
     // Sheet "Artikel" prüfen
     final artikelSheet = _findSheet(excel, ['artikel', 'products', 'stammdaten']);

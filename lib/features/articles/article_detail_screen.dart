@@ -151,7 +151,7 @@ class _StepCardState extends ConsumerState<_StepCard> {
         .write(ProductStepsCompanion(
       maschinenEinstellungenJson: Value(json),
       updatedAt: Value(DateTime.now()),
-    ));
+    ),);
     widget.onUpdated();
   }
 

@@ -205,7 +205,7 @@ class _ArticleTile extends StatelessWidget {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            )),
+                            ),),
                         const SizedBox(width: 8),
                         Text(
                           '${steps.length} Schritte',
