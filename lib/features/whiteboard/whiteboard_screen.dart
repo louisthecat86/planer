@@ -59,6 +59,10 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
     final targetDate =
         weekStart.add(Duration(days: targetSpalte >= 5 ? 5 : targetSpalte));
 
+    final oldDate = wbTask.task.datum;
+    final dateDiff = targetDate.difference(oldDate);
+
+    // 1. Verschobenen Task selbst aktualisieren.
     await (db.update(db.productionTasks)
           ..where((t) => t.id.equals(wbTask.task.id)))
         .write(
@@ -69,7 +73,41 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
       ),
     );
 
+    // 2. Abhängige Vor-Tasks (Children) mitnehmen — gleicher Datums-Offset.
+    if (dateDiff.inDays != 0) {
+      await _moveDependentTasks(db, wbTask.task.id, dateDiff);
+    }
+
     ref.invalidate(weeklyTasksProvider);
+  }
+
+  /// Verschiebt alle Tasks, die über [parentTaskId] direkt oder indirekt
+  /// vom gegebenen Task abhängen, um denselben Datums-Offset.
+  Future<void> _moveDependentTasks(
+    AppDatabase db,
+    String taskId,
+    Duration dateDiff,
+  ) async {
+    // Vor-Tasks (parentTaskId zeigt auf den verschobenen Task).
+    final children = await (db.select(db.productionTasks)
+          ..where((t) => t.parentTaskId.equals(taskId))
+          ..where((t) => t.deletedAt.isNull())
+          ..where((t) => t.status.isNotIn(const ['storniert'])))
+        .get();
+
+    for (final child in children) {
+      final newDate = child.datum.add(dateDiff);
+      await (db.update(db.productionTasks)
+            ..where((t) => t.id.equals(child.id)))
+          .write(
+        ProductionTasksCompanion(
+          datum: Value(newDate),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+      // Rekursiv: Kinder des Kindes ebenfalls verschieben.
+      await _moveDependentTasks(db, child.id, dateDiff);
+    }
   }
 
   void _previousWeek() {
@@ -162,30 +200,39 @@ class _WhiteboardGrid extends StatelessWidget {
         final cellWidth =
             (availableWidth / 6).clamp(_kMinCellWidth, double.infinity);
         final totalWidth = _kLabelWidth + cellWidth * 6;
+        final needsHorizontalScroll = totalWidth > constraints.maxWidth;
 
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SizedBox(
-            width: totalWidth,
-            height: constraints.maxHeight,
-            child: Column(
-              children: [
-                _buildHeader(context, cellWidth, todayDate),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        for (final abt in Abteilung.values)
-                          _buildDepartmentRow(
-                              context, abt, cellWidth, todayDate,),
-                      ],
-                    ),
+        Widget grid = SizedBox(
+          width: totalWidth,
+          height: constraints.maxHeight,
+          child: Column(
+            children: [
+              _buildHeader(context, cellWidth, todayDate),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const ClampingScrollPhysics(),
+                  child: Column(
+                    children: [
+                      for (final abt in Abteilung.values)
+                        _buildDepartmentRow(
+                            context, abt, cellWidth, todayDate,),
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
+
+        if (needsHorizontalScroll) {
+          grid = SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const ClampingScrollPhysics(),
+            child: grid,
+          );
+        }
+
+        return grid;
       },
     );
   }
@@ -379,7 +426,7 @@ class _WhiteboardCell extends StatelessWidget {
                     : null,
           ),
           child: tasks.isEmpty
-              ? const SizedBox.shrink()
+              ? const SizedBox.expand()
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   mainAxisSize: MainAxisSize.min,
@@ -387,9 +434,8 @@ class _WhiteboardCell extends StatelessWidget {
                     for (final task in tasks)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 4),
-                        child: LongPressDraggable<WhiteboardTask>(
+                        child: Draggable<WhiteboardTask>(
                           data: task,
-                          delay: const Duration(milliseconds: 200),
                           feedback: Material(
                             elevation: 8,
                             borderRadius: BorderRadius.circular(8),
@@ -518,6 +564,17 @@ class _TaskCard extends StatelessWidget {
                 ],
               ),
             ],
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                Icon(Icons.calendar_today, size: 10, color: Colors.grey.shade500),
+                const SizedBox(width: 3),
+                Text(
+                  '${task.task.datum.day}.${task.task.datum.month}.',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
           ],
         ),
       ),

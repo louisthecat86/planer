@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -34,16 +35,24 @@ class BackupService {
 
   /// Exportiert die gesamte Datenbank als JSON-Backup.
   ///
-  /// Returns: Pfad zur erstellten Backup-Datei
-  static Future<String> exportBackup(AppDatabase database) async {
+  /// Zeigt einen "Speichern unter"-Dialog, damit der Nutzer den Speicherort
+  /// selbst wählen kann. Returns: Pfad zur erstellten Backup-Datei oder null,
+  /// wenn der Dialog abgebrochen wurde.
+  static Future<String?> exportBackup(AppDatabase database) async {
     try {
-      final backupDir = await _getBackupDir();
-      
-      // Timestamp für Dateinamen generieren
       final now = DateTime.now();
       final timeStamp = DateFormat('yyyy-MM-dd_HHmmss').format(now);
-      final filename = '${_backupFilePrefix}_$timeStamp.$_backupFileExtension';
-      final filepath = '${backupDir.path}/$filename';
+      final defaultFilename =
+          '${_backupFilePrefix}_$timeStamp.$_backupFileExtension';
+
+      // "Speichern unter"-Dialog anzeigen.
+      final outputPath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Backup speichern unter…',
+        fileName: defaultFilename,
+        type: FileType.any,
+      );
+
+      if (outputPath == null) return null; // Nutzer hat abgebrochen.
 
       // Alle Daten aus den Tabellen auslesen
       final backupData = {
@@ -63,14 +72,14 @@ class BackupService {
         },
       };
 
-      // JSON in Datei schreiben
-      final file = File(filepath);
+      // JSON in vom Nutzer gewählte Datei schreiben
+      final file = File(outputPath);
       await file.writeAsString(
         jsonEncode(backupData),
         flush: true,
       );
 
-      return filepath;
+      return outputPath;
     } catch (e) {
       throw Exception('Backup-Export fehlgeschlagen: $e');
     }

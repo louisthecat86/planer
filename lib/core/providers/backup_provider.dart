@@ -38,7 +38,7 @@ final refreshableBackupListProvider = FutureProvider<List<BackupInfo>>((ref) {
 
 /// Export-Operation mit Status.
 final backupExportProvider =
-    FutureProvider.family<String, AppDatabase>((ref, database) async {
+    FutureProvider.family<String?, AppDatabase>((ref, database) async {
   return BackupService.exportBackup(database);
 });
 
@@ -88,12 +88,12 @@ final backupSuccessProvider = StateProvider<String?>((ref) => null);
 
 /// Notifier für Export-Aktion mit Error-Handling.
 final backupExportNotifierProvider =
-    StateNotifierProvider<BackupExportNotifier, AsyncValue<String>>((ref) {
+    StateNotifierProvider<BackupExportNotifier, AsyncValue<String?>>((ref) {
   return BackupExportNotifier();
 });
 
-class BackupExportNotifier extends StateNotifier<AsyncValue<String>> {
-  BackupExportNotifier() : super(const AsyncValue.data(''));
+class BackupExportNotifier extends StateNotifier<AsyncValue<String?>> {
+  BackupExportNotifier() : super(const AsyncValue.data(null));
 
   Future<void> export(AppDatabase database) async {
     state = const AsyncValue.loading();

@@ -197,13 +197,19 @@ class BackupManagementScreen extends ConsumerWidget {
     try {
       final path = await BackupService.exportBackup(database);
 
+      if (path == null) {
+        // Nutzer hat den Dialog abgebrochen.
+        ref.read(isExportingProvider.notifier).state = false;
+        return;
+      }
+
       // Refresh die Backup-Liste
       ref.invalidate(refreshableBackupListProvider);
 
       if (context.mounted) {
         _showSuccessSnackbar(
           context,
-          '✓ Backup erfolgreich erstellt in:\n$path',
+          '✓ Backup erfolgreich gespeichert in:\n$path',
         );
       }
     } catch (e) {
