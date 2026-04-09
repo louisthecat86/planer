@@ -92,7 +92,7 @@ jobs:
         run: flutter build windows --release
 
       - name: Package Windows bundle
-        run: powershell -Command "Compress-Archive -Path build/windows/runner/Release/* -DestinationPath planer-windows.zip"
+        run: powershell -Command "Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath planer-windows.zip"
 
       - name: Upload Windows bundle
         uses: actions/upload-artifact@v4
