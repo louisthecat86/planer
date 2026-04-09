@@ -52,6 +52,11 @@ jobs:
       - name: Code generation (drift, riverpod)
         run: dart run build_runner build --delete-conflicting-outputs
 
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev
+
       - name: Enable Linux desktop
         run: flutter config --enable-linux-desktop
 
@@ -125,7 +130,9 @@ jobs:
         run: flutter build macos --release
 
       - name: Package macOS bundle
-        run: zip -r planer-macos.zip build/macos/Build/Products/Release/Runner.app
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r "$GITHUB_WORKSPACE/planer-macos.zip" *.app
 
       - name: Upload macOS bundle
         uses: actions/upload-artifact@v4
