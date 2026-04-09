@@ -7,6 +7,7 @@ import 'features/shell/home_screen.dart';
 import 'features/shell/landing_screen.dart';
 import 'features/shell/task_detail_screen.dart';
 import 'features/backup/backup_management_screen.dart';
+import 'features/whiteboard/whiteboard_screen.dart';
 import 'core/providers/database_provider.dart';
 
 /// GoRouter-Provider.
@@ -27,6 +28,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/home',
         name: 'home',
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: '/whiteboard',
+        name: 'whiteboard',
+        builder: (context, state) => const WhiteboardScreen(),
       ),
       GoRoute(
         path: '/backup',

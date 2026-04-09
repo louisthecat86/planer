@@ -77,13 +77,6 @@ class HomeScreen extends ConsumerWidget {
 
         final tiles = [
           _NavigationTile(
-            icon: Icons.dashboard_rounded,
-            label: 'Whiteboard',
-            subtitle: 'Wochenplanung per Drag & Drop',
-            color: const Color(0xFF00695C),
-            onTap: () => context.pushNamed('whiteboard'),
-          ),
-          _NavigationTile(
             icon: Icons.bar_chart_rounded,
             label: 'Kapazität',
             subtitle: 'Auslastung je Abteilung',
@@ -189,7 +182,7 @@ class _NavigationTile extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Daily overview tile
+// Daily overview tile – bundles the day's key numbers
 // ---------------------------------------------------------------------------
 
 class _DailyOverviewTile extends ConsumerWidget {
@@ -212,8 +205,20 @@ class _DailyOverviewTile extends ConsumerWidget {
           ..where((tbl) => tbl.status.isNotIn(const ['storniert'])))
         .get();
 
+    // Capacity usage
     double totalUsed = 0;
     double totalCapacity = 0;
+    for (final abteilung in Abteilung.values) {
+      final cap = capacities[abteilung.dbValue] ?? 480;
+      totalCapacity += cap;
+      for (final task in tasks) {
+        if (task.abteilung == abteilung.dbValue) {
+          totalUsed += task.geplanteDauerMinuten;
+        }
+      }
+    }
+
+    // Critical departments
     final usedByDept = <String, double>{};
     for (final task in tasks) {
       usedByDept[task.abteilung] =
@@ -223,13 +228,13 @@ class _DailyOverviewTile extends ConsumerWidget {
     for (final abteilung in Abteilung.values) {
       final cap = capacities[abteilung.dbValue] ?? 480;
       final used = usedByDept[abteilung.dbValue] ?? 0;
-      totalCapacity += cap;
-      totalUsed += used;
       if (cap > 0 && used / cap > 0.9) criticalDepts++;
     }
 
-    final absenceToday =
-        plan.vacations.where((v) => v.overlapsDate(date)).length;
+    // Personnel
+    final absenceToday = plan.vacations
+        .where((v) => v.overlapsDate(date))
+        .length;
 
     return _DailySummary(
       taskCount: tasks.length,
@@ -247,6 +252,7 @@ class _DailyOverviewTile extends ConsumerWidget {
     final capacityState = ref.watch(departmentCapacityNotifierProvider);
     final personnelState = ref.watch(personnelPlanNotifierProvider);
 
+    // Wait for both providers
     final capacities = capacityState.valueOrNull ?? {};
     final plan = personnelState.valueOrNull;
 
@@ -267,11 +273,14 @@ class _DailyOverviewTile extends ConsumerWidget {
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF37474F), Color(0xFF455A64)],
+                colors: [
+                  const Color(0xFF37474F),
+                  const Color(0xFF455A64),
+                ],
               ),
             ),
             padding: const EdgeInsets.all(20),
@@ -280,24 +289,22 @@ class _DailyOverviewTile extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.today_rounded,
-                        color: Colors.white, size: 22),
+                    const Icon(Icons.today_rounded, color: Colors.white, size: 22),
                     const SizedBox(width: 8),
                     Text(
                       'Tagesübersicht',
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
                 if (summary == null)
                   const Center(
-                      child:
-                          CircularProgressIndicator(color: Colors.white70))
+                    child: CircularProgressIndicator(color: Colors.white70),
+                  )
                 else
                   _buildMetrics(context, summary),
               ],
@@ -641,33 +648,6 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
               ],
             );
           },
-        ),
-      ),
-    );
-  }
-}
-
-class _AbteilungTile extends StatelessWidget {
-  const _AbteilungTile(this.abteilung);
-
-  final Abteilung abteilung;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: abteilung.farbe,
-          foregroundColor: Colors.white,
-          child: Text(abteilung.kurzcode),
-        ),
-        title: Text(abteilung.anzeigeName),
-        subtitle: Text(
-          'Kurzcode: ${abteilung.kurzcode}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
         ),
       ),
     );
