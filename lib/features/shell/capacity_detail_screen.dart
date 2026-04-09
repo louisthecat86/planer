@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -131,6 +132,7 @@ class _CapacityList extends StatelessWidget {
           ..where((tbl) => tbl.deletedAt.isNull())
           ..where((tbl) => tbl.datum.isBiggerOrEqualValue(startOfDay))
           ..where((tbl) => tbl.datum.isSmallerThanValue(startOfNextDay))
+
           ..where((tbl) => tbl.status.isNotIn(const ['storniert'])))
         .get();
 
@@ -236,7 +238,8 @@ class _DepartmentCapacityCard extends ConsumerWidget {
                   icon: const Icon(Icons.edit),
                   tooltip: 'Kapazität bearbeiten',
                   onPressed: () => _showEditCapacityDialog(
-                    context, ref, abteilung, capacityMinutes),
+                    context, ref, abteilung, capacityMinutes,
+                  ),
                 ),
               ],
             ),
@@ -255,7 +258,7 @@ class _DepartmentCapacityCard extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '${(_ratio * 100).clamp(0, 150).toStringAsFixed(0)}% Auslastung',
+                  '${(_ratio * 100).clamp(0.0, 150.0).toStringAsFixed(0)}% Auslastung',
                   style: TextStyle(fontWeight: FontWeight.w600, color: _barColor),
                 ),
                 Text(

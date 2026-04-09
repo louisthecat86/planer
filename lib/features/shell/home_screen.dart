@@ -9,6 +9,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/providers/department_capacity_provider.dart';
 import '../../core/providers/personnel_provider.dart';
 import '../../core/services/demo_data_service.dart';
+import '../../core/services/personnel_service.dart';
 
 const _dayNames = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
@@ -229,7 +230,7 @@ class _DailyOverviewTile extends ConsumerWidget {
     }
 
     final absenceToday =
-        plan.vacations.where((v) => v.overlapsDate(date)).length;
+        plan.vacations.where((VacationEntry v) => v.overlapsDate(date)).length;
 
     return _DailySummary(
       taskCount: tasks.length,
@@ -281,7 +282,7 @@ class _DailyOverviewTile extends ConsumerWidget {
                 Row(
                   children: [
                     const Icon(Icons.today_rounded,
-                        color: Colors.white, size: 22),
+                        color: Colors.white, size: 22,),
                     const SizedBox(width: 8),
                     Text(
                       'Tagesübersicht',
@@ -297,7 +298,7 @@ class _DailyOverviewTile extends ConsumerWidget {
                 if (summary == null)
                   const Center(
                       child:
-                          CircularProgressIndicator(color: Colors.white70))
+                          CircularProgressIndicator(color: Colors.white70),)
                 else
                   _buildMetrics(context, summary),
               ],
@@ -647,29 +648,3 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
   }
 }
 
-class _AbteilungTile extends StatelessWidget {
-  const _AbteilungTile(this.abteilung);
-
-  final Abteilung abteilung;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: abteilung.farbe,
-          foregroundColor: Colors.white,
-          child: Text(abteilung.kurzcode),
-        ),
-        title: Text(abteilung.anzeigeName),
-        subtitle: Text(
-          'Kurzcode: ${abteilung.kurzcode}',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}

@@ -9,6 +9,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/providers/department_capacity_provider.dart';
 import '../../core/providers/personnel_provider.dart';
 import '../../core/services/demo_data_service.dart';
+import '../../core/services/personnel_service.dart';
 
 const _dayNames = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
@@ -233,7 +234,7 @@ class _DailyOverviewTile extends ConsumerWidget {
 
     // Personnel
     final absenceToday = plan.vacations
-        .where((v) => v.overlapsDate(date))
+        .where((VacationEntry v) => v.overlapsDate(date))
         .length;
 
     return _DailySummary(
@@ -273,13 +274,13 @@ class _DailyOverviewTile extends ConsumerWidget {
         return Card(
           clipBehavior: Clip.antiAlias,
           child: Container(
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  const Color(0xFF37474F),
-                  const Color(0xFF455A64),
+                  Color(0xFF37474F),
+                  Color(0xFF455A64),
                 ],
               ),
             ),

@@ -61,11 +61,13 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
 
     await (db.update(db.productionTasks)
           ..where((t) => t.id.equals(wbTask.task.id)))
-        .write(ProductionTasksCompanion(
-      datum: Value(targetDate),
-      abteilung: Value(targetAbt.dbValue),
-      updatedAt: Value(DateTime.now()),
-    ));
+        .write(
+      ProductionTasksCompanion(
+        datum: Value(targetDate),
+        abteilung: Value(targetAbt.dbValue),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
 
     ref.invalidate(weeklyTasksProvider);
   }
@@ -175,7 +177,7 @@ class _WhiteboardGrid extends StatelessWidget {
                       children: [
                         for (final abt in Abteilung.values)
                           _buildDepartmentRow(
-                              context, abt, cellWidth, todayDate),
+                              context, abt, cellWidth, todayDate,),
                       ],
                     ),
                   ),
@@ -191,7 +193,7 @@ class _WhiteboardGrid extends StatelessWidget {
   // ---- Header-Zeile ----
 
   Widget _buildHeader(
-      BuildContext context, double cellWidth, DateTime todayDate) {
+      BuildContext context, double cellWidth, DateTime todayDate,) {
     return Container(
       height: _kHeaderHeight,
       decoration: BoxDecoration(
@@ -323,7 +325,7 @@ class _WhiteboardGrid extends StatelessWidget {
                       weekStart.add(Duration(days: col)) == todayDate,
                   tasks: tasks
                       .where(
-                          (t) => t.abteilungEnum == abt && t.spalte == col)
+                          (t) => t.abteilungEnum == abt && t.spalte == col,)
                       .toList(),
                   onMoveTask: onMoveTask,
                 ),

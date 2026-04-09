@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -104,12 +105,18 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.event_busy, size: 48,
-                            color: Theme.of(context).colorScheme.onSurfaceVariant),
+                        Icon(
+                            Icons.event_busy,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                         const SizedBox(height: 12),
-                        Text('Keine Aufträge für diesen Tag.',
+                        Text(
+                            'Keine Aufträge für diesen Tag.',
                             style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                        ),
                       ],
                     ),
                   ),
@@ -174,9 +181,11 @@ class _DateNavigationBar extends ConsumerWidget {
                         DateTime(picked.year, picked.month, picked.day);
                   }
                 },
-                child: Text(label,
+                child: Text(
+                    label,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
               ),
             ),
             if (!isToday)
@@ -265,13 +274,17 @@ class _TaskCard extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     backgroundColor: item.abteilung.farbe,
-                    child: Text(item.abteilung.kurzcode,
-                        style: const TextStyle(color: Colors.white)),
+                    child: Text(
+                        item.abteilung.kurzcode,
+                        style: const TextStyle(color: Colors.white),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(item.productLabel,
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                    child: Text(
+                        item.productLabel,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                   Chip(
                     label: Text(item.statusLabel),
@@ -288,21 +301,27 @@ class _TaskCard extends StatelessWidget {
                   _DetailChip(icon: Icons.schedule, label: item.durationLabel),
                   _DetailChip(
                       icon: Icons.people,
-                      label: '${item.task.geplanteMitarbeiter} MA'),
+                      label: '${item.task.geplanteMitarbeiter} MA',
+                  ),
                   _DetailChip(
                       icon: Icons.scale,
-                      label: '${item.task.mengeKg.toStringAsFixed(0)} kg'),
+                      label: '${item.task.mengeKg.toStringAsFixed(0)} kg',
+                  ),
                   if (item.task.startZeit != null)
                     _DetailChip(
-                        icon: Icons.access_time, label: item.task.startZeit!),
+                        icon: Icons.access_time, label: item.task.startZeit!,
+                    ),
                 ],
               ),
               if (item.task.notizen != null && item.task.notizen!.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(top: 10),
-                  child: Text(item.task.notizen!,
+                  child: Text(
+                      item.task.notizen!,
                       style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant)),
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                  ),
                 ),
             ],
           ),
