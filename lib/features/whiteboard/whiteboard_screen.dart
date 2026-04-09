@@ -132,7 +132,7 @@ class _WhiteboardScreenState extends ConsumerState<WhiteboardScreen> {
         .write(ProductionTasksCompanion(
       startZeit: Value(newStart),
       updatedAt: Value(DateTime.now()),
-    ));
+    ),);
     ref.invalidate(dailyTasksProvider);
   }
 
@@ -381,7 +381,7 @@ class _TimelineBoard extends StatelessWidget {
                 child: Column(
                   children: [
                     // Spacer für die Zeitachsen-Kopfzeile
-                    SizedBox(height: _kHeaderHeight),
+                    const SizedBox(height: _kHeaderHeight),
                     for (final abt in Abteilung.values)
                       _DeptLabel(
                         abt: abt,
@@ -563,8 +563,8 @@ class _HeaderPainter extends CustomPainter {
 
     for (var h = _kWorkStartHour; h <= _kWorkEndHour; h++) {
       final x = _hourToX(h.toDouble(), size.width);
-      canvas.drawLine(Offset(x, size.height - 8), Offset(x, size.height),
-          linePaint);
+      canvas.drawLine(
+          Offset(x, size.height - 8), Offset(x, size.height), linePaint,);
 
       final tp = TextPainter(
         text: TextSpan(
@@ -750,7 +750,7 @@ class _GridPainter extends CustomPainter {
             ((h + 0.5 - _kWorkStartHour) / (_kWorkEndHour - _kWorkStartHour)) *
                 size.width;
         canvas.drawLine(
-            Offset(x30, 0), Offset(x30, size.height), halfHourPaint);
+            Offset(x30, 0), Offset(x30, size.height), halfHourPaint,);
       }
     }
   }
@@ -1005,7 +1005,7 @@ class _PlanProductSheetState extends ConsumerState<_PlanProductSheet> {
         : _products
             .where((p) =>
                 p.artikelbezeichnung.toLowerCase().contains(query) ||
-                p.artikelnummer.toLowerCase().contains(query))
+                p.artikelnummer.toLowerCase().contains(query),)
             .toList();
 
     return DraggableScrollableSheet(
