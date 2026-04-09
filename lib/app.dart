@@ -8,6 +8,9 @@ import 'features/shell/landing_screen.dart';
 import 'features/shell/task_detail_screen.dart';
 import 'features/backup/backup_management_screen.dart';
 import 'features/whiteboard/whiteboard_screen.dart';
+import 'features/import/excel_import_screen.dart';
+import 'features/articles/article_list_screen.dart';
+import 'features/articles/article_detail_screen.dart';
 import 'core/providers/database_provider.dart';
 
 /// GoRouter-Provider.
@@ -38,6 +41,24 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/backup',
         name: 'backup',
         builder: (context, state) => BackupManagementScreen(database: db),
+      ),
+      GoRoute(
+        path: '/import',
+        name: 'import',
+        builder: (context, state) => const ExcelImportScreen(),
+      ),
+      GoRoute(
+        path: '/articles',
+        name: 'articles',
+        builder: (context, state) => const ArticleListScreen(),
+      ),
+      GoRoute(
+        path: '/article/:productId',
+        name: 'articleDetail',
+        builder: (context, state) {
+          final productId = state.pathParameters['productId']!;
+          return ArticleDetailScreen(productId: productId);
+        },
       ),
       GoRoute(
         path: '/task/:taskId',

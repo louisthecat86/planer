@@ -48,6 +48,42 @@ class ProductSteps extends Table {
   IntColumn get basisAnzahlMessungen =>
       integer().withDefault(const Constant(0))();
 
+  // --- Ausbeute / Verluste ---
+
+  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust (Gar, Schnitt, etc.).
+  /// NULL = kein Verlust in diesem Schritt (Faktor 1.0).
+  /// Gesamtausbeute = Produkt aller Schritt-Faktoren.
+  RealColumn get ausbeuteFaktor => real().nullable()();
+
+  // --- Wartezeit ---
+
+  /// Pflicht-Wartezeit NACH diesem Schritt, bevor der nächste starten darf
+  /// (z.B. Abkühlung 360 min, Brät ruhen 30 min). NULL/0 = sofort weiter.
+  RealColumn get wartezeitMinuten => real().nullable()();
+
+  // --- Chargengrößen / Maschinenkapazität ---
+
+  /// Min. Chargengröße in kg für diesen Schritt (z.B. Kutter min 50 kg).
+  RealColumn get minChargenKg => real().nullable()();
+
+  /// Max. Chargengröße in kg (z.B. Kutter max 200 kg).
+  /// Bei Überschreitung → mehrere Durchgänge nötig → Dauer multipliziert.
+  RealColumn get maxChargenKg => real().nullable()();
+
+  // --- HACCP / Temperatur ---
+
+  /// Ziel-Kerntemperatur in °C (z.B. 72°C beim Garen). NULL = nicht relevant.
+  RealColumn get kerntemperaturZiel => real().nullable()();
+
+  /// Maximale Raumtemperatur in °C (z.B. 12°C beim Kuttern). NULL = nicht relevant.
+  RealColumn get raumtemperaturMax => real().nullable()();
+
+  // --- Maschine ---
+
+  /// Freitext-Referenz auf die Maschine (z.B. "Kutter K200", "Bratstraße 2").
+  /// Späterer Ausbau: FK auf Maschinen-Tabelle.
+  TextColumn get maschine => text().nullable()();
+
   /// JSON-Objekt mit Maschineneinstellungen (z.B. {"temperatur": 72, "zeit_min": 45}).
   /// Bewusst frei, weil jede Abteilung andere Parameter hat. Strukturierte
   /// Validierung passiert in der Domain-Schicht.

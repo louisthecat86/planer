@@ -112,6 +112,20 @@ class HomeScreen extends ConsumerWidget {
             color: const Color(0xFF6A1B9A),
             onTap: () => context.pushNamed('backup'),
           ),
+          _NavigationTile(
+            icon: Icons.inventory_2_rounded,
+            label: 'Artikel',
+            subtitle: 'Stammdaten & Maschinen',
+            color: const Color(0xFF4E342E),
+            onTap: () => context.pushNamed('articles'),
+          ),
+          _NavigationTile(
+            icon: Icons.upload_file_rounded,
+            label: 'Excel-Import',
+            subtitle: 'Stammdaten importieren',
+            color: const Color(0xFF00838F),
+            onTap: () => context.pushNamed('import'),
+          ),
         ];
 
         return Wrap(

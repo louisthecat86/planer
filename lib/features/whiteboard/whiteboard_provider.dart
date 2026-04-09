@@ -94,8 +94,16 @@ final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
 /// Erzeugt für jedes [ProductStep] eines Produkts einen [ProductionTask]
 /// und verkettet sie über [parentTaskId].
 ///
-/// Die Startzeiten werden sequenziell gesetzt, mit 15 min Puffer.
-Future<void> createTasksFromProduct({
+/// Berücksichtigt:
+/// - **Chargengrößen**: Wenn maxChargenKg gesetzt ist, werden mehrere
+///   Durchgänge berechnet (Menge ÷ maxCharge, aufgerundet).
+/// - **Wartezeiten**: wartezeitMinuten wird als Puffer nach dem Schritt addiert.
+/// - **Ausbeute**: Rückwärtsrechnung – wenn 1000 kg Fertigware gewünscht und
+///   Gesamtausbeute 0.75, werden 1333 kg Rohware benötigt. Pro Schritt wird
+///   die eingehende Menge um den Ausbeutefaktor reduziert.
+///
+/// Gibt die berechnete Gesamt-Rohwarenmenge (Input Schritt 1) zurück.
+Future<double> createTasksFromProduct({
   required AppDatabase db,
   required String productId,
   required double mengeKg,
@@ -109,39 +117,91 @@ Future<void> createTasksFromProduct({
         ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
       .get();
 
-  if (steps.isEmpty) return;
+  if (steps.isEmpty) return mengeKg;
+
+  // Rückwärtsrechnung der Eingangsmengen pro Schritt.
+  // Letzter Schritt produziert mengeKg Fertigware.
+  // Jeder Schritt davor muss mehr Input haben wegen Ausbeuteverlust.
+  final inputMengen = List<double>.filled(steps.length, mengeKg);
+  for (var i = steps.length - 1; i >= 0; i--) {
+    final ausbeute = steps[i].ausbeuteFaktor ?? 1.0;
+    if (ausbeute > 0 && ausbeute < 1.0) {
+      // Dieser Schritt braucht mehr Input als er Output liefert
+      inputMengen[i] = inputMengen[i] / ausbeute;
+    }
+    // Vorheriger Schritt muss genug für diesen liefern
+    if (i > 0) {
+      inputMengen[i - 1] = inputMengen[i];
+    }
+  }
 
   String? previousTaskId;
   int offsetMinutes = 4 * 60; // Start bei 04:00
 
-  for (final step in steps) {
+  for (var i = 0; i < steps.length; i++) {
+    final step = steps[i];
     final taskId = uuid.v4();
+    final stepMenge = inputMengen[i];
 
     // Dauer skalieren: fix_zeit + basis_dauer * (menge / basis_menge)
     final fixZeit = step.fixZeitMinuten ?? 0.0;
-    final scaledDauer =
-        fixZeit + step.basisDauerMinuten * (mengeKg / step.basisMengeKg);
+    var scaledDauer =
+        fixZeit + step.basisDauerMinuten * (stepMenge / step.basisMengeKg);
+
+    // Chargengrößen: Wenn max_chargen_kg gesetzt ist und die Menge
+    // die Kapazität übersteigt, werden mehrere Durchgänge benötigt.
+    final maxCharge = step.maxChargenKg;
+    int durchgaenge = 1;
+    if (maxCharge != null && maxCharge > 0 && stepMenge > maxCharge) {
+      durchgaenge = (stepMenge / maxCharge).ceil();
+      // Jeder Durchgang dauert die skalierte Zeit für maxCharge,
+      // plus Fixzeit für jeden zusätzlichen Durchgang.
+      final dauerProCharge =
+          fixZeit + step.basisDauerMinuten * (maxCharge / step.basisMengeKg);
+      scaledDauer = dauerProCharge * durchgaenge;
+    }
+
     final dauer = scaledDauer.roundToDouble();
 
     final hh = (offsetMinutes ~/ 60).toString().padLeft(2, '0');
     final mm = (offsetMinutes % 60).toString().padLeft(2, '0');
     final startZeit = '$hh:$mm';
 
+    // Notizen mit berechneten Details
+    final notizen = StringBuffer();
+    if (durchgaenge > 1) {
+      notizen.write('$durchgaenge Durchgänge à ${maxCharge!.toStringAsFixed(0)} kg. ');
+    }
+    final ausbeute = step.ausbeuteFaktor;
+    if (ausbeute != null && ausbeute < 1.0) {
+      final verlust = ((1 - ausbeute) * 100).toStringAsFixed(0);
+      notizen.write('Ausbeute ${(ausbeute * 100).toStringAsFixed(0)}% '
+          '(Verlust $verlust%). ');
+    }
+
     await db.into(db.productionTasks).insert(
           ProductionTasksCompanion.insert(
             id: taskId,
             productId: productId,
-            mengeKg: mengeKg,
+            mengeKg: stepMenge,
             datum: datum,
             abteilung: step.abteilung,
             geplanteDauerMinuten: dauer,
             geplanteMitarbeiter: step.basisMitarbeiter,
             startZeit: Value(startZeit),
             parentTaskId: Value(previousTaskId),
+            notizen: Value(
+              notizen.isEmpty ? null : notizen.toString().trim(),
+            ),
           ),
         );
 
     previousTaskId = taskId;
-    offsetMinutes += dauer.toInt() + 15; // 15 min Puffer
+
+    // Offset: Dauer + Wartezeit + 15 min Puffer
+    final wartezeit = (step.wartezeitMinuten ?? 0.0).toInt();
+    offsetMinutes += dauer.toInt() + wartezeit + 15;
   }
+
+  return inputMengen[0]; // Gesamt-Rohwarenmenge für Schritt 1
 }

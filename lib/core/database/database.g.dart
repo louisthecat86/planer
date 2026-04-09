@@ -39,6 +39,42 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
       'notizen', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verpackungsartMeta =
+      const VerificationMeta('verpackungsart');
+  @override
+  late final GeneratedColumn<String> verpackungsart = GeneratedColumn<String>(
+      'verpackungsart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _gebindeGroesseKgMeta =
+      const VerificationMeta('gebindeGroesseKg');
+  @override
+  late final GeneratedColumn<double> gebindeGroesseKg = GeneratedColumn<double>(
+      'gebinde_groesse_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _haltbarkeitTageMeta =
+      const VerificationMeta('haltbarkeitTage');
+  @override
+  late final GeneratedColumn<int> haltbarkeitTage = GeneratedColumn<int>(
+      'haltbarkeit_tage', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _gesamtAusbeuteFaktorMeta =
+      const VerificationMeta('gesamtAusbeuteFaktor');
+  @override
+  late final GeneratedColumn<double> gesamtAusbeuteFaktor =
+      GeneratedColumn<double>('gesamt_ausbeute_faktor', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _mindestVorlaufzeitTageMeta =
+      const VerificationMeta('mindestVorlaufzeitTage');
+  @override
+  late final GeneratedColumn<int> mindestVorlaufzeitTage = GeneratedColumn<int>(
+      'mindest_vorlaufzeit_tage', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _planungsgruppeMeta =
+      const VerificationMeta('planungsgruppe');
+  @override
+  late final GeneratedColumn<String> planungsgruppe = GeneratedColumn<String>(
+      'planungsgruppe', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -68,6 +104,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         artikelbezeichnung,
         beschreibung,
         notizen,
+        verpackungsart,
+        gebindeGroesseKg,
+        haltbarkeitTage,
+        gesamtAusbeuteFaktor,
+        mindestVorlaufzeitTage,
+        planungsgruppe,
         createdAt,
         updatedAt,
         deletedAt
@@ -113,6 +155,42 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       context.handle(_notizenMeta,
           notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
     }
+    if (data.containsKey('verpackungsart')) {
+      context.handle(
+          _verpackungsartMeta,
+          verpackungsart.isAcceptableOrUnknown(
+              data['verpackungsart']!, _verpackungsartMeta));
+    }
+    if (data.containsKey('gebinde_groesse_kg')) {
+      context.handle(
+          _gebindeGroesseKgMeta,
+          gebindeGroesseKg.isAcceptableOrUnknown(
+              data['gebinde_groesse_kg']!, _gebindeGroesseKgMeta));
+    }
+    if (data.containsKey('haltbarkeit_tage')) {
+      context.handle(
+          _haltbarkeitTageMeta,
+          haltbarkeitTage.isAcceptableOrUnknown(
+              data['haltbarkeit_tage']!, _haltbarkeitTageMeta));
+    }
+    if (data.containsKey('gesamt_ausbeute_faktor')) {
+      context.handle(
+          _gesamtAusbeuteFaktorMeta,
+          gesamtAusbeuteFaktor.isAcceptableOrUnknown(
+              data['gesamt_ausbeute_faktor']!, _gesamtAusbeuteFaktorMeta));
+    }
+    if (data.containsKey('mindest_vorlaufzeit_tage')) {
+      context.handle(
+          _mindestVorlaufzeitTageMeta,
+          mindestVorlaufzeitTage.isAcceptableOrUnknown(
+              data['mindest_vorlaufzeit_tage']!, _mindestVorlaufzeitTageMeta));
+    }
+    if (data.containsKey('planungsgruppe')) {
+      context.handle(
+          _planungsgruppeMeta,
+          planungsgruppe.isAcceptableOrUnknown(
+              data['planungsgruppe']!, _planungsgruppeMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -144,6 +222,19 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.string, data['${effectivePrefix}beschreibung']),
       notizen: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      verpackungsart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}verpackungsart']),
+      gebindeGroesseKg: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}gebinde_groesse_kg']),
+      haltbarkeitTage: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}haltbarkeit_tage']),
+      gesamtAusbeuteFaktor: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}gesamt_ausbeute_faktor']),
+      mindestVorlaufzeitTage: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}mindest_vorlaufzeit_tage']),
+      planungsgruppe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}planungsgruppe']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -171,6 +262,28 @@ class Product extends DataClass implements Insertable<Product> {
   final String artikelbezeichnung;
   final String? beschreibung;
   final String? notizen;
+
+  /// Art der Verpackung (z.B. 'vakuum', 'map', 'frischetheke', 'thermoform').
+  final String? verpackungsart;
+
+  /// Gebindegröße in kg (z.B. 0.5, 1.0, 2.5).
+  final double? gebindeGroesseKg;
+
+  /// Haltbarkeit ab Produktion in Tagen (z.B. vakuum Leberkäse = 21 Tage).
+  final int? haltbarkeitTage;
+
+  /// Gesamtausbeute-Faktor (Rohware → Fertigware).
+  /// z.B. 0.75 = aus 1 kg Rohware werden 0.75 kg Fertigprodukt.
+  /// Wird aus den einzelnen Schritt-Ausbeutefaktoren berechnet oder manuell gesetzt.
+  final double? gesamtAusbeuteFaktor;
+
+  /// Mindest-Vorlaufzeit in Tagen (z.B. 2 = muss 2 Tage vorher geplant werden).
+  final int? mindestVorlaufzeitTage;
+
+  /// Planungsgruppe für Reihenfolge-Optimierung
+  /// (z.B. 'hell', 'dunkel', 'allergen_senf', 'allergen_soja').
+  /// Helle Produkte vor dunklen → weniger Reinigung.
+  final String? planungsgruppe;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -180,6 +293,12 @@ class Product extends DataClass implements Insertable<Product> {
       required this.artikelbezeichnung,
       this.beschreibung,
       this.notizen,
+      this.verpackungsart,
+      this.gebindeGroesseKg,
+      this.haltbarkeitTage,
+      this.gesamtAusbeuteFaktor,
+      this.mindestVorlaufzeitTage,
+      this.planungsgruppe,
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt});
@@ -194,6 +313,24 @@ class Product extends DataClass implements Insertable<Product> {
     }
     if (!nullToAbsent || notizen != null) {
       map['notizen'] = Variable<String>(notizen);
+    }
+    if (!nullToAbsent || verpackungsart != null) {
+      map['verpackungsart'] = Variable<String>(verpackungsart);
+    }
+    if (!nullToAbsent || gebindeGroesseKg != null) {
+      map['gebinde_groesse_kg'] = Variable<double>(gebindeGroesseKg);
+    }
+    if (!nullToAbsent || haltbarkeitTage != null) {
+      map['haltbarkeit_tage'] = Variable<int>(haltbarkeitTage);
+    }
+    if (!nullToAbsent || gesamtAusbeuteFaktor != null) {
+      map['gesamt_ausbeute_faktor'] = Variable<double>(gesamtAusbeuteFaktor);
+    }
+    if (!nullToAbsent || mindestVorlaufzeitTage != null) {
+      map['mindest_vorlaufzeit_tage'] = Variable<int>(mindestVorlaufzeitTage);
+    }
+    if (!nullToAbsent || planungsgruppe != null) {
+      map['planungsgruppe'] = Variable<String>(planungsgruppe);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -214,6 +351,24 @@ class Product extends DataClass implements Insertable<Product> {
       notizen: notizen == null && nullToAbsent
           ? const Value.absent()
           : Value(notizen),
+      verpackungsart: verpackungsart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verpackungsart),
+      gebindeGroesseKg: gebindeGroesseKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gebindeGroesseKg),
+      haltbarkeitTage: haltbarkeitTage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(haltbarkeitTage),
+      gesamtAusbeuteFaktor: gesamtAusbeuteFaktor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gesamtAusbeuteFaktor),
+      mindestVorlaufzeitTage: mindestVorlaufzeitTage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mindestVorlaufzeitTage),
+      planungsgruppe: planungsgruppe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(planungsgruppe),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -232,6 +387,14 @@ class Product extends DataClass implements Insertable<Product> {
           serializer.fromJson<String>(json['artikelbezeichnung']),
       beschreibung: serializer.fromJson<String?>(json['beschreibung']),
       notizen: serializer.fromJson<String?>(json['notizen']),
+      verpackungsart: serializer.fromJson<String?>(json['verpackungsart']),
+      gebindeGroesseKg: serializer.fromJson<double?>(json['gebindeGroesseKg']),
+      haltbarkeitTage: serializer.fromJson<int?>(json['haltbarkeitTage']),
+      gesamtAusbeuteFaktor:
+          serializer.fromJson<double?>(json['gesamtAusbeuteFaktor']),
+      mindestVorlaufzeitTage:
+          serializer.fromJson<int?>(json['mindestVorlaufzeitTage']),
+      planungsgruppe: serializer.fromJson<String?>(json['planungsgruppe']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -246,6 +409,12 @@ class Product extends DataClass implements Insertable<Product> {
       'artikelbezeichnung': serializer.toJson<String>(artikelbezeichnung),
       'beschreibung': serializer.toJson<String?>(beschreibung),
       'notizen': serializer.toJson<String?>(notizen),
+      'verpackungsart': serializer.toJson<String?>(verpackungsart),
+      'gebindeGroesseKg': serializer.toJson<double?>(gebindeGroesseKg),
+      'haltbarkeitTage': serializer.toJson<int?>(haltbarkeitTage),
+      'gesamtAusbeuteFaktor': serializer.toJson<double?>(gesamtAusbeuteFaktor),
+      'mindestVorlaufzeitTage': serializer.toJson<int?>(mindestVorlaufzeitTage),
+      'planungsgruppe': serializer.toJson<String?>(planungsgruppe),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -258,6 +427,12 @@ class Product extends DataClass implements Insertable<Product> {
           String? artikelbezeichnung,
           Value<String?> beschreibung = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
+          Value<String?> verpackungsart = const Value.absent(),
+          Value<double?> gebindeGroesseKg = const Value.absent(),
+          Value<int?> haltbarkeitTage = const Value.absent(),
+          Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
+          Value<int?> mindestVorlaufzeitTage = const Value.absent(),
+          Value<String?> planungsgruppe = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent()}) =>
@@ -268,6 +443,22 @@ class Product extends DataClass implements Insertable<Product> {
         beschreibung:
             beschreibung.present ? beschreibung.value : this.beschreibung,
         notizen: notizen.present ? notizen.value : this.notizen,
+        verpackungsart:
+            verpackungsart.present ? verpackungsart.value : this.verpackungsart,
+        gebindeGroesseKg: gebindeGroesseKg.present
+            ? gebindeGroesseKg.value
+            : this.gebindeGroesseKg,
+        haltbarkeitTage: haltbarkeitTage.present
+            ? haltbarkeitTage.value
+            : this.haltbarkeitTage,
+        gesamtAusbeuteFaktor: gesamtAusbeuteFaktor.present
+            ? gesamtAusbeuteFaktor.value
+            : this.gesamtAusbeuteFaktor,
+        mindestVorlaufzeitTage: mindestVorlaufzeitTage.present
+            ? mindestVorlaufzeitTage.value
+            : this.mindestVorlaufzeitTage,
+        planungsgruppe:
+            planungsgruppe.present ? planungsgruppe.value : this.planungsgruppe,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -285,6 +476,24 @@ class Product extends DataClass implements Insertable<Product> {
           ? data.beschreibung.value
           : this.beschreibung,
       notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      verpackungsart: data.verpackungsart.present
+          ? data.verpackungsart.value
+          : this.verpackungsart,
+      gebindeGroesseKg: data.gebindeGroesseKg.present
+          ? data.gebindeGroesseKg.value
+          : this.gebindeGroesseKg,
+      haltbarkeitTage: data.haltbarkeitTage.present
+          ? data.haltbarkeitTage.value
+          : this.haltbarkeitTage,
+      gesamtAusbeuteFaktor: data.gesamtAusbeuteFaktor.present
+          ? data.gesamtAusbeuteFaktor.value
+          : this.gesamtAusbeuteFaktor,
+      mindestVorlaufzeitTage: data.mindestVorlaufzeitTage.present
+          ? data.mindestVorlaufzeitTage.value
+          : this.mindestVorlaufzeitTage,
+      planungsgruppe: data.planungsgruppe.present
+          ? data.planungsgruppe.value
+          : this.planungsgruppe,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -299,6 +508,12 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('verpackungsart: $verpackungsart, ')
+          ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
+          ..write('haltbarkeitTage: $haltbarkeitTage, ')
+          ..write('gesamtAusbeuteFaktor: $gesamtAusbeuteFaktor, ')
+          ..write('mindestVorlaufzeitTage: $mindestVorlaufzeitTage, ')
+          ..write('planungsgruppe: $planungsgruppe, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -307,8 +522,21 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(id, artikelnummer, artikelbezeichnung,
-      beschreibung, notizen, createdAt, updatedAt, deletedAt);
+  int get hashCode => Object.hash(
+      id,
+      artikelnummer,
+      artikelbezeichnung,
+      beschreibung,
+      notizen,
+      verpackungsart,
+      gebindeGroesseKg,
+      haltbarkeitTage,
+      gesamtAusbeuteFaktor,
+      mindestVorlaufzeitTage,
+      planungsgruppe,
+      createdAt,
+      updatedAt,
+      deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -318,6 +546,12 @@ class Product extends DataClass implements Insertable<Product> {
           other.artikelbezeichnung == this.artikelbezeichnung &&
           other.beschreibung == this.beschreibung &&
           other.notizen == this.notizen &&
+          other.verpackungsart == this.verpackungsart &&
+          other.gebindeGroesseKg == this.gebindeGroesseKg &&
+          other.haltbarkeitTage == this.haltbarkeitTage &&
+          other.gesamtAusbeuteFaktor == this.gesamtAusbeuteFaktor &&
+          other.mindestVorlaufzeitTage == this.mindestVorlaufzeitTage &&
+          other.planungsgruppe == this.planungsgruppe &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -329,6 +563,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String> artikelbezeichnung;
   final Value<String?> beschreibung;
   final Value<String?> notizen;
+  final Value<String?> verpackungsart;
+  final Value<double?> gebindeGroesseKg;
+  final Value<int?> haltbarkeitTage;
+  final Value<double?> gesamtAusbeuteFaktor;
+  final Value<int?> mindestVorlaufzeitTage;
+  final Value<String?> planungsgruppe;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -339,6 +579,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.artikelbezeichnung = const Value.absent(),
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.verpackungsart = const Value.absent(),
+    this.gebindeGroesseKg = const Value.absent(),
+    this.haltbarkeitTage = const Value.absent(),
+    this.gesamtAusbeuteFaktor = const Value.absent(),
+    this.mindestVorlaufzeitTage = const Value.absent(),
+    this.planungsgruppe = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -350,6 +596,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required String artikelbezeichnung,
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.verpackungsart = const Value.absent(),
+    this.gebindeGroesseKg = const Value.absent(),
+    this.haltbarkeitTage = const Value.absent(),
+    this.gesamtAusbeuteFaktor = const Value.absent(),
+    this.mindestVorlaufzeitTage = const Value.absent(),
+    this.planungsgruppe = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -363,6 +615,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? artikelbezeichnung,
     Expression<String>? beschreibung,
     Expression<String>? notizen,
+    Expression<String>? verpackungsart,
+    Expression<double>? gebindeGroesseKg,
+    Expression<int>? haltbarkeitTage,
+    Expression<double>? gesamtAusbeuteFaktor,
+    Expression<int>? mindestVorlaufzeitTage,
+    Expression<String>? planungsgruppe,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -374,6 +632,14 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (artikelbezeichnung != null) 'artikelbezeichnung': artikelbezeichnung,
       if (beschreibung != null) 'beschreibung': beschreibung,
       if (notizen != null) 'notizen': notizen,
+      if (verpackungsart != null) 'verpackungsart': verpackungsart,
+      if (gebindeGroesseKg != null) 'gebinde_groesse_kg': gebindeGroesseKg,
+      if (haltbarkeitTage != null) 'haltbarkeit_tage': haltbarkeitTage,
+      if (gesamtAusbeuteFaktor != null)
+        'gesamt_ausbeute_faktor': gesamtAusbeuteFaktor,
+      if (mindestVorlaufzeitTage != null)
+        'mindest_vorlaufzeit_tage': mindestVorlaufzeitTage,
+      if (planungsgruppe != null) 'planungsgruppe': planungsgruppe,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -387,6 +653,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String>? artikelbezeichnung,
       Value<String?>? beschreibung,
       Value<String?>? notizen,
+      Value<String?>? verpackungsart,
+      Value<double?>? gebindeGroesseKg,
+      Value<int?>? haltbarkeitTage,
+      Value<double?>? gesamtAusbeuteFaktor,
+      Value<int?>? mindestVorlaufzeitTage,
+      Value<String?>? planungsgruppe,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
@@ -397,6 +669,13 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       artikelbezeichnung: artikelbezeichnung ?? this.artikelbezeichnung,
       beschreibung: beschreibung ?? this.beschreibung,
       notizen: notizen ?? this.notizen,
+      verpackungsart: verpackungsart ?? this.verpackungsart,
+      gebindeGroesseKg: gebindeGroesseKg ?? this.gebindeGroesseKg,
+      haltbarkeitTage: haltbarkeitTage ?? this.haltbarkeitTage,
+      gesamtAusbeuteFaktor: gesamtAusbeuteFaktor ?? this.gesamtAusbeuteFaktor,
+      mindestVorlaufzeitTage:
+          mindestVorlaufzeitTage ?? this.mindestVorlaufzeitTage,
+      planungsgruppe: planungsgruppe ?? this.planungsgruppe,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -422,6 +701,26 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (notizen.present) {
       map['notizen'] = Variable<String>(notizen.value);
     }
+    if (verpackungsart.present) {
+      map['verpackungsart'] = Variable<String>(verpackungsart.value);
+    }
+    if (gebindeGroesseKg.present) {
+      map['gebinde_groesse_kg'] = Variable<double>(gebindeGroesseKg.value);
+    }
+    if (haltbarkeitTage.present) {
+      map['haltbarkeit_tage'] = Variable<int>(haltbarkeitTage.value);
+    }
+    if (gesamtAusbeuteFaktor.present) {
+      map['gesamt_ausbeute_faktor'] =
+          Variable<double>(gesamtAusbeuteFaktor.value);
+    }
+    if (mindestVorlaufzeitTage.present) {
+      map['mindest_vorlaufzeit_tage'] =
+          Variable<int>(mindestVorlaufzeitTage.value);
+    }
+    if (planungsgruppe.present) {
+      map['planungsgruppe'] = Variable<String>(planungsgruppe.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -445,6 +744,12 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('verpackungsart: $verpackungsart, ')
+          ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
+          ..write('haltbarkeitTage: $haltbarkeitTage, ')
+          ..write('gesamtAusbeuteFaktor: $gesamtAusbeuteFaktor, ')
+          ..write('mindestVorlaufzeitTage: $mindestVorlaufzeitTage, ')
+          ..write('planungsgruppe: $planungsgruppe, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -524,6 +829,48 @@ class $ProductStepsTable extends ProductSteps
       type: DriftSqlType.int,
       requiredDuringInsert: false,
       defaultValue: const Constant(0));
+  static const VerificationMeta _ausbeuteFaktorMeta =
+      const VerificationMeta('ausbeuteFaktor');
+  @override
+  late final GeneratedColumn<double> ausbeuteFaktor = GeneratedColumn<double>(
+      'ausbeute_faktor', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _wartezeitMinutenMeta =
+      const VerificationMeta('wartezeitMinuten');
+  @override
+  late final GeneratedColumn<double> wartezeitMinuten = GeneratedColumn<double>(
+      'wartezeit_minuten', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _minChargenKgMeta =
+      const VerificationMeta('minChargenKg');
+  @override
+  late final GeneratedColumn<double> minChargenKg = GeneratedColumn<double>(
+      'min_chargen_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _maxChargenKgMeta =
+      const VerificationMeta('maxChargenKg');
+  @override
+  late final GeneratedColumn<double> maxChargenKg = GeneratedColumn<double>(
+      'max_chargen_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kerntemperaturZielMeta =
+      const VerificationMeta('kerntemperaturZiel');
+  @override
+  late final GeneratedColumn<double> kerntemperaturZiel =
+      GeneratedColumn<double>('kerntemperatur_ziel', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _raumtemperaturMaxMeta =
+      const VerificationMeta('raumtemperaturMax');
+  @override
+  late final GeneratedColumn<double> raumtemperaturMax =
+      GeneratedColumn<double>('raumtemperatur_max', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _maschineMeta =
+      const VerificationMeta('maschine');
+  @override
+  late final GeneratedColumn<String> maschine = GeneratedColumn<String>(
+      'maschine', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _maschinenEinstellungenJsonMeta =
       const VerificationMeta('maschinenEinstellungenJson');
   @override
@@ -570,6 +917,13 @@ class $ProductStepsTable extends ProductSteps
         dauerStdAbweichung,
         basisMitarbeiter,
         basisAnzahlMessungen,
+        ausbeuteFaktor,
+        wartezeitMinuten,
+        minChargenKg,
+        maxChargenKg,
+        kerntemperaturZiel,
+        raumtemperaturMax,
+        maschine,
         maschinenEinstellungenJson,
         notizen,
         createdAt,
@@ -653,6 +1007,46 @@ class $ProductStepsTable extends ProductSteps
           basisAnzahlMessungen.isAcceptableOrUnknown(
               data['basis_anzahl_messungen']!, _basisAnzahlMessungenMeta));
     }
+    if (data.containsKey('ausbeute_faktor')) {
+      context.handle(
+          _ausbeuteFaktorMeta,
+          ausbeuteFaktor.isAcceptableOrUnknown(
+              data['ausbeute_faktor']!, _ausbeuteFaktorMeta));
+    }
+    if (data.containsKey('wartezeit_minuten')) {
+      context.handle(
+          _wartezeitMinutenMeta,
+          wartezeitMinuten.isAcceptableOrUnknown(
+              data['wartezeit_minuten']!, _wartezeitMinutenMeta));
+    }
+    if (data.containsKey('min_chargen_kg')) {
+      context.handle(
+          _minChargenKgMeta,
+          minChargenKg.isAcceptableOrUnknown(
+              data['min_chargen_kg']!, _minChargenKgMeta));
+    }
+    if (data.containsKey('max_chargen_kg')) {
+      context.handle(
+          _maxChargenKgMeta,
+          maxChargenKg.isAcceptableOrUnknown(
+              data['max_chargen_kg']!, _maxChargenKgMeta));
+    }
+    if (data.containsKey('kerntemperatur_ziel')) {
+      context.handle(
+          _kerntemperaturZielMeta,
+          kerntemperaturZiel.isAcceptableOrUnknown(
+              data['kerntemperatur_ziel']!, _kerntemperaturZielMeta));
+    }
+    if (data.containsKey('raumtemperatur_max')) {
+      context.handle(
+          _raumtemperaturMaxMeta,
+          raumtemperaturMax.isAcceptableOrUnknown(
+              data['raumtemperatur_max']!, _raumtemperaturMaxMeta));
+    }
+    if (data.containsKey('maschine')) {
+      context.handle(_maschineMeta,
+          maschine.isAcceptableOrUnknown(data['maschine']!, _maschineMeta));
+    }
     if (data.containsKey('maschinen_einstellungen_json')) {
       context.handle(
           _maschinenEinstellungenJsonMeta,
@@ -705,6 +1099,20 @@ class $ProductStepsTable extends ProductSteps
           .read(DriftSqlType.int, data['${effectivePrefix}basis_mitarbeiter'])!,
       basisAnzahlMessungen: attachedDatabase.typeMapping.read(
           DriftSqlType.int, data['${effectivePrefix}basis_anzahl_messungen'])!,
+      ausbeuteFaktor: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ausbeute_faktor']),
+      wartezeitMinuten: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}wartezeit_minuten']),
+      minChargenKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}min_chargen_kg']),
+      maxChargenKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}max_chargen_kg']),
+      kerntemperaturZiel: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}kerntemperatur_ziel']),
+      raumtemperaturMax: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}raumtemperatur_max']),
+      maschine: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}maschine']),
       maschinenEinstellungenJson: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}maschinen_einstellungen_json']),
@@ -753,6 +1161,32 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
   /// 0 = noch nie gemessen (Schätzwerte). Ab ~5 zunehmend verlässlich.
   final int basisAnzahlMessungen;
 
+  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust (Gar, Schnitt, etc.).
+  /// NULL = kein Verlust in diesem Schritt (Faktor 1.0).
+  /// Gesamtausbeute = Produkt aller Schritt-Faktoren.
+  final double? ausbeuteFaktor;
+
+  /// Pflicht-Wartezeit NACH diesem Schritt, bevor der nächste starten darf
+  /// (z.B. Abkühlung 360 min, Brät ruhen 30 min). NULL/0 = sofort weiter.
+  final double? wartezeitMinuten;
+
+  /// Min. Chargengröße in kg für diesen Schritt (z.B. Kutter min 50 kg).
+  final double? minChargenKg;
+
+  /// Max. Chargengröße in kg (z.B. Kutter max 200 kg).
+  /// Bei Überschreitung → mehrere Durchgänge nötig → Dauer multipliziert.
+  final double? maxChargenKg;
+
+  /// Ziel-Kerntemperatur in °C (z.B. 72°C beim Garen). NULL = nicht relevant.
+  final double? kerntemperaturZiel;
+
+  /// Maximale Raumtemperatur in °C (z.B. 12°C beim Kuttern). NULL = nicht relevant.
+  final double? raumtemperaturMax;
+
+  /// Freitext-Referenz auf die Maschine (z.B. "Kutter K200", "Bratstraße 2").
+  /// Späterer Ausbau: FK auf Maschinen-Tabelle.
+  final String? maschine;
+
   /// JSON-Objekt mit Maschineneinstellungen (z.B. {"temperatur": 72, "zeit_min": 45}).
   /// Bewusst frei, weil jede Abteilung andere Parameter hat. Strukturierte
   /// Validierung passiert in der Domain-Schicht.
@@ -772,6 +1206,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       this.dauerStdAbweichung,
       required this.basisMitarbeiter,
       required this.basisAnzahlMessungen,
+      this.ausbeuteFaktor,
+      this.wartezeitMinuten,
+      this.minChargenKg,
+      this.maxChargenKg,
+      this.kerntemperaturZiel,
+      this.raumtemperaturMax,
+      this.maschine,
       this.maschinenEinstellungenJson,
       this.notizen,
       required this.createdAt,
@@ -794,6 +1235,27 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
     }
     map['basis_mitarbeiter'] = Variable<int>(basisMitarbeiter);
     map['basis_anzahl_messungen'] = Variable<int>(basisAnzahlMessungen);
+    if (!nullToAbsent || ausbeuteFaktor != null) {
+      map['ausbeute_faktor'] = Variable<double>(ausbeuteFaktor);
+    }
+    if (!nullToAbsent || wartezeitMinuten != null) {
+      map['wartezeit_minuten'] = Variable<double>(wartezeitMinuten);
+    }
+    if (!nullToAbsent || minChargenKg != null) {
+      map['min_chargen_kg'] = Variable<double>(minChargenKg);
+    }
+    if (!nullToAbsent || maxChargenKg != null) {
+      map['max_chargen_kg'] = Variable<double>(maxChargenKg);
+    }
+    if (!nullToAbsent || kerntemperaturZiel != null) {
+      map['kerntemperatur_ziel'] = Variable<double>(kerntemperaturZiel);
+    }
+    if (!nullToAbsent || raumtemperaturMax != null) {
+      map['raumtemperatur_max'] = Variable<double>(raumtemperaturMax);
+    }
+    if (!nullToAbsent || maschine != null) {
+      map['maschine'] = Variable<String>(maschine);
+    }
     if (!nullToAbsent || maschinenEinstellungenJson != null) {
       map['maschinen_einstellungen_json'] =
           Variable<String>(maschinenEinstellungenJson);
@@ -825,6 +1287,27 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           : Value(dauerStdAbweichung),
       basisMitarbeiter: Value(basisMitarbeiter),
       basisAnzahlMessungen: Value(basisAnzahlMessungen),
+      ausbeuteFaktor: ausbeuteFaktor == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ausbeuteFaktor),
+      wartezeitMinuten: wartezeitMinuten == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wartezeitMinuten),
+      minChargenKg: minChargenKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(minChargenKg),
+      maxChargenKg: maxChargenKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maxChargenKg),
+      kerntemperaturZiel: kerntemperaturZiel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kerntemperaturZiel),
+      raumtemperaturMax: raumtemperaturMax == null && nullToAbsent
+          ? const Value.absent()
+          : Value(raumtemperaturMax),
+      maschine: maschine == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maschine),
       maschinenEinstellungenJson:
           maschinenEinstellungenJson == null && nullToAbsent
               ? const Value.absent()
@@ -856,6 +1339,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       basisMitarbeiter: serializer.fromJson<int>(json['basisMitarbeiter']),
       basisAnzahlMessungen:
           serializer.fromJson<int>(json['basisAnzahlMessungen']),
+      ausbeuteFaktor: serializer.fromJson<double?>(json['ausbeuteFaktor']),
+      wartezeitMinuten: serializer.fromJson<double?>(json['wartezeitMinuten']),
+      minChargenKg: serializer.fromJson<double?>(json['minChargenKg']),
+      maxChargenKg: serializer.fromJson<double?>(json['maxChargenKg']),
+      kerntemperaturZiel:
+          serializer.fromJson<double?>(json['kerntemperaturZiel']),
+      raumtemperaturMax:
+          serializer.fromJson<double?>(json['raumtemperaturMax']),
+      maschine: serializer.fromJson<String?>(json['maschine']),
       maschinenEinstellungenJson:
           serializer.fromJson<String?>(json['maschinenEinstellungenJson']),
       notizen: serializer.fromJson<String?>(json['notizen']),
@@ -878,6 +1370,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       'dauerStdAbweichung': serializer.toJson<double?>(dauerStdAbweichung),
       'basisMitarbeiter': serializer.toJson<int>(basisMitarbeiter),
       'basisAnzahlMessungen': serializer.toJson<int>(basisAnzahlMessungen),
+      'ausbeuteFaktor': serializer.toJson<double?>(ausbeuteFaktor),
+      'wartezeitMinuten': serializer.toJson<double?>(wartezeitMinuten),
+      'minChargenKg': serializer.toJson<double?>(minChargenKg),
+      'maxChargenKg': serializer.toJson<double?>(maxChargenKg),
+      'kerntemperaturZiel': serializer.toJson<double?>(kerntemperaturZiel),
+      'raumtemperaturMax': serializer.toJson<double?>(raumtemperaturMax),
+      'maschine': serializer.toJson<String?>(maschine),
       'maschinenEinstellungenJson':
           serializer.toJson<String?>(maschinenEinstellungenJson),
       'notizen': serializer.toJson<String?>(notizen),
@@ -898,6 +1397,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           Value<double?> dauerStdAbweichung = const Value.absent(),
           int? basisMitarbeiter,
           int? basisAnzahlMessungen,
+          Value<double?> ausbeuteFaktor = const Value.absent(),
+          Value<double?> wartezeitMinuten = const Value.absent(),
+          Value<double?> minChargenKg = const Value.absent(),
+          Value<double?> maxChargenKg = const Value.absent(),
+          Value<double?> kerntemperaturZiel = const Value.absent(),
+          Value<double?> raumtemperaturMax = const Value.absent(),
+          Value<String?> maschine = const Value.absent(),
           Value<String?> maschinenEinstellungenJson = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
           DateTime? createdAt,
@@ -917,6 +1423,22 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
             : this.dauerStdAbweichung,
         basisMitarbeiter: basisMitarbeiter ?? this.basisMitarbeiter,
         basisAnzahlMessungen: basisAnzahlMessungen ?? this.basisAnzahlMessungen,
+        ausbeuteFaktor:
+            ausbeuteFaktor.present ? ausbeuteFaktor.value : this.ausbeuteFaktor,
+        wartezeitMinuten: wartezeitMinuten.present
+            ? wartezeitMinuten.value
+            : this.wartezeitMinuten,
+        minChargenKg:
+            minChargenKg.present ? minChargenKg.value : this.minChargenKg,
+        maxChargenKg:
+            maxChargenKg.present ? maxChargenKg.value : this.maxChargenKg,
+        kerntemperaturZiel: kerntemperaturZiel.present
+            ? kerntemperaturZiel.value
+            : this.kerntemperaturZiel,
+        raumtemperaturMax: raumtemperaturMax.present
+            ? raumtemperaturMax.value
+            : this.raumtemperaturMax,
+        maschine: maschine.present ? maschine.value : this.maschine,
         maschinenEinstellungenJson: maschinenEinstellungenJson.present
             ? maschinenEinstellungenJson.value
             : this.maschinenEinstellungenJson,
@@ -950,6 +1472,25 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       basisAnzahlMessungen: data.basisAnzahlMessungen.present
           ? data.basisAnzahlMessungen.value
           : this.basisAnzahlMessungen,
+      ausbeuteFaktor: data.ausbeuteFaktor.present
+          ? data.ausbeuteFaktor.value
+          : this.ausbeuteFaktor,
+      wartezeitMinuten: data.wartezeitMinuten.present
+          ? data.wartezeitMinuten.value
+          : this.wartezeitMinuten,
+      minChargenKg: data.minChargenKg.present
+          ? data.minChargenKg.value
+          : this.minChargenKg,
+      maxChargenKg: data.maxChargenKg.present
+          ? data.maxChargenKg.value
+          : this.maxChargenKg,
+      kerntemperaturZiel: data.kerntemperaturZiel.present
+          ? data.kerntemperaturZiel.value
+          : this.kerntemperaturZiel,
+      raumtemperaturMax: data.raumtemperaturMax.present
+          ? data.raumtemperaturMax.value
+          : this.raumtemperaturMax,
+      maschine: data.maschine.present ? data.maschine.value : this.maschine,
       maschinenEinstellungenJson: data.maschinenEinstellungenJson.present
           ? data.maschinenEinstellungenJson.value
           : this.maschinenEinstellungenJson,
@@ -973,6 +1514,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           ..write('dauerStdAbweichung: $dauerStdAbweichung, ')
           ..write('basisMitarbeiter: $basisMitarbeiter, ')
           ..write('basisAnzahlMessungen: $basisAnzahlMessungen, ')
+          ..write('ausbeuteFaktor: $ausbeuteFaktor, ')
+          ..write('wartezeitMinuten: $wartezeitMinuten, ')
+          ..write('minChargenKg: $minChargenKg, ')
+          ..write('maxChargenKg: $maxChargenKg, ')
+          ..write('kerntemperaturZiel: $kerntemperaturZiel, ')
+          ..write('raumtemperaturMax: $raumtemperaturMax, ')
+          ..write('maschine: $maschine, ')
           ..write('maschinenEinstellungenJson: $maschinenEinstellungenJson, ')
           ..write('notizen: $notizen, ')
           ..write('createdAt: $createdAt, ')
@@ -983,22 +1531,30 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      productId,
-      reihenfolge,
-      abteilung,
-      basisMengeKg,
-      basisDauerMinuten,
-      fixZeitMinuten,
-      dauerStdAbweichung,
-      basisMitarbeiter,
-      basisAnzahlMessungen,
-      maschinenEinstellungenJson,
-      notizen,
-      createdAt,
-      updatedAt,
-      deletedAt);
+  int get hashCode => Object.hashAll([
+        id,
+        productId,
+        reihenfolge,
+        abteilung,
+        basisMengeKg,
+        basisDauerMinuten,
+        fixZeitMinuten,
+        dauerStdAbweichung,
+        basisMitarbeiter,
+        basisAnzahlMessungen,
+        ausbeuteFaktor,
+        wartezeitMinuten,
+        minChargenKg,
+        maxChargenKg,
+        kerntemperaturZiel,
+        raumtemperaturMax,
+        maschine,
+        maschinenEinstellungenJson,
+        notizen,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1013,6 +1569,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           other.dauerStdAbweichung == this.dauerStdAbweichung &&
           other.basisMitarbeiter == this.basisMitarbeiter &&
           other.basisAnzahlMessungen == this.basisAnzahlMessungen &&
+          other.ausbeuteFaktor == this.ausbeuteFaktor &&
+          other.wartezeitMinuten == this.wartezeitMinuten &&
+          other.minChargenKg == this.minChargenKg &&
+          other.maxChargenKg == this.maxChargenKg &&
+          other.kerntemperaturZiel == this.kerntemperaturZiel &&
+          other.raumtemperaturMax == this.raumtemperaturMax &&
+          other.maschine == this.maschine &&
           other.maschinenEinstellungenJson == this.maschinenEinstellungenJson &&
           other.notizen == this.notizen &&
           other.createdAt == this.createdAt &&
@@ -1031,6 +1594,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
   final Value<double?> dauerStdAbweichung;
   final Value<int> basisMitarbeiter;
   final Value<int> basisAnzahlMessungen;
+  final Value<double?> ausbeuteFaktor;
+  final Value<double?> wartezeitMinuten;
+  final Value<double?> minChargenKg;
+  final Value<double?> maxChargenKg;
+  final Value<double?> kerntemperaturZiel;
+  final Value<double?> raumtemperaturMax;
+  final Value<String?> maschine;
   final Value<String?> maschinenEinstellungenJson;
   final Value<String?> notizen;
   final Value<DateTime> createdAt;
@@ -1048,6 +1618,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     this.dauerStdAbweichung = const Value.absent(),
     this.basisMitarbeiter = const Value.absent(),
     this.basisAnzahlMessungen = const Value.absent(),
+    this.ausbeuteFaktor = const Value.absent(),
+    this.wartezeitMinuten = const Value.absent(),
+    this.minChargenKg = const Value.absent(),
+    this.maxChargenKg = const Value.absent(),
+    this.kerntemperaturZiel = const Value.absent(),
+    this.raumtemperaturMax = const Value.absent(),
+    this.maschine = const Value.absent(),
     this.maschinenEinstellungenJson = const Value.absent(),
     this.notizen = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1066,6 +1643,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     this.dauerStdAbweichung = const Value.absent(),
     required int basisMitarbeiter,
     this.basisAnzahlMessungen = const Value.absent(),
+    this.ausbeuteFaktor = const Value.absent(),
+    this.wartezeitMinuten = const Value.absent(),
+    this.minChargenKg = const Value.absent(),
+    this.maxChargenKg = const Value.absent(),
+    this.kerntemperaturZiel = const Value.absent(),
+    this.raumtemperaturMax = const Value.absent(),
+    this.maschine = const Value.absent(),
     this.maschinenEinstellungenJson = const Value.absent(),
     this.notizen = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1090,6 +1674,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     Expression<double>? dauerStdAbweichung,
     Expression<int>? basisMitarbeiter,
     Expression<int>? basisAnzahlMessungen,
+    Expression<double>? ausbeuteFaktor,
+    Expression<double>? wartezeitMinuten,
+    Expression<double>? minChargenKg,
+    Expression<double>? maxChargenKg,
+    Expression<double>? kerntemperaturZiel,
+    Expression<double>? raumtemperaturMax,
+    Expression<String>? maschine,
     Expression<String>? maschinenEinstellungenJson,
     Expression<String>? notizen,
     Expression<DateTime>? createdAt,
@@ -1110,6 +1701,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       if (basisMitarbeiter != null) 'basis_mitarbeiter': basisMitarbeiter,
       if (basisAnzahlMessungen != null)
         'basis_anzahl_messungen': basisAnzahlMessungen,
+      if (ausbeuteFaktor != null) 'ausbeute_faktor': ausbeuteFaktor,
+      if (wartezeitMinuten != null) 'wartezeit_minuten': wartezeitMinuten,
+      if (minChargenKg != null) 'min_chargen_kg': minChargenKg,
+      if (maxChargenKg != null) 'max_chargen_kg': maxChargenKg,
+      if (kerntemperaturZiel != null) 'kerntemperatur_ziel': kerntemperaturZiel,
+      if (raumtemperaturMax != null) 'raumtemperatur_max': raumtemperaturMax,
+      if (maschine != null) 'maschine': maschine,
       if (maschinenEinstellungenJson != null)
         'maschinen_einstellungen_json': maschinenEinstellungenJson,
       if (notizen != null) 'notizen': notizen,
@@ -1131,6 +1729,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       Value<double?>? dauerStdAbweichung,
       Value<int>? basisMitarbeiter,
       Value<int>? basisAnzahlMessungen,
+      Value<double?>? ausbeuteFaktor,
+      Value<double?>? wartezeitMinuten,
+      Value<double?>? minChargenKg,
+      Value<double?>? maxChargenKg,
+      Value<double?>? kerntemperaturZiel,
+      Value<double?>? raumtemperaturMax,
+      Value<String?>? maschine,
       Value<String?>? maschinenEinstellungenJson,
       Value<String?>? notizen,
       Value<DateTime>? createdAt,
@@ -1148,6 +1753,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       dauerStdAbweichung: dauerStdAbweichung ?? this.dauerStdAbweichung,
       basisMitarbeiter: basisMitarbeiter ?? this.basisMitarbeiter,
       basisAnzahlMessungen: basisAnzahlMessungen ?? this.basisAnzahlMessungen,
+      ausbeuteFaktor: ausbeuteFaktor ?? this.ausbeuteFaktor,
+      wartezeitMinuten: wartezeitMinuten ?? this.wartezeitMinuten,
+      minChargenKg: minChargenKg ?? this.minChargenKg,
+      maxChargenKg: maxChargenKg ?? this.maxChargenKg,
+      kerntemperaturZiel: kerntemperaturZiel ?? this.kerntemperaturZiel,
+      raumtemperaturMax: raumtemperaturMax ?? this.raumtemperaturMax,
+      maschine: maschine ?? this.maschine,
       maschinenEinstellungenJson:
           maschinenEinstellungenJson ?? this.maschinenEinstellungenJson,
       notizen: notizen ?? this.notizen,
@@ -1191,6 +1803,27 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     if (basisAnzahlMessungen.present) {
       map['basis_anzahl_messungen'] = Variable<int>(basisAnzahlMessungen.value);
     }
+    if (ausbeuteFaktor.present) {
+      map['ausbeute_faktor'] = Variable<double>(ausbeuteFaktor.value);
+    }
+    if (wartezeitMinuten.present) {
+      map['wartezeit_minuten'] = Variable<double>(wartezeitMinuten.value);
+    }
+    if (minChargenKg.present) {
+      map['min_chargen_kg'] = Variable<double>(minChargenKg.value);
+    }
+    if (maxChargenKg.present) {
+      map['max_chargen_kg'] = Variable<double>(maxChargenKg.value);
+    }
+    if (kerntemperaturZiel.present) {
+      map['kerntemperatur_ziel'] = Variable<double>(kerntemperaturZiel.value);
+    }
+    if (raumtemperaturMax.present) {
+      map['raumtemperatur_max'] = Variable<double>(raumtemperaturMax.value);
+    }
+    if (maschine.present) {
+      map['maschine'] = Variable<String>(maschine.value);
+    }
     if (maschinenEinstellungenJson.present) {
       map['maschinen_einstellungen_json'] =
           Variable<String>(maschinenEinstellungenJson.value);
@@ -1226,6 +1859,13 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
           ..write('dauerStdAbweichung: $dauerStdAbweichung, ')
           ..write('basisMitarbeiter: $basisMitarbeiter, ')
           ..write('basisAnzahlMessungen: $basisAnzahlMessungen, ')
+          ..write('ausbeuteFaktor: $ausbeuteFaktor, ')
+          ..write('wartezeitMinuten: $wartezeitMinuten, ')
+          ..write('minChargenKg: $minChargenKg, ')
+          ..write('maxChargenKg: $maxChargenKg, ')
+          ..write('kerntemperaturZiel: $kerntemperaturZiel, ')
+          ..write('raumtemperaturMax: $raumtemperaturMax, ')
+          ..write('maschine: $maschine, ')
           ..write('maschinenEinstellungenJson: $maschinenEinstellungenJson, ')
           ..write('notizen: $notizen, ')
           ..write('createdAt: $createdAt, ')
@@ -5440,6 +6080,12 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   required String artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<String?> verpackungsart,
+  Value<double?> gebindeGroesseKg,
+  Value<int?> haltbarkeitTage,
+  Value<double?> gesamtAusbeuteFaktor,
+  Value<int?> mindestVorlaufzeitTage,
+  Value<String?> planungsgruppe,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -5451,6 +6097,12 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String> artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<String?> verpackungsart,
+  Value<double?> gebindeGroesseKg,
+  Value<int?> haltbarkeitTage,
+  Value<double?> gesamtAusbeuteFaktor,
+  Value<int?> mindestVorlaufzeitTage,
+  Value<String?> planungsgruppe,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -5536,6 +6188,30 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verpackungsart => $composableBuilder(
+      column: $table.verpackungsart,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get gebindeGroesseKg => $composableBuilder(
+      column: $table.gebindeGroesseKg,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get haltbarkeitTage => $composableBuilder(
+      column: $table.haltbarkeitTage,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get gesamtAusbeuteFaktor => $composableBuilder(
+      column: $table.gesamtAusbeuteFaktor,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get mindestVorlaufzeitTage => $composableBuilder(
+      column: $table.mindestVorlaufzeitTage,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get planungsgruppe => $composableBuilder(
+      column: $table.planungsgruppe,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -5637,6 +6313,30 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get verpackungsart => $composableBuilder(
+      column: $table.verpackungsart,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get gebindeGroesseKg => $composableBuilder(
+      column: $table.gebindeGroesseKg,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get haltbarkeitTage => $composableBuilder(
+      column: $table.haltbarkeitTage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get gesamtAusbeuteFaktor => $composableBuilder(
+      column: $table.gesamtAusbeuteFaktor,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get mindestVorlaufzeitTage => $composableBuilder(
+      column: $table.mindestVorlaufzeitTage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get planungsgruppe => $composableBuilder(
+      column: $table.planungsgruppe,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -5670,6 +6370,24 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get notizen =>
       $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<String> get verpackungsart => $composableBuilder(
+      column: $table.verpackungsart, builder: (column) => column);
+
+  GeneratedColumn<double> get gebindeGroesseKg => $composableBuilder(
+      column: $table.gebindeGroesseKg, builder: (column) => column);
+
+  GeneratedColumn<int> get haltbarkeitTage => $composableBuilder(
+      column: $table.haltbarkeitTage, builder: (column) => column);
+
+  GeneratedColumn<double> get gesamtAusbeuteFaktor => $composableBuilder(
+      column: $table.gesamtAusbeuteFaktor, builder: (column) => column);
+
+  GeneratedColumn<int> get mindestVorlaufzeitTage => $composableBuilder(
+      column: $table.mindestVorlaufzeitTage, builder: (column) => column);
+
+  GeneratedColumn<String> get planungsgruppe => $composableBuilder(
+      column: $table.planungsgruppe, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -5777,6 +6495,12 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String> artikelbezeichnung = const Value.absent(),
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<String?> verpackungsart = const Value.absent(),
+            Value<double?> gebindeGroesseKg = const Value.absent(),
+            Value<int?> haltbarkeitTage = const Value.absent(),
+            Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
+            Value<int?> mindestVorlaufzeitTage = const Value.absent(),
+            Value<String?> planungsgruppe = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -5788,6 +6512,12 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            verpackungsart: verpackungsart,
+            gebindeGroesseKg: gebindeGroesseKg,
+            haltbarkeitTage: haltbarkeitTage,
+            gesamtAusbeuteFaktor: gesamtAusbeuteFaktor,
+            mindestVorlaufzeitTage: mindestVorlaufzeitTage,
+            planungsgruppe: planungsgruppe,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -5799,6 +6529,12 @@ class $$ProductsTableTableManager extends RootTableManager<
             required String artikelbezeichnung,
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<String?> verpackungsart = const Value.absent(),
+            Value<double?> gebindeGroesseKg = const Value.absent(),
+            Value<int?> haltbarkeitTage = const Value.absent(),
+            Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
+            Value<int?> mindestVorlaufzeitTage = const Value.absent(),
+            Value<String?> planungsgruppe = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -5810,6 +6546,12 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            verpackungsart: verpackungsart,
+            gebindeGroesseKg: gebindeGroesseKg,
+            haltbarkeitTage: haltbarkeitTage,
+            gesamtAusbeuteFaktor: gesamtAusbeuteFaktor,
+            mindestVorlaufzeitTage: mindestVorlaufzeitTage,
+            planungsgruppe: planungsgruppe,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -5906,6 +6648,13 @@ typedef $$ProductStepsTableCreateCompanionBuilder = ProductStepsCompanion
   Value<double?> dauerStdAbweichung,
   required int basisMitarbeiter,
   Value<int> basisAnzahlMessungen,
+  Value<double?> ausbeuteFaktor,
+  Value<double?> wartezeitMinuten,
+  Value<double?> minChargenKg,
+  Value<double?> maxChargenKg,
+  Value<double?> kerntemperaturZiel,
+  Value<double?> raumtemperaturMax,
+  Value<String?> maschine,
   Value<String?> maschinenEinstellungenJson,
   Value<String?> notizen,
   Value<DateTime> createdAt,
@@ -5925,6 +6674,13 @@ typedef $$ProductStepsTableUpdateCompanionBuilder = ProductStepsCompanion
   Value<double?> dauerStdAbweichung,
   Value<int> basisMitarbeiter,
   Value<int> basisAnzahlMessungen,
+  Value<double?> ausbeuteFaktor,
+  Value<double?> wartezeitMinuten,
+  Value<double?> minChargenKg,
+  Value<double?> maxChargenKg,
+  Value<double?> kerntemperaturZiel,
+  Value<double?> raumtemperaturMax,
+  Value<String?> maschine,
   Value<String?> maschinenEinstellungenJson,
   Value<String?> notizen,
   Value<DateTime> createdAt,
@@ -5993,6 +6749,31 @@ class $$ProductStepsTableFilterComposer
   ColumnFilters<int> get basisAnzahlMessungen => $composableBuilder(
       column: $table.basisAnzahlMessungen,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get ausbeuteFaktor => $composableBuilder(
+      column: $table.ausbeuteFaktor,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get wartezeitMinuten => $composableBuilder(
+      column: $table.wartezeitMinuten,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get minChargenKg => $composableBuilder(
+      column: $table.minChargenKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get maxChargenKg => $composableBuilder(
+      column: $table.maxChargenKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kerntemperaturZiel => $composableBuilder(
+      column: $table.kerntemperaturZiel,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get raumtemperaturMax => $composableBuilder(
+      column: $table.raumtemperaturMax,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get maschine => $composableBuilder(
+      column: $table.maschine, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get maschinenEinstellungenJson => $composableBuilder(
       column: $table.maschinenEinstellungenJson,
@@ -6073,6 +6854,33 @@ class $$ProductStepsTableOrderingComposer
       column: $table.basisAnzahlMessungen,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get ausbeuteFaktor => $composableBuilder(
+      column: $table.ausbeuteFaktor,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get wartezeitMinuten => $composableBuilder(
+      column: $table.wartezeitMinuten,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get minChargenKg => $composableBuilder(
+      column: $table.minChargenKg,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get maxChargenKg => $composableBuilder(
+      column: $table.maxChargenKg,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kerntemperaturZiel => $composableBuilder(
+      column: $table.kerntemperaturZiel,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get raumtemperaturMax => $composableBuilder(
+      column: $table.raumtemperaturMax,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get maschine => $composableBuilder(
+      column: $table.maschine, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get maschinenEinstellungenJson => $composableBuilder(
       column: $table.maschinenEinstellungenJson,
       builder: (column) => ColumnOrderings(column));
@@ -6146,6 +6954,27 @@ class $$ProductStepsTableAnnotationComposer
   GeneratedColumn<int> get basisAnzahlMessungen => $composableBuilder(
       column: $table.basisAnzahlMessungen, builder: (column) => column);
 
+  GeneratedColumn<double> get ausbeuteFaktor => $composableBuilder(
+      column: $table.ausbeuteFaktor, builder: (column) => column);
+
+  GeneratedColumn<double> get wartezeitMinuten => $composableBuilder(
+      column: $table.wartezeitMinuten, builder: (column) => column);
+
+  GeneratedColumn<double> get minChargenKg => $composableBuilder(
+      column: $table.minChargenKg, builder: (column) => column);
+
+  GeneratedColumn<double> get maxChargenKg => $composableBuilder(
+      column: $table.maxChargenKg, builder: (column) => column);
+
+  GeneratedColumn<double> get kerntemperaturZiel => $composableBuilder(
+      column: $table.kerntemperaturZiel, builder: (column) => column);
+
+  GeneratedColumn<double> get raumtemperaturMax => $composableBuilder(
+      column: $table.raumtemperaturMax, builder: (column) => column);
+
+  GeneratedColumn<String> get maschine =>
+      $composableBuilder(column: $table.maschine, builder: (column) => column);
+
   GeneratedColumn<String> get maschinenEinstellungenJson => $composableBuilder(
       column: $table.maschinenEinstellungenJson, builder: (column) => column);
 
@@ -6215,6 +7044,13 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             Value<double?> dauerStdAbweichung = const Value.absent(),
             Value<int> basisMitarbeiter = const Value.absent(),
             Value<int> basisAnzahlMessungen = const Value.absent(),
+            Value<double?> ausbeuteFaktor = const Value.absent(),
+            Value<double?> wartezeitMinuten = const Value.absent(),
+            Value<double?> minChargenKg = const Value.absent(),
+            Value<double?> maxChargenKg = const Value.absent(),
+            Value<double?> kerntemperaturZiel = const Value.absent(),
+            Value<double?> raumtemperaturMax = const Value.absent(),
+            Value<String?> maschine = const Value.absent(),
             Value<String?> maschinenEinstellungenJson = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -6233,6 +7069,13 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             dauerStdAbweichung: dauerStdAbweichung,
             basisMitarbeiter: basisMitarbeiter,
             basisAnzahlMessungen: basisAnzahlMessungen,
+            ausbeuteFaktor: ausbeuteFaktor,
+            wartezeitMinuten: wartezeitMinuten,
+            minChargenKg: minChargenKg,
+            maxChargenKg: maxChargenKg,
+            kerntemperaturZiel: kerntemperaturZiel,
+            raumtemperaturMax: raumtemperaturMax,
+            maschine: maschine,
             maschinenEinstellungenJson: maschinenEinstellungenJson,
             notizen: notizen,
             createdAt: createdAt,
@@ -6251,6 +7094,13 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             Value<double?> dauerStdAbweichung = const Value.absent(),
             required int basisMitarbeiter,
             Value<int> basisAnzahlMessungen = const Value.absent(),
+            Value<double?> ausbeuteFaktor = const Value.absent(),
+            Value<double?> wartezeitMinuten = const Value.absent(),
+            Value<double?> minChargenKg = const Value.absent(),
+            Value<double?> maxChargenKg = const Value.absent(),
+            Value<double?> kerntemperaturZiel = const Value.absent(),
+            Value<double?> raumtemperaturMax = const Value.absent(),
+            Value<String?> maschine = const Value.absent(),
             Value<String?> maschinenEinstellungenJson = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
@@ -6269,6 +7119,13 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             dauerStdAbweichung: dauerStdAbweichung,
             basisMitarbeiter: basisMitarbeiter,
             basisAnzahlMessungen: basisAnzahlMessungen,
+            ausbeuteFaktor: ausbeuteFaktor,
+            wartezeitMinuten: wartezeitMinuten,
+            minChargenKg: minChargenKg,
+            maxChargenKg: maxChargenKg,
+            kerntemperaturZiel: kerntemperaturZiel,
+            raumtemperaturMax: raumtemperaturMax,
+            maschine: maschine,
             maschinenEinstellungenJson: maschinenEinstellungenJson,
             notizen: notizen,
             createdAt: createdAt,

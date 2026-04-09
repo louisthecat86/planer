@@ -979,14 +979,27 @@ class _PlanProductSheetState extends ConsumerState<_PlanProductSheet> {
     final db = ref.read(databaseProvider);
     final date = ref.read(selectedDateProvider);
 
-    await createTasksFromProduct(
+    final rohwareBedarf = await createTasksFromProduct(
       db: db,
       productId: product.id,
       mengeKg: menge,
       datum: date,
     );
 
-    if (mounted) Navigator.of(context).pop(true);
+    if (mounted) {
+      if (rohwareBedarf > menge) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Rohwaren-Bedarf: ${rohwareBedarf.toStringAsFixed(1)} kg '
+              'für ${menge.toStringAsFixed(1)} kg Fertigware',
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+      Navigator.of(context).pop(true);
+    }
   }
 
   @override
@@ -1182,9 +1195,27 @@ class _StepPreviewTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final abt = Abteilung.fromDbValue(step.abteilung);
+    final ausbeute = step.ausbeuteFaktor;
+    final wartezeit = step.wartezeitMinuten;
+    final maxCharge = step.maxChargenKg;
+
+    // Detail-Info zusammenbauen
+    final details = <String>[
+      '${step.basisDauerMinuten.toStringAsFixed(0)} min',
+      '${step.basisMitarbeiter} MA',
+    ];
+    if (ausbeute != null && ausbeute < 1.0) {
+      details.add('${(ausbeute * 100).toStringAsFixed(0)}% Ausbeute');
+    }
+    if (wartezeit != null && wartezeit > 0) {
+      details.add('+${wartezeit.toStringAsFixed(0)} min Wartezeit');
+    }
+    if (maxCharge != null && maxCharge > 0) {
+      details.add('max ${maxCharge.toStringAsFixed(0)} kg/Charge');
+    }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
           CircleAvatar(
@@ -1201,16 +1232,28 @@ class _StepPreviewTile extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              '${step.reihenfolge}. ${abt.anzeigeName}',
-              style: const TextStyle(fontSize: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${step.reihenfolge}. ${abt.anzeigeName}',
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  details.join(' · '),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
             ),
           ),
-          Text(
-            '${step.basisDauerMinuten.toStringAsFixed(0)} min · '
-            '${step.basisMitarbeiter} MA',
-            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-          ),
+          if (step.maschine != null)
+            Text(
+              step.maschine!,
+              style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+            ),
         ],
       ),
     );
