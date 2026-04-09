@@ -205,7 +205,7 @@ class _DepartmentCapacityCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final remaining = (capacityMinutes - usedMinutes).clamp(0, double.infinity);
+    final remaining = (capacityMinutes - usedMinutes).clamp(0.0, double.infinity);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
