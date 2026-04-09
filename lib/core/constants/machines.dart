@@ -362,17 +362,17 @@ const kAllMachines = <MachineDefinition>[
 // ---------------------------------------------------------------------------
 
 /// Alle Maschinen einer Abteilung (mit aufgelösten Instanzen).
-List<_MachineInstance> machinesForDepartment(String abteilungDbValue) {
-  final result = <_MachineInstance>[];
+List<MachineInstance> machinesForDepartment(String abteilungDbValue) {
+  final result = <MachineInstance>[];
   for (final m in kAllMachines) {
     if (m.abteilung != abteilungDbValue) continue;
     for (var i = 1; i <= m.instances; i++) {
-      result.add(_MachineInstance(
+      result.add(MachineInstance(
         definition: m,
         instanceNr: i,
         key: m.instanceKey(i),
         label: m.instanceLabel(i),
-      ));
+      ),);
     }
   }
   return result;
@@ -392,9 +392,6 @@ class MachineInstance {
   final String key;
   final String label;
 }
-
-// Private alias so the function above can construct them.
-typedef _MachineInstance = MachineInstance;
 
 /// Liest maschinenEinstellungenJson → Map<instanceKey, settings>.
 Map<String, Map<String, dynamic>> parseMachineSettings(String? json) {
@@ -442,7 +439,7 @@ List<MachineInstance> enabledMachines(String? json) {
       instanceNr: nr,
       key: entry.key,
       label: def.instances > 1 ? '${def.label} $nr' : def.label,
-    ));
+    ),);
   }
   return result;
 }
