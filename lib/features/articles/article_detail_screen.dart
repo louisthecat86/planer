@@ -60,7 +60,7 @@ class ArticleDetailScreen extends ConsumerWidget {
                 ? Padding(
                     padding: const EdgeInsets.only(right: 12),
                     child: Chip(
-                      label: Text(p.artikelnummer ?? '—'),
+                      label: Text(p.artikelnummer),
                       avatar: const Icon(Icons.tag, size: 16),
                     ),
                   )
@@ -159,7 +159,7 @@ class _StepCardState extends ConsumerState<_StepCard> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final abt = _abteilung;
-    final color = abt != null ? Color(abt.farbCode) : Colors.grey;
+    final color = abt != null ? Color(abt.farbwert) : Colors.grey;
     final enabledCount = enabledMachines(widget.step.maschinenEinstellungenJson).length;
 
     return Card(
@@ -329,8 +329,6 @@ class _DetailGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Wrap(
       spacing: 24,
       runSpacing: 8,

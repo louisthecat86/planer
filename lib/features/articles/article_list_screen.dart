@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -174,8 +175,7 @@ class _ArticleTile extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (p.artikelnummer != null)
-                      Padding(
+                    Padding(
                         padding: const EdgeInsets.only(top: 2),
                         child: Text(
                           'Art.-Nr.: ${p.artikelnummer}',
@@ -185,8 +185,6 @@ class _ArticleTile extends StatelessWidget {
                         ),
                       ),
 
-                    const SizedBox(height: 8),
-
                     // Abteilungs-Dots + Schritt-Anzahl
                     Row(
                       children: [
@@ -195,7 +193,7 @@ class _ArticleTile extends StatelessWidget {
                               height: 24,
                               margin: const EdgeInsets.only(right: 4),
                               decoration: BoxDecoration(
-                                color: Color(a.farbCode),
+                                color: Color(a.farbwert),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               alignment: Alignment.center,
@@ -215,7 +213,7 @@ class _ArticleTile extends StatelessWidget {
                         ),
                         if (machineCount > 0) ...[
                           const SizedBox(width: 8),
-                          Icon(Icons.settings, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                          Icon(Icons.settings, size: 14, color: theme.colorScheme.onSurfaceVariant,),
                           const SizedBox(width: 2),
                           Text(
                             '$machineCount Maschinen',

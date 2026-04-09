@@ -83,7 +83,7 @@ class _MachineSettingsEditorState extends State<MachineSettingsEditor> {
                   onToggle: (v) => _toggleMachine(machine.key, v),
                   onSettingChanged: (sk, v) =>
                       _updateSetting(machine.key, sk, v),
-                )),
+                ),),
           ],
         ],
       ],
@@ -324,7 +324,7 @@ class MachineSettingsDisplay extends StatelessWidget {
                     if (s.type == SettingType.bool_) {
                       display = v == true ? 'Ja' : 'Nein';
                     } else {
-                      display = '${v}${s.unit != null ? ' ${s.unit}' : ''}';
+                      display = '$v${s.unit != null ? ' ${s.unit}' : ''}';
                     }
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 1),

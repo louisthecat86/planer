@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,7 +191,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
               ),
 
             if (_preview!.istLeer)
-              _MessageCard(
+              const _MessageCard(
                 icon: Icons.warning_amber,
                 color: Colors.orange,
                 title: 'Leere Datei',
@@ -336,7 +334,6 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final success = !result.hatFehler;
 
     return Card(

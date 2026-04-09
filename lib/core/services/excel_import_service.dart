@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:drift/drift.dart' hide Column;
 import 'package:excel/excel.dart';
@@ -105,7 +104,7 @@ class ExcelImportService {
     final fehler = <String>[];
 
     int artikelNeu = 0;
-    int artikelAktualisiert = 0;
+    final int artikelAktualisiert = 0;
 
     // Sheet "Artikel" prüfen
     final artikelSheet = _findSheet(excel, ['artikel', 'products', 'stammdaten']);
