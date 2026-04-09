@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import 'whiteboard_provider.dart';
@@ -24,7 +23,7 @@ Future<bool> showTaskDetailSheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (_) => ProviderScope(
-      parent: ProviderScope.containerOf(context),
+      overrides: const [],
       child: _TaskDetailSheet(wbTask: wbTask),
     ),
   );
@@ -53,7 +52,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   late String _status;
 
   ProductStep? _step; // Zugehöriger ProductStep für Skalierung.
-  bool _isDirty = false;
   bool _isSaving = false;
 
   @override

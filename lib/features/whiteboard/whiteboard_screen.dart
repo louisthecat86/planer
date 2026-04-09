@@ -707,7 +707,7 @@ class _TimelinePainter extends CustomPainter {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
 
       final tp = TextPainter(
-        text: TextSpan(text: '${h.toString().padLeft(2, '0')}', style: textStyle),
+        text: TextSpan(text: h.toString().padLeft(2, '0'), style: textStyle),
         textDirection: TextDirection.ltr,
       )..layout();
       tp.paint(canvas, Offset(x + 2, 1));
