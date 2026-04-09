@@ -22,8 +22,8 @@ Future<bool> showTaskDetailSheet(
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => ProviderScope(
-      overrides: const [],
+    builder: (_) => UncontrolledProviderScope(
+      container: ProviderScope.containerOf(context),
       child: _TaskDetailSheet(wbTask: wbTask),
     ),
   );
@@ -52,6 +52,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   late String _status;
 
   ProductStep? _step; // Zugehöriger ProductStep für Skalierung.
+  bool _isDirty = false;
   bool _isSaving = false;
 
   @override
@@ -384,7 +385,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 width: double.infinity,
                 height: 48,
                 child: FilledButton.icon(
-                  onPressed: _isSaving ? null : _save,
+                  onPressed: _isSaving || !_isDirty ? null : _save,
                   icon: _isSaving
                       ? const SizedBox(
                           width: 18,
