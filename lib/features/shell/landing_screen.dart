@@ -118,7 +118,7 @@ class _LandingScreenState extends ConsumerState<LandingScreen> {
               ),
               const SizedBox(height: 24),
               Container(
-                margin: const EdgeInsets.zero,
+                margin: EdgeInsets.zero,
                 decoration: BoxDecoration(
                   color: Colors.blue.shade50,
                   border: Border.all(color: Colors.blue.shade200),
