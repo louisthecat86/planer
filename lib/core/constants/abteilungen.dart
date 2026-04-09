@@ -24,6 +24,12 @@ enum Abteilung {
     kurzcode: 'WK',
     farbwert: 0xFF880E4F,
   ),
+  kutterabteilung(
+    dbValue: 'kutterabteilung',
+    anzeigeName: 'Kutterabteilung',
+    kurzcode: 'KA',
+    farbwert: 0xFFE65100,
+  ),
   bratstrasse(
     dbValue: 'bratstrasse',
     anzeigeName: 'Bratstraße',

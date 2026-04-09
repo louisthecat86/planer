@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
-import '../../core/constants/bratstrasse_machines.dart';
+import '../../core/constants/machines.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 

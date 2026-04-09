@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/abteilungen.dart';
-import '../../core/constants/bratstrasse_machines.dart';
+import '../../core/constants/machines.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import 'machine_settings_editor.dart';
@@ -262,6 +262,7 @@ class _StepCardState extends ConsumerState<_StepCard> {
                   ),
                   const SizedBox(height: 8),
                   MachineSettingsEditor(
+                    abteilungDbValue: widget.step.abteilung,
                     initialJson: widget.step.maschinenEinstellungenJson,
                     onChanged: _saveMachineSettings,
                   ),

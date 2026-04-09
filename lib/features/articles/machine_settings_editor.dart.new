@@ -85,7 +85,7 @@ class _MachineSettingsEditorState extends State<MachineSettingsEditor> {
 }
 
 // ---------------------------------------------------------------------------
-// Karte für eine einzelne Maschine (Checkbox + Settings)
+// Karte für eine einzelne Maschineninstanz (Checkbox + Settings)
 // ---------------------------------------------------------------------------
 
 class _MachineCard extends StatelessWidget {

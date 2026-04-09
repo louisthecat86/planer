@@ -49,13 +49,34 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
           await _createIndexes();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            // Products: neue Spalten
+            await customStatement('ALTER TABLE products ADD COLUMN verpackungsart TEXT');
+            await customStatement('ALTER TABLE products ADD COLUMN gebinde_groesse_kg REAL');
+            await customStatement('ALTER TABLE products ADD COLUMN haltbarkeit_tage INTEGER');
+            await customStatement('ALTER TABLE products ADD COLUMN gesamt_ausbeute_faktor REAL');
+            await customStatement('ALTER TABLE products ADD COLUMN mindest_vorlaufzeit_tage INTEGER');
+            await customStatement('ALTER TABLE products ADD COLUMN planungsgruppe TEXT');
+
+            // ProductSteps: neue Spalten
+            await customStatement('ALTER TABLE product_steps ADD COLUMN ausbeute_faktor REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN wartezeit_minuten REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN min_chargen_kg REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN max_chargen_kg REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN kerntemperatur_ziel REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN raumtemperatur_max REAL');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN maschine TEXT');
+            await customStatement('ALTER TABLE product_steps ADD COLUMN maschinen_einstellungen_json TEXT');
+          }
         },
         beforeOpen: (details) async {
           // Foreign-Key-Enforcement einschalten (ist per Default in SQLite aus).
