@@ -257,7 +257,7 @@ void main() {
     // Zurück-Link
     sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-        .value = FormulaCellValue("HYPERLINK(\"#'Übersicht'!A1\", \"← Zurück zur Übersicht\")");
+        .value = const FormulaCellValue("HYPERLINK(\"#'Übersicht'!A1\", \"← Zurück zur Übersicht\")");
     row += 2;
 
     // == STAMMDATEN ==

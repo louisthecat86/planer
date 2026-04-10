@@ -128,7 +128,7 @@ class ExcelImportService {
 
     if (isNewFormat) {
       // ---- Neues Format: Übersicht + Produkt‑Sheets ----
-      artikelNeu = (uebersichtSheet!.rows.length - 1).clamp(0, 999999);
+      artikelNeu = (uebersichtSheet.rows.length - 1).clamp(0, 999999);
 
       // Produkt-Sheets durchsuchen
       for (var row = 1; row < uebersichtSheet.rows.length; row++) {

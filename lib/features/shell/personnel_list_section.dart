@@ -10,16 +10,6 @@ import '../../core/services/personnel_service.dart';
 class PersonnelListSection extends ConsumerWidget {
   const PersonnelListSection({super.key});
 
-  static const _dayLabels = {
-    1: 'Mo',
-    2: 'Di',
-    3: 'Mi',
-    4: 'Do',
-    5: 'Fr',
-    6: 'Sa',
-    7: 'So',
-  };
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final planState = ref.watch(personnelPlanNotifierProvider);

@@ -23,7 +23,7 @@ class TemplateExportService {
 
     // Beispiel-Artikeldaten
     final artikel = [
-      _ArtikelDaten(
+      const _ArtikelDaten(
         nr: '10001',
         bezeichnung: 'Leberkäse fein',
         beschreibung: 'Feiner Leberkäse 500g',
@@ -58,7 +58,7 @@ class TemplateExportService {
           ['2026-03-10', '3', '100', '120', '1', ''],
         ],
       ),
-      _ArtikelDaten(
+      const _ArtikelDaten(
         nr: '10002',
         bezeichnung: 'Wiener Würstchen',
         beschreibung: 'Wiener im Saitling 5er Pack',
@@ -82,7 +82,7 @@ class TemplateExportService {
         ],
         historie: [],
       ),
-      _ArtikelDaten(
+      const _ArtikelDaten(
         nr: '10003',
         bezeichnung: 'Schnitzel paniert',
         beschreibung: 'Schweineschnitzel paniert 200g',
@@ -106,7 +106,7 @@ class TemplateExportService {
         ],
         historie: [],
       ),
-      _ArtikelDaten(
+      const _ArtikelDaten(
         nr: '10004',
         bezeichnung: 'Kotelett',
         beschreibung: 'Schweinekotelett natur 300g',
@@ -239,7 +239,7 @@ class TemplateExportService {
     // --- Link zurück zur Übersicht ---
     sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
-        .value = FormulaCellValue(
+        .value = const FormulaCellValue(
       "HYPERLINK(\"#'Übersicht'!A1\",\"← Zurück zur Übersicht\")",
     );
     row += 2;
@@ -257,7 +257,7 @@ class TemplateExportService {
       'Gesamtausbeute',
       'Vorlaufzeit',
       'Planungsgruppe',
-    ], startRow: row);
+    ], startRow: row,);
     row++;
     _writeRowAt(sheet, row, [
       art.nr,
@@ -269,7 +269,7 @@ class TemplateExportService {
       art.gesamtausbeute,
       art.vorlaufzeit,
       art.planungsgruppe,
-    ]);
+    ],);
     row += 3;
 
     // --- Block 2: Produktionsschritte ---
@@ -290,7 +290,7 @@ class TemplateExportService {
       'Raumtemperatur',
       'Maschine',
       'Notizen',
-    ], startRow: row);
+    ], startRow: row,);
     row++;
     for (final s in art.schritte) {
       _writeRowAt(sheet, row, s);
@@ -306,7 +306,7 @@ class TemplateExportService {
       'Rohware',
       'Menge_pro_kg',
       'Toleranz',
-    ], startRow: row);
+    ], startRow: row,);
     row++;
     for (final r in art.rezeptur) {
       _writeRowAt(sheet, row, r);
@@ -325,7 +325,7 @@ class TemplateExportService {
       'Dauer_min',
       'Mitarbeiter',
       'Notizen',
-    ], startRow: row);
+    ], startRow: row,);
     row++;
     for (final h in art.historie) {
       _writeRowAt(sheet, row, h);
