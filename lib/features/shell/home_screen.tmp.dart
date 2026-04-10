@@ -1,3 +1,11 @@
+
+Run flutter analyze
+  
+Analyzing planer...                                             
+   info • Missing a required trailing comma • lib/features/shell/personnel_list_section.dart:36:53 • require_trailing_commas
+   info • Missing a required trailing comma • lib/features/shell/personnel_list_section.dart:94:65 • require_trailing_commas
+2 issues found. (ran in 16.3s)
+Error: Process completed with exit code 1.
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

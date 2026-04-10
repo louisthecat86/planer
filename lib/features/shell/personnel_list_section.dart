@@ -31,9 +31,11 @@ class _PersonnelListSectionState extends ConsumerState<PersonnelListSection> {
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
       list = list
-          .where((e) =>
-              e.name.toLowerCase().contains(q) ||
-              e.department.toLowerCase().contains(q))
+          .where(
+            (e) =>
+                e.name.toLowerCase().contains(q) ||
+                e.department.toLowerCase().contains(q),
+          )
           .toList();
     }
 
@@ -90,8 +92,9 @@ class _PersonnelListSectionState extends ConsumerState<PersonnelListSection> {
 
     // Abteilungen die überhaupt Mitarbeiter haben (für Filter-Chips)
     final presentDepts = Abteilung.values
-        .where((a) =>
-            plan.employees.any((e) => e.department == a.dbValue))
+        .where(
+          (a) => plan.employees.any((e) => e.department == a.dbValue),
+        )
         .toList();
 
     return Card(
