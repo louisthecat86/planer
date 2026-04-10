@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../core/services/excel_import_service.dart';
+import '../articles/article_list_screen.dart';
 
 // ---------------------------------------------------------------------------
 // Excel-Import Screen
@@ -92,6 +93,8 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
       final service = ExcelImportService(ref.read(databaseProvider));
       final result = await service.importFile(_filePath!);
       if (mounted) {
+        // Artikelliste invalidieren, damit neue Artikel sichtbar werden
+        ref.invalidate(articlesProvider);
         setState(() {
           _result = result;
           _isLoading = false;
