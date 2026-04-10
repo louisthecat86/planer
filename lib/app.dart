@@ -12,6 +12,8 @@ import 'features/import/excel_import_screen.dart';
 import 'features/articles/article_list_screen.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/shell/personnel_detail_screen.dart';
+import 'features/shell/capacity_detail_screen.dart';
+import 'features/shell/tasks_detail_screen.dart';
 import 'core/providers/database_provider.dart';
 
 /// GoRouter-Provider.
@@ -57,6 +59,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/personnel',
         name: 'personnel',
         builder: (context, state) => const PersonnelDetailScreen(),
+      ),
+      GoRoute(
+        path: '/capacity',
+        name: 'capacity',
+        builder: (context, state) => const CapacityDetailScreen(),
+      ),
+      GoRoute(
+        path: '/tasks',
+        name: 'tasks',
+        builder: (context, state) => const TasksDetailScreen(),
       ),
       GoRoute(
         path: '/article/:productId',
