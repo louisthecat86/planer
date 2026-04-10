@@ -21,7 +21,13 @@ class PersonnelPlanNotifier extends StateNotifier<AsyncValue<PersonnelPlan>> {
     }
   }
 
-  Future<void> addEmployee(String name, String department) async {
+  Future<void> addEmployee(
+    String name,
+    String department, {
+    String arbeitsBeginn = '06:00',
+    String arbeitsEnde = '14:00',
+    List<int> wochentage = const [1, 2, 3, 4, 5],
+  }) async {
     if (state is! AsyncData<PersonnelPlan>) return;
     final currentPlan = (state as AsyncData<PersonnelPlan>).value;
     final updated = PersonnelPlan(
@@ -31,6 +37,9 @@ class PersonnelPlanNotifier extends StateNotifier<AsyncValue<PersonnelPlan>> {
           id: PersonnelService.createId(),
           name: name,
           department: department,
+          arbeitsBeginn: arbeitsBeginn,
+          arbeitsEnde: arbeitsEnde,
+          wochentage: wochentage,
         ),
       ],
       vacations: currentPlan.vacations,

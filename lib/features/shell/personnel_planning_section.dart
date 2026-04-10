@@ -205,56 +205,126 @@ class PersonnelPlanningSection extends ConsumerWidget {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     String selectedDepartment = Abteilung.zerlegung.dbValue;
+    TimeOfDay arbeitsBeginn = const TimeOfDay(hour: 6, minute: 0);
+    TimeOfDay arbeitsEnde = const TimeOfDay(hour: 14, minute: 0);
+    List<int> wochentage = [1, 2, 3, 4, 5];
+
+    const dayLabels = {1: 'Mo', 2: 'Di', 3: 'Mi', 4: 'Do', 5: 'Fr', 6: 'Sa', 7: 'So'};
+
+    String formatTime(TimeOfDay t) =>
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Mitarbeiter hinzufügen'),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Name'),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Bitte Name eingeben';
-                  }
-                  return null;
-                },
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Mitarbeiter hinzufügen'),
+          content: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: nameController,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Bitte Name eingeben';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedDepartment,
+                    decoration: const InputDecoration(labelText: 'Abteilung'),
+                    items: Abteilung.values
+                        .map((abteilung) => DropdownMenuItem(
+                              value: abteilung.dbValue,
+                              child: Text(abteilung.anzeigeName),
+                            ))
+                        .toList(),
+                    onChanged: (value) {
+                      if (value != null) selectedDepartment = value;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: arbeitsBeginn,
+                            );
+                            if (picked != null) setState(() => arbeitsBeginn = picked);
+                          },
+                          child: Text('Beginn: ${formatTime(arbeitsBeginn)}'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            final picked = await showTimePicker(
+                              context: context,
+                              initialTime: arbeitsEnde,
+                            );
+                            if (picked != null) setState(() => arbeitsEnde = picked);
+                          },
+                          child: Text('Ende: ${formatTime(arbeitsEnde)}'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Arbeitstage',
+                        style: Theme.of(context).textTheme.bodySmall),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 4,
+                    children: dayLabels.entries.map((entry) {
+                      final selected = wochentage.contains(entry.key);
+                      return FilterChip(
+                        label: Text(entry.value),
+                        selected: selected,
+                        onSelected: (value) {
+                          setState(() {
+                            if (value) {
+                              wochentage = [...wochentage, entry.key]..sort();
+                            } else {
+                              wochentage = wochentage
+                                  .where((d) => d != entry.key)
+                                  .toList();
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                ],
               ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<String>(
-                initialValue: selectedDepartment,
-                decoration: const InputDecoration(labelText: 'Abteilung'),
-                items: Abteilung.values
-                    .map((abteilung) => DropdownMenuItem(
-                          value: abteilung.dbValue,
-                          child: Text(abteilung.anzeigeName),
-                        ),)
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) selectedDepartment = value;
-                },
-              ),
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Abbrechen'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (formKey.currentState?.validate() != true) return;
+                Navigator.pop(context, true);
+              },
+              child: const Text('Speichern'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (formKey.currentState?.validate() != true) return;
-              Navigator.pop(context, true);
-            },
-                child: const Text('Speichern'),
-          ),
-        ],
       ),
     );
 
@@ -263,6 +333,9 @@ class PersonnelPlanningSection extends ConsumerWidget {
     await ref.read(personnelPlanNotifierProvider.notifier).addEmployee(
           nameController.text.trim(),
           selectedDepartment,
+          arbeitsBeginn: formatTime(arbeitsBeginn),
+          arbeitsEnde: formatTime(arbeitsEnde),
+          wochentage: wochentage,
         );
   }
 
@@ -531,12 +604,16 @@ class _VacationRow extends StatelessWidget {
       (employee) => employee.id == vacation.employeeId,
       orElse: () => Employee(id: vacation.employeeId, name: 'Unbekannt', department: ''),
     );
+    final abt = Abteilung.values.where((a) => a.dbValue == employee.department);
+    final abtName = abt.isNotEmpty ? abt.first.anzeigeName : '';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: ListTile(
         title: Text(employee.name),
         subtitle: Text(
-          '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}${vacation.reason.isNotEmpty ? ' • ${vacation.reason}' : ''}',
+          '${abtName.isNotEmpty ? '$abtName • ' : ''}'
+          '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}'
+          '${vacation.reason.isNotEmpty ? ' • ${vacation.reason}' : ''}',
         ),
         trailing: IconButton(
           icon: const Icon(Icons.delete_outline),

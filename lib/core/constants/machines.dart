@@ -104,6 +104,16 @@ const kAllMachines = <MachineDefinition>[
       MachineSetting(key: 'notizen', label: 'Hinweise', type: SettingType.text),
     ],
   ),
+  MachineDefinition(
+    key: 'marel',
+    label: 'Marel',
+    abteilung: 'zerlegung',
+    settings: [
+      MachineSetting(key: 'schnittdicke', label: 'Schnittdicke', type: SettingType.number, unit: 'mm'),
+      MachineSetting(key: 'schneidekorridor', label: 'Schneidekorridor', type: SettingType.text),
+      MachineSetting(key: 'notizen', label: 'Hinweise', type: SettingType.text),
+    ],
+  ),
 
   // ===== WURSTKÜCHE =====
   MachineDefinition(

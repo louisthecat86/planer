@@ -10,6 +10,7 @@ import '../../core/providers/department_capacity_provider.dart';
 import '../../core/providers/personnel_provider.dart';
 import '../../core/services/demo_data_service.dart';
 import '../../core/services/personnel_service.dart';
+import '../../core/services/template_export_service.dart';
 
 const _dayNames = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
@@ -126,6 +127,13 @@ class HomeScreen extends ConsumerWidget {
             color: const Color(0xFF00838F),
             onTap: () => context.pushNamed('import'),
           ),
+          _NavigationTile(
+            icon: Icons.table_chart_rounded,
+            label: 'Excel-Vorlage',
+            subtitle: 'Vorlage für neue Artikel',
+            color: const Color(0xFF558B2F),
+            onTap: () => _exportTemplate(context),
+          ),
         ];
 
         return Wrap(
@@ -137,6 +145,23 @@ class HomeScreen extends ConsumerWidget {
         );
       },
     );
+  }
+
+  Future<void> _exportTemplate(BuildContext context) async {
+    try {
+      final path = await TemplateExportService.generateAndSave();
+      if (!context.mounted) return;
+      if (path != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Vorlage gespeichert: $path')),
+        );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Fehler: $e')),
+      );
+    }
   }
 }
 
