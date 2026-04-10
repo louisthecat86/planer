@@ -237,13 +237,13 @@ class PersonnelPlanningSection extends ConsumerWidget {
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
-                    value: selectedDepartment,
+                    initialValue: selectedDepartment,
                     decoration: const InputDecoration(labelText: 'Abteilung'),
                     items: Abteilung.values
                         .map((abteilung) => DropdownMenuItem(
                               value: abteilung.dbValue,
                               child: Text(abteilung.anzeigeName),
-                            ))
+                            ),)
                         .toList(),
                     onChanged: (value) {
                       if (value != null) selectedDepartment = value;
@@ -282,8 +282,10 @@ class PersonnelPlanningSection extends ConsumerWidget {
                   const SizedBox(height: 12),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: Text('Arbeitstage',
-                        style: Theme.of(context).textTheme.bodySmall),
+                    child: Text(
+                        'Arbeitstage',
+                        style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Wrap(
