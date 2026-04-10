@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import 'home_screen.dart';
+import 'personnel_list_section.dart';
 import 'personnel_planning_section.dart';
 
 class PersonnelDetailScreen extends ConsumerWidget {
@@ -19,6 +20,8 @@ class PersonnelDetailScreen extends ConsumerWidget {
         padding: const EdgeInsets.all(16),
         children: [
           PersonnelPlanningSection(db: db, selectedDate: selectedDate),
+          const SizedBox(height: 16),
+          const PersonnelListSection(),
         ],
       ),
     );

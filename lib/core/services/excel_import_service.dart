@@ -18,6 +18,7 @@ class ImportResult {
   final int schritteImportiert;
   final int rezepturenImportiert;
   final int rohwarenImportiert;
+  final int historienVerarbeitet;
   final List<String> warnungen;
   final List<String> fehler;
 
@@ -27,6 +28,7 @@ class ImportResult {
     this.schritteImportiert = 0,
     this.rezepturenImportiert = 0,
     this.rohwarenImportiert = 0,
+    this.historienVerarbeitet = 0,
     this.warnungen = const [],
     this.fehler = const [],
   });
@@ -42,6 +44,7 @@ class ImportPreview {
   final int schritte;
   final int rezepturen;
   final int rohwaren;
+  final int historien;
   final List<String> warnungen;
   final List<String> fehler;
 
@@ -51,6 +54,7 @@ class ImportPreview {
     this.schritte = 0,
     this.rezepturen = 0,
     this.rohwaren = 0,
+    this.historien = 0,
     this.warnungen = const [],
     this.fehler = const [],
   });
@@ -61,7 +65,8 @@ class ImportPreview {
       artikelAktualisiert == 0 &&
       schritte == 0 &&
       rezepturen == 0 &&
-      rohwaren == 0;
+      rohwaren == 0 &&
+      historien == 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,44 +108,74 @@ class ExcelImportService {
     final warnungen = <String>[];
     final fehler = <String>[];
 
+    // Neues Format erkennen: „Übersicht"-Sheet vorhanden?
+    final uebersichtSheet = _findSheet(excel, ['übersicht', 'uebersicht', 'overview']);
+    final isNewFormat = uebersichtSheet != null;
+
     int artikelNeu = 0;
     const int artikelAktualisiert = 0;
+    int schritteCount = 0;
+    int rezeptCount = 0;
+    int rohwarenCount = 0;
+    int historienCount = 0;
 
-    // Sheet "Artikel" prüfen
-    final artikelSheet = _findSheet(excel, ['artikel', 'products', 'stammdaten']);
-    if (artikelSheet == null) {
-      fehler.add('Kein Sheet "Artikel" gefunden.');
-    }
-
-    // Sheet "Schritte" prüfen
-    final schritteSheet =
-        _findSheet(excel, ['schritte', 'steps', 'produktionsschritte']);
-    final schritteCount = schritteSheet != null
-        ? (schritteSheet.rows.length - 1).clamp(0, 999999)
-        : 0;
-    if (schritteSheet == null) {
-      warnungen.add('Kein Sheet "Schritte" gefunden — keine Schritte importiert.');
-    }
-
-    // Sheet "Rezeptur" prüfen
-    final rezeptSheet = _findSheet(excel, ['rezeptur', 'rezepturen', 'bom']);
-    final rezeptCount = rezeptSheet != null
-        ? (rezeptSheet.rows.length - 1).clamp(0, 999999)
-        : 0;
-    if (rezeptSheet == null) {
-      warnungen.add('Kein Sheet "Rezeptur" gefunden — keine Rezepturen importiert.');
-    }
-
-    // Sheet "Rohwaren" prüfen
+    // Rohwaren — immer als eigenes Sheet
     final rohwarenSheet =
         _findSheet(excel, ['rohwaren', 'raw_materials', 'rohstoffe']);
-    final rohwarenCount = rohwarenSheet != null
+    rohwarenCount = rohwarenSheet != null
         ? (rohwarenSheet.rows.length - 1).clamp(0, 999999)
         : 0;
 
-    // Artikel zählen (würde existierende prüfen, aber für Preview reicht Zeilencount)
-    if (artikelSheet != null) {
-      artikelNeu = (artikelSheet.rows.length - 1).clamp(0, 999999);
+    if (isNewFormat) {
+      // ---- Neues Format: Übersicht + Produkt‑Sheets ----
+      artikelNeu = (uebersichtSheet!.rows.length - 1).clamp(0, 999999);
+
+      // Produkt-Sheets durchsuchen
+      for (var row = 1; row < uebersichtSheet.rows.length; row++) {
+        final cells = uebersichtSheet.rows[row];
+        final artNr = _cellStr(cells, 0);
+        final bez = _cellStr(cells, 1);
+        if (artNr == null) continue;
+
+        final produktSheet = _findProduktSheet(excel, artNr, bez);
+        if (produktSheet == null) {
+          warnungen.add('Kein Produkt-Sheet für Artikel "$artNr" gefunden.');
+          continue;
+        }
+
+        final sections = _parseProduktSheetSections(produktSheet);
+        schritteCount += sections.schritteRows;
+        rezeptCount += sections.rezepturRows;
+        historienCount += sections.historieRows;
+      }
+    } else {
+      // ---- Altes Format: flache Sheets ----
+      final artikelSheet =
+          _findSheet(excel, ['artikel', 'products', 'stammdaten']);
+      if (artikelSheet == null) {
+        fehler.add('Kein Sheet "Übersicht" oder "Artikel" gefunden.');
+      } else {
+        artikelNeu = (artikelSheet.rows.length - 1).clamp(0, 999999);
+      }
+
+      final schritteSheet =
+          _findSheet(excel, ['schritte', 'steps', 'produktionsschritte']);
+      schritteCount = schritteSheet != null
+          ? (schritteSheet.rows.length - 1).clamp(0, 999999)
+          : 0;
+
+      final rezeptSheet = _findSheet(excel, ['rezeptur', 'rezepturen', 'bom']);
+      rezeptCount = rezeptSheet != null
+          ? (rezeptSheet.rows.length - 1).clamp(0, 999999)
+          : 0;
+
+      final historieSheet = _findSheet(
+        excel,
+        ['produktionshistorie', 'historie', 'history', 'ist_daten'],
+      );
+      historienCount = historieSheet != null
+          ? (historieSheet.rows.length - 1).clamp(0, 999999)
+          : 0;
     }
 
     return ImportPreview(
@@ -149,6 +184,7 @@ class ExcelImportService {
       schritte: schritteCount,
       rezepturen: rezeptCount,
       rohwaren: rohwarenCount,
+      historien: historienCount,
       warnungen: warnungen,
       fehler: fehler,
     );
@@ -166,8 +202,9 @@ class ExcelImportService {
     int schritteImportiert = 0;
     int rezepturenImportiert = 0;
     int rohwarenImportiert = 0;
+    int historienVerarbeitet = 0;
 
-    // 1. Rohwaren zuerst (weil Rezeptur darauf referenziert)
+    // 1. Rohwaren (immer als eigenes Sheet)
     final rohwarenSheet =
         _findSheet(excel, ['rohwaren', 'raw_materials', 'rohstoffe']);
     if (rohwarenSheet != null) {
@@ -175,32 +212,110 @@ class ExcelImportService {
           await _importRohwaren(rohwarenSheet, warnungen, fehler);
     }
 
-    // 2. Artikel
-    final artikelSheet =
-        _findSheet(excel, ['artikel', 'products', 'stammdaten']);
-    if (artikelSheet != null) {
-      final result =
-          await _importArtikel(artikelSheet, warnungen, fehler);
-      artikelNeu = result.$1;
-      artikelAktualisiert = result.$2;
+    // Neues Format erkennen
+    final uebersichtSheet =
+        _findSheet(excel, ['übersicht', 'uebersicht', 'overview']);
+
+    if (uebersichtSheet != null) {
+      // ---- Neues Format: Übersicht + Produkt‑Sheets ----
+
+      // 2. Artikel aus Übersicht
+      final artResult =
+          await _importArtikel(uebersichtSheet, warnungen, fehler);
+      artikelNeu = artResult.$1;
+      artikelAktualisiert = artResult.$2;
+
+      // 3. Produkt‑Sheets lesen
+      for (var row = 1; row < uebersichtSheet.rows.length; row++) {
+        final cells = uebersichtSheet.rows[row];
+        final artNr = _cellStr(cells, 0);
+        final bez = _cellStr(cells, 1);
+        if (artNr == null || artNr.isEmpty) continue;
+
+        final produktSheet = _findProduktSheet(excel, artNr, bez);
+        if (produktSheet == null) {
+          warnungen.add('Kein Produkt-Sheet für "$artNr" — Schritte/Rezeptur/Historie übersprungen.');
+          continue;
+        }
+
+        final sections = _parseProduktSheetSections(produktSheet);
+
+        // Schritte
+        if (sections.schritteStart != null) {
+          schritteImportiert += await _importSchritteFromBlock(
+            produktSheet,
+            artNr,
+            sections.schritteStart!,
+            sections.schritteEnd,
+            warnungen,
+            fehler,
+          );
+        }
+
+        // Rezeptur
+        if (sections.rezepturStart != null) {
+          rezepturenImportiert += await _importRezepturFromBlock(
+            produktSheet,
+            artNr,
+            sections.rezepturStart!,
+            sections.rezepturEnd,
+            warnungen,
+            fehler,
+          );
+        }
+
+        // Historie
+        if (sections.historieStart != null) {
+          historienVerarbeitet += await _importHistorieFromBlock(
+            produktSheet,
+            artNr,
+            sections.historieStart!,
+            sections.historieEnd,
+            warnungen,
+            fehler,
+          );
+        }
+      }
     } else {
-      fehler.add('Kein Sheet "Artikel" gefunden — Abbruch.');
-      return ImportResult(fehler: fehler);
-    }
+      // ---- Altes Format: flache Sheets ----
 
-    // 3. Schritte
-    final schritteSheet =
-        _findSheet(excel, ['schritte', 'steps', 'produktionsschritte']);
-    if (schritteSheet != null) {
-      schritteImportiert =
-          await _importSchritte(schritteSheet, warnungen, fehler);
-    }
+      // 2. Artikel
+      final artikelSheet =
+          _findSheet(excel, ['artikel', 'products', 'stammdaten']);
+      if (artikelSheet != null) {
+        final result =
+            await _importArtikel(artikelSheet, warnungen, fehler);
+        artikelNeu = result.$1;
+        artikelAktualisiert = result.$2;
+      } else {
+        fehler.add('Kein Sheet "Übersicht" oder "Artikel" gefunden — Abbruch.');
+        return ImportResult(fehler: fehler);
+      }
 
-    // 4. Rezeptur
-    final rezeptSheet = _findSheet(excel, ['rezeptur', 'rezepturen', 'bom']);
-    if (rezeptSheet != null) {
-      rezepturenImportiert =
-          await _importRezeptur(rezeptSheet, warnungen, fehler);
+      // 3. Schritte
+      final schritteSheet =
+          _findSheet(excel, ['schritte', 'steps', 'produktionsschritte']);
+      if (schritteSheet != null) {
+        schritteImportiert =
+            await _importSchritte(schritteSheet, warnungen, fehler);
+      }
+
+      // 4. Rezeptur
+      final rezeptSheet = _findSheet(excel, ['rezeptur', 'rezepturen', 'bom']);
+      if (rezeptSheet != null) {
+        rezepturenImportiert =
+            await _importRezeptur(rezeptSheet, warnungen, fehler);
+      }
+
+      // 5. Historie
+      final historieSheet = _findSheet(
+        excel,
+        ['produktionshistorie', 'historie', 'history', 'ist_daten'],
+      );
+      if (historieSheet != null) {
+        historienVerarbeitet =
+            await _importHistorie(historieSheet, warnungen, fehler);
+      }
     }
 
     return ImportResult(
@@ -209,6 +324,7 @@ class ExcelImportService {
       schritteImportiert: schritteImportiert,
       rezepturenImportiert: rezepturenImportiert,
       rohwarenImportiert: rohwarenImportiert,
+      historienVerarbeitet: historienVerarbeitet,
       warnungen: warnungen,
       fehler: fehler,
     );
@@ -574,6 +690,507 @@ class ExcelImportService {
     return count;
   }
 
+  // ---- Sheet-Importer: Produktionshistorie ----
+
+  /// Liest historische Ist-Daten ein und berechnet daraus Mittelwerte
+  /// für die Basis-Werte in [ProductSteps].
+  ///
+  /// Spalten: Artikelnr, Schritt, Datum, Menge_kg, Dauer_min, Mitarbeiter, Notizen
+  ///
+  /// Die Logik gruppiert alle Zeilen nach (Artikelnr + Schritt) und berechnet:
+  ///   - basisDauerMinuten = Mittelwert(Dauer_min)
+  ///   - basisMengeKg = Mittelwert(Menge_kg)
+  ///   - basisMitarbeiter = Mittelwert(Mitarbeiter), gerundet
+  ///   - dauerStdAbweichung = Standardabweichung(Dauer_min)
+  ///   - basisAnzahlMessungen = Anzahl Zeilen
+  Future<int> _importHistorie(
+    Sheet sheet,
+    List<String> warn,
+    List<String> err,
+  ) async {
+    final headers = _readHeaders(sheet);
+    final artNrCol = _findCol(headers, ['artikelnr', 'artikelnummer', 'art_nr']);
+    final schrittCol = _findCol(headers, ['schritt', 'step', 'reihenfolge']);
+    final mengeCol = _findCol(headers, ['menge_kg', 'menge', 'ist_menge']);
+    final dauerCol = _findCol(headers, ['dauer_min', 'dauer', 'ist_dauer']);
+    final maCol = _findCol(headers, ['mitarbeiter', 'ma', 'ist_mitarbeiter']);
+
+    if (artNrCol == null || schrittCol == null || dauerCol == null) {
+      err.add(
+        'Produktionshistorie-Sheet: Spalte "Artikelnr", "Schritt" oder '
+        '"Dauer_min" fehlt.',
+      );
+      return 0;
+    }
+
+    // Historische Messwerte sammeln: key = "artikelnr|schritt"
+    final measurements = <String, List<_HistoryEntry>>{};
+
+    for (var row = 1; row < sheet.rows.length; row++) {
+      final cells = sheet.rows[row];
+      final artNr = _cellStr(cells, artNrCol);
+      final schritt = _cellInt(cells, schrittCol);
+      final dauer = _cellDouble(cells, dauerCol);
+
+      if (artNr == null || schritt == null || dauer == null) continue;
+
+      final menge = _cellDouble(cells, mengeCol) ?? 100.0;
+      final ma = _cellInt(cells, maCol) ?? 1;
+
+      final key = '$artNr|$schritt';
+      measurements.putIfAbsent(key, () => []).add(
+            _HistoryEntry(menge: menge, dauer: dauer, mitarbeiter: ma),
+          );
+    }
+
+    int count = 0;
+
+    for (final entry in measurements.entries) {
+      final parts = entry.key.split('|');
+      final artNr = parts[0];
+      final schritt = int.parse(parts[1]);
+      final values = entry.value;
+
+      // Produkt auflösen
+      final product = await (_db.select(_db.products)
+            ..where((p) => p.artikelnummer.equals(artNr))
+            ..where((p) => p.deletedAt.isNull()))
+          .getSingleOrNull();
+      if (product == null) {
+        warn.add(
+          'Historie: Artikel "$artNr" nicht in DB — übersprungen.',
+        );
+        continue;
+      }
+
+      // Schritt auflösen
+      final step = await (_db.select(_db.productSteps)
+            ..where((s) => s.productId.equals(product.id))
+            ..where((s) => s.reihenfolge.equals(schritt))
+            ..where((s) => s.deletedAt.isNull()))
+          .getSingleOrNull();
+      if (step == null) {
+        warn.add(
+          'Historie: Schritt $schritt für Artikel "$artNr" nicht gefunden '
+          '— übersprungen.',
+        );
+        continue;
+      }
+
+      // Mittelwerte berechnen
+      final n = values.length;
+      final avgDauer = values.map((v) => v.dauer).reduce((a, b) => a + b) / n;
+      final avgMenge = values.map((v) => v.menge).reduce((a, b) => a + b) / n;
+      final avgMa = (values.map((v) => v.mitarbeiter).reduce((a, b) => a + b) / n).round();
+
+      // Standardabweichung berechnen
+      double stdAbw = 0;
+      if (n > 1) {
+        final variance = values
+                .map((v) => (v.dauer - avgDauer) * (v.dauer - avgDauer))
+                .reduce((a, b) => a + b) /
+            (n - 1);
+        stdAbw = _sqrt(variance);
+      }
+
+      // ProductStep aktualisieren
+      await (_db.update(_db.productSteps)
+            ..where((s) => s.id.equals(step.id)))
+          .write(ProductStepsCompanion(
+        basisDauerMinuten: Value(avgDauer),
+        basisMengeKg: Value(avgMenge),
+        basisMitarbeiter: Value(avgMa),
+        basisAnzahlMessungen: Value(n),
+        dauerStdAbweichung: Value(n > 1 ? stdAbw : null),
+        updatedAt: Value(DateTime.now()),
+      ),);
+
+      count += n;
+    }
+
+    return count;
+  }
+
+  // ===========================================================================
+  // Neues Format: Produkt-Sheet-Parsing
+  // ===========================================================================
+
+  /// Sucht ein Produkt-Sheet, dessen Name mit der Artikelnr beginnt.
+  Sheet? _findProduktSheet(Excel excel, String artNr, String? bezeichnung) {
+    final artNrLower = artNr.toLowerCase().trim();
+    for (final name in excel.tables.keys) {
+      final lower = name.toLowerCase().trim();
+      if (lower.startsWith(artNrLower)) return excel.tables[name];
+    }
+    return null;
+  }
+
+  /// Parst die Abschnitts-Grenzen in einem Produkt-Sheet.
+  _ProduktSheetSections _parseProduktSheetSections(Sheet sheet) {
+    int? stammdatenStart;
+    int? schritteStart;
+    int? rezepturStart;
+    int? historieStart;
+
+    for (var row = 0; row < sheet.rows.length; row++) {
+      final cells = sheet.rows[row];
+      final firstCell = _cellStr(cells, 0)?.toUpperCase() ?? '';
+      if (firstCell.contains('PRODUKTIONSSCHRITTE')) {
+        schritteStart = row;
+      } else if (firstCell.contains('REZEPTUR')) {
+        rezepturStart = row;
+      } else if (firstCell.contains('PRODUKTIONSHISTORIE')) {
+        historieStart = row;
+      } else if (firstCell.contains('STAMMDATEN')) {
+        stammdatenStart = row;
+      }
+    }
+
+    // Datenzeilen beginnen nach Abschnitts-Header + Spaltenüberschriften (+2)
+    int? dataStart(int? headerRow) =>
+        headerRow != null ? headerRow + 2 : null;
+
+    // Ende = Beginn des nächsten Abschnitts (oder Sheet-Ende)
+    int sectionEnd(int? start, List<int?> nextStarts) {
+      if (start == null) return sheet.rows.length;
+      final candidates = nextStarts
+          .whereType<int>()
+          .where((s) => s > start)
+          .toList()
+        ..sort();
+      return candidates.isNotEmpty ? candidates.first : sheet.rows.length;
+    }
+
+    final allStarts = [stammdatenStart, schritteStart, rezepturStart, historieStart];
+
+    return _ProduktSheetSections(
+      schritteStart: dataStart(schritteStart),
+      schritteEnd: sectionEnd(schritteStart, allStarts),
+      rezepturStart: dataStart(rezepturStart),
+      rezepturEnd: sectionEnd(rezepturStart, allStarts),
+      historieStart: dataStart(historieStart),
+      historieEnd: sectionEnd(historieStart, allStarts),
+    );
+  }
+
+  /// Importiert Schritte aus einem Zeilenblock eines Produkt-Sheets.
+  Future<int> _importSchritteFromBlock(
+    Sheet sheet,
+    String artNr,
+    int startRow,
+    int endRow,
+    List<String> warn,
+    List<String> err,
+  ) async {
+    // Produkt auflösen
+    final product = await (_db.select(_db.products)
+          ..where((p) => p.artikelnummer.equals(artNr))
+          ..where((p) => p.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (product == null) return 0;
+
+    // Headerzeile ist startRow - 1
+    final headerRow = startRow - 1;
+    if (headerRow < 0 || headerRow >= sheet.rows.length) return 0;
+    final headers = <String, int>{};
+    final hCells = sheet.rows[headerRow];
+    for (var i = 0; i < hCells.length; i++) {
+      final val = hCells[i]?.value?.toString().trim().toLowerCase();
+      if (val != null && val.isNotEmpty) {
+        headers[val.replaceAll(' ', '_').replaceAll('-', '_')] = i;
+      }
+    }
+
+    final reihenfolgeCol = _findCol(headers, ['schritt', 'reihenfolge', 'step', 'nr']);
+    final abtCol = _findCol(headers, ['abteilung', 'department']);
+    final dauerCol = _findCol(headers, ['dauer', 'dauer_min', 'basis_dauer']);
+    final fixzeitCol = _findCol(headers, ['fixzeit', 'fix_zeit', 'ruestzeit']);
+    final mengCol = _findCol(headers, ['basis_menge', 'basismenge', 'basis_menge_kg']);
+    final maCol = _findCol(headers, ['mitarbeiter', 'basis_mitarbeiter', 'ma']);
+    final ausbeuteCol = _findCol(headers, ['ausbeute', 'ausbeute_faktor']);
+    final wartezeitCol = _findCol(headers, ['wartezeit', 'wartezeit_min']);
+    final minChargeCol = _findCol(headers, ['min_charge', 'min_chargen_kg']);
+    final maxChargeCol = _findCol(headers, ['max_charge', 'max_chargen_kg']);
+    final kerntempCol = _findCol(headers, ['kerntemperatur', 'kerntemp']);
+    final raumtempCol = _findCol(headers, ['raumtemperatur', 'raumtemp']);
+    final maschineCol = _findCol(headers, ['maschine', 'machine']);
+    final einstellungenCol =
+        _findCol(headers, ['einstellungen', 'maschineneinstellungen']);
+    final notizenCol = _findCol(headers, ['notizen', 'notes']);
+
+    if (abtCol == null || dauerCol == null) return 0;
+
+    int count = 0;
+    int autoReihenfolge = 1;
+    for (var row = startRow; row < endRow && row < sheet.rows.length; row++) {
+      final cells = sheet.rows[row];
+      final abtStr = _cellStr(cells, abtCol);
+      if (abtStr == null) continue;
+
+      Abteilung abt;
+      try {
+        abt = Abteilung.fromDbValue(abtStr.toLowerCase().replaceAll(' ', '_'));
+      } catch (_) {
+        final match = Abteilung.values.where(
+          (a) => a.anzeigeName.toLowerCase() == abtStr.toLowerCase(),
+        );
+        if (match.isEmpty) {
+          warn.add('Produkt $artNr: Unbekannte Abteilung "$abtStr" — übersprungen.');
+          continue;
+        }
+        abt = match.first;
+      }
+
+      final reihenfolge = _cellInt(cells, reihenfolgeCol) ?? autoReihenfolge;
+      autoReihenfolge = reihenfolge + 1;
+      final basisMenge = _cellDouble(cells, mengCol) ?? 100.0;
+      final dauer = _cellDouble(cells, dauerCol) ?? 0.0;
+      final fixzeit = _cellDouble(cells, fixzeitCol);
+      final ma = _cellInt(cells, maCol) ?? 1;
+
+      final existing = await (_db.select(_db.productSteps)
+            ..where((s) => s.productId.equals(product.id))
+            ..where((s) => s.reihenfolge.equals(reihenfolge))
+            ..where((s) => s.deletedAt.isNull()))
+          .getSingleOrNull();
+
+      if (existing != null) {
+        await (_db.update(_db.productSteps)
+              ..where((s) => s.id.equals(existing.id)))
+            .write(ProductStepsCompanion(
+          abteilung: Value(abt.dbValue),
+          basisMengeKg: Value(basisMenge),
+          basisDauerMinuten: Value(dauer),
+          fixZeitMinuten: Value(fixzeit),
+          basisMitarbeiter: Value(ma),
+          ausbeuteFaktor: Value(_cellDouble(cells, ausbeuteCol)),
+          wartezeitMinuten: Value(_cellDouble(cells, wartezeitCol)),
+          minChargenKg: Value(_cellDouble(cells, minChargeCol)),
+          maxChargenKg: Value(_cellDouble(cells, maxChargeCol)),
+          kerntemperaturZiel: Value(_cellDouble(cells, kerntempCol)),
+          raumtemperaturMax: Value(_cellDouble(cells, raumtempCol)),
+          maschine: Value(_cellStr(cells, maschineCol)),
+          maschinenEinstellungenJson:
+              Value(_cellStr(cells, einstellungenCol)),
+          notizen: Value(_cellStr(cells, notizenCol)),
+          updatedAt: Value(DateTime.now()),
+        ),);
+      } else {
+        await _db.into(_db.productSteps).insert(
+              ProductStepsCompanion.insert(
+                id: _uuid.v4(),
+                productId: product.id,
+                reihenfolge: reihenfolge,
+                abteilung: abt.dbValue,
+                basisMengeKg: basisMenge,
+                basisDauerMinuten: dauer,
+                fixZeitMinuten: Value(fixzeit),
+                basisMitarbeiter: ma,
+                ausbeuteFaktor: Value(_cellDouble(cells, ausbeuteCol)),
+                wartezeitMinuten: Value(_cellDouble(cells, wartezeitCol)),
+                minChargenKg: Value(_cellDouble(cells, minChargeCol)),
+                maxChargenKg: Value(_cellDouble(cells, maxChargeCol)),
+                kerntemperaturZiel: Value(_cellDouble(cells, kerntempCol)),
+                raumtemperaturMax: Value(_cellDouble(cells, raumtempCol)),
+                maschine: Value(_cellStr(cells, maschineCol)),
+                maschinenEinstellungenJson:
+                    Value(_cellStr(cells, einstellungenCol)),
+                notizen: Value(_cellStr(cells, notizenCol)),
+              ),
+            );
+      }
+      count++;
+    }
+    return count;
+  }
+
+  /// Importiert Rezeptur aus einem Zeilenblock eines Produkt-Sheets.
+  Future<int> _importRezepturFromBlock(
+    Sheet sheet,
+    String artNr,
+    int startRow,
+    int endRow,
+    List<String> warn,
+    List<String> err,
+  ) async {
+    final product = await (_db.select(_db.products)
+          ..where((p) => p.artikelnummer.equals(artNr))
+          ..where((p) => p.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (product == null) return 0;
+
+    // Headerzeile
+    final headerRow = startRow - 1;
+    if (headerRow < 0 || headerRow >= sheet.rows.length) return 0;
+    final headers = <String, int>{};
+    final hCells = sheet.rows[headerRow];
+    for (var i = 0; i < hCells.length; i++) {
+      final val = hCells[i]?.value?.toString().trim().toLowerCase();
+      if (val != null && val.isNotEmpty) {
+        headers[val.replaceAll(' ', '_').replaceAll('-', '_')] = i;
+      }
+    }
+
+    final rohwareCol = _findCol(headers, ['rohware', 'rohstoff', 'name']);
+    final mengeCol = _findCol(headers, ['menge_pro_kg', 'menge', 'mengeprokg']);
+    final toleranzCol = _findCol(headers, ['toleranz', 'toleranz_prozent']);
+
+    if (rohwareCol == null || mengeCol == null) return 0;
+
+    int count = 0;
+    for (var row = startRow; row < endRow && row < sheet.rows.length; row++) {
+      final cells = sheet.rows[row];
+      final rohwareName = _cellStr(cells, rohwareCol);
+      if (rohwareName == null) continue;
+
+      final menge = _cellDouble(cells, mengeCol);
+      if (menge == null || menge <= 0) continue;
+
+      final rohware = await (_db.select(_db.rawMaterials)
+            ..where((r) => r.name.equals(rohwareName))
+            ..where((r) => r.deletedAt.isNull()))
+          .getSingleOrNull();
+      if (rohware == null) {
+        warn.add('Produkt $artNr: Rohware "$rohwareName" nicht gefunden.');
+        continue;
+      }
+
+      final existing = await (_db.select(_db.productRawMaterials)
+            ..where((r) => r.productId.equals(product.id))
+            ..where((r) => r.rawMaterialId.equals(rohware.id))
+            ..where((r) => r.deletedAt.isNull()))
+          .getSingleOrNull();
+
+      if (existing != null) {
+        await (_db.update(_db.productRawMaterials)
+              ..where((r) => r.id.equals(existing.id)))
+            .write(ProductRawMaterialsCompanion(
+          mengeProKgProdukt: Value(menge),
+          toleranzProzent: Value(_cellDouble(cells, toleranzCol)),
+          updatedAt: Value(DateTime.now()),
+        ),);
+      } else {
+        await _db.into(_db.productRawMaterials).insert(
+              ProductRawMaterialsCompanion.insert(
+                id: _uuid.v4(),
+                productId: product.id,
+                rawMaterialId: rohware.id,
+                mengeProKgProdukt: menge,
+                toleranzProzent: Value(_cellDouble(cells, toleranzCol)),
+              ),
+            );
+      }
+      count++;
+    }
+    return count;
+  }
+
+  /// Importiert Produktionshistorie aus einem Zeilenblock eines Produkt-Sheets.
+  Future<int> _importHistorieFromBlock(
+    Sheet sheet,
+    String artNr,
+    int startRow,
+    int endRow,
+    List<String> warn,
+    List<String> err,
+  ) async {
+    final product = await (_db.select(_db.products)
+          ..where((p) => p.artikelnummer.equals(artNr))
+          ..where((p) => p.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (product == null) return 0;
+
+    // Headerzeile
+    final headerRow = startRow - 1;
+    if (headerRow < 0 || headerRow >= sheet.rows.length) return 0;
+    final headers = <String, int>{};
+    final hCells = sheet.rows[headerRow];
+    for (var i = 0; i < hCells.length; i++) {
+      final val = hCells[i]?.value?.toString().trim().toLowerCase();
+      if (val != null && val.isNotEmpty) {
+        headers[val.replaceAll(' ', '_').replaceAll('-', '_')] = i;
+      }
+    }
+
+    final schrittCol = _findCol(headers, ['schritt', 'step', 'reihenfolge']);
+    final mengeCol = _findCol(headers, ['menge_kg', 'menge', 'ist_menge']);
+    final dauerCol = _findCol(headers, ['dauer_min', 'dauer', 'ist_dauer']);
+    final maCol = _findCol(headers, ['mitarbeiter', 'ma', 'ist_mitarbeiter']);
+
+    if (schrittCol == null || dauerCol == null) return 0;
+
+    // Messwerte sammeln
+    final measurements = <int, List<_HistoryEntry>>{};
+
+    for (var row = startRow; row < endRow && row < sheet.rows.length; row++) {
+      final cells = sheet.rows[row];
+      final schritt = _cellInt(cells, schrittCol);
+      final dauer = _cellDouble(cells, dauerCol);
+      if (schritt == null || dauer == null) continue;
+
+      final menge = _cellDouble(cells, mengeCol) ?? 100.0;
+      final ma = _cellInt(cells, maCol) ?? 1;
+
+      measurements.putIfAbsent(schritt, () => []).add(
+            _HistoryEntry(menge: menge, dauer: dauer, mitarbeiter: ma),
+          );
+    }
+
+    int count = 0;
+    for (final entry in measurements.entries) {
+      final schritt = entry.key;
+      final values = entry.value;
+
+      final step = await (_db.select(_db.productSteps)
+            ..where((s) => s.productId.equals(product.id))
+            ..where((s) => s.reihenfolge.equals(schritt))
+            ..where((s) => s.deletedAt.isNull()))
+          .getSingleOrNull();
+      if (step == null) {
+        warn.add('Historie $artNr: Schritt $schritt nicht gefunden.');
+        continue;
+      }
+
+      final n = values.length;
+      final avgDauer = values.map((v) => v.dauer).reduce((a, b) => a + b) / n;
+      final avgMenge = values.map((v) => v.menge).reduce((a, b) => a + b) / n;
+      final avgMa = (values.map((v) => v.mitarbeiter).reduce((a, b) => a + b) / n).round();
+
+      double stdAbw = 0;
+      if (n > 1) {
+        final variance = values
+                .map((v) => (v.dauer - avgDauer) * (v.dauer - avgDauer))
+                .reduce((a, b) => a + b) /
+            (n - 1);
+        stdAbw = _sqrt(variance);
+      }
+
+      await (_db.update(_db.productSteps)
+            ..where((s) => s.id.equals(step.id)))
+          .write(ProductStepsCompanion(
+        basisDauerMinuten: Value(avgDauer),
+        basisMengeKg: Value(avgMenge),
+        basisMitarbeiter: Value(avgMa),
+        basisAnzahlMessungen: Value(n),
+        dauerStdAbweichung: Value(n > 1 ? stdAbw : null),
+        updatedAt: Value(DateTime.now()),
+      ),);
+
+      count += n;
+    }
+    return count;
+  }
+
+  /// Einfache Quadratwurzel (Newton-Verfahren) ohne dart:math Import.
+  static double _sqrt(double x) {
+    if (x <= 0) return 0;
+    double guess = x / 2;
+    for (var i = 0; i < 20; i++) {
+      guess = (guess + x / guess) / 2;
+    }
+    return guess;
+  }
+
   // ---- Hilfsfunktionen ----
 
   /// Sucht ein Sheet per Name (case-insensitive, mehrere Aliase).
@@ -637,4 +1254,43 @@ class ExcelImportService {
     final s = val.toString().trim();
     return int.tryParse(s);
   }
+}
+
+/// Einzelner historischer Messwert aus dem Produktionshistorie-Sheet.
+class _HistoryEntry {
+  const _HistoryEntry({
+    required this.menge,
+    required this.dauer,
+    required this.mitarbeiter,
+  });
+
+  final double menge;
+  final double dauer;
+  final int mitarbeiter;
+}
+
+/// Abschnitts-Grenzen in einem Produkt-Sheet (Zeilen-Indizes).
+class _ProduktSheetSections {
+  const _ProduktSheetSections({
+    this.schritteStart,
+    this.schritteEnd = 0,
+    this.rezepturStart,
+    this.rezepturEnd = 0,
+    this.historieStart,
+    this.historieEnd = 0,
+  });
+
+  final int? schritteStart;
+  final int schritteEnd;
+  final int? rezepturStart;
+  final int rezepturEnd;
+  final int? historieStart;
+  final int historieEnd;
+
+  int get schritteRows =>
+      schritteStart != null ? (schritteEnd - schritteStart!).clamp(0, 999999) : 0;
+  int get rezepturRows =>
+      rezepturStart != null ? (rezepturEnd - rezepturStart!).clamp(0, 999999) : 0;
+  int get historieRows =>
+      historieStart != null ? (historieEnd - historieStart!).clamp(0, 999999) : 0;
 }

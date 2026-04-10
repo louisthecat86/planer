@@ -135,7 +135,8 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
                   child: Text(
                     'Importiere Artikel-Stammdaten aus einer Excel-Datei. '
                     'Die Datei sollte Sheets für Artikel, Schritte, '
-                    'Rezeptur und Rohwaren enthalten.',
+                    'Rezeptur, Rohwaren und optional '
+                    'Produktionshistorie enthalten.',
                     style: TextStyle(
                       fontSize: 13,
                       color: colors.onPrimaryContainer,
@@ -247,6 +248,7 @@ class _PreviewCard extends StatelessWidget {
             _countRow('Produktions-Schritte', preview.schritte),
             _countRow('Rezeptur-Einträge', preview.rezepturen),
             _countRow('Rohwaren', preview.rohwaren),
+            _countRow('Historische Messwerte', preview.historien),
 
             if (preview.warnungen.isNotEmpty) ...[
               const Divider(),
@@ -368,6 +370,7 @@ class _ResultCard extends StatelessWidget {
             _countRow('Schritte', result.schritteImportiert),
             _countRow('Rezepturen', result.rezepturenImportiert),
             _countRow('Rohwaren', result.rohwarenImportiert),
+            _countRow('Historische Messwerte', result.historienVerarbeitet),
 
             if (result.warnungen.isNotEmpty) ...[
               const Divider(),
