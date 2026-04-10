@@ -144,6 +144,12 @@ class _CapacityList extends StatelessWidget {
     return usedByDepartment;
   }
 
+  String _fmtMin(double m) {
+    final h = m ~/ 60;
+    final min = (m % 60).round();
+    return '${h}h ${min.toString().padLeft(2, '0')}m';
+  }
+
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<Map<String, double>>(
@@ -161,18 +167,140 @@ class _CapacityList extends StatelessWidget {
 
         final usedByDept = snapshot.data ?? {};
 
+        // ── Gesamt-Zusammenfassung ──
+        double totalCapacity = 0;
+        double totalUsed = 0;
+        int overloaded = 0;
+        int idle = 0;
+
+        for (final abt in Abteilung.values) {
+          final cap = capacities[abt.dbValue] ?? 480;
+          final used = usedByDept[abt.dbValue] ?? 0;
+          totalCapacity += cap;
+          totalUsed += used;
+          if (used > cap) overloaded++;
+          if (used == 0) idle++;
+        }
+
+        final totalRatio =
+            totalCapacity > 0 ? totalUsed / totalCapacity : 0.0;
+        final totalColor = totalRatio > 1.0
+            ? Colors.red
+            : totalRatio > 0.75
+                ? Colors.orange
+                : Colors.green;
+
         return Column(
-          children: Abteilung.values.map((abteilung) {
-            final capacityMinutes = capacities[abteilung.dbValue] ?? 480;
-            final usedMinutes = usedByDept[abteilung.dbValue] ?? 0;
-            return _DepartmentCapacityCard(
-              abteilung: abteilung,
-              usedMinutes: usedMinutes,
-              capacityMinutes: capacityMinutes,
-            );
-          }).toList(),
+          children: [
+            // ── Summary-Card ──
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tages-Übersicht',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: (totalRatio).clamp(0, 1.0),
+                        backgroundColor: Colors.grey.shade200,
+                        color: totalColor,
+                        minHeight: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${(totalRatio * 100).clamp(0, 150).toStringAsFixed(0)}% Gesamt',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: totalColor,
+                          ),
+                        ),
+                        Text(
+                          '${_fmtMin(totalUsed)} / ${_fmtMin(totalCapacity)}',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 16,
+                      children: [
+                        _SummaryChip(
+                          icon: Icons.warning_amber_rounded,
+                          label: '$overloaded überlastet',
+                          color: overloaded > 0
+                              ? Colors.red
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                        ),
+                        _SummaryChip(
+                          icon: Icons.pause_circle_outline,
+                          label: '$idle ohne Aufträge',
+                          color: Theme.of(context)
+                              .colorScheme
+                              .onSurfaceVariant,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            // ── Einzelne Abteilungen ──
+            ...Abteilung.values.map((abteilung) {
+              final capacityMinutes =
+                  capacities[abteilung.dbValue] ?? 480;
+              final usedMinutes =
+                  usedByDept[abteilung.dbValue] ?? 0;
+              return _DepartmentCapacityCard(
+                abteilung: abteilung,
+                usedMinutes: usedMinutes,
+                capacityMinutes: capacityMinutes,
+              );
+            }),
+          ],
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kleiner Chip für die Tages-Übersicht
+// ---------------------------------------------------------------------------
+
+class _SummaryChip extends StatelessWidget {
+  const _SummaryChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 12, color: color)),
+      ],
     );
   }
 }

@@ -21,6 +21,7 @@ class TasksDetailScreen extends ConsumerStatefulWidget {
 class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
   Abteilung? _filterAbt;
   String _filterStatus = 'offen'; // 'offen', 'alle', 'geplant', 'in_arbeit'
+  String _search = '';
 
   /// Lädt alle offenen Tasks (nicht storniert, nicht fertig) und
   /// gruppiert sie nach Dringlichkeit.
@@ -73,6 +74,21 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
 
     for (final task in tasks) {
       final product = productMap[task.productId];
+
+      // Textsuche
+      if (_search.isNotEmpty) {
+        final q = _search.toLowerCase();
+        final label = product != null
+            ? '${product.artikelnummer} ${product.artikelbezeichnung}'
+            : task.productId;
+        final abtName = Abteilung.fromDbValue(task.abteilung).anzeigeName;
+        if (!label.toLowerCase().contains(q) &&
+            !abtName.toLowerCase().contains(q) &&
+            !(task.notizen?.toLowerCase().contains(q) ?? false)) {
+          continue;
+        }
+      }
+
       final item = _OrderItem(
         task: task,
         product: product,
@@ -114,6 +130,27 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          // Suchfeld
+          TextField(
+            decoration: InputDecoration(
+              hintText: 'Suche nach Artikel, Abteilung, Notiz…',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _search.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () => setState(() => _search = ''),
+                    )
+                  : null,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 0),
+              filled: true,
+            ),
+            onChanged: (v) => setState(() => _search = v),
+          ),
+          const SizedBox(height: 12),
+
           // Status-Tabs
           _StatusFilterRow(
             selected: _filterStatus,
@@ -157,10 +194,11 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
               }
 
               final data = snapshot.data!;
-              final hasAny = data.ueberfaellig.isNotEmpty ||
-                  data.heute.isNotEmpty ||
-                  data.dieseWoche.isNotEmpty ||
-                  data.spaeter.isNotEmpty;
+              final total = data.ueberfaellig.length +
+                  data.heute.length +
+                  data.dieseWoche.length +
+                  data.spaeter.length;
+              final hasAny = total > 0;
 
               if (!hasAny) {
                 return Padding(
@@ -189,6 +227,47 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Zusammenfassungs-Leiste
+                  Card(
+                    color: theme.colorScheme.surfaceContainerLow,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _SummaryBadge(
+                            label: 'Überfällig',
+                            count: data.ueberfaellig.length,
+                            color: Colors.red,
+                          ),
+                          _SummaryBadge(
+                            label: 'Heute',
+                            count: data.heute.length,
+                            color: const Color(0xFFFB8C00),
+                          ),
+                          _SummaryBadge(
+                            label: 'Woche',
+                            count: data.dieseWoche.length,
+                            color: const Color(0xFFFDD835),
+                          ),
+                          _SummaryBadge(
+                            label: 'Später',
+                            count: data.spaeter.length,
+                            color: Colors.green,
+                          ),
+                          _SummaryBadge(
+                            label: 'Gesamt',
+                            count: total,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   if (data.ueberfaellig.isNotEmpty)
                     _DringlichkeitsSection(
                       titel: '🔴 Überfällig',
@@ -219,6 +298,45 @@ class _TasksDetailScreenState extends ConsumerState<TasksDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Zusammenfassungs-Badge
+// ---------------------------------------------------------------------------
+
+class _SummaryBadge extends StatelessWidget {
+  const _SummaryBadge({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: count > 0 ? color : Colors.grey,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+        ),
+      ],
     );
   }
 }

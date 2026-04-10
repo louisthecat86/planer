@@ -6,16 +6,46 @@ import '../../core/providers/personnel_provider.dart';
 import '../../core/services/personnel_service.dart';
 
 /// Vollständige Mitarbeiterliste mit Abteilung, Arbeitszeiten, Urlaub
-/// und Lösch-Funktion.
-class PersonnelListSection extends ConsumerWidget {
+/// und Lösch-Funktion – jetzt mit Suche und Abteilungs-Filter.
+class PersonnelListSection extends ConsumerStatefulWidget {
   const PersonnelListSection({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PersonnelListSection> createState() =>
+      _PersonnelListSectionState();
+}
+
+class _PersonnelListSectionState extends ConsumerState<PersonnelListSection> {
+  String _search = '';
+  Abteilung? _filterAbt;
+
+  List<Employee> _filtered(List<Employee> all) {
+    var list = all;
+
+    // Abteilungs-Filter
+    if (_filterAbt != null) {
+      list = list.where((e) => e.department == _filterAbt!.dbValue).toList();
+    }
+
+    // Text-Suche
+    if (_search.isNotEmpty) {
+      final q = _search.toLowerCase();
+      list = list
+          .where((e) =>
+              e.name.toLowerCase().contains(q) ||
+              e.department.toLowerCase().contains(q))
+          .toList();
+    }
+
+    return list;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final planState = ref.watch(personnelPlanNotifierProvider);
 
     return planState.when(
-      data: (plan) => _buildList(context, ref, plan),
+      data: (plan) => _buildList(context, plan),
       loading: () => const SizedBox(
         height: 140,
         child: Center(child: CircularProgressIndicator()),
@@ -33,7 +63,7 @@ class PersonnelListSection extends ConsumerWidget {
     );
   }
 
-  Widget _buildList(BuildContext context, WidgetRef ref, PersonnelPlan plan) {
+  Widget _buildList(BuildContext context, PersonnelPlan plan) {
     if (plan.employees.isEmpty) {
       return const Card(
         child: Padding(
@@ -45,9 +75,11 @@ class PersonnelListSection extends ConsumerWidget {
       );
     }
 
+    final filtered = _filtered(plan.employees);
+
     // Nach Abteilung gruppieren
     final grouped = <String, List<Employee>>{};
-    for (final emp in plan.employees) {
+    for (final emp in filtered) {
       grouped.putIfAbsent(emp.department, () => []).add(emp);
     }
 
@@ -56,46 +88,112 @@ class PersonnelListSection extends ConsumerWidget {
         .where((a) => grouped.containsKey(a.dbValue))
         .toList();
 
+    // Abteilungen die überhaupt Mitarbeiter haben (für Filter-Chips)
+    final presentDepts = Abteilung.values
+        .where((a) =>
+            plan.employees.any((e) => e.department == a.dbValue))
+        .toList();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Suchfeld ──
+            TextField(
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search, size: 20),
+                hintText: 'Name oder Abteilung suchen …',
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                suffixIcon: _search.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () => setState(() => _search = ''),
+                      )
+                    : null,
+              ),
+              onChanged: (v) => setState(() => _search = v),
+            ),
+            const SizedBox(height: 10),
+
+            // ── Abteilungs-Filter-Chips ──
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  FilterChip(
+                    label: const Text('Alle'),
+                    selected: _filterAbt == null,
+                    onSelected: (_) => setState(() => _filterAbt = null),
+                  ),
+                  const SizedBox(width: 6),
+                  for (final abt in presentDepts) ...[
+                    FilterChip(
+                      avatar: CircleAvatar(
+                        backgroundColor: abt.farbe,
+                        child: Text(
+                          abt.kurzcode,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                          ),
+                        ),
+                      ),
+                      label: Text(abt.anzeigeName),
+                      selected: _filterAbt == abt,
+                      onSelected: (_) => setState(
+                        () => _filterAbt = _filterAbt == abt ? null : abt,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            // ── Ergebnis-Zähler ──
             Text(
-              'Alle Mitarbeiter (${plan.employees.length})',
-              style: Theme.of(context).textTheme.titleMedium,
+              '${filtered.length} von ${plan.employees.length} Mitarbeiter',
+              style: Theme.of(context).textTheme.titleSmall,
             ),
             const SizedBox(height: 12),
-            for (final abt in sortedDepts) ...[
-              _DepartmentHeader(abteilung: abt),
-              const SizedBox(height: 4),
-              ...grouped[abt.dbValue]!.map(
-                (emp) => _EmployeeTile(
-                  employee: emp,
-                  vacations: plan.vacations
-                      .where((v) => v.employeeId == emp.id)
-                      .toList(),
-                  onDelete: () =>
-                      _confirmDelete(context, ref, emp),
+
+            // ── Gruppierte Liste ──
+            if (filtered.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: Text('Keine Treffer.')),
+              )
+            else
+              for (final abt in sortedDepts) ...[
+                _DepartmentHeader(abteilung: abt),
+                const SizedBox(height: 4),
+                ...grouped[abt.dbValue]!.map(
+                  (emp) => _EmployeeTile(
+                    employee: emp,
+                    vacations: plan.vacations
+                        .where((v) => v.employeeId == emp.id)
+                        .toList(),
+                    onDelete: () => _confirmDelete(emp),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-            ],
+                const SizedBox(height: 12),
+              ],
           ],
         ),
       ),
     );
   }
 
-  Future<void> _confirmDelete(
-    BuildContext context,
-    WidgetRef ref,
-    Employee employee,
-  ) async {
+  Future<void> _confirmDelete(Employee employee) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('Mitarbeiter löschen?'),
         content: Text(
           '„${employee.name}" wird unwiderruflich entfernt, '
@@ -103,11 +201,11 @@ class PersonnelListSection extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Abbrechen'),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: Text(
               'Löschen',
               style: TextStyle(color: Theme.of(context).colorScheme.error),
