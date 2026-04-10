@@ -100,6 +100,7 @@ class PersonnelPlanningSection extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Header mit Aktionen ──
                   Row(
                     children: [
                       Expanded(
@@ -108,60 +109,90 @@ class PersonnelPlanningSection extends ConsumerWidget {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddEmployeeDialog(context, ref, plan),
-                        icon: const Icon(Icons.person_add),
-                        label: const Text('Mitarbeiter'),
+                      SizedBox(
+                        height: 32,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showAddEmployeeDialog(context, ref, plan),
+                          icon: const Icon(Icons.person_add, size: 16),
+                          label: const Text('MA', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                        ),
                       ),
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showAddVacationDialog(context, ref, plan),
-                        icon: const Icon(Icons.beach_access),
-                        label: const Text('Urlaub'),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        height: 32,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showAddVacationDialog(context, ref, plan),
+                          icon: const Icon(Icons.beach_access, size: 16),
+                          label: const Text('Urlaub', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 10)),
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
+
+                  // ── Kompakte KPI-Zeile ──
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 16,
+                    runSpacing: 6,
                     children: [
                       _InfoBadge(
                         label: 'Team',
-                        value: '${plan.employees.length} Mitarbeiter',
+                        value: '${plan.employees.length}',
                         icon: Icons.group,
                       ),
                       _InfoBadge(
-                        label: 'Heute abwesend',
+                        label: 'Abwesend',
                         value: '${absenceToday.length}',
                         icon: Icons.airline_seat_individual_suite,
                       ),
                       _InfoBadge(
-                        label: 'Nächste Urlaube',
+                        label: 'Urlaube',
                         value: '${upcomingVacations.length}',
                         icon: Icons.calendar_month,
                       ),
                     ],
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Personalübersicht nach Abteilung',
-                    style: Theme.of(context).textTheme.titleSmall,
+
+                  // ── Divider + Abteilungsübersicht ──
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1),
                   ),
-                  const SizedBox(height: 10),
+                  Text(
+                    'Nach Abteilung',
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
                   Column(
                     children: departmentStatus
                         .map((status) => _DepartmentStaffCard(status: status))
                         .toList(),
                   ),
-                  const SizedBox(height: 16),
+
+                  // ── Divider + Urlaube ──
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(height: 1),
+                  ),
                   Text(
                     'Bevorstehende Urlaube',
-                    style: Theme.of(context).textTheme.titleSmall,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   if (upcomingVacations.isEmpty)
-                    const Text('Keine Urlaube in der nächsten Zeit geplant.')
+                    Text(
+                      'Keine Urlaube geplant.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    )
                   else
                     Column(
                       children: upcomingVacations
@@ -480,10 +511,21 @@ class _InfoBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      avatar: Icon(icon, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      label: Text('$label: $value'),
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: colors.onSurfaceVariant),
+        const SizedBox(width: 4),
+        Text(
+          '$label: ',
+          style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+        ),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 }
@@ -523,68 +565,81 @@ class _DepartmentStaffCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
-                  backgroundColor: status.abteilung.farbe,
-                  child: Text(
-                    status.abteilung.kurzcode,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    status.abteilung.anzeigeName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Text(
-                  status.statusText,
-                  style: TextStyle(
-                    color: status.statusColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+    final colors = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: status.abteilung.farbe,
+              borderRadius: BorderRadius.circular(6),
             ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _MiniStatChip(label: 'Team', value: '${status.totalStaff}'),
-                _MiniStatChip(label: 'Abwesend', value: '${status.absentStaff}'),
-                _MiniStatChip(label: 'Verfügbar', value: '${status.availableStaff}'),
-                _MiniStatChip(label: 'Bedarf', value: '${status.plannedDemand}'),
-              ],
+            alignment: Alignment.center,
+            child: Text(
+              status.abteilung.kurzcode,
+              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              status.abteilung.anzeigeName,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
+          _StatValue(label: 'Team', value: '${status.totalStaff}'),
+          const SizedBox(width: 10),
+          _StatValue(label: 'Verf.', value: '${status.availableStaff}'),
+          const SizedBox(width: 10),
+          _StatValue(label: 'Bedarf', value: '${status.plannedDemand}'),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: status.statusColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              status.statusText,
+              style: TextStyle(
+                color: status.statusColor,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _MiniStatChip extends StatelessWidget {
-  const _MiniStatChip({required this.label, required this.value});
+class _StatValue extends StatelessWidget {
+  const _StatValue({required this.label, required this.value});
 
   final String label;
   final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      label: Text('$label: $value'),
-      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 9,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -608,20 +663,40 @@ class _VacationRow extends StatelessWidget {
     );
     final abt = Abteilung.values.where((a) => a.dbValue == employee.department);
     final abtName = abt.isNotEmpty ? abt.first.anzeigeName : '';
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: ListTile(
-        title: Text(employee.name),
-        subtitle: Text(
-          '${abtName.isNotEmpty ? '$abtName • ' : ''}'
-          '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}'
-          '${vacation.reason.isNotEmpty ? ' • ${vacation.reason}' : ''}',
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete_outline),
-          onPressed: onDelete,
-          tooltip: 'Urlaub entfernen',
-        ),
+    final colors = Theme.of(context).colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  employee.name,
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+                Text(
+                  '${abtName.isNotEmpty ? '$abtName · ' : ''}'
+                  '${_formatDate(vacation.fromDate)} – ${_formatDate(vacation.toDate)}'
+                  '${vacation.reason.isNotEmpty ? ' · ${vacation.reason}' : ''}',
+                  style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(
+            width: 32,
+            height: 32,
+            child: IconButton(
+              icon: Icon(Icons.delete_outline, size: 16, color: colors.error),
+              padding: EdgeInsets.zero,
+              onPressed: onDelete,
+              tooltip: 'Urlaub entfernen',
+            ),
+          ),
+        ],
       ),
     );
   }

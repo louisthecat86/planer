@@ -471,21 +471,27 @@ class _OrderCard extends StatelessWidget {
       child: Card(
         margin: const EdgeInsets.only(bottom: 8),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Zeile 1: Abteilung + Produkt + Status
               Row(
                 children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: item.abteilung.farbe,
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: item.abteilung.farbe,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    alignment: Alignment.center,
                     child: Text(
                       item.abteilung.kurzcode,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 12,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -493,61 +499,80 @@ class _OrderCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       produktLabel,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  _StatusChip(status: item.task.status),
+                  _StatusDot(status: item.task.status),
                 ],
               ),
               const SizedBox(height: 8),
 
-              // Zeile 2: Details
-              Wrap(
-                spacing: 10,
-                runSpacing: 6,
-                children: [
-                  _DetailChip(
-                    icon: Icons.calendar_today,
-                    label: _formatDate(item.task.datum),
-                  ),
-                  _DetailChip(
-                    icon: Icons.scale,
-                    label: '${item.task.mengeKg.toStringAsFixed(0)} kg',
-                  ),
-                  _DetailChip(
-                    icon: Icons.schedule,
-                    label: _formatDuration(item.task.geplanteDauerMinuten),
-                  ),
-                  _DetailChip(
-                    icon: Icons.people,
-                    label: '${item.task.geplanteMitarbeiter} MA',
-                  ),
-                  if (item.task.startZeit != null)
-                    _DetailChip(
-                      icon: Icons.access_time,
-                      label: item.task.startZeit!,
-                    ),
-                  if (abgangLabel != null)
-                    _DetailChip(
-                      icon: Icons.event_available,
-                      label: abgangLabel,
-                    ),
-                ],
+              // Zeile 2: Kompakte Detail-Zeile
+              DefaultTextStyle(
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.onSurfaceVariant,
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 13, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text(_formatDate(item.task.datum)),
+                    const SizedBox(width: 12),
+                    Icon(Icons.scale, size: 13, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text('${item.task.mengeKg.toStringAsFixed(0)} kg'),
+                    const SizedBox(width: 12),
+                    Icon(Icons.schedule, size: 13, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text(_formatDuration(item.task.geplanteDauerMinuten)),
+                    const SizedBox(width: 12),
+                    Icon(Icons.people, size: 13, color: colors.onSurfaceVariant),
+                    const SizedBox(width: 3),
+                    Text('${item.task.geplanteMitarbeiter}'),
+                    if (item.task.startZeit != null) ...[
+                      const SizedBox(width: 12),
+                      Icon(Icons.access_time, size: 13, color: colors.onSurfaceVariant),
+                      const SizedBox(width: 3),
+                      Text(item.task.startZeit!),
+                    ],
+                  ],
+                ),
               ),
+
+              // MHD-Zeile (falls vorhanden)
+              if (abgangLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Row(
+                    children: [
+                      Icon(Icons.event_available, size: 13, color: colors.onSurfaceVariant),
+                      const SizedBox(width: 3),
+                      Text(
+                        abgangLabel,
+                        style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                ),
 
               // Notizen
               if (item.task.notizen != null &&
                   item.task.notizen!.isNotEmpty)
                 Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: const EdgeInsets.only(top: 4),
                   child: Text(
                     item.task.notizen!,
                     style: TextStyle(
                       fontSize: 12,
+                      fontStyle: FontStyle.italic,
                       color: colors.onSurfaceVariant,
                     ),
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -563,8 +588,8 @@ class _OrderCard extends StatelessWidget {
 // Status-Chip
 // ---------------------------------------------------------------------------
 
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.status});
+class _StatusDot extends StatelessWidget {
+  const _StatusDot({required this.status});
 
   final String status;
 
@@ -596,34 +621,16 @@ class _StatusChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Chip(
-      label: Text(_label, style: TextStyle(color: _color, fontSize: 12)),
-      backgroundColor: _color.withValues(alpha: 0.12),
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Detail-Chip
-// ---------------------------------------------------------------------------
-
-class _DetailChip extends StatelessWidget {
-  const _DetailChip({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Chip(
-      avatar: Icon(icon, size: 16, color: colors.onSurfaceVariant),
-      label: Text(label),
-      backgroundColor: colors.surfaceContainerLow,
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: _color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        _label,
+        style: TextStyle(color: _color, fontSize: 11, fontWeight: FontWeight.w600),
+      ),
     );
   }
 }

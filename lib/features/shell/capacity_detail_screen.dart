@@ -195,62 +195,67 @@ class _CapacityList extends StatelessWidget {
             // ── Summary-Card ──
             Card(
               child: Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Tages-Übersicht',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 10),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: (totalRatio).clamp(0, 1.0),
-                        backgroundColor: Colors.grey.shade200,
-                        color: totalColor,
-                        minHeight: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          '${(totalRatio * 100).clamp(0, 150).toStringAsFixed(0)}% Gesamt',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: totalColor,
+                        Expanded(
+                          child: Text(
+                            'Tages-Übersicht',
+                            style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
                         Text(
-                          '${_fmtMin(totalUsed)} / ${_fmtMin(totalCapacity)}',
-                          style: const TextStyle(fontSize: 12),
+                          '${(totalRatio * 100).clamp(0, 150).toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: totalColor,
+                          ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 16,
-                      children: [
-                        _SummaryChip(
-                          icon: Icons.warning_amber_rounded,
-                          label: '$overloaded überlastet',
-                          color: overloaded > 0
-                              ? Colors.red
-                              : Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                        ),
-                        _SummaryChip(
-                          icon: Icons.pause_circle_outline,
-                          label: '$idle ohne Aufträge',
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
-                        ),
-                      ],
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (totalRatio).clamp(0, 1.0),
+                        backgroundColor: Colors.grey.shade200,
+                        color: totalColor,
+                        minHeight: 8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    DefaultTextStyle(
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      child: Row(
+                        children: [
+                          Text('${_fmtMin(totalUsed)} / ${_fmtMin(totalCapacity)}'),
+                          const Spacer(),
+                          _SummaryChip(
+                            icon: Icons.warning_amber_rounded,
+                            label: '$overloaded überlastet',
+                            color: overloaded > 0
+                                ? Colors.red
+                                : Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 12),
+                          _SummaryChip(
+                            icon: Icons.pause_circle_outline,
+                            label: '$idle ohne Aufträge',
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -334,73 +339,81 @@ class _DepartmentCapacityCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final remaining = (capacityMinutes - usedMinutes).clamp(0.0, double.infinity);
+    final pctLabel = '${(_ratio * 100).clamp(0.0, 150.0).toStringAsFixed(0)}%';
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: abteilung.farbe,
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: abteilung.farbe,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  alignment: Alignment.center,
                   child: Text(
                     abteilung.kurzcode,
-                    style: const TextStyle(color: Colors.white, fontSize: 14),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    abteilung.anzeigeName,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        abteilung.anzeigeName,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${_formatMinutes(usedMinutes)} / ${_formatMinutes(capacityMinutes)}  ·  Rest ${_formatMinutes(remaining)}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  pctLabel,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: _barColor,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    icon: const Icon(Icons.edit, size: 16),
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Kapazität bearbeiten',
+                    onPressed: () => _showEditCapacityDialog(
+                      context, ref, abteilung, capacityMinutes,
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  tooltip: 'Kapazität bearbeiten',
-                  onPressed: () => _showEditCapacityDialog(
-                    context, ref, abteilung, capacityMinutes,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: _ratio > 1.0 ? 1.0 : _ratio,
-                backgroundColor: Colors.grey.shade200,
-                color: _barColor,
-                minHeight: 12,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${(_ratio * 100).clamp(0.0, 150.0).toStringAsFixed(0)}% Auslastung',
-                  style: TextStyle(fontWeight: FontWeight.w600, color: _barColor),
-                ),
-                Text(
-                  'Kapazität: ${_formatMinutes(capacityMinutes)}',
-                  style: const TextStyle(fontSize: 12),
                 ),
               ],
             ),
             const SizedBox(height: 6),
-            Text(
-              'Gebucht: ${_formatMinutes(usedMinutes)} · Rest: ${_formatMinutes(remaining)}',
-              style: TextStyle(
-                fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _ratio > 1.0 ? 1.0 : _ratio,
+                backgroundColor: Colors.grey.shade200,
+                color: _barColor,
+                minHeight: 6,
               ),
             ),
           ],
