@@ -1,19 +1,31 @@
-import 'dart:io';
 import 'package:excel/excel.dart';
 import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
-/// Erzeugt die Stammdaten-Excel-Vorlage und bietet einen
-/// „Speichern unter"-Dialog an.
+import '../constants/product_groups.dart';
+import '../constants/product_group_fields.dart';
+
+/// Erzeugt die Stammdaten-Excel-Vorlage mit gruppenspezifischen Feldern.
 ///
-/// Aufbau der Vorlage:
-///   1. **Übersicht** — Gesamtliste aller Artikel mit Hyperlinks zu den
-///      jeweiligen Produkt-Sheets
-///   2. **Rohwaren** — Globale Rohstoff-Definitionen (Lieferant, Einheit, ...)
-///   3. **Pro Artikel ein Sheet** (z.B. „10001_Leberkaese_fein") mit:
-///      - Stammdaten-Block
-///      - Produktionsschritte
-///      - Rezeptur / Stückliste
-///      - Produktionshistorie (historische Ist-Daten)
+/// Aufbau:
+///   1. **Übersicht** — filterbare Gesamtliste aller Artikel mit
+///      Hyperlinks zu den jeweiligen Produkt-Sheets
+///   2. **Rohwaren** — globale Rohstoff-Definitionen
+///   3. **Ein Beispiel-Sheet pro Produktgruppe** mit:
+///      - Zurück-Link zur Übersicht
+///      - Stammdaten-Block (allgemein + gruppenspezifisch)
+///        · Zeile 1: Label (Pflichtfelder gelb hinterlegt)
+///        · Zeile 2: Einheit (grau, kursiv)
+///        · Zeile 3: Beispiel-Datenzeile
+///      - Produktionsschritte (nur Header, vom Nutzer auszufüllen)
+///      - Rezeptur (nur Header)
+///      - Produktionshistorie (nur Header)
+///      - Tab-Farbe je nach Gruppe
+///
+/// Der Nutzer kann die Beispiel-Sheets kopieren (Excel-Rechtsklick auf Tab →
+/// "Verschieben/Kopieren → Kopie erstellen") und als Blaupause für neue
+/// Artikel verwenden. Jeder Artikel, der importiert werden soll, muss in
+/// der Übersicht eingetragen sein.
 class TemplateExportService {
   TemplateExportService._();
 
@@ -21,126 +33,28 @@ class TemplateExportService {
   static Future<String?> generateAndSave() async {
     final excel = Excel.createExcel();
 
-    // Beispiel-Artikeldaten
-    final artikel = [
-      const _ArtikelDaten(
-        nr: '10001',
-        bezeichnung: 'Leberkäse fein',
-        beschreibung: 'Feiner Leberkäse 500g',
-        verpackungsart: 'Vakuum',
-        gebindeKg: '0.5',
-        mhdTage: '21',
-        gesamtausbeute: '0.85',
-        vorlaufzeit: '2',
-        planungsgruppe: 'Aufschnitt',
-        schritte: [
-          ['1', 'zerlegung', '100', '45', '10', '2', '', '', '', '', '', '12', '', 'Schweinefleisch zerlegen'],
-          ['2', 'kutterabteilung', '100', '30', '5', '1', '0.98', '', '50', '200', '', '8', 'Kutter', 'Brät herstellen'],
-          ['3', 'wurstkueche', '100', '120', '15', '1', '0.88', '60', '', '', '72', '', 'Kochkammer', 'Kochen + Räuchern'],
-          ['4', 'verpackung', '100', '20', '5', '2', '0.99', '', '', '', '', '', 'Multivac Neu', ''],
-        ],
-        rezeptur: [
-          ['Schweinefleisch S1', '0.45', '5'],
-          ['Schweinefleisch S8', '0.25', '5'],
-          ['Eis/Wasser', '0.20', ''],
-          ['Nitritpökelsalz', '0.018', ''],
-          ['Gewürzmischung LK', '0.012', ''],
-        ],
-        historie: [
-          ['2026-01-15', '1', '100', '42', '2', ''],
-          ['2026-02-03', '1', '100', '47', '2', ''],
-          ['2026-03-10', '1', '100', '44', '2', ''],
-          ['2026-01-15', '2', '100', '28', '1', ''],
-          ['2026-02-03', '2', '100', '32', '1', ''],
-          ['2026-03-10', '2', '100', '30', '1', ''],
-          ['2026-01-15', '3', '100', '115', '1', ''],
-          ['2026-02-03', '3', '100', '125', '1', ''],
-          ['2026-03-10', '3', '100', '120', '1', ''],
-        ],
-      ),
-      const _ArtikelDaten(
-        nr: '10002',
-        bezeichnung: 'Wiener Würstchen',
-        beschreibung: 'Wiener im Saitling 5er Pack',
-        verpackungsart: 'MAP',
-        gebindeKg: '0.4',
-        mhdTage: '14',
-        gesamtausbeute: '0.92',
-        vorlaufzeit: '1',
-        planungsgruppe: 'Würstchen',
-        schritte: [
-          ['1', 'kutterabteilung', '100', '25', '5', '1', '0.98', '', '30', '150', '', '8', 'Kutter', ''],
-          ['2', 'wurstkueche', '100', '15', '5', '1', '1.0', '', '', '', '', '', 'Füllmaschine', 'In Saitling füllen'],
-          ['3', 'wurstkueche', '100', '90', '10', '1', '0.90', '30', '', '', '72', '', 'Kochkammer', 'Brühen'],
-          ['4', 'verpackung', '100', '15', '5', '2', '0.99', '', '', '', '', '', 'Multivac Alt', ''],
-        ],
-        rezeptur: [
-          ['Schweinefleisch S8', '0.55', '5'],
-          ['Eis/Wasser', '0.25', ''],
-          ['Nitritpökelsalz', '0.018', ''],
-          ['Saitlinge', '1.0', ''],
-        ],
-        historie: [],
-      ),
-      const _ArtikelDaten(
-        nr: '10003',
-        bezeichnung: 'Schnitzel paniert',
-        beschreibung: 'Schweineschnitzel paniert 200g',
-        verpackungsart: 'Skin-Pack',
-        gebindeKg: '0.2',
-        mhdTage: '7',
-        gesamtausbeute: '0.78',
-        vorlaufzeit: '1',
-        planungsgruppe: 'Bratstraße',
-        schritte: [
-          ['1', 'zerlegung', '100', '30', '5', '2', '0.95', '', '', '', '', '12', '', 'Zuschneiden'],
-          ['2', 'bratstrasse', '100', '25', '10', '2', '0.90', '', '', '', '72', '', 'Bratstraße', 'Panieren + Braten'],
-          ['3', 'bratstrasse', '100', '15', '5', '1', '0.99', '', '', '', '-18', '', 'Schockfroster', 'Schockfrosten'],
-          ['4', 'verpackung', '100', '20', '5', '2', '0.99', '', '', '', '', '', 'Multivac Neu', ''],
-        ],
-        rezeptur: [
-          ['Schweinefleisch S1', '0.70', '5'],
-          ['Paniermehl', '0.10', ''],
-          ['Vollei flüssig', '0.08', ''],
-          ['Mehl', '0.05', ''],
-        ],
-        historie: [],
-      ),
-      const _ArtikelDaten(
-        nr: '10004',
-        bezeichnung: 'Kotelett',
-        beschreibung: 'Schweinekotelett natur 300g',
-        verpackungsart: 'Vakuum',
-        gebindeKg: '0.3',
-        mhdTage: '7',
-        gesamtausbeute: '0.95',
-        vorlaufzeit: '1',
-        planungsgruppe: 'Zerlegung',
-        schritte: [
-          ['1', 'zerlegung', '100', '20', '5', '2', '0.95', '', '', '', '', '7', '', 'Koteletts portionieren'],
-          ['2', 'schneideabteilung', '100', '15', '5', '1', '0.98', '', '', '', '', '', 'Kotelethacker', 'Hacken'],
-          ['3', 'verpackung', '100', '15', '5', '2', '0.99', '', '', '', '', '', 'Multivac Neu', ''],
-        ],
-        rezeptur: [
-          ['Schweinefleisch S1', '1.0', '5'],
-        ],
-        historie: [],
-      ),
-    ];
+    // 1. Übersicht-Sheet
+    _buildUebersichtSheet(excel);
 
-    // 1. Übersicht-Sheet mit Hyperlinks
-    _buildUebersichtSheet(excel, artikel);
-
-    // 2. Rohwaren-Sheet (global)
+    // 2. Rohwaren-Sheet
     _buildRohwarenSheet(excel);
 
-    // 3. Pro Artikel ein Sheet
-    for (final art in artikel) {
-      _buildProduktSheet(excel, art);
+    // 3. Pro Produktgruppe ein Beispiel-Sheet
+    for (final group in ProductGroup.values) {
+      final beispiel = _beispielFuer(group);
+      _buildProduktSheet(excel, beispiel);
     }
 
     // Standard-Sheet entfernen
     excel.delete('Sheet1');
+
+    // Übersicht als aktives Sheet beim Öffnen (falls API unterstützt)
+    try {
+      // ignore: avoid_dynamic_calls
+      (excel as dynamic).setDefaultSheet('Übersicht');
+    } catch (_) {
+      // Nicht kritisch — Nutzer sieht beim Öffnen das erste Sheet
+    }
 
     final bytes = excel.encode();
     if (bytes == null) return null;
@@ -158,85 +72,132 @@ class TemplateExportService {
     return path;
   }
 
-  // -----------------------------------------------------------------------
-  // Sheet: Übersicht — Gesamtliste aller Artikel
-  // -----------------------------------------------------------------------
+  // ══════════════════════════════════════════════════════════════════════
+  // Übersicht
+  // ══════════════════════════════════════════════════════════════════════
 
-  static void _buildUebersichtSheet(Excel excel, List<_ArtikelDaten> artikel) {
+  static void _buildUebersichtSheet(Excel excel) {
     final sheet = excel['Übersicht'];
+
     final headers = [
       'Artikelnr',
       'Bezeichnung',
-      'Beschreibung',
+      'Produktgruppe',
       'Verpackungsart',
-      'Gebinde_kg',
-      'MHD_Tage',
-      'Gesamtausbeute',
-      'Vorlaufzeit',
+      'Gebinde (kg)',
+      'MHD (Tage)',
+      'Vorlaufzeit (Tage)',
       'Planungsgruppe',
       '→ Zum Produkt-Sheet',
     ];
-    _writeHeaders(sheet, headers);
 
-    for (var i = 0; i < artikel.length; i++) {
-      final art = artikel[i];
-      final row = i + 1;
-      final sheetName = _sheetName(art.nr, art.bezeichnung);
+    // Header-Zeile mit Style
+    for (var col = 0; col < headers.length; col++) {
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0),
+      );
+      cell.value = TextCellValue(headers[col]);
+      _applyStyle(cell, _headerStyle);
+    }
 
-      _setCellText(sheet, row, 0, art.nr);
-      _setCellText(sheet, row, 1, art.bezeichnung);
-      _setCellText(sheet, row, 2, art.beschreibung);
-      _setCellText(sheet, row, 3, art.verpackungsart);
-      _setCellText(sheet, row, 4, art.gebindeKg);
-      _setCellText(sheet, row, 5, art.mhdTage);
-      _setCellText(sheet, row, 6, art.gesamtausbeute);
-      _setCellText(sheet, row, 7, art.vorlaufzeit);
-      _setCellText(sheet, row, 8, art.planungsgruppe);
+    // Beispiel-Artikel pro Gruppe (Blaupause-Zeilen)
+    var row = 1;
+    for (final group in ProductGroup.values) {
+      final beispiel = _beispielFuer(group);
+      final sheetName = _sheetName(beispiel.artikelnr, beispiel.bezeichnung);
 
-      // Hyperlink zur Produkt-Sheet
+      _writeRowAt(sheet, row, [
+        beispiel.artikelnr,
+        beispiel.bezeichnung,
+        group.label,
+        beispiel.feldwerte['Verpackungsart'] ?? '',
+        beispiel.feldwerte['Gebinde'] ?? '',
+        beispiel.feldwerte['MHD'] ?? '',
+        beispiel.feldwerte['Vorlaufzeit'] ?? '',
+        '', // Planungsgruppe — leer
+      ]);
+
+      // Hyperlink in Spalte 8 (→ Zum Produkt-Sheet)
       sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: 9, rowIndex: row))
+          .cell(CellIndex.indexByColumnRow(columnIndex: 8, rowIndex: row))
           .value = FormulaCellValue(
         "HYPERLINK(\"#'$sheetName'!A1\",\"→ $sheetName\")",
       );
+      row++;
     }
+
+    // AutoFilter auf den Datenbereich legen
+    _trySetAutoFilter(sheet, row - 1, headers.length);
+
+    // Erste Zeile fixieren
+    _tryFreezeFirstRow(sheet);
   }
 
-  // -----------------------------------------------------------------------
-  // Sheet: Rohwaren (global)
-  // -----------------------------------------------------------------------
+  // ══════════════════════════════════════════════════════════════════════
+  // Rohwaren
+  // ══════════════════════════════════════════════════════════════════════
 
   static void _buildRohwarenSheet(Excel excel) {
     final sheet = excel['Rohwaren'];
-    _writeHeaders(sheet, ['Name', 'Einheit', 'Lieferant', 'Lieferzeit', 'Chargen_Pflicht']);
+    final headers = [
+      'Name',
+      'Einheit',
+      'Lieferant',
+      'Lieferzeit',
+      'Chargen_Pflicht',
+    ];
 
+    // Header
+    for (var col = 0; col < headers.length; col++) {
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: 0),
+      );
+      cell.value = TextCellValue(headers[col]);
+      _applyStyle(cell, _headerStyle);
+    }
+
+    // Beispiele
     final beispiele = [
       ['Schweinefleisch S1', 'kg', 'Fleisch Müller GmbH', '2', 'Ja'],
       ['Schweinefleisch S8', 'kg', 'Fleisch Müller GmbH', '2', 'Ja'],
+      ['Rindfleisch R1', 'kg', 'Fleisch Müller GmbH', '2', 'Ja'],
       ['Eis/Wasser', 'kg', '', '0', 'Nein'],
       ['Nitritpökelsalz', 'kg', 'Gewürz Schmidt', '5', 'Ja'],
-      ['Gewürzmischung LK', 'kg', 'Gewürz Schmidt', '5', 'Ja'],
-      ['Saitlinge', 'Stk', 'Darm Weber', '7', 'Ja'],
+      ['Gewürzmischung Brühwurst', 'kg', 'Gewürz Schmidt', '5', 'Ja'],
+      ['Gewürzmischung Rohwurst', 'kg', 'Gewürz Schmidt', '5', 'Ja'],
+      ['Starterkultur Rohwurst', 'kg', 'Kultur-Lab', '7', 'Ja'],
+      ['Saitlinge 24mm', 'Stk', 'Darm Weber', '7', 'Ja'],
+      ['Kunstdarm 60mm', 'Stk', 'Darm Weber', '7', 'Ja'],
       ['Paniermehl', 'kg', 'Bäcker Huber', '3', 'Ja'],
+      ['Panko', 'kg', 'Bäcker Huber', '3', 'Ja'],
       ['Vollei flüssig', 'kg', 'Ei-Center', '2', 'Ja'],
       ['Mehl', 'kg', 'Mühle Berger', '3', 'Nein'],
       ['Vakuumbeutel 500g', 'Stk', 'Verpackung AG', '10', 'Nein'],
       ['MAP-Schale 5er', 'Stk', 'Verpackung AG', '10', 'Nein'],
       ['Skin-Pack Folie', 'Stk', 'Verpackung AG', '10', 'Nein'],
     ];
-    _writeRows(sheet, beispiele);
+
+    for (var i = 0; i < beispiele.length; i++) {
+      _writeRowAt(sheet, i + 1, beispiele[i]);
+    }
+
+    _tryFreezeFirstRow(sheet);
   }
 
-  // -----------------------------------------------------------------------
-  // Pro-Produkt-Sheet — Stammdaten + Schritte + Rezeptur + Historie
-  // -----------------------------------------------------------------------
+  // ══════════════════════════════════════════════════════════════════════
+  // Pro-Produkt-Sheet
+  // ══════════════════════════════════════════════════════════════════════
 
-  static void _buildProduktSheet(Excel excel, _ArtikelDaten art) {
-    final name = _sheetName(art.nr, art.bezeichnung);
+  static void _buildProduktSheet(Excel excel, _BeispielArtikel beispiel) {
+    final name = _sheetName(beispiel.artikelnr, beispiel.bezeichnung);
     final sheet = excel[name];
+
+    // Tab-Farbe je Gruppe
+    _trySetTabColor(sheet, _tabColorFor(beispiel.group));
+
     var row = 0;
 
-    // --- Link zurück zur Übersicht ---
+    // ── Link zurück zur Übersicht ─────────────────────────────────────
     sheet
         .cell(CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: row))
         .value = const FormulaCellValue(
@@ -244,38 +205,53 @@ class TemplateExportService {
     );
     row += 2;
 
-    // --- Block 1: Stammdaten ---
-    _setCellText(sheet, row, 0, '== STAMMDATEN ==');
+    // ── Block 1: Stammdaten ───────────────────────────────────────────
+    _setSectionHeader(sheet, row, 0, '== STAMMDATEN ==');
     row++;
-    _writeHeaders(sheet, [
-      'Artikelnr',
-      'Bezeichnung',
-      'Beschreibung',
-      'Verpackungsart',
-      'Gebinde_kg',
-      'MHD_Tage',
-      'Gesamtausbeute',
-      'Vorlaufzeit',
-      'Planungsgruppe',
-    ], startRow: row,);
-    row++;
-    _writeRowAt(sheet, row, [
-      art.nr,
-      art.bezeichnung,
-      art.beschreibung,
-      art.verpackungsart,
-      art.gebindeKg,
-      art.mhdTage,
-      art.gesamtausbeute,
-      art.vorlaufzeit,
-      art.planungsgruppe,
-    ],);
-    row += 3;
 
-    // --- Block 2: Produktionsschritte ---
-    _setCellText(sheet, row, 0, '== PRODUKTIONSSCHRITTE ==');
+    // Felder für diese Gruppe zusammenstellen
+    final felder = ProductGroupFields.alleFelderFuer(beispiel.group);
+
+    // Zeile 1: Label (Pflichtfelder gelb)
+    for (var col = 0; col < felder.length; col++) {
+      final field = felder[col];
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+      );
+      cell.value = TextCellValue(field.label);
+      _applyStyle(cell, field.required ? _pflichtStyle : _headerStyle);
+    }
+    final einheitenRow = row + 1;
+    final datenRow = row + 2;
+
+    // Zeile 2: Einheit (grau, kursiv)
+    for (var col = 0; col < felder.length; col++) {
+      final field = felder[col];
+      final einheitText = field.unit ?? '';
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: einheitenRow),
+      );
+      cell.value = TextCellValue(einheitText);
+      _applyStyle(cell, _einheitStyle);
+    }
+
+    // Zeile 3: Beispiel-Datenzeile
+    for (var col = 0; col < felder.length; col++) {
+      final field = felder[col];
+      final wert = _valueFor(field, beispiel);
+      final cell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: datenRow),
+      );
+      cell.value = TextCellValue(wert);
+    }
+
+    row = datenRow + 3;
+
+    // ── Block 2: Produktionsschritte (leer, nur Header) ───────────────
+    _setSectionHeader(sheet, row, 0, '== PRODUKTIONSSCHRITTE ==');
     row++;
-    _writeHeaders(sheet, [
+
+    const schritteHeaders = [
       'Schritt',
       'Abteilung',
       'Basis_Menge',
@@ -289,53 +265,220 @@ class TemplateExportService {
       'Kerntemperatur',
       'Raumtemperatur',
       'Maschine',
+      'Kochkammer_Programm',
+      'Klimaprogramm',
+      'Bratparameter',
       'Notizen',
-    ], startRow: row,);
-    row++;
-    for (final s in art.schritte) {
-      _writeRowAt(sheet, row, s);
-      row++;
-    }
-    // Platz für neue Schritte
-    row += 3;
+    ];
+    const schritteEinheiten = [
+      '(Nr)',
+      '',
+      '(kg)',
+      '(min)',
+      '(min)',
+      '(Anz)',
+      '(0-1)',
+      '(min)',
+      '(kg)',
+      '(kg)',
+      '(°C)',
+      '(°C)',
+      '',
+      '',
+      '',
+      '',
+      '',
+    ];
+    _writeHeadersWithUnits(sheet, row, schritteHeaders, schritteEinheiten);
+    row += 2;
+    // Platz für ca. 10 Schritte — Nutzer füllt manuell
+    row += 10;
 
-    // --- Block 3: Rezeptur ---
-    _setCellText(sheet, row, 0, '== REZEPTUR ==');
+    // ── Block 3: Rezeptur (leer, nur Header) ──────────────────────────
+    _setSectionHeader(sheet, row, 0, '== REZEPTUR ==');
     row++;
-    _writeHeaders(sheet, [
-      'Rohware',
-      'Menge_pro_kg',
-      'Toleranz',
-    ], startRow: row,);
-    row++;
-    for (final r in art.rezeptur) {
-      _writeRowAt(sheet, row, r);
-      row++;
-    }
-    // Platz für neue Rohwaren
-    row += 3;
+    const rezepturHeaders = ['Rohware', 'Menge_pro_kg', 'Toleranz'];
+    const rezepturEinheiten = ['', '(kg/kg)', '(%)'];
+    _writeHeadersWithUnits(sheet, row, rezepturHeaders, rezepturEinheiten);
+    row += 2;
+    // Platz für ca. 15 Zeilen
+    row += 15;
 
-    // --- Block 4: Produktionshistorie ---
-    _setCellText(sheet, row, 0, '== PRODUKTIONSHISTORIE ==');
+    // ── Block 4: Produktionshistorie (leer, nur Header) ───────────────
+    _setSectionHeader(sheet, row, 0, '== PRODUKTIONSHISTORIE ==');
     row++;
-    _writeHeaders(sheet, [
+    const historieHeaders = [
       'Datum',
       'Schritt',
       'Menge_kg',
       'Dauer_min',
       'Mitarbeiter',
       'Notizen',
-    ], startRow: row,);
-    row++;
-    for (final h in art.historie) {
-      _writeRowAt(sheet, row, h);
-      row++;
+    ];
+    const historieEinheiten = ['(YYYY-MM-DD)', '(Nr)', '(kg)', '(min)', '(Anz)', ''];
+    _writeHeadersWithUnits(sheet, row, historieHeaders, historieEinheiten);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Hilfsfunktionen: Styling
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Standard-Header-Style (fetter dunkelblauer Text, hellgrauer Hintergrund).
+  static CellStyle get _headerStyle => CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('E0E0E0'),
+        fontColorHex: ExcelColor.fromHexString('212121'),
+        horizontalAlign: HorizontalAlign.Left,
+      );
+
+  /// Pflichtfeld-Style (fetter Text, gelber Hintergrund).
+  static CellStyle get _pflichtStyle => CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('FFF9C4'),
+        fontColorHex: ExcelColor.fromHexString('BF360C'),
+        horizontalAlign: HorizontalAlign.Left,
+      );
+
+  /// Einheiten-Style (kursiv, grau).
+  static CellStyle get _einheitStyle => CellStyle(
+        italic: true,
+        fontColorHex: ExcelColor.fromHexString('757575'),
+        horizontalAlign: HorizontalAlign.Left,
+      );
+
+  /// Section-Header-Style (== BLOCK ==, fett und groß).
+  static CellStyle get _sectionStyle => CellStyle(
+        bold: true,
+        backgroundColorHex: ExcelColor.fromHexString('455A64'),
+        fontColorHex: ExcelColor.fromHexString('FFFFFF'),
+      );
+
+  static void _applyStyle(Data cell, CellStyle style) {
+    cell.cellStyle = style;
+  }
+
+  static void _setSectionHeader(Sheet sheet, int row, int col, String text) {
+    final cell = sheet.cell(
+      CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row),
+    );
+    cell.value = TextCellValue(text);
+    _applyStyle(cell, _sectionStyle);
+  }
+
+  static void _writeHeadersWithUnits(
+    Sheet sheet,
+    int startRow,
+    List<String> headers,
+    List<String> einheiten,
+  ) {
+    for (var col = 0; col < headers.length; col++) {
+      final headerCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: startRow),
+      );
+      headerCell.value = TextCellValue(headers[col]);
+      _applyStyle(headerCell, _headerStyle);
+
+      final einheitCell = sheet.cell(
+        CellIndex.indexByColumnRow(columnIndex: col, rowIndex: startRow + 1),
+      );
+      einheitCell.value = TextCellValue(
+        col < einheiten.length ? einheiten[col] : '',
+      );
+      _applyStyle(einheitCell, _einheitStyle);
     }
   }
 
-  // -----------------------------------------------------------------------
-  // Hilfsmethoden
-  // -----------------------------------------------------------------------
+  static void _writeRowAt(Sheet sheet, int rowIndex, List<String> values) {
+    for (var col = 0; col < values.length; col++) {
+      sheet
+          .cell(CellIndex.indexByColumnRow(
+            columnIndex: col,
+            rowIndex: rowIndex,
+          ))
+          .value = TextCellValue(values[col]);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Defensive Feature-Calls (falls API-Version es nicht unterstützt)
+  // ══════════════════════════════════════════════════════════════════════
+
+  /// Setzt die Tab-Farbe, falls das excel-Paket das unterstützt.
+  /// Fail-silent bei API-Inkompatibilität.
+  static void _trySetTabColor(Sheet sheet, String hexColor) {
+    try {
+      // Hex ohne führendes '#' übergeben (excel-Paket-Konvention)
+      final clean = hexColor.startsWith('#') ? hexColor.substring(1) : hexColor;
+      // ignore: avoid_dynamic_calls
+      (sheet as dynamic).sheetProperties?.tabColor =
+          ExcelColor.fromHexString(clean);
+    } catch (_) {
+      // Fallback: keine Tab-Farbe
+    }
+  }
+
+  /// Versucht AutoFilter auf den Datenbereich zu setzen.
+  static void _trySetAutoFilter(Sheet sheet, int lastRow, int colCount) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (sheet as dynamic).setAutoFilter(
+        CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: 0),
+        CellIndex.indexByColumnRow(
+          columnIndex: colCount - 1,
+          rowIndex: lastRow,
+        ),
+      );
+    } catch (_) {
+      // Nutzer muss Filter bei Bedarf manuell setzen (Strg+Umschalt+L)
+    }
+  }
+
+  /// Versucht die erste Zeile einzufrieren.
+  static void _tryFreezeFirstRow(Sheet sheet) {
+    try {
+      // ignore: avoid_dynamic_calls
+      (sheet as dynamic).freezePane(rowIndex: 1);
+    } catch (_) {
+      // Fallback: kein Freeze, Nutzer kann in Excel manuell setzen
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Farben pro Produktgruppe (Tab-Farbe)
+  // ══════════════════════════════════════════════════════════════════════
+
+  static String _tabColorFor(ProductGroup group) {
+    switch (group) {
+      case ProductGroup.bruehwurst:
+        return '#E57373'; // hellrot
+      case ProductGroup.rohwurst:
+        return '#B71C1C'; // dunkelrot
+      case ProductGroup.kochpoekelware:
+        return '#F48FB1'; // rosa
+      case ProductGroup.rohpoekelware:
+        return '#8D6E63'; // braun
+      case ProductGroup.aufschnitt:
+        return '#64B5F6'; // hellblau
+      case ProductGroup.bratstrasseNatur:
+        return '#FFB74D'; // orange
+      case ProductGroup.bratstrassePaniert:
+        return '#FFA000'; // dunkelorange/gold
+      case ProductGroup.hackproduktGegart:
+        return '#9575CD'; // violett
+      case ProductGroup.hackproduktRoh:
+        return '#CE93D8'; // hellviolett
+      case ProductGroup.braten:
+        return '#5D4037'; // dunkelbraun
+      case ProductGroup.sousVide:
+        return '#4DB6AC'; // türkis
+      case ProductGroup.angebrateneBruehwurst:
+        return '#FF7043'; // rot-orange
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Sheet-Namen
+  // ══════════════════════════════════════════════════════════════════════
 
   /// Erzeugt einen gültigen Sheet-Namen (max. 31 Zeichen, keine [ ] : * ? / \).
   static String _sheetName(String nr, String bezeichnung) {
@@ -346,80 +489,279 @@ class TemplateExportService {
     return raw.length > 31 ? raw.substring(0, 31) : raw;
   }
 
-  static void _writeHeaders(
-    Sheet sheet,
-    List<String> headers, {
-    int startRow = 0,
-  }) {
-    for (var i = 0; i < headers.length; i++) {
-      sheet
-          .cell(CellIndex.indexByColumnRow(columnIndex: i, rowIndex: startRow))
-          .value = TextCellValue(headers[i]);
+  // ══════════════════════════════════════════════════════════════════════
+  // Wert-Mapping für Beispiel-Datenzeile
+  // ══════════════════════════════════════════════════════════════════════
+
+  static String _valueFor(FieldSpec field, _BeispielArtikel b) {
+    // Erst im feldwerte-Map nachschauen (gruppenspezifisch)
+    if (b.feldwerte.containsKey(field.label)) {
+      return b.feldwerte[field.label] ?? '';
+    }
+    // Allgemeine Felder über label-Match
+    switch (field.key) {
+      case 'artikelnummer':
+        return b.artikelnr;
+      case 'artikelbezeichnung':
+        return b.bezeichnung;
+      case 'beschreibung':
+        return b.beschreibung;
+      case 'produktgruppe':
+        return b.group.label;
+      default:
+        return '';
     }
   }
 
-  static void _writeRows(Sheet sheet, List<List<String>> rows) {
-    for (var row = 0; row < rows.length; row++) {
-      _writeRowAt(sheet, row + 1, rows[row]);
-    }
-  }
+  // ══════════════════════════════════════════════════════════════════════
+  // Beispiel-Artikel pro Gruppe
+  // ══════════════════════════════════════════════════════════════════════
 
-  static void _writeRowAt(Sheet sheet, int rowIndex, List<String> values) {
-    for (var col = 0; col < values.length; col++) {
-      sheet
-          .cell(CellIndex.indexByColumnRow(
-            columnIndex: col,
-            rowIndex: rowIndex,
-          ),)
-          .value = TextCellValue(values[col]);
+  static _BeispielArtikel _beispielFuer(ProductGroup group) {
+    switch (group) {
+      case ProductGroup.bruehwurst:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'BW-001',
+          bezeichnung: 'Leberkäse fein',
+          beschreibung: 'Feiner Leberkäse 500g',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '0.5',
+            'MHD': '21',
+            'Gesamtausbeute': '0.85',
+            'Vorlaufzeit': '2',
+            'Brät-Feinheit': 'fein',
+            'Kutter-Endtemp': '12.0',
+            'Kochkammer-Programm': 'Programm 12',
+            'Räucherart': 'warm',
+            'Ziel-Kerntemp': '72.0',
+          },
+        );
+      case ProductGroup.rohwurst:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'RW-001',
+          bezeichnung: 'Salami Milano',
+          beschreibung: 'Luftgetrocknete Salami 200g',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '0.2',
+            'MHD': '60',
+            'Gesamtausbeute': '0.65',
+            'Vorlaufzeit': '28',
+            'Startkultur': 'Bactoferm T-SPX',
+            'Reifezeit': '21',
+            'Klimaprogramm': 'Reife-Prog-A',
+            'Ziel-pH': '5.30',
+            'Ziel-aw-Wert': '0.900',
+            'Gewichtsverlust': '35.0',
+            'Räucherart': 'kalt',
+          },
+        );
+      case ProductGroup.kochpoekelware:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'KP-001',
+          bezeichnung: 'Kochschinken',
+          beschreibung: 'Kochschinken am Stück',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '2.5',
+            'MHD': '30',
+            'Gesamtausbeute': '1.05',
+            'Vorlaufzeit': '4',
+            'Pökelart': 'injektion',
+            'Lake-Konzentration': '15.0',
+            'Pökelzeit': '3',
+            'Tumbelzeit': '180',
+            'Ziel-Kerntemp': '68.0',
+            'Räucherart': 'warm',
+          },
+        );
+      case ProductGroup.rohpoekelware:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'RP-001',
+          bezeichnung: 'Schinkenspeck',
+          beschreibung: 'Luftgetrockneter Schinkenspeck',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '1.0',
+            'MHD': '120',
+            'Gesamtausbeute': '0.70',
+            'Vorlaufzeit': '90',
+            'Pökelart': 'trocken',
+            'Pökelzeit': '14',
+            'Reifezeit': '70',
+            'Trocknungsverlust': '30.0',
+            'Ziel-aw-Wert': '0.920',
+            'Räucherart': 'kalt',
+          },
+        );
+      case ProductGroup.aufschnitt:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'AS-001',
+          bezeichnung: 'Kochschinken Aufschnitt 100g',
+          beschreibung: 'Kochschinken in Scheiben, MAP',
+          feldwerte: {
+            'Verpackungsart': 'MAP',
+            'Gebinde': '0.1',
+            'MHD': '14',
+            'Vorlaufzeit': '1',
+            'Basis-Artikelnr': 'KP-001',
+            'Scheibendicke': '1.5',
+            'Scheiben pro Packung': '8',
+            'Packungsgewicht': '100',
+            'MAP-Gasgemisch': '70% N₂ / 30% CO₂',
+          },
+        );
+      case ProductGroup.bratstrasseNatur:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'BN-001',
+          bezeichnung: 'Frikadelle 80g',
+          beschreibung: 'Hausmacher Frikadelle, gebraten',
+          feldwerte: {
+            'Verpackungsart': 'MAP',
+            'Gebinde': '0.4',
+            'MHD': '10',
+            'Gesamtausbeute': '0.82',
+            'Vorlaufzeit': '1',
+            'Formgewicht': '80',
+            'Form': 'rund',
+            'Ziel-Kerntemp': '75.0',
+            'Bratgrad': 'durch',
+          },
+        );
+      case ProductGroup.bratstrassePaniert:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'BP-001',
+          bezeichnung: 'Schnitzel paniert 200g',
+          beschreibung: 'Schweineschnitzel paniert, gebraten',
+          feldwerte: {
+            'Verpackungsart': 'Skin-Pack',
+            'Gebinde': '0.2',
+            'MHD': '7',
+            'Gesamtausbeute': '0.78',
+            'Vorlaufzeit': '1',
+            'Panierart': 'Paniermehl',
+            'Panier-Aufnahme': '22.0',
+            'Formgewicht': '200',
+            'Ziel-Kerntemp': '72.0',
+          },
+        );
+      case ProductGroup.hackproduktGegart:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'HG-001',
+          bezeichnung: 'Chili con Carne',
+          beschreibung: 'Fertiggericht mit Hackfleisch',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '0.5',
+            'MHD': '14',
+            'Vorlaufzeit': '1',
+            'Fleischanteil-Typ': 'S8',
+            'Ziel-Kerntemp': '75.0',
+            'Abkühlgradient': 'auf 7°C in 90 min',
+          },
+        );
+      case ProductGroup.hackproduktRoh:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'HR-001',
+          bezeichnung: 'Hackfleisch gemischt',
+          beschreibung: 'Rind/Schwein 50/50, tagesfrisch',
+          feldwerte: {
+            'Verpackungsart': 'MAP',
+            'Gebinde': '0.5',
+            'MHD': '3',
+            'Vorlaufzeit': '0',
+            'Fleischanteil-Typ': 'gemischt',
+            'Gesamtdurchlaufzeit max': '4',
+            'Wolf-Lochscheibe': '3.0',
+          },
+        );
+      case ProductGroup.braten:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'BR-001',
+          bezeichnung: 'Rollbraten mit Füllung',
+          beschreibung: 'Schweinerollbraten, vorgegart',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '1.5',
+            'MHD': '14',
+            'Vorlaufzeit': '2',
+            'Variante': 'vorgegart',
+            'Füllung': 'Semmelfüllung',
+            'Netzbindung': 'Ja',
+            'Ziel-Kerntemp': '68.0',
+          },
+        );
+      case ProductGroup.sousVide:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'SV-001',
+          bezeichnung: 'Pulled Pork',
+          beschreibung: 'Schweinenacken Sous Vide gegart',
+          feldwerte: {
+            'Verpackungsart': 'Vakuum',
+            'Gebinde': '1.0',
+            'MHD': '30',
+            'Vorlaufzeit': '2',
+            'SV-Badtemp': '74.0',
+            'SV-Garzeit': '24.0',
+            'Ziel-Kerntemp': '72.0',
+            'Abkühlgradient': 'auf 3°C in 120 min',
+          },
+        );
+      case ProductGroup.angebrateneBruehwurst:
+        return _BeispielArtikel(
+          group: group,
+          artikelnr: 'AB-001',
+          bezeichnung: 'Weiße Bratwurst angebraten',
+          beschreibung: 'Weiße Bratwurst, oberflächlich angebraten',
+          feldwerte: {
+            'Verpackungsart': 'MAP',
+            'Gebinde': '0.5',
+            'MHD': '14',
+            'Gesamtausbeute': '0.88',
+            'Vorlaufzeit': '1',
+            'Brät-Feinheit': 'fein',
+            'Kutter-Endtemp': '10.0',
+            'Kochkammer-Programm': 'Programm 8',
+            'Anbratgrad': 'hell',
+            'Ziel-Kerntemp': '72.0',
+          },
+        );
     }
-  }
-
-  static void _setCellText(Sheet sheet, int row, int col, String text) {
-    sheet
-        .cell(CellIndex.indexByColumnRow(columnIndex: col, rowIndex: row))
-        .value = TextCellValue(text);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Internes Datenmodell für die Vorlage
-// ---------------------------------------------------------------------------
+// ══════════════════════════════════════════════════════════════════════════
+// Interne Datenklasse für Beispiel-Artikel
+// ══════════════════════════════════════════════════════════════════════════
 
-class _ArtikelDaten {
-  const _ArtikelDaten({
-    required this.nr,
+class _BeispielArtikel {
+  const _BeispielArtikel({
+    required this.group,
+    required this.artikelnr,
     required this.bezeichnung,
     required this.beschreibung,
-    required this.verpackungsart,
-    required this.gebindeKg,
-    required this.mhdTage,
-    required this.gesamtausbeute,
-    required this.vorlaufzeit,
-    required this.planungsgruppe,
-    required this.schritte,
-    required this.rezeptur,
-    required this.historie,
+    required this.feldwerte,
   });
 
-  final String nr;
+  final ProductGroup group;
+  final String artikelnr;
   final String bezeichnung;
   final String beschreibung;
-  final String verpackungsart;
-  final String gebindeKg;
-  final String mhdTage;
-  final String gesamtausbeute;
-  final String vorlaufzeit;
-  final String planungsgruppe;
 
-  /// [Schritt, Abteilung, Basis_Menge, Dauer, Fixzeit, Mitarbeiter,
-  ///  Ausbeute, Wartezeit, Min_Charge, Max_Charge, Kerntemp, Raumtemp,
-  ///  Maschine, Notizen]
-  final List<List<String>> schritte;
-
-  /// [Rohware, Menge_pro_kg, Toleranz]
-  final List<List<String>> rezeptur;
-
-  /// [Datum, Schritt, Menge_kg, Dauer_min, Mitarbeiter, Notizen]
-  final List<List<String>> historie;
+  /// Mapping: Feld-Label → Wert als String.
+  /// Label muss EXAKT mit dem FieldSpec.label in product_group_fields.dart
+  /// übereinstimmen.
+  final Map<String, String> feldwerte;
 }

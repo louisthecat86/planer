@@ -19,14 +19,6 @@ part 'database.g.dart';
 /// deleted_at für Soft-Delete). Die Wartung der Sync-Felder liegt
 /// **in der Repository-Schicht** — drift setzt sie nicht automatisch.
 ///
-/// Regel für jeden Schreibzugriff:
-///   - `created_at` und `updated_at` werden durch `currentDateAndTime`-Default
-///     beim Insert automatisch gesetzt.
-///   - `updated_at` muss bei jedem Update manuell neu gesetzt werden
-///     (via Companion mit `updatedAt: Value(DateTime.now())`).
-///   - Löschungen sind immer Soft-Deletes: `deletedAt: Value(DateTime.now())`
-///     statt `delete()`. Queries filtern mit `WHERE deleted_at IS NULL`.
-///
 /// Nach Änderungen an den Tabellen-Dateien unbedingt ausführen:
 ///     dart run build_runner build --delete-conflicting-outputs
 @DriftDatabase(
@@ -49,7 +41,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -58,8 +50,8 @@ class AppDatabase extends _$AppDatabase {
           await _createIndexes();
         },
         onUpgrade: (m, from, to) async {
+          // ─── v1 → v2: Basis-Erweiterung products/product_steps ───────
           if (from < 2) {
-            // Products: neue Spalten
             await _addColumnIfNotExists('products', 'verpackungsart', 'TEXT');
             await _addColumnIfNotExists('products', 'gebinde_groesse_kg', 'REAL');
             await _addColumnIfNotExists('products', 'haltbarkeit_tage', 'INTEGER');
@@ -67,7 +59,6 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists('products', 'mindest_vorlaufzeit_tage', 'INTEGER');
             await _addColumnIfNotExists('products', 'planungsgruppe', 'TEXT');
 
-            // ProductSteps: neue Spalten
             await _addColumnIfNotExists('product_steps', 'ausbeute_faktor', 'REAL');
             await _addColumnIfNotExists('product_steps', 'wartezeit_minuten', 'REAL');
             await _addColumnIfNotExists('product_steps', 'min_chargen_kg', 'REAL');
@@ -77,43 +68,110 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists('product_steps', 'maschine', 'TEXT');
             await _addColumnIfNotExists('product_steps', 'maschinen_einstellungen_json', 'TEXT');
           }
+
+          // ─── v2 → v3: Produktgruppen + gruppenspezifische Felder ─────
+          if (from < 3) {
+            // Produktgruppe
+            await _addColumnIfNotExists('products', 'produktgruppe', 'TEXT');
+
+            // Temperaturen (gruppenübergreifend)
+            await _addColumnIfNotExists('products', 'ziel_kerntemp_c', 'REAL');
+            await _addColumnIfNotExists('products', 'kutter_endtemp_c', 'REAL');
+
+            // Brät / Wurst
+            await _addColumnIfNotExists('products', 'braet_feinheit', 'TEXT');
+            await _addColumnIfNotExists('products', 'kochkammer_programm', 'TEXT');
+            await _addColumnIfNotExists('products', 'raeucherart', 'TEXT');
+
+            // Rohwurst / Reifung
+            await _addColumnIfNotExists('products', 'startkultur', 'TEXT');
+            await _addColumnIfNotExists('products', 'reifezeit_tage', 'INTEGER');
+            await _addColumnIfNotExists('products', 'klimaprogramm', 'TEXT');
+            await _addColumnIfNotExists('products', 'ziel_ph', 'REAL');
+            await _addColumnIfNotExists('products', 'ziel_aw', 'REAL');
+            await _addColumnIfNotExists('products', 'gewichtsverlust_prozent', 'REAL');
+
+            // Pökelware
+            await _addColumnIfNotExists('products', 'poekelart', 'TEXT');
+            await _addColumnIfNotExists('products', 'lake_konzentration_prozent', 'REAL');
+            await _addColumnIfNotExists('products', 'poekelzeit_tage', 'INTEGER');
+            await _addColumnIfNotExists('products', 'tumbelzeit_min', 'REAL');
+
+            // Aufschnitt
+            await _addColumnIfNotExists('products', 'basis_produkt_artikelnummer', 'TEXT');
+            await _addColumnIfNotExists('products', 'scheibendicke_mm', 'REAL');
+            await _addColumnIfNotExists('products', 'scheiben_pro_packung', 'INTEGER');
+            await _addColumnIfNotExists('products', 'packungsgewicht_g', 'REAL');
+            await _addColumnIfNotExists('products', 'map_gas', 'TEXT');
+
+            // Bratstraße
+            await _addColumnIfNotExists('products', 'formgewicht_g', 'REAL');
+            await _addColumnIfNotExists('products', 'form', 'TEXT');
+            await _addColumnIfNotExists('products', 'bratgrad', 'TEXT');
+            await _addColumnIfNotExists('products', 'panierart', 'TEXT');
+            await _addColumnIfNotExists('products', 'panier_aufnahme_prozent', 'REAL');
+
+            // Hackprodukte
+            await _addColumnIfNotExists('products', 'fleischanteil_typ', 'TEXT');
+            await _addColumnIfNotExists('products', 'gesamtdurchlaufzeit_max_std', 'REAL');
+            await _addColumnIfNotExists('products', 'wolf_lochscheibe_mm', 'REAL');
+            await _addColumnIfNotExists('products', 'abkuehlgradient', 'TEXT');
+
+            // Braten
+            await _addColumnIfNotExists('products', 'braten_variante', 'TEXT');
+            await _addColumnIfNotExists('products', 'fuellung', 'TEXT');
+            await _addColumnIfNotExists('products', 'netzbindung', 'INTEGER'); // bool in SQLite
+
+            // Sous Vide
+            await _addColumnIfNotExists('products', 'sv_badtemp_c', 'REAL');
+            await _addColumnIfNotExists('products', 'sv_garzeit_std', 'REAL');
+
+            // Angebratene Brühwurst
+            await _addColumnIfNotExists('products', 'anbratgrad', 'TEXT');
+
+            // product_steps — Programm-Felder
+            await _addColumnIfNotExists('product_steps', 'kochkammer_programm', 'TEXT');
+            await _addColumnIfNotExists('product_steps', 'klimaprogramm', 'TEXT');
+            await _addColumnIfNotExists('product_steps', 'bratparameter', 'TEXT');
+
+            // Index auf Produktgruppe (häufige Filter-Query)
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_products_produktgruppe '
+              'ON products(produktgruppe)',
+            );
+          }
         },
         beforeOpen: (details) async {
-          // Foreign-Key-Enforcement einschalten (ist per Default in SQLite aus).
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
 
   /// Indizes für typische Query-Patterns anlegen.
-  /// Getrennt in eigener Methode, damit sie in späteren Migrationen
-  /// einfach ergänzt werden können.
   Future<void> _createIndexes() async {
-    // Lookup nach Artikelnummer (Produkt-Suche).
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_products_artikelnummer '
       'ON products(artikelnummer)',
     );
-    // Schritte eines Produkts laden (sehr häufig).
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_products_produktgruppe '
+      'ON products(produktgruppe)',
+    );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_product_steps_product_id '
       'ON product_steps(product_id, reihenfolge)',
     );
-    // Tasks einer Woche/eines Tages laden (Whiteboard-Query).
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_production_tasks_datum_abteilung '
       'ON production_tasks(datum, abteilung)',
     );
-    // Runs eines Tasks für Mittelwert-Berechnung.
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_production_runs_task_id '
       'ON production_runs(task_id)',
     );
-    // Chargen einer Rohware (Bestandsabfrage).
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_batches_raw_material_id '
       'ON raw_material_batches(raw_material_id)',
     );
-    // Bestellliste einer Woche.
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_order_list_woche '
       'ON order_list_items(woche_start_datum)',
@@ -137,7 +195,5 @@ class AppDatabase extends _$AppDatabase {
 }
 
 QueryExecutor _openConnection() {
-  // drift_flutter kümmert sich um Plattform-Besonderheiten (iOS/Android/Desktop).
-  // Datenbank-Datei: <app documents>/produktion_planer.sqlite
   return driftDatabase(name: 'produktion_planer');
 }

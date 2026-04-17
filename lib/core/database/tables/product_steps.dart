@@ -38,56 +38,52 @@ class ProductSteps extends Table {
   RealColumn get fixZeitMinuten => real().nullable()();
 
   /// Standardabweichung der gemessenen Dauern (aus [ProductionRuns] berechnet).
-  /// UI kann damit "90 min ± 12 min" ehrlich anzeigen.
   RealColumn get dauerStdAbweichung => real().nullable()();
 
   IntColumn get basisMitarbeiter => integer()();
 
   /// Anzahl der Runs, aus denen die Basis-Werte berechnet wurden.
-  /// 0 = noch nie gemessen (Schätzwerte). Ab ~5 zunehmend verlässlich.
   IntColumn get basisAnzahlMessungen =>
       integer().withDefault(const Constant(0))();
 
   // --- Ausbeute / Verluste ---
 
-  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust (Gar, Schnitt, etc.).
-  /// NULL = kein Verlust in diesem Schritt (Faktor 1.0).
-  /// Gesamtausbeute = Produkt aller Schritt-Faktoren.
+  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust.
   RealColumn get ausbeuteFaktor => real().nullable()();
 
   // --- Wartezeit ---
 
-  /// Pflicht-Wartezeit NACH diesem Schritt, bevor der nächste starten darf
-  /// (z.B. Abkühlung 360 min, Brät ruhen 30 min). NULL/0 = sofort weiter.
+  /// Pflicht-Wartezeit NACH diesem Schritt (z.B. Abkühlung, Reifung).
   RealColumn get wartezeitMinuten => real().nullable()();
 
   // --- Chargengrößen / Maschinenkapazität ---
 
-  /// Min. Chargengröße in kg für diesen Schritt (z.B. Kutter min 50 kg).
   RealColumn get minChargenKg => real().nullable()();
-
-  /// Max. Chargengröße in kg (z.B. Kutter max 200 kg).
-  /// Bei Überschreitung → mehrere Durchgänge nötig → Dauer multipliziert.
   RealColumn get maxChargenKg => real().nullable()();
 
   // --- HACCP / Temperatur ---
 
-  /// Ziel-Kerntemperatur in °C (z.B. 72°C beim Garen). NULL = nicht relevant.
   RealColumn get kerntemperaturZiel => real().nullable()();
-
-  /// Maximale Raumtemperatur in °C (z.B. 12°C beim Kuttern). NULL = nicht relevant.
   RealColumn get raumtemperaturMax => real().nullable()();
 
   // --- Maschine ---
 
-  /// Freitext-Referenz auf die Maschine (z.B. "Kutter K200", "Bratstraße 2").
-  /// Späterer Ausbau: FK auf Maschinen-Tabelle.
+  /// Freitext-Referenz auf die Maschine.
   TextColumn get maschine => text().nullable()();
 
-  /// JSON-Objekt mit Maschineneinstellungen (z.B. {"temperatur": 72, "zeit_min": 45}).
-  /// Bewusst frei, weil jede Abteilung andere Parameter hat. Strukturierte
-  /// Validierung passiert in der Domain-Schicht.
+  /// JSON mit Maschineneinstellungen.
   TextColumn get maschinenEinstellungenJson => text().nullable()();
+
+  // --- Programm-spezifisch (Phase A-Erweiterung) ---
+
+  /// Kochkammer-Programm-Nr oder -Name (wenn Abteilung = Wurstküche).
+  TextColumn get kochkammerProgramm => text().nullable()();
+
+  /// Klimaprogramm-Nr oder -Name (wenn Rohwurst/Rohpökel-Reifung).
+  TextColumn get klimaprogramm => text().nullable()();
+
+  /// Bratparameter als Freitext (z.B. "220°C oben / 180°C unten, 4 min").
+  TextColumn get bratparameter => text().nullable()();
 
   TextColumn get notizen => text().nullable()();
 
