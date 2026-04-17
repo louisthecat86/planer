@@ -314,7 +314,7 @@ class ExcelImportService {
         artikelnr: artNrExpected,
         feld: 'Stammdaten-Block',
         grund: 'Marker "== STAMMDATEN ==" nicht gefunden',
-      ));
+      ),);
       return null;
     }
 
@@ -339,7 +339,7 @@ class ExcelImportService {
         artikelnr: artNrExpected,
         feld: 'Datenzeile',
         grund: 'Keine Datenzeile unter Stammdaten-Header',
-      ));
+      ),);
       return null;
     }
 
@@ -372,7 +372,7 @@ class ExcelImportService {
         artikelnr: artNrExpected,
         feld: 'Produktgruppe',
         grund: 'Spalte "Produktgruppe" fehlt im Stammdaten-Header',
-      ));
+      ),);
       return null;
     }
     final gruppeStr = _cellStr(effektiveDaten, gruppeCol);
@@ -382,7 +382,7 @@ class ExcelImportService {
         artikelnr: artNrExpected,
         feld: 'Produktgruppe',
         grund: 'Pflichtfeld leer',
-      ));
+      ),);
       return null;
     }
     final gruppe = ProductGroup.tryFromAnyString(gruppeStr);
@@ -393,7 +393,7 @@ class ExcelImportService {
         feld: 'Produktgruppe',
         grund: 'Unbekannter Wert "$gruppeStr" — erlaubt sind: '
             '${ProductGroup.values.map((g) => g.label).join(", ")}',
-      ));
+      ),);
       return null;
     }
 
@@ -410,7 +410,7 @@ class ExcelImportService {
             artikelnr: artNrExpected,
             feld: field.label,
             grund: 'Pflicht-Spalte fehlt im Stammdaten-Header',
-          ));
+          ),);
         }
         continue;
       }
@@ -423,7 +423,7 @@ class ExcelImportService {
             artikelnr: artNrExpected,
             feld: field.label,
             grund: 'Pflichtfeld leer',
-          ));
+          ),);
         }
         continue;
       }
@@ -436,7 +436,7 @@ class ExcelImportService {
           artikelnr: artNrExpected,
           feld: field.label,
           grund: converted.error!,
-        ));
+        ),);
         continue;
       }
       werte[field.key] = converted.value;
@@ -451,7 +451,7 @@ class ExcelImportService {
         feld: 'Artikelnr',
         grund: 'Artikelnr im Sheet ("$artNrImSheet") stimmt nicht mit '
             'Übersichtseintrag ("$artNrExpected") überein',
-      ));
+      ),);
     }
 
     return _ParsedProduct(
@@ -544,7 +544,7 @@ class ExcelImportService {
             artikelbezeichnung: bezeichnung,
             beschreibung: Value(werte['beschreibung'] as String?),
             produktgruppe: Value(p.gruppe.dbValue),
-          ));
+          ),);
     } else {
       await (_db.update(_db.products)
             ..where((t) => t.id.equals(productId)))
@@ -553,7 +553,7 @@ class ExcelImportService {
         beschreibung: Value(werte['beschreibung'] as String?),
         produktgruppe: Value(p.gruppe.dbValue),
         updatedAt: Value(DateTime.now()),
-      ));
+      ),);
     }
 
     // Alle weiteren Felder via einzelne UPDATEs auf die dbColumn-Namen.
@@ -739,7 +739,7 @@ class ExcelImportService {
               klimaprogramm: Value(_cellStr(cells, klimaCol)),
               bratparameter: Value(_cellStr(cells, bratparamCol)),
               notizen: Value(_cellStr(cells, notizenCol)),
-            ));
+            ),);
       }
       count++;
     }
@@ -802,7 +802,7 @@ class ExcelImportService {
           mengeProKgProdukt: Value(menge),
           toleranzProzent: Value(_cellDouble(cells, toleranzCol)),
           updatedAt: Value(DateTime.now()),
-        ));
+        ),);
       } else {
         await _db.into(_db.productRawMaterials).insert(
               ProductRawMaterialsCompanion.insert(
@@ -899,7 +899,7 @@ class ExcelImportService {
         basisAnzahlMessungen: Value(n),
         dauerStdAbweichung: Value(n > 1 ? stdAbw : null),
         updatedAt: Value(DateTime.now()),
-      ));
+      ),);
 
       count += n;
     }
@@ -948,7 +948,7 @@ class ExcelImportService {
           chargenPflicht:
               Value(_cellStr(cells, chargenCol)?.toLowerCase() == 'ja'),
           updatedAt: Value(DateTime.now()),
-        ));
+        ),);
       } else {
         await _db.into(_db.rawMaterials).insert(
               RawMaterialsCompanion.insert(
