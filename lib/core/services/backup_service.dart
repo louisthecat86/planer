@@ -46,7 +46,7 @@ class BackupService {
           '${_backupFilePrefix}_$timeStamp.$_backupFileExtension';
 
       // "Speichern unter"-Dialog anzeigen.
-      final outputPath = await FilePicker.platform.saveFile(
+      final outputPath = await FilePicker.saveFile(
         dialogTitle: 'Backup speichern unter…',
         fileName: defaultFilename,
         type: FileType.any,

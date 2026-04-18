@@ -161,7 +161,7 @@ class BackupDeleteNotifier extends StateNotifier<AsyncValue<void>> {
 /// File-Picker für Backup-Import.
 Future<String?> pickBackupFile() async {
   try {
-    final result = await FilePicker.platform.pickFiles(
+    final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['planerbackup', 'json'],
       dialogTitle: 'Backup wählen',

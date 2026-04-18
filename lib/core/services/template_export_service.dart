@@ -59,7 +59,7 @@ class TemplateExportService {
     final bytes = excel.encode();
     if (bytes == null) return null;
 
-    final outputPath = await FilePicker.platform.saveFile(
+    final outputPath = await FilePicker.saveFile(
       dialogTitle: 'Stammdaten-Vorlage speichern…',
       fileName: 'stammdaten_vorlage.xlsx',
       type: FileType.any,

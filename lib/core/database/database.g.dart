@@ -39,6 +39,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
       'notizen', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _produktgruppeMeta =
+      const VerificationMeta('produktgruppe');
+  @override
+  late final GeneratedColumn<String> produktgruppe = GeneratedColumn<String>(
+      'produktgruppe', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _verpackungsartMeta =
       const VerificationMeta('verpackungsart');
   @override
@@ -75,6 +81,215 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> planungsgruppe = GeneratedColumn<String>(
       'planungsgruppe', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _zielKerntempCMeta =
+      const VerificationMeta('zielKerntempC');
+  @override
+  late final GeneratedColumn<double> zielKerntempC = GeneratedColumn<double>(
+      'ziel_kerntemp_c', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kutterEndtempCMeta =
+      const VerificationMeta('kutterEndtempC');
+  @override
+  late final GeneratedColumn<double> kutterEndtempC = GeneratedColumn<double>(
+      'kutter_endtemp_c', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _braetFeinheitMeta =
+      const VerificationMeta('braetFeinheit');
+  @override
+  late final GeneratedColumn<String> braetFeinheit = GeneratedColumn<String>(
+      'braet_feinheit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kochkammerProgrammMeta =
+      const VerificationMeta('kochkammerProgramm');
+  @override
+  late final GeneratedColumn<String> kochkammerProgramm =
+      GeneratedColumn<String>('kochkammer_programm', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _raeucherartMeta =
+      const VerificationMeta('raeucherart');
+  @override
+  late final GeneratedColumn<String> raeucherart = GeneratedColumn<String>(
+      'raeucherart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _startkulturMeta =
+      const VerificationMeta('startkultur');
+  @override
+  late final GeneratedColumn<String> startkultur = GeneratedColumn<String>(
+      'startkultur', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _reifezeitTageMeta =
+      const VerificationMeta('reifezeitTage');
+  @override
+  late final GeneratedColumn<int> reifezeitTage = GeneratedColumn<int>(
+      'reifezeit_tage', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _klimaprogrammMeta =
+      const VerificationMeta('klimaprogramm');
+  @override
+  late final GeneratedColumn<String> klimaprogramm = GeneratedColumn<String>(
+      'klimaprogramm', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _zielPhMeta = const VerificationMeta('zielPh');
+  @override
+  late final GeneratedColumn<double> zielPh = GeneratedColumn<double>(
+      'ziel_ph', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _zielAwMeta = const VerificationMeta('zielAw');
+  @override
+  late final GeneratedColumn<double> zielAw = GeneratedColumn<double>(
+      'ziel_aw', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _gewichtsverlustProzentMeta =
+      const VerificationMeta('gewichtsverlustProzent');
+  @override
+  late final GeneratedColumn<double> gewichtsverlustProzent =
+      GeneratedColumn<double>('gewichtsverlust_prozent', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _poekelartMeta =
+      const VerificationMeta('poekelart');
+  @override
+  late final GeneratedColumn<String> poekelart = GeneratedColumn<String>(
+      'poekelart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lakeKonzentrationProzentMeta =
+      const VerificationMeta('lakeKonzentrationProzent');
+  @override
+  late final GeneratedColumn<double> lakeKonzentrationProzent =
+      GeneratedColumn<double>('lake_konzentration_prozent', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _poekelzeitTageMeta =
+      const VerificationMeta('poekelzeitTage');
+  @override
+  late final GeneratedColumn<int> poekelzeitTage = GeneratedColumn<int>(
+      'poekelzeit_tage', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _tumbelzeitMinMeta =
+      const VerificationMeta('tumbelzeitMin');
+  @override
+  late final GeneratedColumn<double> tumbelzeitMin = GeneratedColumn<double>(
+      'tumbelzeit_min', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _basisProduktArtikelnummerMeta =
+      const VerificationMeta('basisProduktArtikelnummer');
+  @override
+  late final GeneratedColumn<String> basisProduktArtikelnummer =
+      GeneratedColumn<String>('basis_produkt_artikelnummer', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _scheibendickeMmMeta =
+      const VerificationMeta('scheibendickeMm');
+  @override
+  late final GeneratedColumn<double> scheibendickeMm = GeneratedColumn<double>(
+      'scheibendicke_mm', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _scheibenProPackungMeta =
+      const VerificationMeta('scheibenProPackung');
+  @override
+  late final GeneratedColumn<int> scheibenProPackung = GeneratedColumn<int>(
+      'scheiben_pro_packung', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _packungsgewichtGMeta =
+      const VerificationMeta('packungsgewichtG');
+  @override
+  late final GeneratedColumn<double> packungsgewichtG = GeneratedColumn<double>(
+      'packungsgewicht_g', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _mapGasMeta = const VerificationMeta('mapGas');
+  @override
+  late final GeneratedColumn<String> mapGas = GeneratedColumn<String>(
+      'map_gas', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _formgewichtGMeta =
+      const VerificationMeta('formgewichtG');
+  @override
+  late final GeneratedColumn<double> formgewichtG = GeneratedColumn<double>(
+      'formgewicht_g', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _formMeta = const VerificationMeta('form');
+  @override
+  late final GeneratedColumn<String> form = GeneratedColumn<String>(
+      'form', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bratgradMeta =
+      const VerificationMeta('bratgrad');
+  @override
+  late final GeneratedColumn<String> bratgrad = GeneratedColumn<String>(
+      'bratgrad', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _panierartMeta =
+      const VerificationMeta('panierart');
+  @override
+  late final GeneratedColumn<String> panierart = GeneratedColumn<String>(
+      'panierart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _panierAufnahmeProzentMeta =
+      const VerificationMeta('panierAufnahmeProzent');
+  @override
+  late final GeneratedColumn<double> panierAufnahmeProzent =
+      GeneratedColumn<double>('panier_aufnahme_prozent', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _fleischanteilTypMeta =
+      const VerificationMeta('fleischanteilTyp');
+  @override
+  late final GeneratedColumn<String> fleischanteilTyp = GeneratedColumn<String>(
+      'fleischanteil_typ', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _gesamtdurchlaufzeitMaxStdMeta =
+      const VerificationMeta('gesamtdurchlaufzeitMaxStd');
+  @override
+  late final GeneratedColumn<double> gesamtdurchlaufzeitMaxStd =
+      GeneratedColumn<double>('gesamtdurchlaufzeit_max_std', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _wolfLochscheibeMmMeta =
+      const VerificationMeta('wolfLochscheibeMm');
+  @override
+  late final GeneratedColumn<double> wolfLochscheibeMm =
+      GeneratedColumn<double>('wolf_lochscheibe_mm', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _abkuehlgradientMeta =
+      const VerificationMeta('abkuehlgradient');
+  @override
+  late final GeneratedColumn<String> abkuehlgradient = GeneratedColumn<String>(
+      'abkuehlgradient', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bratenVarianteMeta =
+      const VerificationMeta('bratenVariante');
+  @override
+  late final GeneratedColumn<String> bratenVariante = GeneratedColumn<String>(
+      'braten_variante', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _fuellungMeta =
+      const VerificationMeta('fuellung');
+  @override
+  late final GeneratedColumn<String> fuellung = GeneratedColumn<String>(
+      'fuellung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _netzbindungMeta =
+      const VerificationMeta('netzbindung');
+  @override
+  late final GeneratedColumn<bool> netzbindung = GeneratedColumn<bool>(
+      'netzbindung', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("netzbindung" IN (0, 1))'));
+  static const VerificationMeta _svBadtempCMeta =
+      const VerificationMeta('svBadtempC');
+  @override
+  late final GeneratedColumn<double> svBadtempC = GeneratedColumn<double>(
+      'sv_badtemp_c', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _svGarzeitStdMeta =
+      const VerificationMeta('svGarzeitStd');
+  @override
+  late final GeneratedColumn<double> svGarzeitStd = GeneratedColumn<double>(
+      'sv_garzeit_std', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _anbratgradMeta =
+      const VerificationMeta('anbratgrad');
+  @override
+  late final GeneratedColumn<String> anbratgrad = GeneratedColumn<String>(
+      'anbratgrad', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -104,12 +319,48 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         artikelbezeichnung,
         beschreibung,
         notizen,
+        produktgruppe,
         verpackungsart,
         gebindeGroesseKg,
         haltbarkeitTage,
         gesamtAusbeuteFaktor,
         mindestVorlaufzeitTage,
         planungsgruppe,
+        zielKerntempC,
+        kutterEndtempC,
+        braetFeinheit,
+        kochkammerProgramm,
+        raeucherart,
+        startkultur,
+        reifezeitTage,
+        klimaprogramm,
+        zielPh,
+        zielAw,
+        gewichtsverlustProzent,
+        poekelart,
+        lakeKonzentrationProzent,
+        poekelzeitTage,
+        tumbelzeitMin,
+        basisProduktArtikelnummer,
+        scheibendickeMm,
+        scheibenProPackung,
+        packungsgewichtG,
+        mapGas,
+        formgewichtG,
+        form,
+        bratgrad,
+        panierart,
+        panierAufnahmeProzent,
+        fleischanteilTyp,
+        gesamtdurchlaufzeitMaxStd,
+        wolfLochscheibeMm,
+        abkuehlgradient,
+        bratenVariante,
+        fuellung,
+        netzbindung,
+        svBadtempC,
+        svGarzeitStd,
+        anbratgrad,
         createdAt,
         updatedAt,
         deletedAt
@@ -155,6 +406,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
       context.handle(_notizenMeta,
           notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
     }
+    if (data.containsKey('produktgruppe')) {
+      context.handle(
+          _produktgruppeMeta,
+          produktgruppe.isAcceptableOrUnknown(
+              data['produktgruppe']!, _produktgruppeMeta));
+    }
     if (data.containsKey('verpackungsart')) {
       context.handle(
           _verpackungsartMeta,
@@ -191,6 +448,203 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           planungsgruppe.isAcceptableOrUnknown(
               data['planungsgruppe']!, _planungsgruppeMeta));
     }
+    if (data.containsKey('ziel_kerntemp_c')) {
+      context.handle(
+          _zielKerntempCMeta,
+          zielKerntempC.isAcceptableOrUnknown(
+              data['ziel_kerntemp_c']!, _zielKerntempCMeta));
+    }
+    if (data.containsKey('kutter_endtemp_c')) {
+      context.handle(
+          _kutterEndtempCMeta,
+          kutterEndtempC.isAcceptableOrUnknown(
+              data['kutter_endtemp_c']!, _kutterEndtempCMeta));
+    }
+    if (data.containsKey('braet_feinheit')) {
+      context.handle(
+          _braetFeinheitMeta,
+          braetFeinheit.isAcceptableOrUnknown(
+              data['braet_feinheit']!, _braetFeinheitMeta));
+    }
+    if (data.containsKey('kochkammer_programm')) {
+      context.handle(
+          _kochkammerProgrammMeta,
+          kochkammerProgramm.isAcceptableOrUnknown(
+              data['kochkammer_programm']!, _kochkammerProgrammMeta));
+    }
+    if (data.containsKey('raeucherart')) {
+      context.handle(
+          _raeucherartMeta,
+          raeucherart.isAcceptableOrUnknown(
+              data['raeucherart']!, _raeucherartMeta));
+    }
+    if (data.containsKey('startkultur')) {
+      context.handle(
+          _startkulturMeta,
+          startkultur.isAcceptableOrUnknown(
+              data['startkultur']!, _startkulturMeta));
+    }
+    if (data.containsKey('reifezeit_tage')) {
+      context.handle(
+          _reifezeitTageMeta,
+          reifezeitTage.isAcceptableOrUnknown(
+              data['reifezeit_tage']!, _reifezeitTageMeta));
+    }
+    if (data.containsKey('klimaprogramm')) {
+      context.handle(
+          _klimaprogrammMeta,
+          klimaprogramm.isAcceptableOrUnknown(
+              data['klimaprogramm']!, _klimaprogrammMeta));
+    }
+    if (data.containsKey('ziel_ph')) {
+      context.handle(_zielPhMeta,
+          zielPh.isAcceptableOrUnknown(data['ziel_ph']!, _zielPhMeta));
+    }
+    if (data.containsKey('ziel_aw')) {
+      context.handle(_zielAwMeta,
+          zielAw.isAcceptableOrUnknown(data['ziel_aw']!, _zielAwMeta));
+    }
+    if (data.containsKey('gewichtsverlust_prozent')) {
+      context.handle(
+          _gewichtsverlustProzentMeta,
+          gewichtsverlustProzent.isAcceptableOrUnknown(
+              data['gewichtsverlust_prozent']!, _gewichtsverlustProzentMeta));
+    }
+    if (data.containsKey('poekelart')) {
+      context.handle(_poekelartMeta,
+          poekelart.isAcceptableOrUnknown(data['poekelart']!, _poekelartMeta));
+    }
+    if (data.containsKey('lake_konzentration_prozent')) {
+      context.handle(
+          _lakeKonzentrationProzentMeta,
+          lakeKonzentrationProzent.isAcceptableOrUnknown(
+              data['lake_konzentration_prozent']!,
+              _lakeKonzentrationProzentMeta));
+    }
+    if (data.containsKey('poekelzeit_tage')) {
+      context.handle(
+          _poekelzeitTageMeta,
+          poekelzeitTage.isAcceptableOrUnknown(
+              data['poekelzeit_tage']!, _poekelzeitTageMeta));
+    }
+    if (data.containsKey('tumbelzeit_min')) {
+      context.handle(
+          _tumbelzeitMinMeta,
+          tumbelzeitMin.isAcceptableOrUnknown(
+              data['tumbelzeit_min']!, _tumbelzeitMinMeta));
+    }
+    if (data.containsKey('basis_produkt_artikelnummer')) {
+      context.handle(
+          _basisProduktArtikelnummerMeta,
+          basisProduktArtikelnummer.isAcceptableOrUnknown(
+              data['basis_produkt_artikelnummer']!,
+              _basisProduktArtikelnummerMeta));
+    }
+    if (data.containsKey('scheibendicke_mm')) {
+      context.handle(
+          _scheibendickeMmMeta,
+          scheibendickeMm.isAcceptableOrUnknown(
+              data['scheibendicke_mm']!, _scheibendickeMmMeta));
+    }
+    if (data.containsKey('scheiben_pro_packung')) {
+      context.handle(
+          _scheibenProPackungMeta,
+          scheibenProPackung.isAcceptableOrUnknown(
+              data['scheiben_pro_packung']!, _scheibenProPackungMeta));
+    }
+    if (data.containsKey('packungsgewicht_g')) {
+      context.handle(
+          _packungsgewichtGMeta,
+          packungsgewichtG.isAcceptableOrUnknown(
+              data['packungsgewicht_g']!, _packungsgewichtGMeta));
+    }
+    if (data.containsKey('map_gas')) {
+      context.handle(_mapGasMeta,
+          mapGas.isAcceptableOrUnknown(data['map_gas']!, _mapGasMeta));
+    }
+    if (data.containsKey('formgewicht_g')) {
+      context.handle(
+          _formgewichtGMeta,
+          formgewichtG.isAcceptableOrUnknown(
+              data['formgewicht_g']!, _formgewichtGMeta));
+    }
+    if (data.containsKey('form')) {
+      context.handle(
+          _formMeta, form.isAcceptableOrUnknown(data['form']!, _formMeta));
+    }
+    if (data.containsKey('bratgrad')) {
+      context.handle(_bratgradMeta,
+          bratgrad.isAcceptableOrUnknown(data['bratgrad']!, _bratgradMeta));
+    }
+    if (data.containsKey('panierart')) {
+      context.handle(_panierartMeta,
+          panierart.isAcceptableOrUnknown(data['panierart']!, _panierartMeta));
+    }
+    if (data.containsKey('panier_aufnahme_prozent')) {
+      context.handle(
+          _panierAufnahmeProzentMeta,
+          panierAufnahmeProzent.isAcceptableOrUnknown(
+              data['panier_aufnahme_prozent']!, _panierAufnahmeProzentMeta));
+    }
+    if (data.containsKey('fleischanteil_typ')) {
+      context.handle(
+          _fleischanteilTypMeta,
+          fleischanteilTyp.isAcceptableOrUnknown(
+              data['fleischanteil_typ']!, _fleischanteilTypMeta));
+    }
+    if (data.containsKey('gesamtdurchlaufzeit_max_std')) {
+      context.handle(
+          _gesamtdurchlaufzeitMaxStdMeta,
+          gesamtdurchlaufzeitMaxStd.isAcceptableOrUnknown(
+              data['gesamtdurchlaufzeit_max_std']!,
+              _gesamtdurchlaufzeitMaxStdMeta));
+    }
+    if (data.containsKey('wolf_lochscheibe_mm')) {
+      context.handle(
+          _wolfLochscheibeMmMeta,
+          wolfLochscheibeMm.isAcceptableOrUnknown(
+              data['wolf_lochscheibe_mm']!, _wolfLochscheibeMmMeta));
+    }
+    if (data.containsKey('abkuehlgradient')) {
+      context.handle(
+          _abkuehlgradientMeta,
+          abkuehlgradient.isAcceptableOrUnknown(
+              data['abkuehlgradient']!, _abkuehlgradientMeta));
+    }
+    if (data.containsKey('braten_variante')) {
+      context.handle(
+          _bratenVarianteMeta,
+          bratenVariante.isAcceptableOrUnknown(
+              data['braten_variante']!, _bratenVarianteMeta));
+    }
+    if (data.containsKey('fuellung')) {
+      context.handle(_fuellungMeta,
+          fuellung.isAcceptableOrUnknown(data['fuellung']!, _fuellungMeta));
+    }
+    if (data.containsKey('netzbindung')) {
+      context.handle(
+          _netzbindungMeta,
+          netzbindung.isAcceptableOrUnknown(
+              data['netzbindung']!, _netzbindungMeta));
+    }
+    if (data.containsKey('sv_badtemp_c')) {
+      context.handle(
+          _svBadtempCMeta,
+          svBadtempC.isAcceptableOrUnknown(
+              data['sv_badtemp_c']!, _svBadtempCMeta));
+    }
+    if (data.containsKey('sv_garzeit_std')) {
+      context.handle(
+          _svGarzeitStdMeta,
+          svGarzeitStd.isAcceptableOrUnknown(
+              data['sv_garzeit_std']!, _svGarzeitStdMeta));
+    }
+    if (data.containsKey('anbratgrad')) {
+      context.handle(
+          _anbratgradMeta,
+          anbratgrad.isAcceptableOrUnknown(
+              data['anbratgrad']!, _anbratgradMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -222,6 +676,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.string, data['${effectivePrefix}beschreibung']),
       notizen: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      produktgruppe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}produktgruppe']),
       verpackungsart: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}verpackungsart']),
       gebindeGroesseKg: attachedDatabase.typeMapping.read(
@@ -235,6 +691,81 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           DriftSqlType.int, data['${effectivePrefix}mindest_vorlaufzeit_tage']),
       planungsgruppe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}planungsgruppe']),
+      zielKerntempC: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ziel_kerntemp_c']),
+      kutterEndtempC: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}kutter_endtemp_c']),
+      braetFeinheit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}braet_feinheit']),
+      kochkammerProgramm: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}kochkammer_programm']),
+      raeucherart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}raeucherart']),
+      startkultur: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}startkultur']),
+      reifezeitTage: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}reifezeit_tage']),
+      klimaprogramm: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}klimaprogramm']),
+      zielPh: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ziel_ph']),
+      zielAw: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ziel_aw']),
+      gewichtsverlustProzent: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}gewichtsverlust_prozent']),
+      poekelart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}poekelart']),
+      lakeKonzentrationProzent: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}lake_konzentration_prozent']),
+      poekelzeitTage: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}poekelzeit_tage']),
+      tumbelzeitMin: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}tumbelzeit_min']),
+      basisProduktArtikelnummer: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}basis_produkt_artikelnummer']),
+      scheibendickeMm: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}scheibendicke_mm']),
+      scheibenProPackung: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}scheiben_pro_packung']),
+      packungsgewichtG: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}packungsgewicht_g']),
+      mapGas: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}map_gas']),
+      formgewichtG: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}formgewicht_g']),
+      form: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}form']),
+      bratgrad: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bratgrad']),
+      panierart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}panierart']),
+      panierAufnahmeProzent: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}panier_aufnahme_prozent']),
+      fleischanteilTyp: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}fleischanteil_typ']),
+      gesamtdurchlaufzeitMaxStd: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}gesamtdurchlaufzeit_max_std']),
+      wolfLochscheibeMm: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}wolf_lochscheibe_mm']),
+      abkuehlgradient: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}abkuehlgradient']),
+      bratenVariante: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}braten_variante']),
+      fuellung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}fuellung']),
+      netzbindung: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}netzbindung']),
+      svBadtempC: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}sv_badtemp_c']),
+      svGarzeitStd: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}sv_garzeit_std']),
+      anbratgrad: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}anbratgrad']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -263,27 +794,124 @@ class Product extends DataClass implements Insertable<Product> {
   final String? beschreibung;
   final String? notizen;
 
-  /// Art der Verpackung (z.B. 'vakuum', 'map', 'frischetheke', 'thermoform').
+  /// Produktgruppe als [ProductGroup.dbValue]. NULL = noch nicht klassifiziert
+  /// (nur für Altdaten, neue Artikel sollten eine Gruppe haben).
+  final String? produktgruppe;
   final String? verpackungsart;
-
-  /// Gebindegröße in kg (z.B. 0.5, 1.0, 2.5).
   final double? gebindeGroesseKg;
-
-  /// Haltbarkeit ab Produktion in Tagen (z.B. vakuum Leberkäse = 21 Tage).
   final int? haltbarkeitTage;
-
-  /// Gesamtausbeute-Faktor (Rohware → Fertigware).
-  /// z.B. 0.75 = aus 1 kg Rohware werden 0.75 kg Fertigprodukt.
-  /// Wird aus den einzelnen Schritt-Ausbeutefaktoren berechnet oder manuell gesetzt.
   final double? gesamtAusbeuteFaktor;
-
-  /// Mindest-Vorlaufzeit in Tagen (z.B. 2 = muss 2 Tage vorher geplant werden).
   final int? mindestVorlaufzeitTage;
 
-  /// Planungsgruppe für Reihenfolge-Optimierung
-  /// (z.B. 'hell', 'dunkel', 'allergen_senf', 'allergen_soja').
-  /// Helle Produkte vor dunklen → weniger Reinigung.
+  /// Alte Freitext-Planungsgruppe. Wird nicht mehr aktiv gepflegt, bleibt
+  /// aber als Spalte erhalten für Abwärtskompatibilität mit alten Backups.
   final String? planungsgruppe;
+
+  /// Ziel-Kerntemperatur in °C (Brühwurst, Kochpökel, Bratstraße, SV, Braten).
+  final double? zielKerntempC;
+
+  /// Kutter-Endtemperatur in °C (Brühwurst, angebratene Brühwurst).
+  final double? kutterEndtempC;
+
+  /// 'grob' | 'mittel' | 'fein' (Brühwurst, angebratene Brühwurst).
+  final String? braetFeinheit;
+
+  /// Kochkammer-Programm als Freitext (Brühwurst, angebratene Brühwurst).
+  final String? kochkammerProgramm;
+
+  /// 'keine' | 'kalt' | 'warm' | 'heiß' (diverse Gruppen).
+  final String? raeucherart;
+
+  /// Produktname der Starterkultur (Rohwurst).
+  final String? startkultur;
+
+  /// Reifezeit in Tagen (Rohwurst, Rohpökelware).
+  final int? reifezeitTage;
+
+  /// Klimaprogramm-Bezeichnung (Rohwurst).
+  final String? klimaprogramm;
+
+  /// Ziel-pH-Wert (Rohwurst).
+  final double? zielPh;
+
+  /// Ziel-aw-Wert (Rohwurst, Rohpökelware).
+  final double? zielAw;
+
+  /// Gewichtsverlust bzw. Trocknungsverlust in % (Rohwurst, Rohpökelware).
+  final double? gewichtsverlustProzent;
+
+  /// 'trocken' | 'nass' | 'injektion' (Kochpökel, Rohpökel).
+  final String? poekelart;
+
+  /// Lake-Konzentration in % (Kochpökel).
+  final double? lakeKonzentrationProzent;
+
+  /// Pökelzeit in Tagen (Kochpökel, Rohpökel).
+  final int? poekelzeitTage;
+
+  /// Tumbelzeit in Minuten (Kochpökel).
+  final double? tumbelzeitMin;
+
+  /// Artikelnummer des Basis-Produkts (Aufschnitt verweist auf Rohprodukt).
+  /// Bewusst KEIN DB-FK, damit der Import auch bei fehlender Basis nicht bricht.
+  final String? basisProduktArtikelnummer;
+
+  /// Scheibendicke in mm (Aufschnitt).
+  final double? scheibendickeMm;
+
+  /// Anzahl Scheiben pro Packung (Aufschnitt).
+  final int? scheibenProPackung;
+
+  /// Packungsgewicht in g (Aufschnitt).
+  final double? packungsgewichtG;
+
+  /// MAP-Gasgemisch als Freitext (Aufschnitt).
+  final String? mapGas;
+
+  /// Formgewicht in g (Bratstraße natur, Bratstraße paniert).
+  final double? formgewichtG;
+
+  /// 'rund' | 'oval' | 'patty' | 'länglich' (Bratstraße natur).
+  final String? form;
+
+  /// 'leicht' | 'mittel' | 'durch' (Bratstraße natur).
+  final String? bratgrad;
+
+  /// 'Mehl' | 'Paniermehl' | 'Panko' | 'Cornflakes' | 'Sonstige'.
+  final String? panierart;
+
+  /// Panier-Aufnahme in % (Bratstraße paniert).
+  final double? panierAufnahmeProzent;
+
+  /// 'S1' | 'S8' | 'gemischt' | 'R1' | 'R8' (Hackprodukte gegart/roh).
+  final String? fleischanteilTyp;
+
+  /// Gesamtdurchlaufzeit max in Stunden (Hackprodukte roh, Frische-Fenster).
+  final double? gesamtdurchlaufzeitMaxStd;
+
+  /// Wolf-Lochscheibe in mm (Hackprodukte roh).
+  final double? wolfLochscheibeMm;
+
+  /// Abkühlgradient als Freitext (Hackprodukte gegart, Sous Vide).
+  final String? abkuehlgradient;
+
+  /// 'roh' | 'vorgegart'.
+  final String? bratenVariante;
+
+  /// Füllungs-Beschreibung (Braten).
+  final String? fuellung;
+
+  /// Netzbindung ja/nein (Braten).
+  final bool? netzbindung;
+
+  /// SV-Badtemperatur in °C (Sous Vide).
+  final double? svBadtempC;
+
+  /// SV-Garzeit in Stunden (Sous Vide).
+  final double? svGarzeitStd;
+
+  /// 'hell' | 'mittel' | 'dunkel' (angebratene Brühwurst).
+  final String? anbratgrad;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -293,12 +921,48 @@ class Product extends DataClass implements Insertable<Product> {
       required this.artikelbezeichnung,
       this.beschreibung,
       this.notizen,
+      this.produktgruppe,
       this.verpackungsart,
       this.gebindeGroesseKg,
       this.haltbarkeitTage,
       this.gesamtAusbeuteFaktor,
       this.mindestVorlaufzeitTage,
       this.planungsgruppe,
+      this.zielKerntempC,
+      this.kutterEndtempC,
+      this.braetFeinheit,
+      this.kochkammerProgramm,
+      this.raeucherart,
+      this.startkultur,
+      this.reifezeitTage,
+      this.klimaprogramm,
+      this.zielPh,
+      this.zielAw,
+      this.gewichtsverlustProzent,
+      this.poekelart,
+      this.lakeKonzentrationProzent,
+      this.poekelzeitTage,
+      this.tumbelzeitMin,
+      this.basisProduktArtikelnummer,
+      this.scheibendickeMm,
+      this.scheibenProPackung,
+      this.packungsgewichtG,
+      this.mapGas,
+      this.formgewichtG,
+      this.form,
+      this.bratgrad,
+      this.panierart,
+      this.panierAufnahmeProzent,
+      this.fleischanteilTyp,
+      this.gesamtdurchlaufzeitMaxStd,
+      this.wolfLochscheibeMm,
+      this.abkuehlgradient,
+      this.bratenVariante,
+      this.fuellung,
+      this.netzbindung,
+      this.svBadtempC,
+      this.svGarzeitStd,
+      this.anbratgrad,
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt});
@@ -313,6 +977,9 @@ class Product extends DataClass implements Insertable<Product> {
     }
     if (!nullToAbsent || notizen != null) {
       map['notizen'] = Variable<String>(notizen);
+    }
+    if (!nullToAbsent || produktgruppe != null) {
+      map['produktgruppe'] = Variable<String>(produktgruppe);
     }
     if (!nullToAbsent || verpackungsart != null) {
       map['verpackungsart'] = Variable<String>(verpackungsart);
@@ -331,6 +998,114 @@ class Product extends DataClass implements Insertable<Product> {
     }
     if (!nullToAbsent || planungsgruppe != null) {
       map['planungsgruppe'] = Variable<String>(planungsgruppe);
+    }
+    if (!nullToAbsent || zielKerntempC != null) {
+      map['ziel_kerntemp_c'] = Variable<double>(zielKerntempC);
+    }
+    if (!nullToAbsent || kutterEndtempC != null) {
+      map['kutter_endtemp_c'] = Variable<double>(kutterEndtempC);
+    }
+    if (!nullToAbsent || braetFeinheit != null) {
+      map['braet_feinheit'] = Variable<String>(braetFeinheit);
+    }
+    if (!nullToAbsent || kochkammerProgramm != null) {
+      map['kochkammer_programm'] = Variable<String>(kochkammerProgramm);
+    }
+    if (!nullToAbsent || raeucherart != null) {
+      map['raeucherart'] = Variable<String>(raeucherart);
+    }
+    if (!nullToAbsent || startkultur != null) {
+      map['startkultur'] = Variable<String>(startkultur);
+    }
+    if (!nullToAbsent || reifezeitTage != null) {
+      map['reifezeit_tage'] = Variable<int>(reifezeitTage);
+    }
+    if (!nullToAbsent || klimaprogramm != null) {
+      map['klimaprogramm'] = Variable<String>(klimaprogramm);
+    }
+    if (!nullToAbsent || zielPh != null) {
+      map['ziel_ph'] = Variable<double>(zielPh);
+    }
+    if (!nullToAbsent || zielAw != null) {
+      map['ziel_aw'] = Variable<double>(zielAw);
+    }
+    if (!nullToAbsent || gewichtsverlustProzent != null) {
+      map['gewichtsverlust_prozent'] = Variable<double>(gewichtsverlustProzent);
+    }
+    if (!nullToAbsent || poekelart != null) {
+      map['poekelart'] = Variable<String>(poekelart);
+    }
+    if (!nullToAbsent || lakeKonzentrationProzent != null) {
+      map['lake_konzentration_prozent'] =
+          Variable<double>(lakeKonzentrationProzent);
+    }
+    if (!nullToAbsent || poekelzeitTage != null) {
+      map['poekelzeit_tage'] = Variable<int>(poekelzeitTage);
+    }
+    if (!nullToAbsent || tumbelzeitMin != null) {
+      map['tumbelzeit_min'] = Variable<double>(tumbelzeitMin);
+    }
+    if (!nullToAbsent || basisProduktArtikelnummer != null) {
+      map['basis_produkt_artikelnummer'] =
+          Variable<String>(basisProduktArtikelnummer);
+    }
+    if (!nullToAbsent || scheibendickeMm != null) {
+      map['scheibendicke_mm'] = Variable<double>(scheibendickeMm);
+    }
+    if (!nullToAbsent || scheibenProPackung != null) {
+      map['scheiben_pro_packung'] = Variable<int>(scheibenProPackung);
+    }
+    if (!nullToAbsent || packungsgewichtG != null) {
+      map['packungsgewicht_g'] = Variable<double>(packungsgewichtG);
+    }
+    if (!nullToAbsent || mapGas != null) {
+      map['map_gas'] = Variable<String>(mapGas);
+    }
+    if (!nullToAbsent || formgewichtG != null) {
+      map['formgewicht_g'] = Variable<double>(formgewichtG);
+    }
+    if (!nullToAbsent || form != null) {
+      map['form'] = Variable<String>(form);
+    }
+    if (!nullToAbsent || bratgrad != null) {
+      map['bratgrad'] = Variable<String>(bratgrad);
+    }
+    if (!nullToAbsent || panierart != null) {
+      map['panierart'] = Variable<String>(panierart);
+    }
+    if (!nullToAbsent || panierAufnahmeProzent != null) {
+      map['panier_aufnahme_prozent'] = Variable<double>(panierAufnahmeProzent);
+    }
+    if (!nullToAbsent || fleischanteilTyp != null) {
+      map['fleischanteil_typ'] = Variable<String>(fleischanteilTyp);
+    }
+    if (!nullToAbsent || gesamtdurchlaufzeitMaxStd != null) {
+      map['gesamtdurchlaufzeit_max_std'] =
+          Variable<double>(gesamtdurchlaufzeitMaxStd);
+    }
+    if (!nullToAbsent || wolfLochscheibeMm != null) {
+      map['wolf_lochscheibe_mm'] = Variable<double>(wolfLochscheibeMm);
+    }
+    if (!nullToAbsent || abkuehlgradient != null) {
+      map['abkuehlgradient'] = Variable<String>(abkuehlgradient);
+    }
+    if (!nullToAbsent || bratenVariante != null) {
+      map['braten_variante'] = Variable<String>(bratenVariante);
+    }
+    if (!nullToAbsent || fuellung != null) {
+      map['fuellung'] = Variable<String>(fuellung);
+    }
+    if (!nullToAbsent || netzbindung != null) {
+      map['netzbindung'] = Variable<bool>(netzbindung);
+    }
+    if (!nullToAbsent || svBadtempC != null) {
+      map['sv_badtemp_c'] = Variable<double>(svBadtempC);
+    }
+    if (!nullToAbsent || svGarzeitStd != null) {
+      map['sv_garzeit_std'] = Variable<double>(svGarzeitStd);
+    }
+    if (!nullToAbsent || anbratgrad != null) {
+      map['anbratgrad'] = Variable<String>(anbratgrad);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -351,6 +1126,9 @@ class Product extends DataClass implements Insertable<Product> {
       notizen: notizen == null && nullToAbsent
           ? const Value.absent()
           : Value(notizen),
+      produktgruppe: produktgruppe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(produktgruppe),
       verpackungsart: verpackungsart == null && nullToAbsent
           ? const Value.absent()
           : Value(verpackungsart),
@@ -369,6 +1147,108 @@ class Product extends DataClass implements Insertable<Product> {
       planungsgruppe: planungsgruppe == null && nullToAbsent
           ? const Value.absent()
           : Value(planungsgruppe),
+      zielKerntempC: zielKerntempC == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zielKerntempC),
+      kutterEndtempC: kutterEndtempC == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kutterEndtempC),
+      braetFeinheit: braetFeinheit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(braetFeinheit),
+      kochkammerProgramm: kochkammerProgramm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kochkammerProgramm),
+      raeucherart: raeucherart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(raeucherart),
+      startkultur: startkultur == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startkultur),
+      reifezeitTage: reifezeitTage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reifezeitTage),
+      klimaprogramm: klimaprogramm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(klimaprogramm),
+      zielPh:
+          zielPh == null && nullToAbsent ? const Value.absent() : Value(zielPh),
+      zielAw:
+          zielAw == null && nullToAbsent ? const Value.absent() : Value(zielAw),
+      gewichtsverlustProzent: gewichtsverlustProzent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gewichtsverlustProzent),
+      poekelart: poekelart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(poekelart),
+      lakeKonzentrationProzent: lakeKonzentrationProzent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lakeKonzentrationProzent),
+      poekelzeitTage: poekelzeitTage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(poekelzeitTage),
+      tumbelzeitMin: tumbelzeitMin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tumbelzeitMin),
+      basisProduktArtikelnummer:
+          basisProduktArtikelnummer == null && nullToAbsent
+              ? const Value.absent()
+              : Value(basisProduktArtikelnummer),
+      scheibendickeMm: scheibendickeMm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheibendickeMm),
+      scheibenProPackung: scheibenProPackung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheibenProPackung),
+      packungsgewichtG: packungsgewichtG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packungsgewichtG),
+      mapGas:
+          mapGas == null && nullToAbsent ? const Value.absent() : Value(mapGas),
+      formgewichtG: formgewichtG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(formgewichtG),
+      form: form == null && nullToAbsent ? const Value.absent() : Value(form),
+      bratgrad: bratgrad == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bratgrad),
+      panierart: panierart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(panierart),
+      panierAufnahmeProzent: panierAufnahmeProzent == null && nullToAbsent
+          ? const Value.absent()
+          : Value(panierAufnahmeProzent),
+      fleischanteilTyp: fleischanteilTyp == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fleischanteilTyp),
+      gesamtdurchlaufzeitMaxStd:
+          gesamtdurchlaufzeitMaxStd == null && nullToAbsent
+              ? const Value.absent()
+              : Value(gesamtdurchlaufzeitMaxStd),
+      wolfLochscheibeMm: wolfLochscheibeMm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(wolfLochscheibeMm),
+      abkuehlgradient: abkuehlgradient == null && nullToAbsent
+          ? const Value.absent()
+          : Value(abkuehlgradient),
+      bratenVariante: bratenVariante == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bratenVariante),
+      fuellung: fuellung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fuellung),
+      netzbindung: netzbindung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(netzbindung),
+      svBadtempC: svBadtempC == null && nullToAbsent
+          ? const Value.absent()
+          : Value(svBadtempC),
+      svGarzeitStd: svGarzeitStd == null && nullToAbsent
+          ? const Value.absent()
+          : Value(svGarzeitStd),
+      anbratgrad: anbratgrad == null && nullToAbsent
+          ? const Value.absent()
+          : Value(anbratgrad),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -387,6 +1267,7 @@ class Product extends DataClass implements Insertable<Product> {
           serializer.fromJson<String>(json['artikelbezeichnung']),
       beschreibung: serializer.fromJson<String?>(json['beschreibung']),
       notizen: serializer.fromJson<String?>(json['notizen']),
+      produktgruppe: serializer.fromJson<String?>(json['produktgruppe']),
       verpackungsart: serializer.fromJson<String?>(json['verpackungsart']),
       gebindeGroesseKg: serializer.fromJson<double?>(json['gebindeGroesseKg']),
       haltbarkeitTage: serializer.fromJson<int?>(json['haltbarkeitTage']),
@@ -395,6 +1276,48 @@ class Product extends DataClass implements Insertable<Product> {
       mindestVorlaufzeitTage:
           serializer.fromJson<int?>(json['mindestVorlaufzeitTage']),
       planungsgruppe: serializer.fromJson<String?>(json['planungsgruppe']),
+      zielKerntempC: serializer.fromJson<double?>(json['zielKerntempC']),
+      kutterEndtempC: serializer.fromJson<double?>(json['kutterEndtempC']),
+      braetFeinheit: serializer.fromJson<String?>(json['braetFeinheit']),
+      kochkammerProgramm:
+          serializer.fromJson<String?>(json['kochkammerProgramm']),
+      raeucherart: serializer.fromJson<String?>(json['raeucherart']),
+      startkultur: serializer.fromJson<String?>(json['startkultur']),
+      reifezeitTage: serializer.fromJson<int?>(json['reifezeitTage']),
+      klimaprogramm: serializer.fromJson<String?>(json['klimaprogramm']),
+      zielPh: serializer.fromJson<double?>(json['zielPh']),
+      zielAw: serializer.fromJson<double?>(json['zielAw']),
+      gewichtsverlustProzent:
+          serializer.fromJson<double?>(json['gewichtsverlustProzent']),
+      poekelart: serializer.fromJson<String?>(json['poekelart']),
+      lakeKonzentrationProzent:
+          serializer.fromJson<double?>(json['lakeKonzentrationProzent']),
+      poekelzeitTage: serializer.fromJson<int?>(json['poekelzeitTage']),
+      tumbelzeitMin: serializer.fromJson<double?>(json['tumbelzeitMin']),
+      basisProduktArtikelnummer:
+          serializer.fromJson<String?>(json['basisProduktArtikelnummer']),
+      scheibendickeMm: serializer.fromJson<double?>(json['scheibendickeMm']),
+      scheibenProPackung: serializer.fromJson<int?>(json['scheibenProPackung']),
+      packungsgewichtG: serializer.fromJson<double?>(json['packungsgewichtG']),
+      mapGas: serializer.fromJson<String?>(json['mapGas']),
+      formgewichtG: serializer.fromJson<double?>(json['formgewichtG']),
+      form: serializer.fromJson<String?>(json['form']),
+      bratgrad: serializer.fromJson<String?>(json['bratgrad']),
+      panierart: serializer.fromJson<String?>(json['panierart']),
+      panierAufnahmeProzent:
+          serializer.fromJson<double?>(json['panierAufnahmeProzent']),
+      fleischanteilTyp: serializer.fromJson<String?>(json['fleischanteilTyp']),
+      gesamtdurchlaufzeitMaxStd:
+          serializer.fromJson<double?>(json['gesamtdurchlaufzeitMaxStd']),
+      wolfLochscheibeMm:
+          serializer.fromJson<double?>(json['wolfLochscheibeMm']),
+      abkuehlgradient: serializer.fromJson<String?>(json['abkuehlgradient']),
+      bratenVariante: serializer.fromJson<String?>(json['bratenVariante']),
+      fuellung: serializer.fromJson<String?>(json['fuellung']),
+      netzbindung: serializer.fromJson<bool?>(json['netzbindung']),
+      svBadtempC: serializer.fromJson<double?>(json['svBadtempC']),
+      svGarzeitStd: serializer.fromJson<double?>(json['svGarzeitStd']),
+      anbratgrad: serializer.fromJson<String?>(json['anbratgrad']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -409,12 +1332,53 @@ class Product extends DataClass implements Insertable<Product> {
       'artikelbezeichnung': serializer.toJson<String>(artikelbezeichnung),
       'beschreibung': serializer.toJson<String?>(beschreibung),
       'notizen': serializer.toJson<String?>(notizen),
+      'produktgruppe': serializer.toJson<String?>(produktgruppe),
       'verpackungsart': serializer.toJson<String?>(verpackungsart),
       'gebindeGroesseKg': serializer.toJson<double?>(gebindeGroesseKg),
       'haltbarkeitTage': serializer.toJson<int?>(haltbarkeitTage),
       'gesamtAusbeuteFaktor': serializer.toJson<double?>(gesamtAusbeuteFaktor),
       'mindestVorlaufzeitTage': serializer.toJson<int?>(mindestVorlaufzeitTage),
       'planungsgruppe': serializer.toJson<String?>(planungsgruppe),
+      'zielKerntempC': serializer.toJson<double?>(zielKerntempC),
+      'kutterEndtempC': serializer.toJson<double?>(kutterEndtempC),
+      'braetFeinheit': serializer.toJson<String?>(braetFeinheit),
+      'kochkammerProgramm': serializer.toJson<String?>(kochkammerProgramm),
+      'raeucherart': serializer.toJson<String?>(raeucherart),
+      'startkultur': serializer.toJson<String?>(startkultur),
+      'reifezeitTage': serializer.toJson<int?>(reifezeitTage),
+      'klimaprogramm': serializer.toJson<String?>(klimaprogramm),
+      'zielPh': serializer.toJson<double?>(zielPh),
+      'zielAw': serializer.toJson<double?>(zielAw),
+      'gewichtsverlustProzent':
+          serializer.toJson<double?>(gewichtsverlustProzent),
+      'poekelart': serializer.toJson<String?>(poekelart),
+      'lakeKonzentrationProzent':
+          serializer.toJson<double?>(lakeKonzentrationProzent),
+      'poekelzeitTage': serializer.toJson<int?>(poekelzeitTage),
+      'tumbelzeitMin': serializer.toJson<double?>(tumbelzeitMin),
+      'basisProduktArtikelnummer':
+          serializer.toJson<String?>(basisProduktArtikelnummer),
+      'scheibendickeMm': serializer.toJson<double?>(scheibendickeMm),
+      'scheibenProPackung': serializer.toJson<int?>(scheibenProPackung),
+      'packungsgewichtG': serializer.toJson<double?>(packungsgewichtG),
+      'mapGas': serializer.toJson<String?>(mapGas),
+      'formgewichtG': serializer.toJson<double?>(formgewichtG),
+      'form': serializer.toJson<String?>(form),
+      'bratgrad': serializer.toJson<String?>(bratgrad),
+      'panierart': serializer.toJson<String?>(panierart),
+      'panierAufnahmeProzent':
+          serializer.toJson<double?>(panierAufnahmeProzent),
+      'fleischanteilTyp': serializer.toJson<String?>(fleischanteilTyp),
+      'gesamtdurchlaufzeitMaxStd':
+          serializer.toJson<double?>(gesamtdurchlaufzeitMaxStd),
+      'wolfLochscheibeMm': serializer.toJson<double?>(wolfLochscheibeMm),
+      'abkuehlgradient': serializer.toJson<String?>(abkuehlgradient),
+      'bratenVariante': serializer.toJson<String?>(bratenVariante),
+      'fuellung': serializer.toJson<String?>(fuellung),
+      'netzbindung': serializer.toJson<bool?>(netzbindung),
+      'svBadtempC': serializer.toJson<double?>(svBadtempC),
+      'svGarzeitStd': serializer.toJson<double?>(svGarzeitStd),
+      'anbratgrad': serializer.toJson<String?>(anbratgrad),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -427,12 +1391,48 @@ class Product extends DataClass implements Insertable<Product> {
           String? artikelbezeichnung,
           Value<String?> beschreibung = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
+          Value<String?> produktgruppe = const Value.absent(),
           Value<String?> verpackungsart = const Value.absent(),
           Value<double?> gebindeGroesseKg = const Value.absent(),
           Value<int?> haltbarkeitTage = const Value.absent(),
           Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
           Value<int?> mindestVorlaufzeitTage = const Value.absent(),
           Value<String?> planungsgruppe = const Value.absent(),
+          Value<double?> zielKerntempC = const Value.absent(),
+          Value<double?> kutterEndtempC = const Value.absent(),
+          Value<String?> braetFeinheit = const Value.absent(),
+          Value<String?> kochkammerProgramm = const Value.absent(),
+          Value<String?> raeucherart = const Value.absent(),
+          Value<String?> startkultur = const Value.absent(),
+          Value<int?> reifezeitTage = const Value.absent(),
+          Value<String?> klimaprogramm = const Value.absent(),
+          Value<double?> zielPh = const Value.absent(),
+          Value<double?> zielAw = const Value.absent(),
+          Value<double?> gewichtsverlustProzent = const Value.absent(),
+          Value<String?> poekelart = const Value.absent(),
+          Value<double?> lakeKonzentrationProzent = const Value.absent(),
+          Value<int?> poekelzeitTage = const Value.absent(),
+          Value<double?> tumbelzeitMin = const Value.absent(),
+          Value<String?> basisProduktArtikelnummer = const Value.absent(),
+          Value<double?> scheibendickeMm = const Value.absent(),
+          Value<int?> scheibenProPackung = const Value.absent(),
+          Value<double?> packungsgewichtG = const Value.absent(),
+          Value<String?> mapGas = const Value.absent(),
+          Value<double?> formgewichtG = const Value.absent(),
+          Value<String?> form = const Value.absent(),
+          Value<String?> bratgrad = const Value.absent(),
+          Value<String?> panierart = const Value.absent(),
+          Value<double?> panierAufnahmeProzent = const Value.absent(),
+          Value<String?> fleischanteilTyp = const Value.absent(),
+          Value<double?> gesamtdurchlaufzeitMaxStd = const Value.absent(),
+          Value<double?> wolfLochscheibeMm = const Value.absent(),
+          Value<String?> abkuehlgradient = const Value.absent(),
+          Value<String?> bratenVariante = const Value.absent(),
+          Value<String?> fuellung = const Value.absent(),
+          Value<bool?> netzbindung = const Value.absent(),
+          Value<double?> svBadtempC = const Value.absent(),
+          Value<double?> svGarzeitStd = const Value.absent(),
+          Value<String?> anbratgrad = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent()}) =>
@@ -443,6 +1443,8 @@ class Product extends DataClass implements Insertable<Product> {
         beschreibung:
             beschreibung.present ? beschreibung.value : this.beschreibung,
         notizen: notizen.present ? notizen.value : this.notizen,
+        produktgruppe:
+            produktgruppe.present ? produktgruppe.value : this.produktgruppe,
         verpackungsart:
             verpackungsart.present ? verpackungsart.value : this.verpackungsart,
         gebindeGroesseKg: gebindeGroesseKg.present
@@ -459,6 +1461,75 @@ class Product extends DataClass implements Insertable<Product> {
             : this.mindestVorlaufzeitTage,
         planungsgruppe:
             planungsgruppe.present ? planungsgruppe.value : this.planungsgruppe,
+        zielKerntempC:
+            zielKerntempC.present ? zielKerntempC.value : this.zielKerntempC,
+        kutterEndtempC:
+            kutterEndtempC.present ? kutterEndtempC.value : this.kutterEndtempC,
+        braetFeinheit:
+            braetFeinheit.present ? braetFeinheit.value : this.braetFeinheit,
+        kochkammerProgramm: kochkammerProgramm.present
+            ? kochkammerProgramm.value
+            : this.kochkammerProgramm,
+        raeucherart: raeucherart.present ? raeucherart.value : this.raeucherart,
+        startkultur: startkultur.present ? startkultur.value : this.startkultur,
+        reifezeitTage:
+            reifezeitTage.present ? reifezeitTage.value : this.reifezeitTage,
+        klimaprogramm:
+            klimaprogramm.present ? klimaprogramm.value : this.klimaprogramm,
+        zielPh: zielPh.present ? zielPh.value : this.zielPh,
+        zielAw: zielAw.present ? zielAw.value : this.zielAw,
+        gewichtsverlustProzent: gewichtsverlustProzent.present
+            ? gewichtsverlustProzent.value
+            : this.gewichtsverlustProzent,
+        poekelart: poekelart.present ? poekelart.value : this.poekelart,
+        lakeKonzentrationProzent: lakeKonzentrationProzent.present
+            ? lakeKonzentrationProzent.value
+            : this.lakeKonzentrationProzent,
+        poekelzeitTage:
+            poekelzeitTage.present ? poekelzeitTage.value : this.poekelzeitTage,
+        tumbelzeitMin:
+            tumbelzeitMin.present ? tumbelzeitMin.value : this.tumbelzeitMin,
+        basisProduktArtikelnummer: basisProduktArtikelnummer.present
+            ? basisProduktArtikelnummer.value
+            : this.basisProduktArtikelnummer,
+        scheibendickeMm: scheibendickeMm.present
+            ? scheibendickeMm.value
+            : this.scheibendickeMm,
+        scheibenProPackung: scheibenProPackung.present
+            ? scheibenProPackung.value
+            : this.scheibenProPackung,
+        packungsgewichtG: packungsgewichtG.present
+            ? packungsgewichtG.value
+            : this.packungsgewichtG,
+        mapGas: mapGas.present ? mapGas.value : this.mapGas,
+        formgewichtG:
+            formgewichtG.present ? formgewichtG.value : this.formgewichtG,
+        form: form.present ? form.value : this.form,
+        bratgrad: bratgrad.present ? bratgrad.value : this.bratgrad,
+        panierart: panierart.present ? panierart.value : this.panierart,
+        panierAufnahmeProzent: panierAufnahmeProzent.present
+            ? panierAufnahmeProzent.value
+            : this.panierAufnahmeProzent,
+        fleischanteilTyp: fleischanteilTyp.present
+            ? fleischanteilTyp.value
+            : this.fleischanteilTyp,
+        gesamtdurchlaufzeitMaxStd: gesamtdurchlaufzeitMaxStd.present
+            ? gesamtdurchlaufzeitMaxStd.value
+            : this.gesamtdurchlaufzeitMaxStd,
+        wolfLochscheibeMm: wolfLochscheibeMm.present
+            ? wolfLochscheibeMm.value
+            : this.wolfLochscheibeMm,
+        abkuehlgradient: abkuehlgradient.present
+            ? abkuehlgradient.value
+            : this.abkuehlgradient,
+        bratenVariante:
+            bratenVariante.present ? bratenVariante.value : this.bratenVariante,
+        fuellung: fuellung.present ? fuellung.value : this.fuellung,
+        netzbindung: netzbindung.present ? netzbindung.value : this.netzbindung,
+        svBadtempC: svBadtempC.present ? svBadtempC.value : this.svBadtempC,
+        svGarzeitStd:
+            svGarzeitStd.present ? svGarzeitStd.value : this.svGarzeitStd,
+        anbratgrad: anbratgrad.present ? anbratgrad.value : this.anbratgrad,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -476,6 +1547,9 @@ class Product extends DataClass implements Insertable<Product> {
           ? data.beschreibung.value
           : this.beschreibung,
       notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      produktgruppe: data.produktgruppe.present
+          ? data.produktgruppe.value
+          : this.produktgruppe,
       verpackungsart: data.verpackungsart.present
           ? data.verpackungsart.value
           : this.verpackungsart,
@@ -494,6 +1568,90 @@ class Product extends DataClass implements Insertable<Product> {
       planungsgruppe: data.planungsgruppe.present
           ? data.planungsgruppe.value
           : this.planungsgruppe,
+      zielKerntempC: data.zielKerntempC.present
+          ? data.zielKerntempC.value
+          : this.zielKerntempC,
+      kutterEndtempC: data.kutterEndtempC.present
+          ? data.kutterEndtempC.value
+          : this.kutterEndtempC,
+      braetFeinheit: data.braetFeinheit.present
+          ? data.braetFeinheit.value
+          : this.braetFeinheit,
+      kochkammerProgramm: data.kochkammerProgramm.present
+          ? data.kochkammerProgramm.value
+          : this.kochkammerProgramm,
+      raeucherart:
+          data.raeucherart.present ? data.raeucherart.value : this.raeucherart,
+      startkultur:
+          data.startkultur.present ? data.startkultur.value : this.startkultur,
+      reifezeitTage: data.reifezeitTage.present
+          ? data.reifezeitTage.value
+          : this.reifezeitTage,
+      klimaprogramm: data.klimaprogramm.present
+          ? data.klimaprogramm.value
+          : this.klimaprogramm,
+      zielPh: data.zielPh.present ? data.zielPh.value : this.zielPh,
+      zielAw: data.zielAw.present ? data.zielAw.value : this.zielAw,
+      gewichtsverlustProzent: data.gewichtsverlustProzent.present
+          ? data.gewichtsverlustProzent.value
+          : this.gewichtsverlustProzent,
+      poekelart: data.poekelart.present ? data.poekelart.value : this.poekelart,
+      lakeKonzentrationProzent: data.lakeKonzentrationProzent.present
+          ? data.lakeKonzentrationProzent.value
+          : this.lakeKonzentrationProzent,
+      poekelzeitTage: data.poekelzeitTage.present
+          ? data.poekelzeitTage.value
+          : this.poekelzeitTage,
+      tumbelzeitMin: data.tumbelzeitMin.present
+          ? data.tumbelzeitMin.value
+          : this.tumbelzeitMin,
+      basisProduktArtikelnummer: data.basisProduktArtikelnummer.present
+          ? data.basisProduktArtikelnummer.value
+          : this.basisProduktArtikelnummer,
+      scheibendickeMm: data.scheibendickeMm.present
+          ? data.scheibendickeMm.value
+          : this.scheibendickeMm,
+      scheibenProPackung: data.scheibenProPackung.present
+          ? data.scheibenProPackung.value
+          : this.scheibenProPackung,
+      packungsgewichtG: data.packungsgewichtG.present
+          ? data.packungsgewichtG.value
+          : this.packungsgewichtG,
+      mapGas: data.mapGas.present ? data.mapGas.value : this.mapGas,
+      formgewichtG: data.formgewichtG.present
+          ? data.formgewichtG.value
+          : this.formgewichtG,
+      form: data.form.present ? data.form.value : this.form,
+      bratgrad: data.bratgrad.present ? data.bratgrad.value : this.bratgrad,
+      panierart: data.panierart.present ? data.panierart.value : this.panierart,
+      panierAufnahmeProzent: data.panierAufnahmeProzent.present
+          ? data.panierAufnahmeProzent.value
+          : this.panierAufnahmeProzent,
+      fleischanteilTyp: data.fleischanteilTyp.present
+          ? data.fleischanteilTyp.value
+          : this.fleischanteilTyp,
+      gesamtdurchlaufzeitMaxStd: data.gesamtdurchlaufzeitMaxStd.present
+          ? data.gesamtdurchlaufzeitMaxStd.value
+          : this.gesamtdurchlaufzeitMaxStd,
+      wolfLochscheibeMm: data.wolfLochscheibeMm.present
+          ? data.wolfLochscheibeMm.value
+          : this.wolfLochscheibeMm,
+      abkuehlgradient: data.abkuehlgradient.present
+          ? data.abkuehlgradient.value
+          : this.abkuehlgradient,
+      bratenVariante: data.bratenVariante.present
+          ? data.bratenVariante.value
+          : this.bratenVariante,
+      fuellung: data.fuellung.present ? data.fuellung.value : this.fuellung,
+      netzbindung:
+          data.netzbindung.present ? data.netzbindung.value : this.netzbindung,
+      svBadtempC:
+          data.svBadtempC.present ? data.svBadtempC.value : this.svBadtempC,
+      svGarzeitStd: data.svGarzeitStd.present
+          ? data.svGarzeitStd.value
+          : this.svGarzeitStd,
+      anbratgrad:
+          data.anbratgrad.present ? data.anbratgrad.value : this.anbratgrad,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -508,12 +1666,48 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('produktgruppe: $produktgruppe, ')
           ..write('verpackungsart: $verpackungsart, ')
           ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
           ..write('haltbarkeitTage: $haltbarkeitTage, ')
           ..write('gesamtAusbeuteFaktor: $gesamtAusbeuteFaktor, ')
           ..write('mindestVorlaufzeitTage: $mindestVorlaufzeitTage, ')
           ..write('planungsgruppe: $planungsgruppe, ')
+          ..write('zielKerntempC: $zielKerntempC, ')
+          ..write('kutterEndtempC: $kutterEndtempC, ')
+          ..write('braetFeinheit: $braetFeinheit, ')
+          ..write('kochkammerProgramm: $kochkammerProgramm, ')
+          ..write('raeucherart: $raeucherart, ')
+          ..write('startkultur: $startkultur, ')
+          ..write('reifezeitTage: $reifezeitTage, ')
+          ..write('klimaprogramm: $klimaprogramm, ')
+          ..write('zielPh: $zielPh, ')
+          ..write('zielAw: $zielAw, ')
+          ..write('gewichtsverlustProzent: $gewichtsverlustProzent, ')
+          ..write('poekelart: $poekelart, ')
+          ..write('lakeKonzentrationProzent: $lakeKonzentrationProzent, ')
+          ..write('poekelzeitTage: $poekelzeitTage, ')
+          ..write('tumbelzeitMin: $tumbelzeitMin, ')
+          ..write('basisProduktArtikelnummer: $basisProduktArtikelnummer, ')
+          ..write('scheibendickeMm: $scheibendickeMm, ')
+          ..write('scheibenProPackung: $scheibenProPackung, ')
+          ..write('packungsgewichtG: $packungsgewichtG, ')
+          ..write('mapGas: $mapGas, ')
+          ..write('formgewichtG: $formgewichtG, ')
+          ..write('form: $form, ')
+          ..write('bratgrad: $bratgrad, ')
+          ..write('panierart: $panierart, ')
+          ..write('panierAufnahmeProzent: $panierAufnahmeProzent, ')
+          ..write('fleischanteilTyp: $fleischanteilTyp, ')
+          ..write('gesamtdurchlaufzeitMaxStd: $gesamtdurchlaufzeitMaxStd, ')
+          ..write('wolfLochscheibeMm: $wolfLochscheibeMm, ')
+          ..write('abkuehlgradient: $abkuehlgradient, ')
+          ..write('bratenVariante: $bratenVariante, ')
+          ..write('fuellung: $fuellung, ')
+          ..write('netzbindung: $netzbindung, ')
+          ..write('svBadtempC: $svBadtempC, ')
+          ..write('svGarzeitStd: $svGarzeitStd, ')
+          ..write('anbratgrad: $anbratgrad, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -522,21 +1716,58 @@ class Product extends DataClass implements Insertable<Product> {
   }
 
   @override
-  int get hashCode => Object.hash(
-      id,
-      artikelnummer,
-      artikelbezeichnung,
-      beschreibung,
-      notizen,
-      verpackungsart,
-      gebindeGroesseKg,
-      haltbarkeitTage,
-      gesamtAusbeuteFaktor,
-      mindestVorlaufzeitTage,
-      planungsgruppe,
-      createdAt,
-      updatedAt,
-      deletedAt);
+  int get hashCode => Object.hashAll([
+        id,
+        artikelnummer,
+        artikelbezeichnung,
+        beschreibung,
+        notizen,
+        produktgruppe,
+        verpackungsart,
+        gebindeGroesseKg,
+        haltbarkeitTage,
+        gesamtAusbeuteFaktor,
+        mindestVorlaufzeitTage,
+        planungsgruppe,
+        zielKerntempC,
+        kutterEndtempC,
+        braetFeinheit,
+        kochkammerProgramm,
+        raeucherart,
+        startkultur,
+        reifezeitTage,
+        klimaprogramm,
+        zielPh,
+        zielAw,
+        gewichtsverlustProzent,
+        poekelart,
+        lakeKonzentrationProzent,
+        poekelzeitTage,
+        tumbelzeitMin,
+        basisProduktArtikelnummer,
+        scheibendickeMm,
+        scheibenProPackung,
+        packungsgewichtG,
+        mapGas,
+        formgewichtG,
+        form,
+        bratgrad,
+        panierart,
+        panierAufnahmeProzent,
+        fleischanteilTyp,
+        gesamtdurchlaufzeitMaxStd,
+        wolfLochscheibeMm,
+        abkuehlgradient,
+        bratenVariante,
+        fuellung,
+        netzbindung,
+        svBadtempC,
+        svGarzeitStd,
+        anbratgrad,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -546,12 +1777,48 @@ class Product extends DataClass implements Insertable<Product> {
           other.artikelbezeichnung == this.artikelbezeichnung &&
           other.beschreibung == this.beschreibung &&
           other.notizen == this.notizen &&
+          other.produktgruppe == this.produktgruppe &&
           other.verpackungsart == this.verpackungsart &&
           other.gebindeGroesseKg == this.gebindeGroesseKg &&
           other.haltbarkeitTage == this.haltbarkeitTage &&
           other.gesamtAusbeuteFaktor == this.gesamtAusbeuteFaktor &&
           other.mindestVorlaufzeitTage == this.mindestVorlaufzeitTage &&
           other.planungsgruppe == this.planungsgruppe &&
+          other.zielKerntempC == this.zielKerntempC &&
+          other.kutterEndtempC == this.kutterEndtempC &&
+          other.braetFeinheit == this.braetFeinheit &&
+          other.kochkammerProgramm == this.kochkammerProgramm &&
+          other.raeucherart == this.raeucherart &&
+          other.startkultur == this.startkultur &&
+          other.reifezeitTage == this.reifezeitTage &&
+          other.klimaprogramm == this.klimaprogramm &&
+          other.zielPh == this.zielPh &&
+          other.zielAw == this.zielAw &&
+          other.gewichtsverlustProzent == this.gewichtsverlustProzent &&
+          other.poekelart == this.poekelart &&
+          other.lakeKonzentrationProzent == this.lakeKonzentrationProzent &&
+          other.poekelzeitTage == this.poekelzeitTage &&
+          other.tumbelzeitMin == this.tumbelzeitMin &&
+          other.basisProduktArtikelnummer == this.basisProduktArtikelnummer &&
+          other.scheibendickeMm == this.scheibendickeMm &&
+          other.scheibenProPackung == this.scheibenProPackung &&
+          other.packungsgewichtG == this.packungsgewichtG &&
+          other.mapGas == this.mapGas &&
+          other.formgewichtG == this.formgewichtG &&
+          other.form == this.form &&
+          other.bratgrad == this.bratgrad &&
+          other.panierart == this.panierart &&
+          other.panierAufnahmeProzent == this.panierAufnahmeProzent &&
+          other.fleischanteilTyp == this.fleischanteilTyp &&
+          other.gesamtdurchlaufzeitMaxStd == this.gesamtdurchlaufzeitMaxStd &&
+          other.wolfLochscheibeMm == this.wolfLochscheibeMm &&
+          other.abkuehlgradient == this.abkuehlgradient &&
+          other.bratenVariante == this.bratenVariante &&
+          other.fuellung == this.fuellung &&
+          other.netzbindung == this.netzbindung &&
+          other.svBadtempC == this.svBadtempC &&
+          other.svGarzeitStd == this.svGarzeitStd &&
+          other.anbratgrad == this.anbratgrad &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -563,12 +1830,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String> artikelbezeichnung;
   final Value<String?> beschreibung;
   final Value<String?> notizen;
+  final Value<String?> produktgruppe;
   final Value<String?> verpackungsart;
   final Value<double?> gebindeGroesseKg;
   final Value<int?> haltbarkeitTage;
   final Value<double?> gesamtAusbeuteFaktor;
   final Value<int?> mindestVorlaufzeitTage;
   final Value<String?> planungsgruppe;
+  final Value<double?> zielKerntempC;
+  final Value<double?> kutterEndtempC;
+  final Value<String?> braetFeinheit;
+  final Value<String?> kochkammerProgramm;
+  final Value<String?> raeucherart;
+  final Value<String?> startkultur;
+  final Value<int?> reifezeitTage;
+  final Value<String?> klimaprogramm;
+  final Value<double?> zielPh;
+  final Value<double?> zielAw;
+  final Value<double?> gewichtsverlustProzent;
+  final Value<String?> poekelart;
+  final Value<double?> lakeKonzentrationProzent;
+  final Value<int?> poekelzeitTage;
+  final Value<double?> tumbelzeitMin;
+  final Value<String?> basisProduktArtikelnummer;
+  final Value<double?> scheibendickeMm;
+  final Value<int?> scheibenProPackung;
+  final Value<double?> packungsgewichtG;
+  final Value<String?> mapGas;
+  final Value<double?> formgewichtG;
+  final Value<String?> form;
+  final Value<String?> bratgrad;
+  final Value<String?> panierart;
+  final Value<double?> panierAufnahmeProzent;
+  final Value<String?> fleischanteilTyp;
+  final Value<double?> gesamtdurchlaufzeitMaxStd;
+  final Value<double?> wolfLochscheibeMm;
+  final Value<String?> abkuehlgradient;
+  final Value<String?> bratenVariante;
+  final Value<String?> fuellung;
+  final Value<bool?> netzbindung;
+  final Value<double?> svBadtempC;
+  final Value<double?> svGarzeitStd;
+  final Value<String?> anbratgrad;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -579,12 +1882,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.artikelbezeichnung = const Value.absent(),
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.produktgruppe = const Value.absent(),
     this.verpackungsart = const Value.absent(),
     this.gebindeGroesseKg = const Value.absent(),
     this.haltbarkeitTage = const Value.absent(),
     this.gesamtAusbeuteFaktor = const Value.absent(),
     this.mindestVorlaufzeitTage = const Value.absent(),
     this.planungsgruppe = const Value.absent(),
+    this.zielKerntempC = const Value.absent(),
+    this.kutterEndtempC = const Value.absent(),
+    this.braetFeinheit = const Value.absent(),
+    this.kochkammerProgramm = const Value.absent(),
+    this.raeucherart = const Value.absent(),
+    this.startkultur = const Value.absent(),
+    this.reifezeitTage = const Value.absent(),
+    this.klimaprogramm = const Value.absent(),
+    this.zielPh = const Value.absent(),
+    this.zielAw = const Value.absent(),
+    this.gewichtsverlustProzent = const Value.absent(),
+    this.poekelart = const Value.absent(),
+    this.lakeKonzentrationProzent = const Value.absent(),
+    this.poekelzeitTage = const Value.absent(),
+    this.tumbelzeitMin = const Value.absent(),
+    this.basisProduktArtikelnummer = const Value.absent(),
+    this.scheibendickeMm = const Value.absent(),
+    this.scheibenProPackung = const Value.absent(),
+    this.packungsgewichtG = const Value.absent(),
+    this.mapGas = const Value.absent(),
+    this.formgewichtG = const Value.absent(),
+    this.form = const Value.absent(),
+    this.bratgrad = const Value.absent(),
+    this.panierart = const Value.absent(),
+    this.panierAufnahmeProzent = const Value.absent(),
+    this.fleischanteilTyp = const Value.absent(),
+    this.gesamtdurchlaufzeitMaxStd = const Value.absent(),
+    this.wolfLochscheibeMm = const Value.absent(),
+    this.abkuehlgradient = const Value.absent(),
+    this.bratenVariante = const Value.absent(),
+    this.fuellung = const Value.absent(),
+    this.netzbindung = const Value.absent(),
+    this.svBadtempC = const Value.absent(),
+    this.svGarzeitStd = const Value.absent(),
+    this.anbratgrad = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -596,12 +1935,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required String artikelbezeichnung,
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.produktgruppe = const Value.absent(),
     this.verpackungsart = const Value.absent(),
     this.gebindeGroesseKg = const Value.absent(),
     this.haltbarkeitTage = const Value.absent(),
     this.gesamtAusbeuteFaktor = const Value.absent(),
     this.mindestVorlaufzeitTage = const Value.absent(),
     this.planungsgruppe = const Value.absent(),
+    this.zielKerntempC = const Value.absent(),
+    this.kutterEndtempC = const Value.absent(),
+    this.braetFeinheit = const Value.absent(),
+    this.kochkammerProgramm = const Value.absent(),
+    this.raeucherart = const Value.absent(),
+    this.startkultur = const Value.absent(),
+    this.reifezeitTage = const Value.absent(),
+    this.klimaprogramm = const Value.absent(),
+    this.zielPh = const Value.absent(),
+    this.zielAw = const Value.absent(),
+    this.gewichtsverlustProzent = const Value.absent(),
+    this.poekelart = const Value.absent(),
+    this.lakeKonzentrationProzent = const Value.absent(),
+    this.poekelzeitTage = const Value.absent(),
+    this.tumbelzeitMin = const Value.absent(),
+    this.basisProduktArtikelnummer = const Value.absent(),
+    this.scheibendickeMm = const Value.absent(),
+    this.scheibenProPackung = const Value.absent(),
+    this.packungsgewichtG = const Value.absent(),
+    this.mapGas = const Value.absent(),
+    this.formgewichtG = const Value.absent(),
+    this.form = const Value.absent(),
+    this.bratgrad = const Value.absent(),
+    this.panierart = const Value.absent(),
+    this.panierAufnahmeProzent = const Value.absent(),
+    this.fleischanteilTyp = const Value.absent(),
+    this.gesamtdurchlaufzeitMaxStd = const Value.absent(),
+    this.wolfLochscheibeMm = const Value.absent(),
+    this.abkuehlgradient = const Value.absent(),
+    this.bratenVariante = const Value.absent(),
+    this.fuellung = const Value.absent(),
+    this.netzbindung = const Value.absent(),
+    this.svBadtempC = const Value.absent(),
+    this.svGarzeitStd = const Value.absent(),
+    this.anbratgrad = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -615,12 +1990,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? artikelbezeichnung,
     Expression<String>? beschreibung,
     Expression<String>? notizen,
+    Expression<String>? produktgruppe,
     Expression<String>? verpackungsart,
     Expression<double>? gebindeGroesseKg,
     Expression<int>? haltbarkeitTage,
     Expression<double>? gesamtAusbeuteFaktor,
     Expression<int>? mindestVorlaufzeitTage,
     Expression<String>? planungsgruppe,
+    Expression<double>? zielKerntempC,
+    Expression<double>? kutterEndtempC,
+    Expression<String>? braetFeinheit,
+    Expression<String>? kochkammerProgramm,
+    Expression<String>? raeucherart,
+    Expression<String>? startkultur,
+    Expression<int>? reifezeitTage,
+    Expression<String>? klimaprogramm,
+    Expression<double>? zielPh,
+    Expression<double>? zielAw,
+    Expression<double>? gewichtsverlustProzent,
+    Expression<String>? poekelart,
+    Expression<double>? lakeKonzentrationProzent,
+    Expression<int>? poekelzeitTage,
+    Expression<double>? tumbelzeitMin,
+    Expression<String>? basisProduktArtikelnummer,
+    Expression<double>? scheibendickeMm,
+    Expression<int>? scheibenProPackung,
+    Expression<double>? packungsgewichtG,
+    Expression<String>? mapGas,
+    Expression<double>? formgewichtG,
+    Expression<String>? form,
+    Expression<String>? bratgrad,
+    Expression<String>? panierart,
+    Expression<double>? panierAufnahmeProzent,
+    Expression<String>? fleischanteilTyp,
+    Expression<double>? gesamtdurchlaufzeitMaxStd,
+    Expression<double>? wolfLochscheibeMm,
+    Expression<String>? abkuehlgradient,
+    Expression<String>? bratenVariante,
+    Expression<String>? fuellung,
+    Expression<bool>? netzbindung,
+    Expression<double>? svBadtempC,
+    Expression<double>? svGarzeitStd,
+    Expression<String>? anbratgrad,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -632,6 +2043,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (artikelbezeichnung != null) 'artikelbezeichnung': artikelbezeichnung,
       if (beschreibung != null) 'beschreibung': beschreibung,
       if (notizen != null) 'notizen': notizen,
+      if (produktgruppe != null) 'produktgruppe': produktgruppe,
       if (verpackungsart != null) 'verpackungsart': verpackungsart,
       if (gebindeGroesseKg != null) 'gebinde_groesse_kg': gebindeGroesseKg,
       if (haltbarkeitTage != null) 'haltbarkeit_tage': haltbarkeitTage,
@@ -640,6 +2052,47 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (mindestVorlaufzeitTage != null)
         'mindest_vorlaufzeit_tage': mindestVorlaufzeitTage,
       if (planungsgruppe != null) 'planungsgruppe': planungsgruppe,
+      if (zielKerntempC != null) 'ziel_kerntemp_c': zielKerntempC,
+      if (kutterEndtempC != null) 'kutter_endtemp_c': kutterEndtempC,
+      if (braetFeinheit != null) 'braet_feinheit': braetFeinheit,
+      if (kochkammerProgramm != null) 'kochkammer_programm': kochkammerProgramm,
+      if (raeucherart != null) 'raeucherart': raeucherart,
+      if (startkultur != null) 'startkultur': startkultur,
+      if (reifezeitTage != null) 'reifezeit_tage': reifezeitTage,
+      if (klimaprogramm != null) 'klimaprogramm': klimaprogramm,
+      if (zielPh != null) 'ziel_ph': zielPh,
+      if (zielAw != null) 'ziel_aw': zielAw,
+      if (gewichtsverlustProzent != null)
+        'gewichtsverlust_prozent': gewichtsverlustProzent,
+      if (poekelart != null) 'poekelart': poekelart,
+      if (lakeKonzentrationProzent != null)
+        'lake_konzentration_prozent': lakeKonzentrationProzent,
+      if (poekelzeitTage != null) 'poekelzeit_tage': poekelzeitTage,
+      if (tumbelzeitMin != null) 'tumbelzeit_min': tumbelzeitMin,
+      if (basisProduktArtikelnummer != null)
+        'basis_produkt_artikelnummer': basisProduktArtikelnummer,
+      if (scheibendickeMm != null) 'scheibendicke_mm': scheibendickeMm,
+      if (scheibenProPackung != null)
+        'scheiben_pro_packung': scheibenProPackung,
+      if (packungsgewichtG != null) 'packungsgewicht_g': packungsgewichtG,
+      if (mapGas != null) 'map_gas': mapGas,
+      if (formgewichtG != null) 'formgewicht_g': formgewichtG,
+      if (form != null) 'form': form,
+      if (bratgrad != null) 'bratgrad': bratgrad,
+      if (panierart != null) 'panierart': panierart,
+      if (panierAufnahmeProzent != null)
+        'panier_aufnahme_prozent': panierAufnahmeProzent,
+      if (fleischanteilTyp != null) 'fleischanteil_typ': fleischanteilTyp,
+      if (gesamtdurchlaufzeitMaxStd != null)
+        'gesamtdurchlaufzeit_max_std': gesamtdurchlaufzeitMaxStd,
+      if (wolfLochscheibeMm != null) 'wolf_lochscheibe_mm': wolfLochscheibeMm,
+      if (abkuehlgradient != null) 'abkuehlgradient': abkuehlgradient,
+      if (bratenVariante != null) 'braten_variante': bratenVariante,
+      if (fuellung != null) 'fuellung': fuellung,
+      if (netzbindung != null) 'netzbindung': netzbindung,
+      if (svBadtempC != null) 'sv_badtemp_c': svBadtempC,
+      if (svGarzeitStd != null) 'sv_garzeit_std': svGarzeitStd,
+      if (anbratgrad != null) 'anbratgrad': anbratgrad,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -653,12 +2106,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String>? artikelbezeichnung,
       Value<String?>? beschreibung,
       Value<String?>? notizen,
+      Value<String?>? produktgruppe,
       Value<String?>? verpackungsart,
       Value<double?>? gebindeGroesseKg,
       Value<int?>? haltbarkeitTage,
       Value<double?>? gesamtAusbeuteFaktor,
       Value<int?>? mindestVorlaufzeitTage,
       Value<String?>? planungsgruppe,
+      Value<double?>? zielKerntempC,
+      Value<double?>? kutterEndtempC,
+      Value<String?>? braetFeinheit,
+      Value<String?>? kochkammerProgramm,
+      Value<String?>? raeucherart,
+      Value<String?>? startkultur,
+      Value<int?>? reifezeitTage,
+      Value<String?>? klimaprogramm,
+      Value<double?>? zielPh,
+      Value<double?>? zielAw,
+      Value<double?>? gewichtsverlustProzent,
+      Value<String?>? poekelart,
+      Value<double?>? lakeKonzentrationProzent,
+      Value<int?>? poekelzeitTage,
+      Value<double?>? tumbelzeitMin,
+      Value<String?>? basisProduktArtikelnummer,
+      Value<double?>? scheibendickeMm,
+      Value<int?>? scheibenProPackung,
+      Value<double?>? packungsgewichtG,
+      Value<String?>? mapGas,
+      Value<double?>? formgewichtG,
+      Value<String?>? form,
+      Value<String?>? bratgrad,
+      Value<String?>? panierart,
+      Value<double?>? panierAufnahmeProzent,
+      Value<String?>? fleischanteilTyp,
+      Value<double?>? gesamtdurchlaufzeitMaxStd,
+      Value<double?>? wolfLochscheibeMm,
+      Value<String?>? abkuehlgradient,
+      Value<String?>? bratenVariante,
+      Value<String?>? fuellung,
+      Value<bool?>? netzbindung,
+      Value<double?>? svBadtempC,
+      Value<double?>? svGarzeitStd,
+      Value<String?>? anbratgrad,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
@@ -669,6 +2158,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       artikelbezeichnung: artikelbezeichnung ?? this.artikelbezeichnung,
       beschreibung: beschreibung ?? this.beschreibung,
       notizen: notizen ?? this.notizen,
+      produktgruppe: produktgruppe ?? this.produktgruppe,
       verpackungsart: verpackungsart ?? this.verpackungsart,
       gebindeGroesseKg: gebindeGroesseKg ?? this.gebindeGroesseKg,
       haltbarkeitTage: haltbarkeitTage ?? this.haltbarkeitTage,
@@ -676,6 +2166,46 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       mindestVorlaufzeitTage:
           mindestVorlaufzeitTage ?? this.mindestVorlaufzeitTage,
       planungsgruppe: planungsgruppe ?? this.planungsgruppe,
+      zielKerntempC: zielKerntempC ?? this.zielKerntempC,
+      kutterEndtempC: kutterEndtempC ?? this.kutterEndtempC,
+      braetFeinheit: braetFeinheit ?? this.braetFeinheit,
+      kochkammerProgramm: kochkammerProgramm ?? this.kochkammerProgramm,
+      raeucherart: raeucherart ?? this.raeucherart,
+      startkultur: startkultur ?? this.startkultur,
+      reifezeitTage: reifezeitTage ?? this.reifezeitTage,
+      klimaprogramm: klimaprogramm ?? this.klimaprogramm,
+      zielPh: zielPh ?? this.zielPh,
+      zielAw: zielAw ?? this.zielAw,
+      gewichtsverlustProzent:
+          gewichtsverlustProzent ?? this.gewichtsverlustProzent,
+      poekelart: poekelart ?? this.poekelart,
+      lakeKonzentrationProzent:
+          lakeKonzentrationProzent ?? this.lakeKonzentrationProzent,
+      poekelzeitTage: poekelzeitTage ?? this.poekelzeitTage,
+      tumbelzeitMin: tumbelzeitMin ?? this.tumbelzeitMin,
+      basisProduktArtikelnummer:
+          basisProduktArtikelnummer ?? this.basisProduktArtikelnummer,
+      scheibendickeMm: scheibendickeMm ?? this.scheibendickeMm,
+      scheibenProPackung: scheibenProPackung ?? this.scheibenProPackung,
+      packungsgewichtG: packungsgewichtG ?? this.packungsgewichtG,
+      mapGas: mapGas ?? this.mapGas,
+      formgewichtG: formgewichtG ?? this.formgewichtG,
+      form: form ?? this.form,
+      bratgrad: bratgrad ?? this.bratgrad,
+      panierart: panierart ?? this.panierart,
+      panierAufnahmeProzent:
+          panierAufnahmeProzent ?? this.panierAufnahmeProzent,
+      fleischanteilTyp: fleischanteilTyp ?? this.fleischanteilTyp,
+      gesamtdurchlaufzeitMaxStd:
+          gesamtdurchlaufzeitMaxStd ?? this.gesamtdurchlaufzeitMaxStd,
+      wolfLochscheibeMm: wolfLochscheibeMm ?? this.wolfLochscheibeMm,
+      abkuehlgradient: abkuehlgradient ?? this.abkuehlgradient,
+      bratenVariante: bratenVariante ?? this.bratenVariante,
+      fuellung: fuellung ?? this.fuellung,
+      netzbindung: netzbindung ?? this.netzbindung,
+      svBadtempC: svBadtempC ?? this.svBadtempC,
+      svGarzeitStd: svGarzeitStd ?? this.svGarzeitStd,
+      anbratgrad: anbratgrad ?? this.anbratgrad,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -701,6 +2231,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (notizen.present) {
       map['notizen'] = Variable<String>(notizen.value);
     }
+    if (produktgruppe.present) {
+      map['produktgruppe'] = Variable<String>(produktgruppe.value);
+    }
     if (verpackungsart.present) {
       map['verpackungsart'] = Variable<String>(verpackungsart.value);
     }
@@ -720,6 +2253,116 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     }
     if (planungsgruppe.present) {
       map['planungsgruppe'] = Variable<String>(planungsgruppe.value);
+    }
+    if (zielKerntempC.present) {
+      map['ziel_kerntemp_c'] = Variable<double>(zielKerntempC.value);
+    }
+    if (kutterEndtempC.present) {
+      map['kutter_endtemp_c'] = Variable<double>(kutterEndtempC.value);
+    }
+    if (braetFeinheit.present) {
+      map['braet_feinheit'] = Variable<String>(braetFeinheit.value);
+    }
+    if (kochkammerProgramm.present) {
+      map['kochkammer_programm'] = Variable<String>(kochkammerProgramm.value);
+    }
+    if (raeucherart.present) {
+      map['raeucherart'] = Variable<String>(raeucherart.value);
+    }
+    if (startkultur.present) {
+      map['startkultur'] = Variable<String>(startkultur.value);
+    }
+    if (reifezeitTage.present) {
+      map['reifezeit_tage'] = Variable<int>(reifezeitTage.value);
+    }
+    if (klimaprogramm.present) {
+      map['klimaprogramm'] = Variable<String>(klimaprogramm.value);
+    }
+    if (zielPh.present) {
+      map['ziel_ph'] = Variable<double>(zielPh.value);
+    }
+    if (zielAw.present) {
+      map['ziel_aw'] = Variable<double>(zielAw.value);
+    }
+    if (gewichtsverlustProzent.present) {
+      map['gewichtsverlust_prozent'] =
+          Variable<double>(gewichtsverlustProzent.value);
+    }
+    if (poekelart.present) {
+      map['poekelart'] = Variable<String>(poekelart.value);
+    }
+    if (lakeKonzentrationProzent.present) {
+      map['lake_konzentration_prozent'] =
+          Variable<double>(lakeKonzentrationProzent.value);
+    }
+    if (poekelzeitTage.present) {
+      map['poekelzeit_tage'] = Variable<int>(poekelzeitTage.value);
+    }
+    if (tumbelzeitMin.present) {
+      map['tumbelzeit_min'] = Variable<double>(tumbelzeitMin.value);
+    }
+    if (basisProduktArtikelnummer.present) {
+      map['basis_produkt_artikelnummer'] =
+          Variable<String>(basisProduktArtikelnummer.value);
+    }
+    if (scheibendickeMm.present) {
+      map['scheibendicke_mm'] = Variable<double>(scheibendickeMm.value);
+    }
+    if (scheibenProPackung.present) {
+      map['scheiben_pro_packung'] = Variable<int>(scheibenProPackung.value);
+    }
+    if (packungsgewichtG.present) {
+      map['packungsgewicht_g'] = Variable<double>(packungsgewichtG.value);
+    }
+    if (mapGas.present) {
+      map['map_gas'] = Variable<String>(mapGas.value);
+    }
+    if (formgewichtG.present) {
+      map['formgewicht_g'] = Variable<double>(formgewichtG.value);
+    }
+    if (form.present) {
+      map['form'] = Variable<String>(form.value);
+    }
+    if (bratgrad.present) {
+      map['bratgrad'] = Variable<String>(bratgrad.value);
+    }
+    if (panierart.present) {
+      map['panierart'] = Variable<String>(panierart.value);
+    }
+    if (panierAufnahmeProzent.present) {
+      map['panier_aufnahme_prozent'] =
+          Variable<double>(panierAufnahmeProzent.value);
+    }
+    if (fleischanteilTyp.present) {
+      map['fleischanteil_typ'] = Variable<String>(fleischanteilTyp.value);
+    }
+    if (gesamtdurchlaufzeitMaxStd.present) {
+      map['gesamtdurchlaufzeit_max_std'] =
+          Variable<double>(gesamtdurchlaufzeitMaxStd.value);
+    }
+    if (wolfLochscheibeMm.present) {
+      map['wolf_lochscheibe_mm'] = Variable<double>(wolfLochscheibeMm.value);
+    }
+    if (abkuehlgradient.present) {
+      map['abkuehlgradient'] = Variable<String>(abkuehlgradient.value);
+    }
+    if (bratenVariante.present) {
+      map['braten_variante'] = Variable<String>(bratenVariante.value);
+    }
+    if (fuellung.present) {
+      map['fuellung'] = Variable<String>(fuellung.value);
+    }
+    if (netzbindung.present) {
+      map['netzbindung'] = Variable<bool>(netzbindung.value);
+    }
+    if (svBadtempC.present) {
+      map['sv_badtemp_c'] = Variable<double>(svBadtempC.value);
+    }
+    if (svGarzeitStd.present) {
+      map['sv_garzeit_std'] = Variable<double>(svGarzeitStd.value);
+    }
+    if (anbratgrad.present) {
+      map['anbratgrad'] = Variable<String>(anbratgrad.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -744,12 +2387,48 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('produktgruppe: $produktgruppe, ')
           ..write('verpackungsart: $verpackungsart, ')
           ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
           ..write('haltbarkeitTage: $haltbarkeitTage, ')
           ..write('gesamtAusbeuteFaktor: $gesamtAusbeuteFaktor, ')
           ..write('mindestVorlaufzeitTage: $mindestVorlaufzeitTage, ')
           ..write('planungsgruppe: $planungsgruppe, ')
+          ..write('zielKerntempC: $zielKerntempC, ')
+          ..write('kutterEndtempC: $kutterEndtempC, ')
+          ..write('braetFeinheit: $braetFeinheit, ')
+          ..write('kochkammerProgramm: $kochkammerProgramm, ')
+          ..write('raeucherart: $raeucherart, ')
+          ..write('startkultur: $startkultur, ')
+          ..write('reifezeitTage: $reifezeitTage, ')
+          ..write('klimaprogramm: $klimaprogramm, ')
+          ..write('zielPh: $zielPh, ')
+          ..write('zielAw: $zielAw, ')
+          ..write('gewichtsverlustProzent: $gewichtsverlustProzent, ')
+          ..write('poekelart: $poekelart, ')
+          ..write('lakeKonzentrationProzent: $lakeKonzentrationProzent, ')
+          ..write('poekelzeitTage: $poekelzeitTage, ')
+          ..write('tumbelzeitMin: $tumbelzeitMin, ')
+          ..write('basisProduktArtikelnummer: $basisProduktArtikelnummer, ')
+          ..write('scheibendickeMm: $scheibendickeMm, ')
+          ..write('scheibenProPackung: $scheibenProPackung, ')
+          ..write('packungsgewichtG: $packungsgewichtG, ')
+          ..write('mapGas: $mapGas, ')
+          ..write('formgewichtG: $formgewichtG, ')
+          ..write('form: $form, ')
+          ..write('bratgrad: $bratgrad, ')
+          ..write('panierart: $panierart, ')
+          ..write('panierAufnahmeProzent: $panierAufnahmeProzent, ')
+          ..write('fleischanteilTyp: $fleischanteilTyp, ')
+          ..write('gesamtdurchlaufzeitMaxStd: $gesamtdurchlaufzeitMaxStd, ')
+          ..write('wolfLochscheibeMm: $wolfLochscheibeMm, ')
+          ..write('abkuehlgradient: $abkuehlgradient, ')
+          ..write('bratenVariante: $bratenVariante, ')
+          ..write('fuellung: $fuellung, ')
+          ..write('netzbindung: $netzbindung, ')
+          ..write('svBadtempC: $svBadtempC, ')
+          ..write('svGarzeitStd: $svGarzeitStd, ')
+          ..write('anbratgrad: $anbratgrad, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -877,6 +2556,24 @@ class $ProductStepsTable extends ProductSteps
   late final GeneratedColumn<String> maschinenEinstellungenJson =
       GeneratedColumn<String>('maschinen_einstellungen_json', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kochkammerProgrammMeta =
+      const VerificationMeta('kochkammerProgramm');
+  @override
+  late final GeneratedColumn<String> kochkammerProgramm =
+      GeneratedColumn<String>('kochkammer_programm', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _klimaprogrammMeta =
+      const VerificationMeta('klimaprogramm');
+  @override
+  late final GeneratedColumn<String> klimaprogramm = GeneratedColumn<String>(
+      'klimaprogramm', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bratparameterMeta =
+      const VerificationMeta('bratparameter');
+  @override
+  late final GeneratedColumn<String> bratparameter = GeneratedColumn<String>(
+      'bratparameter', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _notizenMeta =
       const VerificationMeta('notizen');
   @override
@@ -925,6 +2622,9 @@ class $ProductStepsTable extends ProductSteps
         raumtemperaturMax,
         maschine,
         maschinenEinstellungenJson,
+        kochkammerProgramm,
+        klimaprogramm,
+        bratparameter,
         notizen,
         createdAt,
         updatedAt,
@@ -1054,6 +2754,24 @@ class $ProductStepsTable extends ProductSteps
               data['maschinen_einstellungen_json']!,
               _maschinenEinstellungenJsonMeta));
     }
+    if (data.containsKey('kochkammer_programm')) {
+      context.handle(
+          _kochkammerProgrammMeta,
+          kochkammerProgramm.isAcceptableOrUnknown(
+              data['kochkammer_programm']!, _kochkammerProgrammMeta));
+    }
+    if (data.containsKey('klimaprogramm')) {
+      context.handle(
+          _klimaprogrammMeta,
+          klimaprogramm.isAcceptableOrUnknown(
+              data['klimaprogramm']!, _klimaprogrammMeta));
+    }
+    if (data.containsKey('bratparameter')) {
+      context.handle(
+          _bratparameterMeta,
+          bratparameter.isAcceptableOrUnknown(
+              data['bratparameter']!, _bratparameterMeta));
+    }
     if (data.containsKey('notizen')) {
       context.handle(_notizenMeta,
           notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
@@ -1116,6 +2834,12 @@ class $ProductStepsTable extends ProductSteps
       maschinenEinstellungenJson: attachedDatabase.typeMapping.read(
           DriftSqlType.string,
           data['${effectivePrefix}maschinen_einstellungen_json']),
+      kochkammerProgramm: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}kochkammer_programm']),
+      klimaprogramm: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}klimaprogramm']),
+      bratparameter: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bratparameter']),
       notizen: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
       createdAt: attachedDatabase.typeMapping
@@ -1153,44 +2877,36 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
   final double? fixZeitMinuten;
 
   /// Standardabweichung der gemessenen Dauern (aus [ProductionRuns] berechnet).
-  /// UI kann damit "90 min ± 12 min" ehrlich anzeigen.
   final double? dauerStdAbweichung;
   final int basisMitarbeiter;
 
   /// Anzahl der Runs, aus denen die Basis-Werte berechnet wurden.
-  /// 0 = noch nie gemessen (Schätzwerte). Ab ~5 zunehmend verlässlich.
   final int basisAnzahlMessungen;
 
-  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust (Gar, Schnitt, etc.).
-  /// NULL = kein Verlust in diesem Schritt (Faktor 1.0).
-  /// Gesamtausbeute = Produkt aller Schritt-Faktoren.
+  /// Ausbeute-Faktor dieses Schritts: 0.88 = 12% Verlust.
   final double? ausbeuteFaktor;
 
-  /// Pflicht-Wartezeit NACH diesem Schritt, bevor der nächste starten darf
-  /// (z.B. Abkühlung 360 min, Brät ruhen 30 min). NULL/0 = sofort weiter.
+  /// Pflicht-Wartezeit NACH diesem Schritt (z.B. Abkühlung, Reifung).
   final double? wartezeitMinuten;
-
-  /// Min. Chargengröße in kg für diesen Schritt (z.B. Kutter min 50 kg).
   final double? minChargenKg;
-
-  /// Max. Chargengröße in kg (z.B. Kutter max 200 kg).
-  /// Bei Überschreitung → mehrere Durchgänge nötig → Dauer multipliziert.
   final double? maxChargenKg;
-
-  /// Ziel-Kerntemperatur in °C (z.B. 72°C beim Garen). NULL = nicht relevant.
   final double? kerntemperaturZiel;
-
-  /// Maximale Raumtemperatur in °C (z.B. 12°C beim Kuttern). NULL = nicht relevant.
   final double? raumtemperaturMax;
 
-  /// Freitext-Referenz auf die Maschine (z.B. "Kutter K200", "Bratstraße 2").
-  /// Späterer Ausbau: FK auf Maschinen-Tabelle.
+  /// Freitext-Referenz auf die Maschine.
   final String? maschine;
 
-  /// JSON-Objekt mit Maschineneinstellungen (z.B. {"temperatur": 72, "zeit_min": 45}).
-  /// Bewusst frei, weil jede Abteilung andere Parameter hat. Strukturierte
-  /// Validierung passiert in der Domain-Schicht.
+  /// JSON mit Maschineneinstellungen.
   final String? maschinenEinstellungenJson;
+
+  /// Kochkammer-Programm-Nr oder -Name (wenn Abteilung = Wurstküche).
+  final String? kochkammerProgramm;
+
+  /// Klimaprogramm-Nr oder -Name (wenn Rohwurst/Rohpökel-Reifung).
+  final String? klimaprogramm;
+
+  /// Bratparameter als Freitext (z.B. "220°C oben / 180°C unten, 4 min").
+  final String? bratparameter;
   final String? notizen;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -1214,6 +2930,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       this.raumtemperaturMax,
       this.maschine,
       this.maschinenEinstellungenJson,
+      this.kochkammerProgramm,
+      this.klimaprogramm,
+      this.bratparameter,
       this.notizen,
       required this.createdAt,
       required this.updatedAt,
@@ -1259,6 +2978,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
     if (!nullToAbsent || maschinenEinstellungenJson != null) {
       map['maschinen_einstellungen_json'] =
           Variable<String>(maschinenEinstellungenJson);
+    }
+    if (!nullToAbsent || kochkammerProgramm != null) {
+      map['kochkammer_programm'] = Variable<String>(kochkammerProgramm);
+    }
+    if (!nullToAbsent || klimaprogramm != null) {
+      map['klimaprogramm'] = Variable<String>(klimaprogramm);
+    }
+    if (!nullToAbsent || bratparameter != null) {
+      map['bratparameter'] = Variable<String>(bratparameter);
     }
     if (!nullToAbsent || notizen != null) {
       map['notizen'] = Variable<String>(notizen);
@@ -1312,6 +3040,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           maschinenEinstellungenJson == null && nullToAbsent
               ? const Value.absent()
               : Value(maschinenEinstellungenJson),
+      kochkammerProgramm: kochkammerProgramm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kochkammerProgramm),
+      klimaprogramm: klimaprogramm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(klimaprogramm),
+      bratparameter: bratparameter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bratparameter),
       notizen: notizen == null && nullToAbsent
           ? const Value.absent()
           : Value(notizen),
@@ -1350,6 +3087,10 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       maschine: serializer.fromJson<String?>(json['maschine']),
       maschinenEinstellungenJson:
           serializer.fromJson<String?>(json['maschinenEinstellungenJson']),
+      kochkammerProgramm:
+          serializer.fromJson<String?>(json['kochkammerProgramm']),
+      klimaprogramm: serializer.fromJson<String?>(json['klimaprogramm']),
+      bratparameter: serializer.fromJson<String?>(json['bratparameter']),
       notizen: serializer.fromJson<String?>(json['notizen']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -1379,6 +3120,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       'maschine': serializer.toJson<String?>(maschine),
       'maschinenEinstellungenJson':
           serializer.toJson<String?>(maschinenEinstellungenJson),
+      'kochkammerProgramm': serializer.toJson<String?>(kochkammerProgramm),
+      'klimaprogramm': serializer.toJson<String?>(klimaprogramm),
+      'bratparameter': serializer.toJson<String?>(bratparameter),
       'notizen': serializer.toJson<String?>(notizen),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -1405,6 +3149,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           Value<double?> raumtemperaturMax = const Value.absent(),
           Value<String?> maschine = const Value.absent(),
           Value<String?> maschinenEinstellungenJson = const Value.absent(),
+          Value<String?> kochkammerProgramm = const Value.absent(),
+          Value<String?> klimaprogramm = const Value.absent(),
+          Value<String?> bratparameter = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
@@ -1442,6 +3189,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
         maschinenEinstellungenJson: maschinenEinstellungenJson.present
             ? maschinenEinstellungenJson.value
             : this.maschinenEinstellungenJson,
+        kochkammerProgramm: kochkammerProgramm.present
+            ? kochkammerProgramm.value
+            : this.kochkammerProgramm,
+        klimaprogramm:
+            klimaprogramm.present ? klimaprogramm.value : this.klimaprogramm,
+        bratparameter:
+            bratparameter.present ? bratparameter.value : this.bratparameter,
         notizen: notizen.present ? notizen.value : this.notizen,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
@@ -1494,6 +3248,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       maschinenEinstellungenJson: data.maschinenEinstellungenJson.present
           ? data.maschinenEinstellungenJson.value
           : this.maschinenEinstellungenJson,
+      kochkammerProgramm: data.kochkammerProgramm.present
+          ? data.kochkammerProgramm.value
+          : this.kochkammerProgramm,
+      klimaprogramm: data.klimaprogramm.present
+          ? data.klimaprogramm.value
+          : this.klimaprogramm,
+      bratparameter: data.bratparameter.present
+          ? data.bratparameter.value
+          : this.bratparameter,
       notizen: data.notizen.present ? data.notizen.value : this.notizen,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1522,6 +3285,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           ..write('raumtemperaturMax: $raumtemperaturMax, ')
           ..write('maschine: $maschine, ')
           ..write('maschinenEinstellungenJson: $maschinenEinstellungenJson, ')
+          ..write('kochkammerProgramm: $kochkammerProgramm, ')
+          ..write('klimaprogramm: $klimaprogramm, ')
+          ..write('bratparameter: $bratparameter, ')
           ..write('notizen: $notizen, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -1550,6 +3316,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
         raumtemperaturMax,
         maschine,
         maschinenEinstellungenJson,
+        kochkammerProgramm,
+        klimaprogramm,
+        bratparameter,
         notizen,
         createdAt,
         updatedAt,
@@ -1577,6 +3346,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           other.raumtemperaturMax == this.raumtemperaturMax &&
           other.maschine == this.maschine &&
           other.maschinenEinstellungenJson == this.maschinenEinstellungenJson &&
+          other.kochkammerProgramm == this.kochkammerProgramm &&
+          other.klimaprogramm == this.klimaprogramm &&
+          other.bratparameter == this.bratparameter &&
           other.notizen == this.notizen &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
@@ -1602,6 +3374,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
   final Value<double?> raumtemperaturMax;
   final Value<String?> maschine;
   final Value<String?> maschinenEinstellungenJson;
+  final Value<String?> kochkammerProgramm;
+  final Value<String?> klimaprogramm;
+  final Value<String?> bratparameter;
   final Value<String?> notizen;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -1626,6 +3401,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     this.raumtemperaturMax = const Value.absent(),
     this.maschine = const Value.absent(),
     this.maschinenEinstellungenJson = const Value.absent(),
+    this.kochkammerProgramm = const Value.absent(),
+    this.klimaprogramm = const Value.absent(),
+    this.bratparameter = const Value.absent(),
     this.notizen = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1651,6 +3429,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     this.raumtemperaturMax = const Value.absent(),
     this.maschine = const Value.absent(),
     this.maschinenEinstellungenJson = const Value.absent(),
+    this.kochkammerProgramm = const Value.absent(),
+    this.klimaprogramm = const Value.absent(),
+    this.bratparameter = const Value.absent(),
     this.notizen = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -1682,6 +3463,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     Expression<double>? raumtemperaturMax,
     Expression<String>? maschine,
     Expression<String>? maschinenEinstellungenJson,
+    Expression<String>? kochkammerProgramm,
+    Expression<String>? klimaprogramm,
+    Expression<String>? bratparameter,
     Expression<String>? notizen,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -1710,6 +3494,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       if (maschine != null) 'maschine': maschine,
       if (maschinenEinstellungenJson != null)
         'maschinen_einstellungen_json': maschinenEinstellungenJson,
+      if (kochkammerProgramm != null) 'kochkammer_programm': kochkammerProgramm,
+      if (klimaprogramm != null) 'klimaprogramm': klimaprogramm,
+      if (bratparameter != null) 'bratparameter': bratparameter,
       if (notizen != null) 'notizen': notizen,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -1737,6 +3524,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       Value<double?>? raumtemperaturMax,
       Value<String?>? maschine,
       Value<String?>? maschinenEinstellungenJson,
+      Value<String?>? kochkammerProgramm,
+      Value<String?>? klimaprogramm,
+      Value<String?>? bratparameter,
       Value<String?>? notizen,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
@@ -1762,6 +3552,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       maschine: maschine ?? this.maschine,
       maschinenEinstellungenJson:
           maschinenEinstellungenJson ?? this.maschinenEinstellungenJson,
+      kochkammerProgramm: kochkammerProgramm ?? this.kochkammerProgramm,
+      klimaprogramm: klimaprogramm ?? this.klimaprogramm,
+      bratparameter: bratparameter ?? this.bratparameter,
       notizen: notizen ?? this.notizen,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -1828,6 +3621,15 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       map['maschinen_einstellungen_json'] =
           Variable<String>(maschinenEinstellungenJson.value);
     }
+    if (kochkammerProgramm.present) {
+      map['kochkammer_programm'] = Variable<String>(kochkammerProgramm.value);
+    }
+    if (klimaprogramm.present) {
+      map['klimaprogramm'] = Variable<String>(klimaprogramm.value);
+    }
+    if (bratparameter.present) {
+      map['bratparameter'] = Variable<String>(bratparameter.value);
+    }
     if (notizen.present) {
       map['notizen'] = Variable<String>(notizen.value);
     }
@@ -1867,6 +3669,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
           ..write('raumtemperaturMax: $raumtemperaturMax, ')
           ..write('maschine: $maschine, ')
           ..write('maschinenEinstellungenJson: $maschinenEinstellungenJson, ')
+          ..write('kochkammerProgramm: $kochkammerProgramm, ')
+          ..write('klimaprogramm: $klimaprogramm, ')
+          ..write('bratparameter: $bratparameter, ')
           ..write('notizen: $notizen, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -6080,12 +7885,48 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   required String artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<String?> produktgruppe,
   Value<String?> verpackungsart,
   Value<double?> gebindeGroesseKg,
   Value<int?> haltbarkeitTage,
   Value<double?> gesamtAusbeuteFaktor,
   Value<int?> mindestVorlaufzeitTage,
   Value<String?> planungsgruppe,
+  Value<double?> zielKerntempC,
+  Value<double?> kutterEndtempC,
+  Value<String?> braetFeinheit,
+  Value<String?> kochkammerProgramm,
+  Value<String?> raeucherart,
+  Value<String?> startkultur,
+  Value<int?> reifezeitTage,
+  Value<String?> klimaprogramm,
+  Value<double?> zielPh,
+  Value<double?> zielAw,
+  Value<double?> gewichtsverlustProzent,
+  Value<String?> poekelart,
+  Value<double?> lakeKonzentrationProzent,
+  Value<int?> poekelzeitTage,
+  Value<double?> tumbelzeitMin,
+  Value<String?> basisProduktArtikelnummer,
+  Value<double?> scheibendickeMm,
+  Value<int?> scheibenProPackung,
+  Value<double?> packungsgewichtG,
+  Value<String?> mapGas,
+  Value<double?> formgewichtG,
+  Value<String?> form,
+  Value<String?> bratgrad,
+  Value<String?> panierart,
+  Value<double?> panierAufnahmeProzent,
+  Value<String?> fleischanteilTyp,
+  Value<double?> gesamtdurchlaufzeitMaxStd,
+  Value<double?> wolfLochscheibeMm,
+  Value<String?> abkuehlgradient,
+  Value<String?> bratenVariante,
+  Value<String?> fuellung,
+  Value<bool?> netzbindung,
+  Value<double?> svBadtempC,
+  Value<double?> svGarzeitStd,
+  Value<String?> anbratgrad,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -6097,12 +7938,48 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String> artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<String?> produktgruppe,
   Value<String?> verpackungsart,
   Value<double?> gebindeGroesseKg,
   Value<int?> haltbarkeitTage,
   Value<double?> gesamtAusbeuteFaktor,
   Value<int?> mindestVorlaufzeitTage,
   Value<String?> planungsgruppe,
+  Value<double?> zielKerntempC,
+  Value<double?> kutterEndtempC,
+  Value<String?> braetFeinheit,
+  Value<String?> kochkammerProgramm,
+  Value<String?> raeucherart,
+  Value<String?> startkultur,
+  Value<int?> reifezeitTage,
+  Value<String?> klimaprogramm,
+  Value<double?> zielPh,
+  Value<double?> zielAw,
+  Value<double?> gewichtsverlustProzent,
+  Value<String?> poekelart,
+  Value<double?> lakeKonzentrationProzent,
+  Value<int?> poekelzeitTage,
+  Value<double?> tumbelzeitMin,
+  Value<String?> basisProduktArtikelnummer,
+  Value<double?> scheibendickeMm,
+  Value<int?> scheibenProPackung,
+  Value<double?> packungsgewichtG,
+  Value<String?> mapGas,
+  Value<double?> formgewichtG,
+  Value<String?> form,
+  Value<String?> bratgrad,
+  Value<String?> panierart,
+  Value<double?> panierAufnahmeProzent,
+  Value<String?> fleischanteilTyp,
+  Value<double?> gesamtdurchlaufzeitMaxStd,
+  Value<double?> wolfLochscheibeMm,
+  Value<String?> abkuehlgradient,
+  Value<String?> bratenVariante,
+  Value<String?> fuellung,
+  Value<bool?> netzbindung,
+  Value<double?> svBadtempC,
+  Value<double?> svGarzeitStd,
+  Value<String?> anbratgrad,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -6189,6 +8066,9 @@ class $$ProductsTableFilterComposer
   ColumnFilters<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnFilters(column));
 
+  ColumnFilters<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe, builder: (column) => ColumnFilters(column));
+
   ColumnFilters<String> get verpackungsart => $composableBuilder(
       column: $table.verpackungsart,
       builder: (column) => ColumnFilters(column));
@@ -6212,6 +8092,126 @@ class $$ProductsTableFilterComposer
   ColumnFilters<String> get planungsgruppe => $composableBuilder(
       column: $table.planungsgruppe,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zielKerntempC => $composableBuilder(
+      column: $table.zielKerntempC, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kutterEndtempC => $composableBuilder(
+      column: $table.kutterEndtempC,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get braetFeinheit => $composableBuilder(
+      column: $table.braetFeinheit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get raeucherart => $composableBuilder(
+      column: $table.raeucherart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get startkultur => $composableBuilder(
+      column: $table.startkultur, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get reifezeitTage => $composableBuilder(
+      column: $table.reifezeitTage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zielPh => $composableBuilder(
+      column: $table.zielPh, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zielAw => $composableBuilder(
+      column: $table.zielAw, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get gewichtsverlustProzent => $composableBuilder(
+      column: $table.gewichtsverlustProzent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get poekelart => $composableBuilder(
+      column: $table.poekelart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get lakeKonzentrationProzent => $composableBuilder(
+      column: $table.lakeKonzentrationProzent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get poekelzeitTage => $composableBuilder(
+      column: $table.poekelzeitTage,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get tumbelzeitMin => $composableBuilder(
+      column: $table.tumbelzeitMin, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get basisProduktArtikelnummer => $composableBuilder(
+      column: $table.basisProduktArtikelnummer,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get scheibendickeMm => $composableBuilder(
+      column: $table.scheibendickeMm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get scheibenProPackung => $composableBuilder(
+      column: $table.scheibenProPackung,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get packungsgewichtG => $composableBuilder(
+      column: $table.packungsgewichtG,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mapGas => $composableBuilder(
+      column: $table.mapGas, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get formgewichtG => $composableBuilder(
+      column: $table.formgewichtG, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get form => $composableBuilder(
+      column: $table.form, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bratgrad => $composableBuilder(
+      column: $table.bratgrad, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get panierart => $composableBuilder(
+      column: $table.panierart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get panierAufnahmeProzent => $composableBuilder(
+      column: $table.panierAufnahmeProzent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fleischanteilTyp => $composableBuilder(
+      column: $table.fleischanteilTyp,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get gesamtdurchlaufzeitMaxStd => $composableBuilder(
+      column: $table.gesamtdurchlaufzeitMaxStd,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get wolfLochscheibeMm => $composableBuilder(
+      column: $table.wolfLochscheibeMm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get abkuehlgradient => $composableBuilder(
+      column: $table.abkuehlgradient,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bratenVariante => $composableBuilder(
+      column: $table.bratenVariante,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fuellung => $composableBuilder(
+      column: $table.fuellung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get netzbindung => $composableBuilder(
+      column: $table.netzbindung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get svBadtempC => $composableBuilder(
+      column: $table.svBadtempC, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get svGarzeitStd => $composableBuilder(
+      column: $table.svGarzeitStd, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get anbratgrad => $composableBuilder(
+      column: $table.anbratgrad, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -6313,6 +8313,10 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get verpackungsart => $composableBuilder(
       column: $table.verpackungsart,
       builder: (column) => ColumnOrderings(column));
@@ -6336,6 +8340,133 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get planungsgruppe => $composableBuilder(
       column: $table.planungsgruppe,
       builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zielKerntempC => $composableBuilder(
+      column: $table.zielKerntempC,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kutterEndtempC => $composableBuilder(
+      column: $table.kutterEndtempC,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get braetFeinheit => $composableBuilder(
+      column: $table.braetFeinheit,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get raeucherart => $composableBuilder(
+      column: $table.raeucherart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get startkultur => $composableBuilder(
+      column: $table.startkultur, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get reifezeitTage => $composableBuilder(
+      column: $table.reifezeitTage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zielPh => $composableBuilder(
+      column: $table.zielPh, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zielAw => $composableBuilder(
+      column: $table.zielAw, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get gewichtsverlustProzent => $composableBuilder(
+      column: $table.gewichtsverlustProzent,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get poekelart => $composableBuilder(
+      column: $table.poekelart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get lakeKonzentrationProzent => $composableBuilder(
+      column: $table.lakeKonzentrationProzent,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get poekelzeitTage => $composableBuilder(
+      column: $table.poekelzeitTage,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get tumbelzeitMin => $composableBuilder(
+      column: $table.tumbelzeitMin,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get basisProduktArtikelnummer => $composableBuilder(
+      column: $table.basisProduktArtikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get scheibendickeMm => $composableBuilder(
+      column: $table.scheibendickeMm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get scheibenProPackung => $composableBuilder(
+      column: $table.scheibenProPackung,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get packungsgewichtG => $composableBuilder(
+      column: $table.packungsgewichtG,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mapGas => $composableBuilder(
+      column: $table.mapGas, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get formgewichtG => $composableBuilder(
+      column: $table.formgewichtG,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get form => $composableBuilder(
+      column: $table.form, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bratgrad => $composableBuilder(
+      column: $table.bratgrad, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get panierart => $composableBuilder(
+      column: $table.panierart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get panierAufnahmeProzent => $composableBuilder(
+      column: $table.panierAufnahmeProzent,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fleischanteilTyp => $composableBuilder(
+      column: $table.fleischanteilTyp,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get gesamtdurchlaufzeitMaxStd => $composableBuilder(
+      column: $table.gesamtdurchlaufzeitMaxStd,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get wolfLochscheibeMm => $composableBuilder(
+      column: $table.wolfLochscheibeMm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get abkuehlgradient => $composableBuilder(
+      column: $table.abkuehlgradient,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bratenVariante => $composableBuilder(
+      column: $table.bratenVariante,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fuellung => $composableBuilder(
+      column: $table.fuellung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get netzbindung => $composableBuilder(
+      column: $table.netzbindung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get svBadtempC => $composableBuilder(
+      column: $table.svBadtempC, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get svGarzeitStd => $composableBuilder(
+      column: $table.svGarzeitStd,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get anbratgrad => $composableBuilder(
+      column: $table.anbratgrad, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
@@ -6371,6 +8502,9 @@ class $$ProductsTableAnnotationComposer
   GeneratedColumn<String> get notizen =>
       $composableBuilder(column: $table.notizen, builder: (column) => column);
 
+  GeneratedColumn<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe, builder: (column) => column);
+
   GeneratedColumn<String> get verpackungsart => $composableBuilder(
       column: $table.verpackungsart, builder: (column) => column);
 
@@ -6388,6 +8522,111 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get planungsgruppe => $composableBuilder(
       column: $table.planungsgruppe, builder: (column) => column);
+
+  GeneratedColumn<double> get zielKerntempC => $composableBuilder(
+      column: $table.zielKerntempC, builder: (column) => column);
+
+  GeneratedColumn<double> get kutterEndtempC => $composableBuilder(
+      column: $table.kutterEndtempC, builder: (column) => column);
+
+  GeneratedColumn<String> get braetFeinheit => $composableBuilder(
+      column: $table.braetFeinheit, builder: (column) => column);
+
+  GeneratedColumn<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm, builder: (column) => column);
+
+  GeneratedColumn<String> get raeucherart => $composableBuilder(
+      column: $table.raeucherart, builder: (column) => column);
+
+  GeneratedColumn<String> get startkultur => $composableBuilder(
+      column: $table.startkultur, builder: (column) => column);
+
+  GeneratedColumn<int> get reifezeitTage => $composableBuilder(
+      column: $table.reifezeitTage, builder: (column) => column);
+
+  GeneratedColumn<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm, builder: (column) => column);
+
+  GeneratedColumn<double> get zielPh =>
+      $composableBuilder(column: $table.zielPh, builder: (column) => column);
+
+  GeneratedColumn<double> get zielAw =>
+      $composableBuilder(column: $table.zielAw, builder: (column) => column);
+
+  GeneratedColumn<double> get gewichtsverlustProzent => $composableBuilder(
+      column: $table.gewichtsverlustProzent, builder: (column) => column);
+
+  GeneratedColumn<String> get poekelart =>
+      $composableBuilder(column: $table.poekelart, builder: (column) => column);
+
+  GeneratedColumn<double> get lakeKonzentrationProzent => $composableBuilder(
+      column: $table.lakeKonzentrationProzent, builder: (column) => column);
+
+  GeneratedColumn<int> get poekelzeitTage => $composableBuilder(
+      column: $table.poekelzeitTage, builder: (column) => column);
+
+  GeneratedColumn<double> get tumbelzeitMin => $composableBuilder(
+      column: $table.tumbelzeitMin, builder: (column) => column);
+
+  GeneratedColumn<String> get basisProduktArtikelnummer => $composableBuilder(
+      column: $table.basisProduktArtikelnummer, builder: (column) => column);
+
+  GeneratedColumn<double> get scheibendickeMm => $composableBuilder(
+      column: $table.scheibendickeMm, builder: (column) => column);
+
+  GeneratedColumn<int> get scheibenProPackung => $composableBuilder(
+      column: $table.scheibenProPackung, builder: (column) => column);
+
+  GeneratedColumn<double> get packungsgewichtG => $composableBuilder(
+      column: $table.packungsgewichtG, builder: (column) => column);
+
+  GeneratedColumn<String> get mapGas =>
+      $composableBuilder(column: $table.mapGas, builder: (column) => column);
+
+  GeneratedColumn<double> get formgewichtG => $composableBuilder(
+      column: $table.formgewichtG, builder: (column) => column);
+
+  GeneratedColumn<String> get form =>
+      $composableBuilder(column: $table.form, builder: (column) => column);
+
+  GeneratedColumn<String> get bratgrad =>
+      $composableBuilder(column: $table.bratgrad, builder: (column) => column);
+
+  GeneratedColumn<String> get panierart =>
+      $composableBuilder(column: $table.panierart, builder: (column) => column);
+
+  GeneratedColumn<double> get panierAufnahmeProzent => $composableBuilder(
+      column: $table.panierAufnahmeProzent, builder: (column) => column);
+
+  GeneratedColumn<String> get fleischanteilTyp => $composableBuilder(
+      column: $table.fleischanteilTyp, builder: (column) => column);
+
+  GeneratedColumn<double> get gesamtdurchlaufzeitMaxStd => $composableBuilder(
+      column: $table.gesamtdurchlaufzeitMaxStd, builder: (column) => column);
+
+  GeneratedColumn<double> get wolfLochscheibeMm => $composableBuilder(
+      column: $table.wolfLochscheibeMm, builder: (column) => column);
+
+  GeneratedColumn<String> get abkuehlgradient => $composableBuilder(
+      column: $table.abkuehlgradient, builder: (column) => column);
+
+  GeneratedColumn<String> get bratenVariante => $composableBuilder(
+      column: $table.bratenVariante, builder: (column) => column);
+
+  GeneratedColumn<String> get fuellung =>
+      $composableBuilder(column: $table.fuellung, builder: (column) => column);
+
+  GeneratedColumn<bool> get netzbindung => $composableBuilder(
+      column: $table.netzbindung, builder: (column) => column);
+
+  GeneratedColumn<double> get svBadtempC => $composableBuilder(
+      column: $table.svBadtempC, builder: (column) => column);
+
+  GeneratedColumn<double> get svGarzeitStd => $composableBuilder(
+      column: $table.svGarzeitStd, builder: (column) => column);
+
+  GeneratedColumn<String> get anbratgrad => $composableBuilder(
+      column: $table.anbratgrad, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -6495,12 +8734,48 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String> artikelbezeichnung = const Value.absent(),
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<String?> produktgruppe = const Value.absent(),
             Value<String?> verpackungsart = const Value.absent(),
             Value<double?> gebindeGroesseKg = const Value.absent(),
             Value<int?> haltbarkeitTage = const Value.absent(),
             Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
             Value<int?> mindestVorlaufzeitTage = const Value.absent(),
             Value<String?> planungsgruppe = const Value.absent(),
+            Value<double?> zielKerntempC = const Value.absent(),
+            Value<double?> kutterEndtempC = const Value.absent(),
+            Value<String?> braetFeinheit = const Value.absent(),
+            Value<String?> kochkammerProgramm = const Value.absent(),
+            Value<String?> raeucherart = const Value.absent(),
+            Value<String?> startkultur = const Value.absent(),
+            Value<int?> reifezeitTage = const Value.absent(),
+            Value<String?> klimaprogramm = const Value.absent(),
+            Value<double?> zielPh = const Value.absent(),
+            Value<double?> zielAw = const Value.absent(),
+            Value<double?> gewichtsverlustProzent = const Value.absent(),
+            Value<String?> poekelart = const Value.absent(),
+            Value<double?> lakeKonzentrationProzent = const Value.absent(),
+            Value<int?> poekelzeitTage = const Value.absent(),
+            Value<double?> tumbelzeitMin = const Value.absent(),
+            Value<String?> basisProduktArtikelnummer = const Value.absent(),
+            Value<double?> scheibendickeMm = const Value.absent(),
+            Value<int?> scheibenProPackung = const Value.absent(),
+            Value<double?> packungsgewichtG = const Value.absent(),
+            Value<String?> mapGas = const Value.absent(),
+            Value<double?> formgewichtG = const Value.absent(),
+            Value<String?> form = const Value.absent(),
+            Value<String?> bratgrad = const Value.absent(),
+            Value<String?> panierart = const Value.absent(),
+            Value<double?> panierAufnahmeProzent = const Value.absent(),
+            Value<String?> fleischanteilTyp = const Value.absent(),
+            Value<double?> gesamtdurchlaufzeitMaxStd = const Value.absent(),
+            Value<double?> wolfLochscheibeMm = const Value.absent(),
+            Value<String?> abkuehlgradient = const Value.absent(),
+            Value<String?> bratenVariante = const Value.absent(),
+            Value<String?> fuellung = const Value.absent(),
+            Value<bool?> netzbindung = const Value.absent(),
+            Value<double?> svBadtempC = const Value.absent(),
+            Value<double?> svGarzeitStd = const Value.absent(),
+            Value<String?> anbratgrad = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -6512,12 +8787,48 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            produktgruppe: produktgruppe,
             verpackungsart: verpackungsart,
             gebindeGroesseKg: gebindeGroesseKg,
             haltbarkeitTage: haltbarkeitTage,
             gesamtAusbeuteFaktor: gesamtAusbeuteFaktor,
             mindestVorlaufzeitTage: mindestVorlaufzeitTage,
             planungsgruppe: planungsgruppe,
+            zielKerntempC: zielKerntempC,
+            kutterEndtempC: kutterEndtempC,
+            braetFeinheit: braetFeinheit,
+            kochkammerProgramm: kochkammerProgramm,
+            raeucherart: raeucherart,
+            startkultur: startkultur,
+            reifezeitTage: reifezeitTage,
+            klimaprogramm: klimaprogramm,
+            zielPh: zielPh,
+            zielAw: zielAw,
+            gewichtsverlustProzent: gewichtsverlustProzent,
+            poekelart: poekelart,
+            lakeKonzentrationProzent: lakeKonzentrationProzent,
+            poekelzeitTage: poekelzeitTage,
+            tumbelzeitMin: tumbelzeitMin,
+            basisProduktArtikelnummer: basisProduktArtikelnummer,
+            scheibendickeMm: scheibendickeMm,
+            scheibenProPackung: scheibenProPackung,
+            packungsgewichtG: packungsgewichtG,
+            mapGas: mapGas,
+            formgewichtG: formgewichtG,
+            form: form,
+            bratgrad: bratgrad,
+            panierart: panierart,
+            panierAufnahmeProzent: panierAufnahmeProzent,
+            fleischanteilTyp: fleischanteilTyp,
+            gesamtdurchlaufzeitMaxStd: gesamtdurchlaufzeitMaxStd,
+            wolfLochscheibeMm: wolfLochscheibeMm,
+            abkuehlgradient: abkuehlgradient,
+            bratenVariante: bratenVariante,
+            fuellung: fuellung,
+            netzbindung: netzbindung,
+            svBadtempC: svBadtempC,
+            svGarzeitStd: svGarzeitStd,
+            anbratgrad: anbratgrad,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -6529,12 +8840,48 @@ class $$ProductsTableTableManager extends RootTableManager<
             required String artikelbezeichnung,
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<String?> produktgruppe = const Value.absent(),
             Value<String?> verpackungsart = const Value.absent(),
             Value<double?> gebindeGroesseKg = const Value.absent(),
             Value<int?> haltbarkeitTage = const Value.absent(),
             Value<double?> gesamtAusbeuteFaktor = const Value.absent(),
             Value<int?> mindestVorlaufzeitTage = const Value.absent(),
             Value<String?> planungsgruppe = const Value.absent(),
+            Value<double?> zielKerntempC = const Value.absent(),
+            Value<double?> kutterEndtempC = const Value.absent(),
+            Value<String?> braetFeinheit = const Value.absent(),
+            Value<String?> kochkammerProgramm = const Value.absent(),
+            Value<String?> raeucherart = const Value.absent(),
+            Value<String?> startkultur = const Value.absent(),
+            Value<int?> reifezeitTage = const Value.absent(),
+            Value<String?> klimaprogramm = const Value.absent(),
+            Value<double?> zielPh = const Value.absent(),
+            Value<double?> zielAw = const Value.absent(),
+            Value<double?> gewichtsverlustProzent = const Value.absent(),
+            Value<String?> poekelart = const Value.absent(),
+            Value<double?> lakeKonzentrationProzent = const Value.absent(),
+            Value<int?> poekelzeitTage = const Value.absent(),
+            Value<double?> tumbelzeitMin = const Value.absent(),
+            Value<String?> basisProduktArtikelnummer = const Value.absent(),
+            Value<double?> scheibendickeMm = const Value.absent(),
+            Value<int?> scheibenProPackung = const Value.absent(),
+            Value<double?> packungsgewichtG = const Value.absent(),
+            Value<String?> mapGas = const Value.absent(),
+            Value<double?> formgewichtG = const Value.absent(),
+            Value<String?> form = const Value.absent(),
+            Value<String?> bratgrad = const Value.absent(),
+            Value<String?> panierart = const Value.absent(),
+            Value<double?> panierAufnahmeProzent = const Value.absent(),
+            Value<String?> fleischanteilTyp = const Value.absent(),
+            Value<double?> gesamtdurchlaufzeitMaxStd = const Value.absent(),
+            Value<double?> wolfLochscheibeMm = const Value.absent(),
+            Value<String?> abkuehlgradient = const Value.absent(),
+            Value<String?> bratenVariante = const Value.absent(),
+            Value<String?> fuellung = const Value.absent(),
+            Value<bool?> netzbindung = const Value.absent(),
+            Value<double?> svBadtempC = const Value.absent(),
+            Value<double?> svGarzeitStd = const Value.absent(),
+            Value<String?> anbratgrad = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -6546,12 +8893,48 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            produktgruppe: produktgruppe,
             verpackungsart: verpackungsart,
             gebindeGroesseKg: gebindeGroesseKg,
             haltbarkeitTage: haltbarkeitTage,
             gesamtAusbeuteFaktor: gesamtAusbeuteFaktor,
             mindestVorlaufzeitTage: mindestVorlaufzeitTage,
             planungsgruppe: planungsgruppe,
+            zielKerntempC: zielKerntempC,
+            kutterEndtempC: kutterEndtempC,
+            braetFeinheit: braetFeinheit,
+            kochkammerProgramm: kochkammerProgramm,
+            raeucherart: raeucherart,
+            startkultur: startkultur,
+            reifezeitTage: reifezeitTage,
+            klimaprogramm: klimaprogramm,
+            zielPh: zielPh,
+            zielAw: zielAw,
+            gewichtsverlustProzent: gewichtsverlustProzent,
+            poekelart: poekelart,
+            lakeKonzentrationProzent: lakeKonzentrationProzent,
+            poekelzeitTage: poekelzeitTage,
+            tumbelzeitMin: tumbelzeitMin,
+            basisProduktArtikelnummer: basisProduktArtikelnummer,
+            scheibendickeMm: scheibendickeMm,
+            scheibenProPackung: scheibenProPackung,
+            packungsgewichtG: packungsgewichtG,
+            mapGas: mapGas,
+            formgewichtG: formgewichtG,
+            form: form,
+            bratgrad: bratgrad,
+            panierart: panierart,
+            panierAufnahmeProzent: panierAufnahmeProzent,
+            fleischanteilTyp: fleischanteilTyp,
+            gesamtdurchlaufzeitMaxStd: gesamtdurchlaufzeitMaxStd,
+            wolfLochscheibeMm: wolfLochscheibeMm,
+            abkuehlgradient: abkuehlgradient,
+            bratenVariante: bratenVariante,
+            fuellung: fuellung,
+            netzbindung: netzbindung,
+            svBadtempC: svBadtempC,
+            svGarzeitStd: svGarzeitStd,
+            anbratgrad: anbratgrad,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -6656,6 +9039,9 @@ typedef $$ProductStepsTableCreateCompanionBuilder = ProductStepsCompanion
   Value<double?> raumtemperaturMax,
   Value<String?> maschine,
   Value<String?> maschinenEinstellungenJson,
+  Value<String?> kochkammerProgramm,
+  Value<String?> klimaprogramm,
+  Value<String?> bratparameter,
   Value<String?> notizen,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -6682,6 +9068,9 @@ typedef $$ProductStepsTableUpdateCompanionBuilder = ProductStepsCompanion
   Value<double?> raumtemperaturMax,
   Value<String?> maschine,
   Value<String?> maschinenEinstellungenJson,
+  Value<String?> kochkammerProgramm,
+  Value<String?> klimaprogramm,
+  Value<String?> bratparameter,
   Value<String?> notizen,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
@@ -6778,6 +9167,16 @@ class $$ProductStepsTableFilterComposer
   ColumnFilters<String> get maschinenEinstellungenJson => $composableBuilder(
       column: $table.maschinenEinstellungenJson,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bratparameter => $composableBuilder(
+      column: $table.bratparameter, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnFilters(column));
@@ -6885,6 +9284,18 @@ class $$ProductStepsTableOrderingComposer
       column: $table.maschinenEinstellungenJson,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bratparameter => $composableBuilder(
+      column: $table.bratparameter,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnOrderings(column));
 
@@ -6978,6 +9389,15 @@ class $$ProductStepsTableAnnotationComposer
   GeneratedColumn<String> get maschinenEinstellungenJson => $composableBuilder(
       column: $table.maschinenEinstellungenJson, builder: (column) => column);
 
+  GeneratedColumn<String> get kochkammerProgramm => $composableBuilder(
+      column: $table.kochkammerProgramm, builder: (column) => column);
+
+  GeneratedColumn<String> get klimaprogramm => $composableBuilder(
+      column: $table.klimaprogramm, builder: (column) => column);
+
+  GeneratedColumn<String> get bratparameter => $composableBuilder(
+      column: $table.bratparameter, builder: (column) => column);
+
   GeneratedColumn<String> get notizen =>
       $composableBuilder(column: $table.notizen, builder: (column) => column);
 
@@ -7052,6 +9472,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             Value<double?> raumtemperaturMax = const Value.absent(),
             Value<String?> maschine = const Value.absent(),
             Value<String?> maschinenEinstellungenJson = const Value.absent(),
+            Value<String?> kochkammerProgramm = const Value.absent(),
+            Value<String?> klimaprogramm = const Value.absent(),
+            Value<String?> bratparameter = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -7077,6 +9500,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             raumtemperaturMax: raumtemperaturMax,
             maschine: maschine,
             maschinenEinstellungenJson: maschinenEinstellungenJson,
+            kochkammerProgramm: kochkammerProgramm,
+            klimaprogramm: klimaprogramm,
+            bratparameter: bratparameter,
             notizen: notizen,
             createdAt: createdAt,
             updatedAt: updatedAt,
@@ -7102,6 +9528,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             Value<double?> raumtemperaturMax = const Value.absent(),
             Value<String?> maschine = const Value.absent(),
             Value<String?> maschinenEinstellungenJson = const Value.absent(),
+            Value<String?> kochkammerProgramm = const Value.absent(),
+            Value<String?> klimaprogramm = const Value.absent(),
+            Value<String?> bratparameter = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
@@ -7127,6 +9556,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             raumtemperaturMax: raumtemperaturMax,
             maschine: maschine,
             maschinenEinstellungenJson: maschinenEinstellungenJson,
+            kochkammerProgramm: kochkammerProgramm,
+            klimaprogramm: klimaprogramm,
+            bratparameter: bratparameter,
             notizen: notizen,
             createdAt: createdAt,
             updatedAt: updatedAt,
