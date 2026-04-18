@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/theme/app_theme.dart';
+import 'features/intro/intro_screen.dart';
 import 'features/shell/home_screen.dart';
 import 'features/shell/landing_screen.dart';
 import 'features/shell/task_detail_screen.dart';
@@ -21,10 +22,20 @@ import 'core/providers/database_provider.dart';
 /// Der Router wird einmalig erzeugt und über die gesamte App-Lebensdauer
 /// wiederverwendet. Erstellt man ihn in build(), geht bei jedem Rebuild
 /// der Navigations-Zustand verloren.
+///
+/// Die App startet auf `/intro` (Intro-Animation). Von dort wird per
+/// `context.go('/')` auf die Landing-Page weitergeleitet, sobald die
+/// Animation abgelaufen oder vom Nutzer abgetippt wurde.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
+    initialLocation: '/intro',
     routes: [
+      GoRoute(
+        path: '/intro',
+        name: 'intro',
+        builder: (context, state) => const IntroScreen(),
+      ),
       GoRoute(
         path: '/',
         name: 'landing',
