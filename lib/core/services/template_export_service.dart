@@ -394,7 +394,7 @@ class TemplateExportService {
           .cell(CellIndex.indexByColumnRow(
             columnIndex: col,
             rowIndex: rowIndex,
-          ))
+          ),)
           .value = TextCellValue(values[col]);
     }
   }
