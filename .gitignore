@@ -21,3 +21,8 @@ android/captures/
 # Generated
 .idea/
 .vscode/
+
+# Deaktivierte Plattformen — niemals wieder ins Repo
+android/
+ios/
+web/
