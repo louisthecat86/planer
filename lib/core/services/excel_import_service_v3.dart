@@ -85,7 +85,7 @@ class _ValidationError {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Parsed-Data-Klassen (geparste, validierte Zwischenstruktur)
+// Parsed-Data-Klassen
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _ParsedMachine {
@@ -119,7 +119,6 @@ class _ParsedStep {
   double? mengeKg;
   double? zeitMinuten;
 
-  /// Parameter pro Gruppenname (in Reihenfolge der Vorlage).
   final Map<String, List<_ParsedParam>> parameterByGruppe = {};
 }
 
@@ -182,7 +181,7 @@ class _ParsedProduct {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ExcelImportServiceV3 — Hauptklasse
+// ExcelImportServiceV3
 // ═══════════════════════════════════════════════════════════════════════════
 
 class ExcelImportServiceV3 {
@@ -191,14 +190,10 @@ class ExcelImportServiceV3 {
   final AppDatabase _db;
   final _uuid = const Uuid();
 
-  // ── Konstanten aus der v3-Vorlage ────────────────────────────────────
-
-  /// Sheet-Namen, die keine Artikel-Sheets sind.
   static const _metaSheets = <String>{
     'Übersicht',
     'Anleitung',
     'Anlagen-Katalog',
-    // Blaupausen (Kategorie-Namen)
     'Brühwurst',
     'Rohwurst',
     'Kochpökelwaren',
@@ -213,7 +208,6 @@ class ExcelImportServiceV3 {
     'Angebratene Brühwürste',
   };
 
-  /// Label in Spalte A → Zeilen-Typ im Artikel-Sheet.
   static const _schrittZeilen = <String>{
     'Abteilung',
     'Prozessschritt',
@@ -227,7 +221,6 @@ class ExcelImportServiceV3 {
   static const _sonstigeBlockMarker = 'Sonstige Informationen';
   static const _historieBlockMarker = 'HISTORISCHE DATEN';
 
-  /// Mapping v3-Kategorie (Zelle A2 im Artikel-Sheet) → ProductGroup.dbValue.
   static const Map<String, String> _kategorieZuProduktgruppe = {
     'Brühwurst': 'bruehwurst',
     'Rohwurst': 'rohwurst',
@@ -243,7 +236,6 @@ class ExcelImportServiceV3 {
     'Angebratene Brühwürste': 'angebratene_bruehwurst',
   };
 
-  /// Mapping „Abteilungs-Klartext aus Vorlage" → Abteilung.dbValue.
   static const Map<String, String> _abteilungMapping = {
     'Zerlegung': 'zerlegung',
     'Wurstküche': 'wurstkueche',
@@ -259,22 +251,22 @@ class ExcelImportServiceV3 {
     'Verpackung': 'verpackung',
   };
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // Format-Erkennung (für den Dispatcher)
-  // ═════════════════════════════════════════════════════════════════════════
-
   static bool istV3Format(Excel excel) {
     final sheetNames = excel.tables.keys.toSet();
     if (!sheetNames.contains('Anlagen-Katalog')) return false;
     final blaupausenGefunden = _metaSheets
-        .where((s) =>
-            s != 'Übersicht' && s != 'Anleitung' && s != 'Anlagen-Katalog')
+        .where(
+          (s) =>
+              s != 'Übersicht' &&
+              s != 'Anleitung' &&
+              s != 'Anlagen-Katalog',
+        )
         .any(sheetNames.contains);
     return blaupausenGefunden;
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // Dry-Run-Vorschau
+  // Preview
   // ═════════════════════════════════════════════════════════════════════════
 
   Future<ImportPreviewV3> preview(File file) async {
@@ -283,7 +275,7 @@ class ExcelImportServiceV3 {
     if (!istV3Format(excel)) {
       return const ImportPreviewV3(
         fehler: [
-          'Datei ist nicht im v3-Format (Sheet "Anlagen-Katalog" oder Blaupausen fehlen).'
+          'Datei ist nicht im v3-Format (Sheet "Anlagen-Katalog" oder Blaupausen fehlen).',
         ],
       );
     }
@@ -341,7 +333,7 @@ class ExcelImportServiceV3 {
   }
 
   // ═════════════════════════════════════════════════════════════════════════
-  // Haupt-Import
+  // Import
   // ═════════════════════════════════════════════════════════════════════════
 
   Future<ImportResultV3> import(File file) async {
@@ -389,7 +381,6 @@ class ExcelImportServiceV3 {
     int historienVerarbeitet = 0;
 
     await _db.transaction(() async {
-      // 1. Maschinen upserten
       final maschinenIdByName = <String, String>{};
       for (final m in parsedMaschinen) {
         final existing = await (_db.select(_db.machines)
@@ -398,27 +389,30 @@ class ExcelImportServiceV3 {
             .getSingleOrNull();
         if (existing == null) {
           final id = _uuid.v4();
-          await _db.into(_db.machines).insert(MachinesCompanion(
-                id: Value(id),
-                name: Value(m.name),
-                abteilung: Value(m.abteilungDb),
-                typischeParameter: Value(m.typischeParameter),
-              ));
+          await _db.into(_db.machines).insert(
+                MachinesCompanion(
+                  id: Value(id),
+                  name: Value(m.name),
+                  abteilung: Value(m.abteilungDb),
+                  typischeParameter: Value(m.typischeParameter),
+                ),
+              );
           maschinenIdByName[m.name] = id;
           maschinenImportiert++;
         } else {
           await (_db.update(_db.machines)
                 ..where((t) => t.id.equals(existing.id)))
-              .write(MachinesCompanion(
-            abteilung: Value(m.abteilungDb),
-            typischeParameter: Value(m.typischeParameter),
-            updatedAt: Value(DateTime.now()),
-          ));
+              .write(
+            MachinesCompanion(
+              abteilung: Value(m.abteilungDb),
+              typischeParameter: Value(m.typischeParameter),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
           maschinenIdByName[m.name] = existing.id;
         }
       }
 
-      // 2. Artikel upserten + Schritte + Parameter
       for (final art in parsedArtikel) {
         final existing = await (_db.select(_db.products)
               ..where((t) => t.artikelnummer.equals(art.artikelnummer))
@@ -428,25 +422,28 @@ class ExcelImportServiceV3 {
         String productId;
         if (existing == null) {
           productId = _uuid.v4();
-          await _db.into(_db.products).insert(ProductsCompanion(
-                id: Value(productId),
-                artikelnummer: Value(art.artikelnummer),
-                artikelbezeichnung: Value(art.bezeichnung),
-                produktgruppe: Value(art.produktgruppeDb),
-              ));
+          await _db.into(_db.products).insert(
+                ProductsCompanion(
+                  id: Value(productId),
+                  artikelnummer: Value(art.artikelnummer),
+                  artikelbezeichnung: Value(art.bezeichnung),
+                  produktgruppe: Value(art.produktgruppeDb),
+                ),
+              );
           artikelNeu++;
         } else {
           productId = existing.id;
           await (_db.update(_db.products)
                 ..where((t) => t.id.equals(productId)))
-              .write(ProductsCompanion(
-            artikelbezeichnung: Value(art.bezeichnung),
-            produktgruppe: Value(art.produktgruppeDb),
-            updatedAt: Value(DateTime.now()),
-          ));
+              .write(
+            ProductsCompanion(
+              artikelbezeichnung: Value(art.bezeichnung),
+              produktgruppe: Value(art.produktgruppeDb),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
           artikelAktualisiert++;
 
-          // Alte Schritte + Parameter löschen (harter Replace)
           final oldStepIds = await (_db.select(_db.productSteps)
                 ..where((t) => t.productId.equals(productId)))
               .map((s) => s.id)
@@ -461,42 +458,43 @@ class ExcelImportServiceV3 {
               .go();
         }
 
-        // Schritte + Parameter schreiben
         for (final s in art.schritte) {
           final stepId = _uuid.v4();
           final maschineId = s.maschineName != null
               ? maschinenIdByName[s.maschineName]
               : null;
 
-          await _db.into(_db.productSteps).insert(ProductStepsCompanion(
-                id: Value(stepId),
-                productId: Value(productId),
-                reihenfolge: Value(s.reihenfolge),
-                abteilung: Value(s.abteilungDb),
-                maschineId: Value(maschineId),
-                prozessschritt: Value(s.prozessschritt),
-                mengeKg: Value(s.mengeKg),
-                basisMengeKg: Value(s.mengeKg ?? 0.0),
-                basisDauerMinuten: Value(s.zeitMinuten ?? 0.0),
-                basisMitarbeiter: Value(s.personen ?? 1),
-                maschine: Value(s.maschineName),
-              ));
+          await _db.into(_db.productSteps).insert(
+                ProductStepsCompanion(
+                  id: Value(stepId),
+                  productId: Value(productId),
+                  reihenfolge: Value(s.reihenfolge),
+                  abteilung: Value(s.abteilungDb),
+                  maschineId: Value(maschineId),
+                  prozessschritt: Value(s.prozessschritt),
+                  mengeKg: Value(s.mengeKg),
+                  basisMengeKg: Value(s.mengeKg ?? 0.0),
+                  basisDauerMinuten: Value(s.zeitMinuten ?? 0.0),
+                  basisMitarbeiter: Value(s.personen ?? 1),
+                  maschine: Value(s.maschineName),
+                ),
+              );
           schritteImportiert++;
 
           int paramIdx = 0;
           for (final entry in s.parameterByGruppe.entries) {
             for (final p in entry.value) {
-              await _db
-                  .into(_db.productStepParameters)
-                  .insert(ProductStepParametersCompanion(
-                    id: Value(_uuid.v4()),
-                    stepId: Value(stepId),
-                    parameterGruppe: Value(entry.key),
-                    parameterName: Value(p.name),
-                    wert: Value(p.wert),
-                    reihenfolge: Value(paramIdx++),
-                    istCustom: Value(p.istCustom),
-                  ));
+              await _db.into(_db.productStepParameters).insert(
+                    ProductStepParametersCompanion(
+                      id: Value(_uuid.v4()),
+                      stepId: Value(stepId),
+                      parameterGruppe: Value(entry.key),
+                      parameterName: Value(p.name),
+                      wert: Value(p.wert),
+                      reihenfolge: Value(paramIdx++),
+                      istCustom: Value(p.istCustom),
+                    ),
+                  );
               parameterImportiert++;
             }
           }
@@ -544,12 +542,14 @@ class ExcelImportServiceV3 {
       }
     }
     if (headerRow == null) {
-      errors.add(const _ValidationError(
-        sheet: 'Anlagen-Katalog',
-        artikelnr: '—',
-        feld: 'Header',
-        grund: 'Header-Zeile mit "Anlage" nicht gefunden',
-      ));
+      errors.add(
+        const _ValidationError(
+          sheet: 'Anlagen-Katalog',
+          artikelnr: '—',
+          feld: 'Header',
+          grund: 'Header-Zeile mit "Anlage" nicht gefunden',
+        ),
+      );
       return result;
     }
 
@@ -560,21 +560,27 @@ class ExcelImportServiceV3 {
 
       if (name == null || name.isEmpty) continue;
       if (abtText == null || abtText.isEmpty) {
-        warnings.add('Anlagen-Katalog Zeile ${r + 1}: '
-            'Anlage "$name" ohne Abteilung — übersprungen.');
+        warnings.add(
+          'Anlagen-Katalog Zeile ${r + 1}: '
+          'Anlage "$name" ohne Abteilung — übersprungen.',
+        );
         continue;
       }
       final abtDb = _mapAbteilung(abtText);
       if (abtDb == null) {
-        warnings.add('Anlagen-Katalog Zeile ${r + 1}: '
-            'Unbekannte Abteilung "$abtText" für "$name" — übersprungen.');
+        warnings.add(
+          'Anlagen-Katalog Zeile ${r + 1}: '
+          'Unbekannte Abteilung "$abtText" für "$name" — übersprungen.',
+        );
         continue;
       }
-      result.add(_ParsedMachine(
-        name: name,
-        abteilungDb: abtDb,
-        typischeParameter: params,
-      ));
+      result.add(
+        _ParsedMachine(
+          name: name,
+          abteilungDb: abtDb,
+          typischeParameter: params,
+        ),
+      );
     }
     return result;
   }
@@ -588,29 +594,35 @@ class ExcelImportServiceV3 {
   ) {
     final rows = sheet.rows;
     if (rows.length < 6) {
-      errors.add(_ValidationError(
-        sheet: sheetName,
-        artikelnr: sheetName,
-        feld: 'Sheet-Struktur',
-        grund: 'Zu wenige Zeilen für ein Artikel-Sheet',
-      ));
+      errors.add(
+        _ValidationError(
+          sheet: sheetName,
+          artikelnr: sheetName,
+          feld: 'Sheet-Struktur',
+          grund: 'Zu wenige Zeilen für ein Artikel-Sheet',
+        ),
+      );
       return null;
     }
 
     final kategorie = _cellStr(rows[1], 0);
     if (kategorie == null || kategorie.isEmpty) {
-      errors.add(_ValidationError(
-        sheet: sheetName,
-        artikelnr: sheetName,
-        feld: 'Kategorie',
-        grund: 'Zelle A2 (Kategorie-Titel) leer',
-      ));
+      errors.add(
+        _ValidationError(
+          sheet: sheetName,
+          artikelnr: sheetName,
+          feld: 'Kategorie',
+          grund: 'Zelle A2 (Kategorie-Titel) leer',
+        ),
+      );
       return null;
     }
     final produktgruppeDb = _kategorieZuProduktgruppe[kategorie];
     if (produktgruppeDb == null) {
-      warnings.add('Sheet "$sheetName": Unbekannte Kategorie "$kategorie" '
-          '— Produktgruppe bleibt leer.');
+      warnings.add(
+        'Sheet "$sheetName": Unbekannte Kategorie "$kategorie" '
+        '— Produktgruppe bleibt leer.',
+      );
     }
 
     final artNrCell = rows[4].isNotEmpty ? rows[4][0] : null;
@@ -627,26 +639,36 @@ class ExcelImportServiceV3 {
     }
 
     if (artikelnummer == null || artikelnummer.isEmpty) {
-      errors.add(_ValidationError(
-        sheet: sheetName,
-        artikelnr: sheetName,
-        feld: 'Artikelnummer',
-        grund: 'Zelle A5 leer oder ungültig',
-      ));
+      errors.add(
+        _ValidationError(
+          sheet: sheetName,
+          artikelnr: sheetName,
+          feld: 'Artikelnummer',
+          grund: 'Zelle A5 leer oder ungültig',
+        ),
+      );
       return null;
     }
     if (bezeichnung == null || bezeichnung.isEmpty) {
-      errors.add(_ValidationError(
-        sheet: sheetName,
-        artikelnr: artikelnummer,
-        feld: 'Artikelbezeichnung',
-        grund: 'Zelle B5 leer',
-      ));
+      errors.add(
+        _ValidationError(
+          sheet: sheetName,
+          artikelnr: artikelnummer,
+          feld: 'Artikelbezeichnung',
+          grund: 'Zelle B5 leer',
+        ),
+      );
       return null;
     }
 
-    final schritte = _parseSchritte(rows, sheetName, artikelnummer,
-        bekannteMaschinen, errors, warnings);
+    final schritte = _parseSchritte(
+      rows,
+      sheetName,
+      artikelnummer,
+      bekannteMaschinen,
+      errors,
+      warnings,
+    );
     final historie = _parseHistorie(rows);
 
     return _ParsedProduct(
@@ -677,12 +699,14 @@ class ExcelImportServiceV3 {
       }
     }
     if (!labelRow.containsKey('Abteilung')) {
-      errors.add(_ValidationError(
-        sheet: sheetName,
-        artikelnr: artikelnummer,
-        feld: 'Schritt-Struktur',
-        grund: 'Zeile "Abteilung" nicht gefunden',
-      ));
+      errors.add(
+        _ValidationError(
+          sheet: sheetName,
+          artikelnr: artikelnummer,
+          feld: 'Schritt-Struktur',
+          grund: 'Zeile "Abteilung" nicht gefunden',
+        ),
+      );
       return [];
     }
 
@@ -702,8 +726,10 @@ class ExcelImportServiceV3 {
 
       final abtDb = _mapAbteilung(abtText);
       if (abtDb == null) {
-        warnings.add('Sheet "$sheetName" ($artikelnummer): '
-            'Schritt $col: Unbekannte Abteilung "$abtText" — übersprungen.');
+        warnings.add(
+          'Sheet "$sheetName" ($artikelnummer): '
+          'Schritt $col: Unbekannte Abteilung "$abtText" — übersprungen.',
+        );
         continue;
       }
 
@@ -719,10 +745,12 @@ class ExcelImportServiceV3 {
 
       if (step.maschineName != null && step.maschineName!.isNotEmpty) {
         if (!bekannteMaschinen.contains(step.maschineName)) {
-          warnings.add('Sheet "$sheetName" ($artikelnummer): '
-              'Schritt $col: Anlage "${step.maschineName}" nicht im '
-              'Anlagen-Katalog — Schritt wird trotzdem importiert, '
-              'aber ohne Maschinen-Referenz.');
+          warnings.add(
+            'Sheet "$sheetName" ($artikelnummer): '
+            'Schritt $col: Anlage "${step.maschineName}" nicht im '
+            'Anlagen-Katalog — Schritt wird trotzdem importiert, '
+            'aber ohne Maschinen-Referenz.',
+          );
           step.maschineName = null;
         }
       }
@@ -771,11 +799,13 @@ class ExcelImportServiceV3 {
         if (wert == null || wert.isEmpty) continue;
         step.parameterByGruppe
             .putIfAbsent(aktuelleGruppe, () => [])
-            .add(_ParsedParam(
-              name: label.trim(),
-              wert: wert,
-              istCustom: inCustomBlock,
-            ));
+            .add(
+              _ParsedParam(
+                name: label.trim(),
+                wert: wert,
+                istCustom: inCustomBlock,
+              ),
+            );
       }
     }
   }
@@ -828,23 +858,23 @@ class ExcelImportServiceV3 {
       if (datumCell == null || datumCell.value == null) continue;
       final dt = _parseDatum(datumCell);
       if (dt == null) continue;
-      result.add(_ParsedHistorie(
-        datum: dt,
-        kgRohware: _parseDouble(rows[r], 1),
-        kgFertigware: _parseDouble(rows[r], 2),
-        verlustProzent: _parseDouble(rows[r], 3),
-        startzeit: _cellStr(rows[r], 4),
-        endzeit: _cellStr(rows[r], 5),
-        produktionszeitMinuten: _parseZeit(rows[r], 6),
-        kgProStundeRoh: _parseDouble(rows[r], 7),
-        kgProStundeGegart: _parseDouble(rows[r], 8),
-        notizen: _cellStr(rows[r], 9),
-      ));
+      result.add(
+        _ParsedHistorie(
+          datum: dt,
+          kgRohware: _parseDouble(rows[r], 1),
+          kgFertigware: _parseDouble(rows[r], 2),
+          verlustProzent: _parseDouble(rows[r], 3),
+          startzeit: _cellStr(rows[r], 4),
+          endzeit: _cellStr(rows[r], 5),
+          produktionszeitMinuten: _parseZeit(rows[r], 6),
+          kgProStundeRoh: _parseDouble(rows[r], 7),
+          kgProStundeGegart: _parseDouble(rows[r], 8),
+          notizen: _cellStr(rows[r], 9),
+        ),
+      );
     }
     return result;
   }
-
-  // ─── Low-level cell helpers ──────────────────────────────────────────
 
   static String? _cellStr(List<Data?> row, int col) {
     if (col < 0 || col >= row.length) return null;
@@ -858,7 +888,9 @@ class ExcelImportServiceV3 {
       return d == d.roundToDouble() ? d.toInt().toString() : d.toString();
     }
     if (v is BoolCellValue) return v.value.toString();
-    if (v is DateCellValue) return '${v.year}-${_pad(v.month)}-${_pad(v.day)}';
+    if (v is DateCellValue) {
+      return '${v.year}-${_pad(v.month)}-${_pad(v.day)}';
+    }
     if (v is TimeCellValue) {
       return '${_pad(v.hour)}:${_pad(v.minute)}';
     }
@@ -895,7 +927,6 @@ class ExcelImportServiceV3 {
     return null;
   }
 
-  /// Parst "hh:mm" oder "h:mm:ss" → Minuten als double.
   static double? _parseZeit(List<Data?> row, int col) {
     if (col < 0 || col >= row.length) return null;
     final v = row[col]?.value;
@@ -912,7 +943,6 @@ class ExcelImportServiceV3 {
       }
     }
     if (v is DoubleCellValue) {
-      // Excel: Zeit als Bruchteil eines Tages
       return v.value * 24 * 60;
     }
     return null;
