@@ -2438,6 +2438,408 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   }
 }
 
+class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MachinesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'));
+  static const VerificationMeta _abteilungMeta =
+      const VerificationMeta('abteilung');
+  @override
+  late final GeneratedColumn<String> abteilung = GeneratedColumn<String>(
+      'abteilung', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _typischeParameterMeta =
+      const VerificationMeta('typischeParameter');
+  @override
+  late final GeneratedColumn<String> typischeParameter =
+      GeneratedColumn<String>('typische_parameter', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, name, abteilung, typischeParameter, createdAt, updatedAt, deletedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'machines';
+  @override
+  VerificationContext validateIntegrity(Insertable<Machine> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('abteilung')) {
+      context.handle(_abteilungMeta,
+          abteilung.isAcceptableOrUnknown(data['abteilung']!, _abteilungMeta));
+    } else if (isInserting) {
+      context.missing(_abteilungMeta);
+    }
+    if (data.containsKey('typische_parameter')) {
+      context.handle(
+          _typischeParameterMeta,
+          typischeParameter.isAcceptableOrUnknown(
+              data['typische_parameter']!, _typischeParameterMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Machine map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Machine(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      abteilung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
+      typischeParameter: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}typische_parameter']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $MachinesTable createAlias(String alias) {
+    return $MachinesTable(attachedDatabase, alias);
+  }
+}
+
+class Machine extends DataClass implements Insertable<Machine> {
+  /// UUID.
+  final String id;
+
+  /// Eindeutiger Anlagen-Name (z.B. "Verbufa 1", "Bratstraße", "Dampftunnel").
+  /// Entspricht der Spalte A im „Anlagen-Katalog"-Sheet.
+  final String name;
+
+  /// Abteilungs-dbValue (z.B. "bratstrasse", "wurstkueche").
+  /// Beim Import wird der Klartext aus Spalte B ("Bratstraße" usw.)
+  /// auf den dbValue gemappt.
+  final String abteilung;
+
+  /// Typische Einstellungs-Parameter als Freitext (Spalte C im Katalog).
+  /// Pure Dokumentation, keine Funktion.
+  final String? typischeParameter;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Machine(
+      {required this.id,
+      required this.name,
+      required this.abteilung,
+      this.typischeParameter,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['abteilung'] = Variable<String>(abteilung);
+    if (!nullToAbsent || typischeParameter != null) {
+      map['typische_parameter'] = Variable<String>(typischeParameter);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  MachinesCompanion toCompanion(bool nullToAbsent) {
+    return MachinesCompanion(
+      id: Value(id),
+      name: Value(name),
+      abteilung: Value(abteilung),
+      typischeParameter: typischeParameter == null && nullToAbsent
+          ? const Value.absent()
+          : Value(typischeParameter),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Machine.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Machine(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      abteilung: serializer.fromJson<String>(json['abteilung']),
+      typischeParameter:
+          serializer.fromJson<String?>(json['typischeParameter']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'abteilung': serializer.toJson<String>(abteilung),
+      'typischeParameter': serializer.toJson<String?>(typischeParameter),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Machine copyWith(
+          {String? id,
+          String? name,
+          String? abteilung,
+          Value<String?> typischeParameter = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Machine(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        abteilung: abteilung ?? this.abteilung,
+        typischeParameter: typischeParameter.present
+            ? typischeParameter.value
+            : this.typischeParameter,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Machine copyWithCompanion(MachinesCompanion data) {
+    return Machine(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      abteilung: data.abteilung.present ? data.abteilung.value : this.abteilung,
+      typischeParameter: data.typischeParameter.present
+          ? data.typischeParameter.value
+          : this.typischeParameter,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Machine(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('abteilung: $abteilung, ')
+          ..write('typischeParameter: $typischeParameter, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, name, abteilung, typischeParameter, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Machine &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.abteilung == this.abteilung &&
+          other.typischeParameter == this.typischeParameter &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class MachinesCompanion extends UpdateCompanion<Machine> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> abteilung;
+  final Value<String?> typischeParameter;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const MachinesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.abteilung = const Value.absent(),
+    this.typischeParameter = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MachinesCompanion.insert({
+    required String id,
+    required String name,
+    required String abteilung,
+    this.typischeParameter = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name),
+        abteilung = Value(abteilung);
+  static Insertable<Machine> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? abteilung,
+    Expression<String>? typischeParameter,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (abteilung != null) 'abteilung': abteilung,
+      if (typischeParameter != null) 'typische_parameter': typischeParameter,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MachinesCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String>? abteilung,
+      Value<String?>? typischeParameter,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return MachinesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      abteilung: abteilung ?? this.abteilung,
+      typischeParameter: typischeParameter ?? this.typischeParameter,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (abteilung.present) {
+      map['abteilung'] = Variable<String>(abteilung.value);
+    }
+    if (typischeParameter.present) {
+      map['typische_parameter'] = Variable<String>(typischeParameter.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MachinesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('abteilung: $abteilung, ')
+          ..write('typischeParameter: $typischeParameter, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ProductStepsTable extends ProductSteps
     with TableInfo<$ProductStepsTable, ProductStep> {
   @override
@@ -2470,6 +2872,27 @@ class $ProductStepsTable extends ProductSteps
   late final GeneratedColumn<String> abteilung = GeneratedColumn<String>(
       'abteilung', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _maschineIdMeta =
+      const VerificationMeta('maschineId');
+  @override
+  late final GeneratedColumn<String> maschineId = GeneratedColumn<String>(
+      'maschine_id', aliasedName, true,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES machines (id)'));
+  static const VerificationMeta _prozessschrittMeta =
+      const VerificationMeta('prozessschritt');
+  @override
+  late final GeneratedColumn<String> prozessschritt = GeneratedColumn<String>(
+      'prozessschritt', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _mengeKgMeta =
+      const VerificationMeta('mengeKg');
+  @override
+  late final GeneratedColumn<double> mengeKg = GeneratedColumn<double>(
+      'menge_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _basisMengeKgMeta =
       const VerificationMeta('basisMengeKg');
   @override
@@ -2608,6 +3031,9 @@ class $ProductStepsTable extends ProductSteps
         productId,
         reihenfolge,
         abteilung,
+        maschineId,
+        prozessschritt,
+        mengeKg,
         basisMengeKg,
         basisDauerMinuten,
         fixZeitMinuten,
@@ -2664,6 +3090,22 @@ class $ProductStepsTable extends ProductSteps
           abteilung.isAcceptableOrUnknown(data['abteilung']!, _abteilungMeta));
     } else if (isInserting) {
       context.missing(_abteilungMeta);
+    }
+    if (data.containsKey('maschine_id')) {
+      context.handle(
+          _maschineIdMeta,
+          maschineId.isAcceptableOrUnknown(
+              data['maschine_id']!, _maschineIdMeta));
+    }
+    if (data.containsKey('prozessschritt')) {
+      context.handle(
+          _prozessschrittMeta,
+          prozessschritt.isAcceptableOrUnknown(
+              data['prozessschritt']!, _prozessschrittMeta));
+    }
+    if (data.containsKey('menge_kg')) {
+      context.handle(_mengeKgMeta,
+          mengeKg.isAcceptableOrUnknown(data['menge_kg']!, _mengeKgMeta));
     }
     if (data.containsKey('basis_menge_kg')) {
       context.handle(
@@ -2805,6 +3247,12 @@ class $ProductStepsTable extends ProductSteps
           .read(DriftSqlType.int, data['${effectivePrefix}reihenfolge'])!,
       abteilung: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
+      maschineId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}maschine_id']),
+      prozessschritt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}prozessschritt']),
+      mengeKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}menge_kg']),
       basisMengeKg: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}basis_menge_kg'])!,
       basisDauerMinuten: attachedDatabase.typeMapping.read(
@@ -2867,6 +3315,21 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
   /// Abteilung, die diesen Schritt ausführt — gespeichert als [Abteilung.dbValue].
   final String abteilung;
 
+  /// FK auf [Machines]. NULL erlaubt für bestehende Daten (Legacy-Import)
+  /// und Schritte, bei denen keine Anlage zugeordnet ist (z.B. reine
+  /// Handarbeit). Beim v3-Import wird dies gegen den Anlagen-Katalog
+  /// aufgelöst.
+  final String? maschineId;
+
+  /// Freitext-Beschreibung des Schritts aus der v3-Vorlage (Zeile
+  /// „Prozessschritt"), z.B. „Portionieren / Füllen", „Braten",
+  /// „Abkühlen im Dampftunnel".
+  final String? prozessschritt;
+
+  /// Menge in kg aus der v3-Vorlage (Zeile „Menge (kg)"). Optional,
+  /// separate Angabe pro Schritt zusätzlich zur [basisMengeKg].
+  final double? mengeKg;
+
   /// Referenzmenge in kg, auf die sich [basisDauerMinuten] bezieht.
   final double basisMengeKg;
 
@@ -2893,10 +3356,13 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
   final double? kerntemperaturZiel;
   final double? raumtemperaturMax;
 
-  /// Freitext-Referenz auf die Maschine.
+  /// Freitext-Referenz auf die Maschine (Legacy).
+  /// Seit v4 bevorzugt über [maschineId] auf [Machines].
   final String? maschine;
 
-  /// JSON mit Maschineneinstellungen.
+  /// JSON mit Maschineneinstellungen (Legacy).
+  /// Seit v4 bevorzugt über [ProductStepParameters] als strukturierte
+  /// Zeilen.
   final String? maschinenEinstellungenJson;
 
   /// Kochkammer-Programm-Nr oder -Name (wenn Abteilung = Wurstküche).
@@ -2916,6 +3382,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       required this.productId,
       required this.reihenfolge,
       required this.abteilung,
+      this.maschineId,
+      this.prozessschritt,
+      this.mengeKg,
       required this.basisMengeKg,
       required this.basisDauerMinuten,
       this.fixZeitMinuten,
@@ -2944,6 +3413,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
     map['product_id'] = Variable<String>(productId);
     map['reihenfolge'] = Variable<int>(reihenfolge);
     map['abteilung'] = Variable<String>(abteilung);
+    if (!nullToAbsent || maschineId != null) {
+      map['maschine_id'] = Variable<String>(maschineId);
+    }
+    if (!nullToAbsent || prozessschritt != null) {
+      map['prozessschritt'] = Variable<String>(prozessschritt);
+    }
+    if (!nullToAbsent || mengeKg != null) {
+      map['menge_kg'] = Variable<double>(mengeKg);
+    }
     map['basis_menge_kg'] = Variable<double>(basisMengeKg);
     map['basis_dauer_minuten'] = Variable<double>(basisDauerMinuten);
     if (!nullToAbsent || fixZeitMinuten != null) {
@@ -3005,6 +3483,15 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       productId: Value(productId),
       reihenfolge: Value(reihenfolge),
       abteilung: Value(abteilung),
+      maschineId: maschineId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maschineId),
+      prozessschritt: prozessschritt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(prozessschritt),
+      mengeKg: mengeKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mengeKg),
       basisMengeKg: Value(basisMengeKg),
       basisDauerMinuten: Value(basisDauerMinuten),
       fixZeitMinuten: fixZeitMinuten == null && nullToAbsent
@@ -3068,6 +3555,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       productId: serializer.fromJson<String>(json['productId']),
       reihenfolge: serializer.fromJson<int>(json['reihenfolge']),
       abteilung: serializer.fromJson<String>(json['abteilung']),
+      maschineId: serializer.fromJson<String?>(json['maschineId']),
+      prozessschritt: serializer.fromJson<String?>(json['prozessschritt']),
+      mengeKg: serializer.fromJson<double?>(json['mengeKg']),
       basisMengeKg: serializer.fromJson<double>(json['basisMengeKg']),
       basisDauerMinuten: serializer.fromJson<double>(json['basisDauerMinuten']),
       fixZeitMinuten: serializer.fromJson<double?>(json['fixZeitMinuten']),
@@ -3105,6 +3595,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       'productId': serializer.toJson<String>(productId),
       'reihenfolge': serializer.toJson<int>(reihenfolge),
       'abteilung': serializer.toJson<String>(abteilung),
+      'maschineId': serializer.toJson<String?>(maschineId),
+      'prozessschritt': serializer.toJson<String?>(prozessschritt),
+      'mengeKg': serializer.toJson<double?>(mengeKg),
       'basisMengeKg': serializer.toJson<double>(basisMengeKg),
       'basisDauerMinuten': serializer.toJson<double>(basisDauerMinuten),
       'fixZeitMinuten': serializer.toJson<double?>(fixZeitMinuten),
@@ -3135,6 +3628,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           String? productId,
           int? reihenfolge,
           String? abteilung,
+          Value<String?> maschineId = const Value.absent(),
+          Value<String?> prozessschritt = const Value.absent(),
+          Value<double?> mengeKg = const Value.absent(),
           double? basisMengeKg,
           double? basisDauerMinuten,
           Value<double?> fixZeitMinuten = const Value.absent(),
@@ -3161,6 +3657,10 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
         productId: productId ?? this.productId,
         reihenfolge: reihenfolge ?? this.reihenfolge,
         abteilung: abteilung ?? this.abteilung,
+        maschineId: maschineId.present ? maschineId.value : this.maschineId,
+        prozessschritt:
+            prozessschritt.present ? prozessschritt.value : this.prozessschritt,
+        mengeKg: mengeKg.present ? mengeKg.value : this.mengeKg,
         basisMengeKg: basisMengeKg ?? this.basisMengeKg,
         basisDauerMinuten: basisDauerMinuten ?? this.basisDauerMinuten,
         fixZeitMinuten:
@@ -3208,6 +3708,12 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
       reihenfolge:
           data.reihenfolge.present ? data.reihenfolge.value : this.reihenfolge,
       abteilung: data.abteilung.present ? data.abteilung.value : this.abteilung,
+      maschineId:
+          data.maschineId.present ? data.maschineId.value : this.maschineId,
+      prozessschritt: data.prozessschritt.present
+          ? data.prozessschritt.value
+          : this.prozessschritt,
+      mengeKg: data.mengeKg.present ? data.mengeKg.value : this.mengeKg,
       basisMengeKg: data.basisMengeKg.present
           ? data.basisMengeKg.value
           : this.basisMengeKg,
@@ -3271,6 +3777,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           ..write('productId: $productId, ')
           ..write('reihenfolge: $reihenfolge, ')
           ..write('abteilung: $abteilung, ')
+          ..write('maschineId: $maschineId, ')
+          ..write('prozessschritt: $prozessschritt, ')
+          ..write('mengeKg: $mengeKg, ')
           ..write('basisMengeKg: $basisMengeKg, ')
           ..write('basisDauerMinuten: $basisDauerMinuten, ')
           ..write('fixZeitMinuten: $fixZeitMinuten, ')
@@ -3302,6 +3811,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
         productId,
         reihenfolge,
         abteilung,
+        maschineId,
+        prozessschritt,
+        mengeKg,
         basisMengeKg,
         basisDauerMinuten,
         fixZeitMinuten,
@@ -3332,6 +3844,9 @@ class ProductStep extends DataClass implements Insertable<ProductStep> {
           other.productId == this.productId &&
           other.reihenfolge == this.reihenfolge &&
           other.abteilung == this.abteilung &&
+          other.maschineId == this.maschineId &&
+          other.prozessschritt == this.prozessschritt &&
+          other.mengeKg == this.mengeKg &&
           other.basisMengeKg == this.basisMengeKg &&
           other.basisDauerMinuten == this.basisDauerMinuten &&
           other.fixZeitMinuten == this.fixZeitMinuten &&
@@ -3360,6 +3875,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
   final Value<String> productId;
   final Value<int> reihenfolge;
   final Value<String> abteilung;
+  final Value<String?> maschineId;
+  final Value<String?> prozessschritt;
+  final Value<double?> mengeKg;
   final Value<double> basisMengeKg;
   final Value<double> basisDauerMinuten;
   final Value<double?> fixZeitMinuten;
@@ -3387,6 +3905,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     this.productId = const Value.absent(),
     this.reihenfolge = const Value.absent(),
     this.abteilung = const Value.absent(),
+    this.maschineId = const Value.absent(),
+    this.prozessschritt = const Value.absent(),
+    this.mengeKg = const Value.absent(),
     this.basisMengeKg = const Value.absent(),
     this.basisDauerMinuten = const Value.absent(),
     this.fixZeitMinuten = const Value.absent(),
@@ -3415,6 +3936,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     required String productId,
     required int reihenfolge,
     required String abteilung,
+    this.maschineId = const Value.absent(),
+    this.prozessschritt = const Value.absent(),
+    this.mengeKg = const Value.absent(),
     required double basisMengeKg,
     required double basisDauerMinuten,
     this.fixZeitMinuten = const Value.absent(),
@@ -3449,6 +3973,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     Expression<String>? productId,
     Expression<int>? reihenfolge,
     Expression<String>? abteilung,
+    Expression<String>? maschineId,
+    Expression<String>? prozessschritt,
+    Expression<double>? mengeKg,
     Expression<double>? basisMengeKg,
     Expression<double>? basisDauerMinuten,
     Expression<double>? fixZeitMinuten,
@@ -3477,6 +4004,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       if (productId != null) 'product_id': productId,
       if (reihenfolge != null) 'reihenfolge': reihenfolge,
       if (abteilung != null) 'abteilung': abteilung,
+      if (maschineId != null) 'maschine_id': maschineId,
+      if (prozessschritt != null) 'prozessschritt': prozessschritt,
+      if (mengeKg != null) 'menge_kg': mengeKg,
       if (basisMengeKg != null) 'basis_menge_kg': basisMengeKg,
       if (basisDauerMinuten != null) 'basis_dauer_minuten': basisDauerMinuten,
       if (fixZeitMinuten != null) 'fix_zeit_minuten': fixZeitMinuten,
@@ -3510,6 +4040,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       Value<String>? productId,
       Value<int>? reihenfolge,
       Value<String>? abteilung,
+      Value<String?>? maschineId,
+      Value<String?>? prozessschritt,
+      Value<double?>? mengeKg,
       Value<double>? basisMengeKg,
       Value<double>? basisDauerMinuten,
       Value<double?>? fixZeitMinuten,
@@ -3537,6 +4070,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
       productId: productId ?? this.productId,
       reihenfolge: reihenfolge ?? this.reihenfolge,
       abteilung: abteilung ?? this.abteilung,
+      maschineId: maschineId ?? this.maschineId,
+      prozessschritt: prozessschritt ?? this.prozessschritt,
+      mengeKg: mengeKg ?? this.mengeKg,
       basisMengeKg: basisMengeKg ?? this.basisMengeKg,
       basisDauerMinuten: basisDauerMinuten ?? this.basisDauerMinuten,
       fixZeitMinuten: fixZeitMinuten ?? this.fixZeitMinuten,
@@ -3577,6 +4113,15 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
     }
     if (abteilung.present) {
       map['abteilung'] = Variable<String>(abteilung.value);
+    }
+    if (maschineId.present) {
+      map['maschine_id'] = Variable<String>(maschineId.value);
+    }
+    if (prozessschritt.present) {
+      map['prozessschritt'] = Variable<String>(prozessschritt.value);
+    }
+    if (mengeKg.present) {
+      map['menge_kg'] = Variable<double>(mengeKg.value);
     }
     if (basisMengeKg.present) {
       map['basis_menge_kg'] = Variable<double>(basisMengeKg.value);
@@ -3655,6 +4200,9 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
           ..write('productId: $productId, ')
           ..write('reihenfolge: $reihenfolge, ')
           ..write('abteilung: $abteilung, ')
+          ..write('maschineId: $maschineId, ')
+          ..write('prozessschritt: $prozessschritt, ')
+          ..write('mengeKg: $mengeKg, ')
           ..write('basisMengeKg: $basisMengeKg, ')
           ..write('basisDauerMinuten: $basisDauerMinuten, ')
           ..write('fixZeitMinuten: $fixZeitMinuten, ')
@@ -3673,6 +4221,542 @@ class ProductStepsCompanion extends UpdateCompanion<ProductStep> {
           ..write('klimaprogramm: $klimaprogramm, ')
           ..write('bratparameter: $bratparameter, ')
           ..write('notizen: $notizen, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProductStepParametersTable extends ProductStepParameters
+    with TableInfo<$ProductStepParametersTable, ProductStepParameter> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductStepParametersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _stepIdMeta = const VerificationMeta('stepId');
+  @override
+  late final GeneratedColumn<String> stepId = GeneratedColumn<String>(
+      'step_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES product_steps (id)'));
+  static const VerificationMeta _parameterGruppeMeta =
+      const VerificationMeta('parameterGruppe');
+  @override
+  late final GeneratedColumn<String> parameterGruppe = GeneratedColumn<String>(
+      'parameter_gruppe', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _parameterNameMeta =
+      const VerificationMeta('parameterName');
+  @override
+  late final GeneratedColumn<String> parameterName = GeneratedColumn<String>(
+      'parameter_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _wertMeta = const VerificationMeta('wert');
+  @override
+  late final GeneratedColumn<String> wert = GeneratedColumn<String>(
+      'wert', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _reihenfolgeMeta =
+      const VerificationMeta('reihenfolge');
+  @override
+  late final GeneratedColumn<int> reihenfolge = GeneratedColumn<int>(
+      'reihenfolge', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _istCustomMeta =
+      const VerificationMeta('istCustom');
+  @override
+  late final GeneratedColumn<bool> istCustom = GeneratedColumn<bool>(
+      'ist_custom', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("ist_custom" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        stepId,
+        parameterGruppe,
+        parameterName,
+        wert,
+        reihenfolge,
+        istCustom,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'product_step_parameters';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<ProductStepParameter> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('step_id')) {
+      context.handle(_stepIdMeta,
+          stepId.isAcceptableOrUnknown(data['step_id']!, _stepIdMeta));
+    } else if (isInserting) {
+      context.missing(_stepIdMeta);
+    }
+    if (data.containsKey('parameter_gruppe')) {
+      context.handle(
+          _parameterGruppeMeta,
+          parameterGruppe.isAcceptableOrUnknown(
+              data['parameter_gruppe']!, _parameterGruppeMeta));
+    } else if (isInserting) {
+      context.missing(_parameterGruppeMeta);
+    }
+    if (data.containsKey('parameter_name')) {
+      context.handle(
+          _parameterNameMeta,
+          parameterName.isAcceptableOrUnknown(
+              data['parameter_name']!, _parameterNameMeta));
+    } else if (isInserting) {
+      context.missing(_parameterNameMeta);
+    }
+    if (data.containsKey('wert')) {
+      context.handle(
+          _wertMeta, wert.isAcceptableOrUnknown(data['wert']!, _wertMeta));
+    }
+    if (data.containsKey('reihenfolge')) {
+      context.handle(
+          _reihenfolgeMeta,
+          reihenfolge.isAcceptableOrUnknown(
+              data['reihenfolge']!, _reihenfolgeMeta));
+    }
+    if (data.containsKey('ist_custom')) {
+      context.handle(_istCustomMeta,
+          istCustom.isAcceptableOrUnknown(data['ist_custom']!, _istCustomMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductStepParameter map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductStepParameter(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      stepId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}step_id'])!,
+      parameterGruppe: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}parameter_gruppe'])!,
+      parameterName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}parameter_name'])!,
+      wert: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}wert']),
+      reihenfolge: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}reihenfolge'])!,
+      istCustom: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}ist_custom'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $ProductStepParametersTable createAlias(String alias) {
+    return $ProductStepParametersTable(attachedDatabase, alias);
+  }
+}
+
+class ProductStepParameter extends DataClass
+    implements Insertable<ProductStepParameter> {
+  final String id;
+
+  /// Referenz auf den Schritt, zu dem der Parameter gehört.
+  final String stepId;
+
+  /// Gruppenname (z.B. „FÜLLMASCHINE / VERBUFA", „BRATSTRASSE",
+  /// „DAMPFTUNNEL", „SCHOCKFROSTER", „CUSTOM").
+  /// Dient primär der Anzeige in der UI, keine Validierung.
+  final String parameterGruppe;
+
+  /// Parameter-Name wie in Spalte A der v3-Vorlage (z.B. „Takte",
+  /// „Volumen (cm³)", „Temp Oben (°C)").
+  final String parameterName;
+
+  /// Wert als Freitext. Zahlen werden nicht typsicher gespeichert, weil
+  /// die Vorlage heterogene Werte erlaubt („4:00", „230", „Papaya, 3mm").
+  /// Die UI / Auswertung interpretiert je nach Parameter-Name.
+  final String? wert;
+
+  /// Reihenfolge innerhalb der Gruppe (Sortierung in der UI).
+  final int reihenfolge;
+
+  /// `true` wenn aus dem ZUSÄTZLICHE-PARAMETER-Block der Vorlage
+  /// (vom Nutzer selbst benannt), `false` bei den Standard-Parametern.
+  final bool istCustom;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const ProductStepParameter(
+      {required this.id,
+      required this.stepId,
+      required this.parameterGruppe,
+      required this.parameterName,
+      this.wert,
+      required this.reihenfolge,
+      required this.istCustom,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['step_id'] = Variable<String>(stepId);
+    map['parameter_gruppe'] = Variable<String>(parameterGruppe);
+    map['parameter_name'] = Variable<String>(parameterName);
+    if (!nullToAbsent || wert != null) {
+      map['wert'] = Variable<String>(wert);
+    }
+    map['reihenfolge'] = Variable<int>(reihenfolge);
+    map['ist_custom'] = Variable<bool>(istCustom);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ProductStepParametersCompanion toCompanion(bool nullToAbsent) {
+    return ProductStepParametersCompanion(
+      id: Value(id),
+      stepId: Value(stepId),
+      parameterGruppe: Value(parameterGruppe),
+      parameterName: Value(parameterName),
+      wert: wert == null && nullToAbsent ? const Value.absent() : Value(wert),
+      reihenfolge: Value(reihenfolge),
+      istCustom: Value(istCustom),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ProductStepParameter.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductStepParameter(
+      id: serializer.fromJson<String>(json['id']),
+      stepId: serializer.fromJson<String>(json['stepId']),
+      parameterGruppe: serializer.fromJson<String>(json['parameterGruppe']),
+      parameterName: serializer.fromJson<String>(json['parameterName']),
+      wert: serializer.fromJson<String?>(json['wert']),
+      reihenfolge: serializer.fromJson<int>(json['reihenfolge']),
+      istCustom: serializer.fromJson<bool>(json['istCustom']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'stepId': serializer.toJson<String>(stepId),
+      'parameterGruppe': serializer.toJson<String>(parameterGruppe),
+      'parameterName': serializer.toJson<String>(parameterName),
+      'wert': serializer.toJson<String?>(wert),
+      'reihenfolge': serializer.toJson<int>(reihenfolge),
+      'istCustom': serializer.toJson<bool>(istCustom),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ProductStepParameter copyWith(
+          {String? id,
+          String? stepId,
+          String? parameterGruppe,
+          String? parameterName,
+          Value<String?> wert = const Value.absent(),
+          int? reihenfolge,
+          bool? istCustom,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      ProductStepParameter(
+        id: id ?? this.id,
+        stepId: stepId ?? this.stepId,
+        parameterGruppe: parameterGruppe ?? this.parameterGruppe,
+        parameterName: parameterName ?? this.parameterName,
+        wert: wert.present ? wert.value : this.wert,
+        reihenfolge: reihenfolge ?? this.reihenfolge,
+        istCustom: istCustom ?? this.istCustom,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  ProductStepParameter copyWithCompanion(ProductStepParametersCompanion data) {
+    return ProductStepParameter(
+      id: data.id.present ? data.id.value : this.id,
+      stepId: data.stepId.present ? data.stepId.value : this.stepId,
+      parameterGruppe: data.parameterGruppe.present
+          ? data.parameterGruppe.value
+          : this.parameterGruppe,
+      parameterName: data.parameterName.present
+          ? data.parameterName.value
+          : this.parameterName,
+      wert: data.wert.present ? data.wert.value : this.wert,
+      reihenfolge:
+          data.reihenfolge.present ? data.reihenfolge.value : this.reihenfolge,
+      istCustom: data.istCustom.present ? data.istCustom.value : this.istCustom,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductStepParameter(')
+          ..write('id: $id, ')
+          ..write('stepId: $stepId, ')
+          ..write('parameterGruppe: $parameterGruppe, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('wert: $wert, ')
+          ..write('reihenfolge: $reihenfolge, ')
+          ..write('istCustom: $istCustom, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, stepId, parameterGruppe, parameterName,
+      wert, reihenfolge, istCustom, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductStepParameter &&
+          other.id == this.id &&
+          other.stepId == this.stepId &&
+          other.parameterGruppe == this.parameterGruppe &&
+          other.parameterName == this.parameterName &&
+          other.wert == this.wert &&
+          other.reihenfolge == this.reihenfolge &&
+          other.istCustom == this.istCustom &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ProductStepParametersCompanion
+    extends UpdateCompanion<ProductStepParameter> {
+  final Value<String> id;
+  final Value<String> stepId;
+  final Value<String> parameterGruppe;
+  final Value<String> parameterName;
+  final Value<String?> wert;
+  final Value<int> reihenfolge;
+  final Value<bool> istCustom;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ProductStepParametersCompanion({
+    this.id = const Value.absent(),
+    this.stepId = const Value.absent(),
+    this.parameterGruppe = const Value.absent(),
+    this.parameterName = const Value.absent(),
+    this.wert = const Value.absent(),
+    this.reihenfolge = const Value.absent(),
+    this.istCustom = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductStepParametersCompanion.insert({
+    required String id,
+    required String stepId,
+    required String parameterGruppe,
+    required String parameterName,
+    this.wert = const Value.absent(),
+    this.reihenfolge = const Value.absent(),
+    this.istCustom = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        stepId = Value(stepId),
+        parameterGruppe = Value(parameterGruppe),
+        parameterName = Value(parameterName);
+  static Insertable<ProductStepParameter> custom({
+    Expression<String>? id,
+    Expression<String>? stepId,
+    Expression<String>? parameterGruppe,
+    Expression<String>? parameterName,
+    Expression<String>? wert,
+    Expression<int>? reihenfolge,
+    Expression<bool>? istCustom,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (stepId != null) 'step_id': stepId,
+      if (parameterGruppe != null) 'parameter_gruppe': parameterGruppe,
+      if (parameterName != null) 'parameter_name': parameterName,
+      if (wert != null) 'wert': wert,
+      if (reihenfolge != null) 'reihenfolge': reihenfolge,
+      if (istCustom != null) 'ist_custom': istCustom,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductStepParametersCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? stepId,
+      Value<String>? parameterGruppe,
+      Value<String>? parameterName,
+      Value<String?>? wert,
+      Value<int>? reihenfolge,
+      Value<bool>? istCustom,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return ProductStepParametersCompanion(
+      id: id ?? this.id,
+      stepId: stepId ?? this.stepId,
+      parameterGruppe: parameterGruppe ?? this.parameterGruppe,
+      parameterName: parameterName ?? this.parameterName,
+      wert: wert ?? this.wert,
+      reihenfolge: reihenfolge ?? this.reihenfolge,
+      istCustom: istCustom ?? this.istCustom,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (stepId.present) {
+      map['step_id'] = Variable<String>(stepId.value);
+    }
+    if (parameterGruppe.present) {
+      map['parameter_gruppe'] = Variable<String>(parameterGruppe.value);
+    }
+    if (parameterName.present) {
+      map['parameter_name'] = Variable<String>(parameterName.value);
+    }
+    if (wert.present) {
+      map['wert'] = Variable<String>(wert.value);
+    }
+    if (reihenfolge.present) {
+      map['reihenfolge'] = Variable<int>(reihenfolge.value);
+    }
+    if (istCustom.present) {
+      map['ist_custom'] = Variable<bool>(istCustom.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductStepParametersCompanion(')
+          ..write('id: $id, ')
+          ..write('stepId: $stepId, ')
+          ..write('parameterGruppe: $parameterGruppe, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('wert: $wert, ')
+          ..write('reihenfolge: $reihenfolge, ')
+          ..write('istCustom: $istCustom, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -7850,7 +8934,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $ProductsTable products = $ProductsTable(this);
+  late final $MachinesTable machines = $MachinesTable(this);
   late final $ProductStepsTable productSteps = $ProductStepsTable(this);
+  late final $ProductStepParametersTable productStepParameters =
+      $ProductStepParametersTable(this);
   late final $RawMaterialsTable rawMaterials = $RawMaterialsTable(this);
   late final $ProductRawMaterialsTable productRawMaterials =
       $ProductRawMaterialsTable(this);
@@ -7868,7 +8955,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   @override
   List<DatabaseSchemaEntity> get allSchemaEntities => [
         products,
+        machines,
         productSteps,
+        productStepParameters,
         rawMaterials,
         productRawMaterials,
         rawMaterialBatches,
@@ -9019,12 +10108,298 @@ typedef $$ProductsTableProcessedTableManager = ProcessedTableManager<
         {bool productStepsRefs,
         bool productRawMaterialsRefs,
         bool productionTasksRefs})>;
+typedef $$MachinesTableCreateCompanionBuilder = MachinesCompanion Function({
+  required String id,
+  required String name,
+  required String abteilung,
+  Value<String?> typischeParameter,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$MachinesTableUpdateCompanionBuilder = MachinesCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> abteilung,
+  Value<String?> typischeParameter,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+final class $$MachinesTableReferences
+    extends BaseReferences<_$AppDatabase, $MachinesTable, Machine> {
+  $$MachinesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$ProductStepsTable, List<ProductStep>>
+      _productStepsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+          db.productSteps,
+          aliasName:
+              $_aliasNameGenerator(db.machines.id, db.productSteps.maschineId));
+
+  $$ProductStepsTableProcessedTableManager get productStepsRefs {
+    final manager = $$ProductStepsTableTableManager($_db, $_db.productSteps)
+        .filter((f) => f.maschineId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_productStepsRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+}
+
+class $$MachinesTableFilterComposer
+    extends Composer<_$AppDatabase, $MachinesTable> {
+  $$MachinesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get abteilung => $composableBuilder(
+      column: $table.abteilung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get typischeParameter => $composableBuilder(
+      column: $table.typischeParameter,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+
+  Expression<bool> productStepsRefs(
+      Expression<bool> Function($$ProductStepsTableFilterComposer f) f) {
+    final $$ProductStepsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productSteps,
+        getReferencedColumn: (t) => t.maschineId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductStepsTableFilterComposer(
+              $db: $db,
+              $table: $db.productSteps,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$MachinesTableOrderingComposer
+    extends Composer<_$AppDatabase, $MachinesTable> {
+  $$MachinesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get abteilung => $composableBuilder(
+      column: $table.abteilung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get typischeParameter => $composableBuilder(
+      column: $table.typischeParameter,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$MachinesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MachinesTable> {
+  $$MachinesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get abteilung =>
+      $composableBuilder(column: $table.abteilung, builder: (column) => column);
+
+  GeneratedColumn<String> get typischeParameter => $composableBuilder(
+      column: $table.typischeParameter, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  Expression<T> productStepsRefs<T extends Object>(
+      Expression<T> Function($$ProductStepsTableAnnotationComposer a) f) {
+    final $$ProductStepsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productSteps,
+        getReferencedColumn: (t) => t.maschineId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductStepsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productSteps,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+}
+
+class $$MachinesTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $MachinesTable,
+    Machine,
+    $$MachinesTableFilterComposer,
+    $$MachinesTableOrderingComposer,
+    $$MachinesTableAnnotationComposer,
+    $$MachinesTableCreateCompanionBuilder,
+    $$MachinesTableUpdateCompanionBuilder,
+    (Machine, $$MachinesTableReferences),
+    Machine,
+    PrefetchHooks Function({bool productStepsRefs})> {
+  $$MachinesTableTableManager(_$AppDatabase db, $MachinesTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MachinesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MachinesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MachinesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String> abteilung = const Value.absent(),
+            Value<String?> typischeParameter = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MachinesCompanion(
+            id: id,
+            name: name,
+            abteilung: abteilung,
+            typischeParameter: typischeParameter,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            required String abteilung,
+            Value<String?> typischeParameter = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MachinesCompanion.insert(
+            id: id,
+            name: name,
+            abteilung: abteilung,
+            typischeParameter: typischeParameter,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) =>
+                  (e.readTable(table), $$MachinesTableReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: ({productStepsRefs = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [if (productStepsRefs) db.productSteps],
+              addJoins: null,
+              getPrefetchedDataCallback: (items) async {
+                return [
+                  if (productStepsRefs)
+                    await $_getPrefetchedData<Machine, $MachinesTable,
+                            ProductStep>(
+                        currentTable: table,
+                        referencedTable: $$MachinesTableReferences
+                            ._productStepsRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$MachinesTableReferences(db, table, p0)
+                                .productStepsRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.maschineId == item.id),
+                        typedResults: items)
+                ];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$MachinesTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $MachinesTable,
+    Machine,
+    $$MachinesTableFilterComposer,
+    $$MachinesTableOrderingComposer,
+    $$MachinesTableAnnotationComposer,
+    $$MachinesTableCreateCompanionBuilder,
+    $$MachinesTableUpdateCompanionBuilder,
+    (Machine, $$MachinesTableReferences),
+    Machine,
+    PrefetchHooks Function({bool productStepsRefs})>;
 typedef $$ProductStepsTableCreateCompanionBuilder = ProductStepsCompanion
     Function({
   required String id,
   required String productId,
   required int reihenfolge,
   required String abteilung,
+  Value<String?> maschineId,
+  Value<String?> prozessschritt,
+  Value<double?> mengeKg,
   required double basisMengeKg,
   required double basisDauerMinuten,
   Value<double?> fixZeitMinuten,
@@ -9054,6 +10429,9 @@ typedef $$ProductStepsTableUpdateCompanionBuilder = ProductStepsCompanion
   Value<String> productId,
   Value<int> reihenfolge,
   Value<String> abteilung,
+  Value<String?> maschineId,
+  Value<String?> prozessschritt,
+  Value<double?> mengeKg,
   Value<double> basisMengeKg,
   Value<double> basisDauerMinuten,
   Value<double?> fixZeitMinuten,
@@ -9096,6 +10474,40 @@ final class $$ProductStepsTableReferences
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: [item]));
   }
+
+  static $MachinesTable _maschineIdTable(_$AppDatabase db) =>
+      db.machines.createAlias(
+          $_aliasNameGenerator(db.productSteps.maschineId, db.machines.id));
+
+  $$MachinesTableProcessedTableManager? get maschineId {
+    final $_column = $_itemColumn<String>('maschine_id');
+    if ($_column == null) return null;
+    final manager = $$MachinesTableTableManager($_db, $_db.machines)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_maschineIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+
+  static MultiTypedResultKey<$ProductStepParametersTable,
+      List<ProductStepParameter>> _productStepParametersRefsTable(
+          _$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(db.productStepParameters,
+          aliasName: $_aliasNameGenerator(
+              db.productSteps.id, db.productStepParameters.stepId));
+
+  $$ProductStepParametersTableProcessedTableManager
+      get productStepParametersRefs {
+    final manager = $$ProductStepParametersTableTableManager(
+            $_db, $_db.productStepParameters)
+        .filter((f) => f.stepId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_productStepParametersRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
 }
 
 class $$ProductStepsTableFilterComposer
@@ -9115,6 +10527,13 @@ class $$ProductStepsTableFilterComposer
 
   ColumnFilters<String> get abteilung => $composableBuilder(
       column: $table.abteilung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prozessschritt => $composableBuilder(
+      column: $table.prozessschritt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get mengeKg => $composableBuilder(
+      column: $table.mengeKg, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get basisMengeKg => $composableBuilder(
       column: $table.basisMengeKg, builder: (column) => ColumnFilters(column));
@@ -9209,6 +10628,49 @@ class $$ProductStepsTableFilterComposer
             ));
     return composer;
   }
+
+  $$MachinesTableFilterComposer get maschineId {
+    final $$MachinesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.maschineId,
+        referencedTable: $db.machines,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$MachinesTableFilterComposer(
+              $db: $db,
+              $table: $db.machines,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  Expression<bool> productStepParametersRefs(
+      Expression<bool> Function($$ProductStepParametersTableFilterComposer f)
+          f) {
+    final $$ProductStepParametersTableFilterComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.productStepParameters,
+            getReferencedColumn: (t) => t.stepId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$ProductStepParametersTableFilterComposer(
+                  $db: $db,
+                  $table: $db.productStepParameters,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$ProductStepsTableOrderingComposer
@@ -9228,6 +10690,13 @@ class $$ProductStepsTableOrderingComposer
 
   ColumnOrderings<String> get abteilung => $composableBuilder(
       column: $table.abteilung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get prozessschritt => $composableBuilder(
+      column: $table.prozessschritt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get mengeKg => $composableBuilder(
+      column: $table.mengeKg, builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get basisMengeKg => $composableBuilder(
       column: $table.basisMengeKg,
@@ -9327,6 +10796,26 @@ class $$ProductStepsTableOrderingComposer
             ));
     return composer;
   }
+
+  $$MachinesTableOrderingComposer get maschineId {
+    final $$MachinesTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.maschineId,
+        referencedTable: $db.machines,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$MachinesTableOrderingComposer(
+              $db: $db,
+              $table: $db.machines,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
 }
 
 class $$ProductStepsTableAnnotationComposer
@@ -9346,6 +10835,12 @@ class $$ProductStepsTableAnnotationComposer
 
   GeneratedColumn<String> get abteilung =>
       $composableBuilder(column: $table.abteilung, builder: (column) => column);
+
+  GeneratedColumn<String> get prozessschritt => $composableBuilder(
+      column: $table.prozessschritt, builder: (column) => column);
+
+  GeneratedColumn<double> get mengeKg =>
+      $composableBuilder(column: $table.mengeKg, builder: (column) => column);
 
   GeneratedColumn<double> get basisMengeKg => $composableBuilder(
       column: $table.basisMengeKg, builder: (column) => column);
@@ -9429,6 +10924,49 @@ class $$ProductStepsTableAnnotationComposer
             ));
     return composer;
   }
+
+  $$MachinesTableAnnotationComposer get maschineId {
+    final $$MachinesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.maschineId,
+        referencedTable: $db.machines,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$MachinesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.machines,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+
+  Expression<T> productStepParametersRefs<T extends Object>(
+      Expression<T> Function($$ProductStepParametersTableAnnotationComposer a)
+          f) {
+    final $$ProductStepParametersTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.productStepParameters,
+            getReferencedColumn: (t) => t.stepId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$ProductStepParametersTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.productStepParameters,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$ProductStepsTableTableManager extends RootTableManager<
@@ -9442,7 +10980,8 @@ class $$ProductStepsTableTableManager extends RootTableManager<
     $$ProductStepsTableUpdateCompanionBuilder,
     (ProductStep, $$ProductStepsTableReferences),
     ProductStep,
-    PrefetchHooks Function({bool productId})> {
+    PrefetchHooks Function(
+        {bool productId, bool maschineId, bool productStepParametersRefs})> {
   $$ProductStepsTableTableManager(_$AppDatabase db, $ProductStepsTable table)
       : super(TableManagerState(
           db: db,
@@ -9458,6 +10997,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             Value<String> productId = const Value.absent(),
             Value<int> reihenfolge = const Value.absent(),
             Value<String> abteilung = const Value.absent(),
+            Value<String?> maschineId = const Value.absent(),
+            Value<String?> prozessschritt = const Value.absent(),
+            Value<double?> mengeKg = const Value.absent(),
             Value<double> basisMengeKg = const Value.absent(),
             Value<double> basisDauerMinuten = const Value.absent(),
             Value<double?> fixZeitMinuten = const Value.absent(),
@@ -9486,6 +11028,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             productId: productId,
             reihenfolge: reihenfolge,
             abteilung: abteilung,
+            maschineId: maschineId,
+            prozessschritt: prozessschritt,
+            mengeKg: mengeKg,
             basisMengeKg: basisMengeKg,
             basisDauerMinuten: basisDauerMinuten,
             fixZeitMinuten: fixZeitMinuten,
@@ -9514,6 +11059,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             required String productId,
             required int reihenfolge,
             required String abteilung,
+            Value<String?> maschineId = const Value.absent(),
+            Value<String?> prozessschritt = const Value.absent(),
+            Value<double?> mengeKg = const Value.absent(),
             required double basisMengeKg,
             required double basisDauerMinuten,
             Value<double?> fixZeitMinuten = const Value.absent(),
@@ -9542,6 +11090,9 @@ class $$ProductStepsTableTableManager extends RootTableManager<
             productId: productId,
             reihenfolge: reihenfolge,
             abteilung: abteilung,
+            maschineId: maschineId,
+            prozessschritt: prozessschritt,
+            mengeKg: mengeKg,
             basisMengeKg: basisMengeKg,
             basisDauerMinuten: basisDauerMinuten,
             fixZeitMinuten: fixZeitMinuten,
@@ -9571,10 +11122,15 @@ class $$ProductStepsTableTableManager extends RootTableManager<
                     $$ProductStepsTableReferences(db, table, e)
                   ))
               .toList(),
-          prefetchHooksCallback: ({productId = false}) {
+          prefetchHooksCallback: (
+              {productId = false,
+              maschineId = false,
+              productStepParametersRefs = false}) {
             return PrefetchHooks(
               db: db,
-              explicitlyWatchedTables: [],
+              explicitlyWatchedTables: [
+                if (productStepParametersRefs) db.productStepParameters
+              ],
               addJoins: <
                   T extends TableManagerState<
                       dynamic,
@@ -9598,11 +11154,35 @@ class $$ProductStepsTableTableManager extends RootTableManager<
                         $$ProductStepsTableReferences._productIdTable(db).id,
                   ) as T;
                 }
+                if (maschineId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.maschineId,
+                    referencedTable:
+                        $$ProductStepsTableReferences._maschineIdTable(db),
+                    referencedColumn:
+                        $$ProductStepsTableReferences._maschineIdTable(db).id,
+                  ) as T;
+                }
 
                 return state;
               },
               getPrefetchedDataCallback: (items) async {
-                return [];
+                return [
+                  if (productStepParametersRefs)
+                    await $_getPrefetchedData<ProductStep, $ProductStepsTable,
+                            ProductStepParameter>(
+                        currentTable: table,
+                        referencedTable: $$ProductStepsTableReferences
+                            ._productStepParametersRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductStepsTableReferences(db, table, p0)
+                                .productStepParametersRefs,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.stepId == item.id),
+                        typedResults: items)
+                ];
               },
             );
           },
@@ -9620,7 +11200,368 @@ typedef $$ProductStepsTableProcessedTableManager = ProcessedTableManager<
     $$ProductStepsTableUpdateCompanionBuilder,
     (ProductStep, $$ProductStepsTableReferences),
     ProductStep,
-    PrefetchHooks Function({bool productId})>;
+    PrefetchHooks Function(
+        {bool productId, bool maschineId, bool productStepParametersRefs})>;
+typedef $$ProductStepParametersTableCreateCompanionBuilder
+    = ProductStepParametersCompanion Function({
+  required String id,
+  required String stepId,
+  required String parameterGruppe,
+  required String parameterName,
+  Value<String?> wert,
+  Value<int> reihenfolge,
+  Value<bool> istCustom,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$ProductStepParametersTableUpdateCompanionBuilder
+    = ProductStepParametersCompanion Function({
+  Value<String> id,
+  Value<String> stepId,
+  Value<String> parameterGruppe,
+  Value<String> parameterName,
+  Value<String?> wert,
+  Value<int> reihenfolge,
+  Value<bool> istCustom,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+final class $$ProductStepParametersTableReferences extends BaseReferences<
+    _$AppDatabase, $ProductStepParametersTable, ProductStepParameter> {
+  $$ProductStepParametersTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProductStepsTable _stepIdTable(_$AppDatabase db) =>
+      db.productSteps.createAlias($_aliasNameGenerator(
+          db.productStepParameters.stepId, db.productSteps.id));
+
+  $$ProductStepsTableProcessedTableManager get stepId {
+    final $_column = $_itemColumn<String>('step_id')!;
+
+    final manager = $$ProductStepsTableTableManager($_db, $_db.productSteps)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_stepIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$ProductStepParametersTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductStepParametersTable> {
+  $$ProductStepParametersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parameterGruppe => $composableBuilder(
+      column: $table.parameterGruppe,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get wert => $composableBuilder(
+      column: $table.wert, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istCustom => $composableBuilder(
+      column: $table.istCustom, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+
+  $$ProductStepsTableFilterComposer get stepId {
+    final $$ProductStepsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.stepId,
+        referencedTable: $db.productSteps,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductStepsTableFilterComposer(
+              $db: $db,
+              $table: $db.productSteps,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductStepParametersTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductStepParametersTable> {
+  $$ProductStepParametersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get parameterGruppe => $composableBuilder(
+      column: $table.parameterGruppe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get parameterName => $composableBuilder(
+      column: $table.parameterName,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get wert => $composableBuilder(
+      column: $table.wert, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get istCustom => $composableBuilder(
+      column: $table.istCustom, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProductStepsTableOrderingComposer get stepId {
+    final $$ProductStepsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.stepId,
+        referencedTable: $db.productSteps,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductStepsTableOrderingComposer(
+              $db: $db,
+              $table: $db.productSteps,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductStepParametersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductStepParametersTable> {
+  $$ProductStepParametersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get parameterGruppe => $composableBuilder(
+      column: $table.parameterGruppe, builder: (column) => column);
+
+  GeneratedColumn<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => column);
+
+  GeneratedColumn<String> get wert =>
+      $composableBuilder(column: $table.wert, builder: (column) => column);
+
+  GeneratedColumn<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => column);
+
+  GeneratedColumn<bool> get istCustom =>
+      $composableBuilder(column: $table.istCustom, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  $$ProductStepsTableAnnotationComposer get stepId {
+    final $$ProductStepsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.stepId,
+        referencedTable: $db.productSteps,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductStepsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.productSteps,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductStepParametersTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProductStepParametersTable,
+    ProductStepParameter,
+    $$ProductStepParametersTableFilterComposer,
+    $$ProductStepParametersTableOrderingComposer,
+    $$ProductStepParametersTableAnnotationComposer,
+    $$ProductStepParametersTableCreateCompanionBuilder,
+    $$ProductStepParametersTableUpdateCompanionBuilder,
+    (ProductStepParameter, $$ProductStepParametersTableReferences),
+    ProductStepParameter,
+    PrefetchHooks Function({bool stepId})> {
+  $$ProductStepParametersTableTableManager(
+      _$AppDatabase db, $ProductStepParametersTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductStepParametersTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductStepParametersTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductStepParametersTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> stepId = const Value.absent(),
+            Value<String> parameterGruppe = const Value.absent(),
+            Value<String> parameterName = const Value.absent(),
+            Value<String?> wert = const Value.absent(),
+            Value<int> reihenfolge = const Value.absent(),
+            Value<bool> istCustom = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductStepParametersCompanion(
+            id: id,
+            stepId: stepId,
+            parameterGruppe: parameterGruppe,
+            parameterName: parameterName,
+            wert: wert,
+            reihenfolge: reihenfolge,
+            istCustom: istCustom,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String stepId,
+            required String parameterGruppe,
+            required String parameterName,
+            Value<String?> wert = const Value.absent(),
+            Value<int> reihenfolge = const Value.absent(),
+            Value<bool> istCustom = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductStepParametersCompanion.insert(
+            id: id,
+            stepId: stepId,
+            parameterGruppe: parameterGruppe,
+            parameterName: parameterName,
+            wert: wert,
+            reihenfolge: reihenfolge,
+            istCustom: istCustom,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$ProductStepParametersTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({stepId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (stepId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.stepId,
+                    referencedTable:
+                        $$ProductStepParametersTableReferences._stepIdTable(db),
+                    referencedColumn: $$ProductStepParametersTableReferences
+                        ._stepIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$ProductStepParametersTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $ProductStepParametersTable,
+        ProductStepParameter,
+        $$ProductStepParametersTableFilterComposer,
+        $$ProductStepParametersTableOrderingComposer,
+        $$ProductStepParametersTableAnnotationComposer,
+        $$ProductStepParametersTableCreateCompanionBuilder,
+        $$ProductStepParametersTableUpdateCompanionBuilder,
+        (ProductStepParameter, $$ProductStepParametersTableReferences),
+        ProductStepParameter,
+        PrefetchHooks Function({bool stepId})>;
 typedef $$RawMaterialsTableCreateCompanionBuilder = RawMaterialsCompanion
     Function({
   required String id,
@@ -12634,8 +14575,12 @@ class $AppDatabaseManager {
   $AppDatabaseManager(this._db);
   $$ProductsTableTableManager get products =>
       $$ProductsTableTableManager(_db, _db.products);
+  $$MachinesTableTableManager get machines =>
+      $$MachinesTableTableManager(_db, _db.machines);
   $$ProductStepsTableTableManager get productSteps =>
       $$ProductStepsTableTableManager(_db, _db.productSteps);
+  $$ProductStepParametersTableTableManager get productStepParameters =>
+      $$ProductStepParametersTableTableManager(_db, _db.productStepParameters);
   $$RawMaterialsTableTableManager get rawMaterials =>
       $$RawMaterialsTableTableManager(_db, _db.rawMaterials);
   $$ProductRawMaterialsTableTableManager get productRawMaterials =>

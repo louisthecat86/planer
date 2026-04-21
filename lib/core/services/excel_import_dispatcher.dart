@@ -7,7 +7,6 @@ import '../database/database.dart';
 import 'excel_import_service.dart' as legacy;
 import 'excel_import_service_v3.dart';
 
-/// Erkannte Vorlagen-Version einer importierten Excel-Datei.
 enum VorlagenVersion {
   v3,
   legacy,
@@ -94,8 +93,6 @@ class ExcelImportDispatcher {
     return _erkenneVersionFromBytes(bytes);
   }
 
-  /// Sammelt Sheet-Namen aus mehreren Quellen der excel-Package, weil
-  /// einige Versionen `.tables` lazy initialisieren.
   Set<String> _collectSheetNames(Excel excel) {
     final names = <String>{};
     try {
@@ -114,21 +111,14 @@ class ExcelImportDispatcher {
   VorlagenVersion _erkenneVersionFromBytes(Uint8List bytes) {
     try {
       final excel = Excel.decodeBytes(bytes);
-      final sheetNames = _collectSheetNames(excel);
-
-      // DEBUG — lässt Sheet-Namen im Log erscheinen, hilft bei Diagnose
-      // ignore: avoid_print
-      print('[ExcelImportDispatcher] Sheets: $sheetNames');
-
       if (ExcelImportServiceV3.istV3Format(excel)) {
         return VorlagenVersion.v3;
       }
-
+      final sheetNames = _collectSheetNames(excel);
       if (sheetNames.contains('Übersicht') &&
           !sheetNames.contains('Anlagen-Katalog')) {
         return VorlagenVersion.legacy;
       }
-
       for (final sheet in excel.tables.values) {
         for (final row in sheet.rows.take(50)) {
           for (final cell in row.take(5)) {
@@ -146,17 +136,31 @@ class ExcelImportDispatcher {
     }
   }
 
+  /// Liefert die Sheet-Namen sortiert für die Diagnose-Anzeige.
+  List<String> _diagnoseSheets(Uint8List bytes) {
+    try {
+      final excel = Excel.decodeBytes(bytes);
+      return _collectSheetNames(excel).toList()..sort();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<UnifiedImportPreview> preview(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
     final version = _erkenneVersionFromBytes(bytes);
+    final sheetNames = _diagnoseSheets(bytes);
+    final diagnose =
+        'DIAGNOSE: ${sheetNames.length} Sheets gefunden: ${sheetNames.map((s) => '"$s"').join(", ")}';
 
     if (version == VorlagenVersion.unbekannt) {
-      return const UnifiedImportPreview(
+      return UnifiedImportPreview(
         version: VorlagenVersion.unbekannt,
         fehler: [
           'Das Format der Datei konnte nicht erkannt werden. '
               'Erwartet wird entweder die v3-Vorlage (mit Sheet "Anlagen-Katalog") '
               'oder die alte Phase-B-Vorlage (mit "== STAMMDATEN ==" Markern).',
+          diagnose,
         ],
       );
     }
@@ -177,8 +181,19 @@ class ExcelImportDispatcher {
       );
     }
 
+    // Legacy
     final svc = legacy.ExcelImportService(_db);
     final p = await svc.preview(filePath);
+    // Legacy-Parser fügt die Diagnose bei Fehlern mit an, damit du siehst
+    // warum er nichts gefunden hat (z.B. weil es eigentlich eine v3-Datei ist)
+    final fehler = List<String>.from(p.fehler);
+    if (p.fehler.isNotEmpty || (p.artikelNeu == 0 && p.artikelAktualisiert == 0)) {
+      fehler.add(diagnose);
+      fehler.add(
+        'HINWEIS: Falls dies eine v3-Vorlage sein soll, prüfe ob das Sheet '
+        '"Anlagen-Katalog" in der Liste oben auftaucht.',
+      );
+    }
     return UnifiedImportPreview(
       version: VorlagenVersion.legacy,
       artikelNeu: p.artikelNeu,
@@ -188,7 +203,7 @@ class ExcelImportDispatcher {
       rohwaren: p.rohwaren,
       historien: p.historien,
       warnungen: p.warnungen,
-      fehler: p.fehler,
+      fehler: fehler,
     );
   }
 
