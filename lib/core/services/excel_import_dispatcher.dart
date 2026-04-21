@@ -136,22 +136,69 @@ class ExcelImportDispatcher {
     }
   }
 
-  /// Liefert die Sheet-Namen sortiert für die Diagnose-Anzeige.
-  List<String> _diagnoseSheets(Uint8List bytes) {
-    try {
-      final excel = Excel.decodeBytes(bytes);
-      return _collectSheetNames(excel).toList()..sort();
-    } catch (_) {
-      return [];
+  /// Diagnose: Versucht die Datei zu öffnen und liefert detaillierte
+  /// Informationen zurück — Dateigröße, ob decode funktioniert, welche
+  /// Fehlermeldung kommt, wie viele Sheets gefunden werden.
+  List<String> _diagnose(Uint8List bytes, String filePath) {
+    final out = <String>[];
+    out.add('DIAGNOSE: Datei-Pfad: $filePath');
+    out.add('DIAGNOSE: Dateigröße: ${bytes.length} Bytes '
+        '(${(bytes.length / 1024).toStringAsFixed(1)} KB)');
+
+    // Magic bytes prüfen — .xlsx muss mit PK (ZIP-Header) starten
+    if (bytes.length >= 2) {
+      final b0 = bytes[0];
+      final b1 = bytes[1];
+      if (b0 == 0x50 && b1 == 0x4B) {
+        out.add('DIAGNOSE: ZIP-Header OK (PK-Signatur gefunden)');
+      } else {
+        out.add('DIAGNOSE: ⚠ KEINE ZIP-Signatur — Datei ist evtl. '
+            'nicht .xlsx, sondern .xls oder beschädigt. '
+            'Erste Bytes: ${b0.toRadixString(16)} ${b1.toRadixString(16)}');
+        return out;
+      }
     }
+
+    Excel? excel;
+    try {
+      excel = Excel.decodeBytes(bytes);
+      out.add('DIAGNOSE: Excel.decodeBytes erfolgreich');
+    } catch (e, st) {
+      out.add('DIAGNOSE: ❌ Excel.decodeBytes wirft: $e');
+      out.add('DIAGNOSE: Stack (erste 500 Zeichen): '
+          '${st.toString().substring(0, st.toString().length > 500 ? 500 : st.toString().length)}');
+      return out;
+    }
+
+    final tablesKeys = <String>[];
+    try {
+      tablesKeys.addAll(excel.tables.keys);
+      out.add('DIAGNOSE: excel.tables.keys hat ${tablesKeys.length} Einträge: '
+          '${tablesKeys.map((s) => '"$s"').join(", ")}');
+    } catch (e) {
+      out.add('DIAGNOSE: ❌ excel.tables wirft: $e');
+    }
+
+    try {
+      // ignore: avoid_dynamic_calls
+      final dyn = (excel as dynamic).sheets;
+      if (dyn is Map) {
+        final names = dyn.keys.map((k) => k.toString()).toList();
+        out.add('DIAGNOSE: excel.sheets hat ${names.length} Einträge: '
+            '${names.map((s) => '"$s"').join(", ")}');
+      } else {
+        out.add('DIAGNOSE: excel.sheets ist keine Map (Typ: ${dyn.runtimeType})');
+      }
+    } catch (e) {
+      out.add('DIAGNOSE: excel.sheets nicht verfügbar: $e');
+    }
+
+    return out;
   }
 
   Future<UnifiedImportPreview> preview(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
     final version = _erkenneVersionFromBytes(bytes);
-    final sheetNames = _diagnoseSheets(bytes);
-    final diagnose =
-        'DIAGNOSE: ${sheetNames.length} Sheets gefunden: ${sheetNames.map((s) => '"$s"').join(", ")}';
 
     if (version == VorlagenVersion.unbekannt) {
       return UnifiedImportPreview(
@@ -160,7 +207,7 @@ class ExcelImportDispatcher {
           'Das Format der Datei konnte nicht erkannt werden. '
               'Erwartet wird entweder die v3-Vorlage (mit Sheet "Anlagen-Katalog") '
               'oder die alte Phase-B-Vorlage (mit "== STAMMDATEN ==" Markern).',
-          diagnose,
+          ..._diagnose(bytes, filePath),
         ],
       );
     }
@@ -184,14 +231,12 @@ class ExcelImportDispatcher {
     // Legacy
     final svc = legacy.ExcelImportService(_db);
     final p = await svc.preview(filePath);
-    // Legacy-Parser fügt die Diagnose bei Fehlern mit an, damit du siehst
-    // warum er nichts gefunden hat (z.B. weil es eigentlich eine v3-Datei ist)
     final fehler = List<String>.from(p.fehler);
-    if (p.fehler.isNotEmpty || (p.artikelNeu == 0 && p.artikelAktualisiert == 0)) {
-      fehler.add(diagnose);
+    if (p.artikelNeu == 0 && p.artikelAktualisiert == 0) {
+      fehler.addAll(_diagnose(bytes, filePath));
       fehler.add(
         'HINWEIS: Falls dies eine v3-Vorlage sein soll, prüfe ob das Sheet '
-        '"Anlagen-Katalog" in der Liste oben auftaucht.',
+        '"Anlagen-Katalog" in der Diagnose oben auftaucht.',
       );
     }
     return UnifiedImportPreview(
