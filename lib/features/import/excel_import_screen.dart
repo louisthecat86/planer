@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
-import '../../core/services/excel_import_service.dart';
+import '../../core/services/excel_import_dispatcher.dart';
 import '../articles/article_list_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Excel-Import Screen
+// Excel-Import Screen (v3-fähig, via Dispatcher)
 // ---------------------------------------------------------------------------
 
 class ExcelImportScreen extends ConsumerStatefulWidget {
@@ -20,8 +20,8 @@ class ExcelImportScreen extends ConsumerStatefulWidget {
 class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
   String? _filePath;
   String? _fileName;
-  ImportPreview? _preview;
-  ImportResult? _result;
+  UnifiedImportPreview? _preview;
+  UnifiedImportResult? _result;
   bool _isLoading = false;
   String? _error;
 
@@ -60,8 +60,8 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
     });
 
     try {
-      final service = ExcelImportService(ref.read(databaseProvider));
-      final preview = await service.preview(_filePath!);
+      final dispatcher = ExcelImportDispatcher(ref.read(databaseProvider));
+      final preview = await dispatcher.preview(_filePath!);
       if (mounted) {
         setState(() {
           _preview = preview;
@@ -90,10 +90,9 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
     });
 
     try {
-      final service = ExcelImportService(ref.read(databaseProvider));
-      final result = await service.importFile(_filePath!);
+      final dispatcher = ExcelImportDispatcher(ref.read(databaseProvider));
+      final result = await dispatcher.importFile(_filePath!);
       if (mounted) {
-        // Artikelliste invalidieren, damit neue Artikel sichtbar werden
         ref.invalidate(articlesProvider);
         setState(() {
           _result = result;
@@ -137,9 +136,8 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
                 Expanded(
                   child: Text(
                     'Importiere Artikel-Stammdaten aus einer Excel-Datei. '
-                    'Die Datei sollte Sheets für Artikel, Schritte, '
-                    'Rezeptur, Rohwaren und optional '
-                    'Produktionshistorie enthalten.',
+                    'Unterstützt werden: v3-Vorlage (mit Anlagen-Katalog und '
+                    'Kategorie-Blaupausen) sowie die alte Phase-B-Vorlage.',
                     style: TextStyle(
                       fontSize: 13,
                       color: colors.onPrimaryContainer,
@@ -161,13 +159,11 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Ladeanzeige
           if (_isLoading) ...[
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 20),
           ],
 
-          // Fehler
           if (_error != null) ...[
             _MessageCard(
               icon: Icons.error,
@@ -178,7 +174,6 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
             const SizedBox(height: 16),
           ],
 
-          // Vorschau
           if (_preview != null && _result == null) ...[
             _PreviewCard(preview: _preview!),
             const SizedBox(height: 16),
@@ -203,7 +198,6 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
               ),
           ],
 
-          // Ergebnis
           if (_result != null) ...[
             _ResultCard(result: _result!),
           ],
@@ -220,11 +214,12 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
 class _PreviewCard extends StatelessWidget {
   const _PreviewCard({required this.preview});
 
-  final ImportPreview preview;
+  final UnifiedImportPreview preview;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final isV3 = preview.version == VorlagenVersion.v3;
 
     return Card(
       child: Padding(
@@ -243,14 +238,40 @@ class _PreviewCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                const Spacer(),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isV3
+                        ? Colors.green.withValues(alpha: 0.15)
+                        : Colors.blueGrey.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    isV3 ? 'Format: v3' : 'Format: Legacy',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isV3
+                          ? Colors.green.shade700
+                          : Colors.blueGrey.shade700,
+                    ),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 12),
             _countRow('Neue Artikel', preview.artikelNeu),
             _countRow('Aktualisierte Artikel', preview.artikelAktualisiert),
             _countRow('Produktions-Schritte', preview.schritte),
-            _countRow('Rezeptur-Einträge', preview.rezepturen),
-            _countRow('Rohwaren', preview.rohwaren),
+            if (isV3) ...[
+              _countRow('Anlagen (Katalog)', preview.maschinen),
+              _countRow('Schritt-Parameter', preview.parameter),
+            ] else ...[
+              _countRow('Rezeptur-Einträge', preview.rezepturen),
+              _countRow('Rohwaren', preview.rohwaren),
+            ],
             _countRow('Historische Messwerte', preview.historien),
 
             if (preview.warnungen.isNotEmpty) ...[
@@ -335,16 +356,15 @@ class _PreviewCard extends StatelessWidget {
 class _ResultCard extends StatelessWidget {
   const _ResultCard({required this.result});
 
-  final ImportResult result;
+  final UnifiedImportResult result;
 
   @override
   Widget build(BuildContext context) {
     final success = !result.hatFehler;
+    final isV3 = result.version == VorlagenVersion.v3;
 
     return Card(
-      color: success
-          ? Colors.green.shade50
-          : Colors.red.shade50,
+      color: success ? Colors.green.shade50 : Colors.red.shade50,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -362,7 +382,9 @@ class _ResultCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: success ? Colors.green.shade800 : Colors.red.shade800,
+                    color: success
+                        ? Colors.green.shade800
+                        : Colors.red.shade800,
                   ),
                 ),
               ],
@@ -371,8 +393,13 @@ class _ResultCard extends StatelessWidget {
             _countRow('Neue Artikel', result.artikelNeu),
             _countRow('Aktualisierte Artikel', result.artikelAktualisiert),
             _countRow('Schritte', result.schritteImportiert),
-            _countRow('Rezepturen', result.rezepturenImportiert),
-            _countRow('Rohwaren', result.rohwarenImportiert),
+            if (isV3) ...[
+              _countRow('Anlagen importiert', result.maschinenImportiert),
+              _countRow('Schritt-Parameter', result.parameterImportiert),
+            ] else ...[
+              _countRow('Rezepturen', result.rezepturenImportiert),
+              _countRow('Rohwaren', result.rohwarenImportiert),
+            ],
             _countRow('Historische Messwerte', result.historienVerarbeitet),
 
             if (result.warnungen.isNotEmpty) ...[

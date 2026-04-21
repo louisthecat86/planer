@@ -1,8 +1,10 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
+import 'tables/machines.dart';
 import 'tables/order_list_items.dart';
 import 'tables/product_raw_materials.dart';
+import 'tables/product_step_parameters.dart';
 import 'tables/product_steps.dart';
 import 'tables/production_runs.dart';
 import 'tables/production_tasks.dart';
@@ -25,6 +27,8 @@ part 'database.g.dart';
   tables: [
     Products,
     ProductSteps,
+    ProductStepParameters,
+    Machines,
     RawMaterials,
     ProductRawMaterials,
     RawMaterialBatches,
@@ -41,7 +45,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -140,6 +144,39 @@ class AppDatabase extends _$AppDatabase {
               'ON products(produktgruppe)',
             );
           }
+
+          // ─── v3 → v4: Anlagen-Katalog + flexible Schritt-Parameter ───
+          if (from < 4) {
+            // Neue Tabellen anlegen (drift-generierte Statements)
+            await m.createTable(machines);
+            await m.createTable(productStepParameters);
+
+            // product_steps: FK auf machines + Freitext-Felder für v3-Import
+            // Die Spalte maschine_id existiert nur in Schema v4+; in SQLite
+            // kann man FKs über ALTER TABLE nicht hinzufügen, daher nur als
+            // TEXT-Spalte. Foreign-Key-Enforcement erfolgt per PRAGMA.
+            await _addColumnIfNotExists('product_steps', 'maschine_id', 'TEXT');
+            await _addColumnIfNotExists('product_steps', 'prozessschritt', 'TEXT');
+            await _addColumnIfNotExists('product_steps', 'menge_kg', 'REAL');
+
+            // Indizes
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_machines_abteilung '
+              'ON machines(abteilung)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_machines_name '
+              'ON machines(name)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_step_params_step_id '
+              'ON product_step_parameters(step_id, reihenfolge)',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_step_params_name '
+              'ON product_step_parameters(parameter_name)',
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -175,6 +212,23 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_order_list_woche '
       'ON order_list_items(woche_start_datum)',
+    );
+    // v4-Indizes
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_machines_abteilung '
+      'ON machines(abteilung)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_machines_name '
+      'ON machines(name)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_step_params_step_id '
+      'ON product_step_parameters(step_id, reihenfolge)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_step_params_name '
+      'ON product_step_parameters(parameter_name)',
     );
   }
 

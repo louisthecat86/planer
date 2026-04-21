@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+import 'machines.dart';
 import 'products.dart';
 
 /// Abteilungs-Schritte, die ein Produkt durchläuft — Herzkammer der Lernlogik.
@@ -25,6 +26,23 @@ class ProductSteps extends Table {
 
   /// Abteilung, die diesen Schritt ausführt — gespeichert als [Abteilung.dbValue].
   TextColumn get abteilung => text()();
+
+  // --- v3-Erweiterung: Maschinen-Referenz + Prozessschritt-Text ---
+
+  /// FK auf [Machines]. NULL erlaubt für bestehende Daten (Legacy-Import)
+  /// und Schritte, bei denen keine Anlage zugeordnet ist (z.B. reine
+  /// Handarbeit). Beim v3-Import wird dies gegen den Anlagen-Katalog
+  /// aufgelöst.
+  TextColumn get maschineId => text().nullable().references(Machines, #id)();
+
+  /// Freitext-Beschreibung des Schritts aus der v3-Vorlage (Zeile
+  /// „Prozessschritt"), z.B. „Portionieren / Füllen", „Braten",
+  /// „Abkühlen im Dampftunnel".
+  TextColumn get prozessschritt => text().nullable()();
+
+  /// Menge in kg aus der v3-Vorlage (Zeile „Menge (kg)"). Optional,
+  /// separate Angabe pro Schritt zusätzlich zur [basisMengeKg].
+  RealColumn get mengeKg => real().nullable()();
 
   // --- Zeitkorridor (lernend, Mittelwerte über historische Runs) ---
 
@@ -66,12 +84,15 @@ class ProductSteps extends Table {
   RealColumn get kerntemperaturZiel => real().nullable()();
   RealColumn get raumtemperaturMax => real().nullable()();
 
-  // --- Maschine ---
+  // --- Maschine (Legacy-Freitextfeld, bleibt für Abwärtskompatibilität) ---
 
-  /// Freitext-Referenz auf die Maschine.
+  /// Freitext-Referenz auf die Maschine (Legacy).
+  /// Seit v4 bevorzugt über [maschineId] auf [Machines].
   TextColumn get maschine => text().nullable()();
 
-  /// JSON mit Maschineneinstellungen.
+  /// JSON mit Maschineneinstellungen (Legacy).
+  /// Seit v4 bevorzugt über [ProductStepParameters] als strukturierte
+  /// Zeilen.
   TextColumn get maschinenEinstellungenJson => text().nullable()();
 
   // --- Programm-spezifisch (Phase A-Erweiterung) ---
