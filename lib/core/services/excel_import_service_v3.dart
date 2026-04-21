@@ -251,18 +251,37 @@ class ExcelImportServiceV3 {
     'Verpackung': 'verpackung',
   };
 
+  /// Robuste Sheet-Name-Sammlung: einige excel-Package-Versionen liefern
+  /// `excel.tables` erst lazy, deshalb versuchen wir mehrere Quellen.
+  static Set<String> _collectSheetNames(Excel excel) {
+    final names = <String>{};
+    try {
+      names.addAll(excel.tables.keys);
+    } catch (_) {
+      // ignore
+    }
+    // Manche Versionen haben zusätzlich .sheets (gleicher Inhalt, aber
+    // nicht-lazy initialisiert)
+    try {
+      // ignore: avoid_dynamic_calls
+      final dyn = (excel as dynamic).sheets;
+      if (dyn is Map) {
+        names.addAll(dyn.keys.map((k) => k.toString()));
+      }
+    } catch (_) {
+      // ignore
+    }
+    return names;
+  }
+
   static bool istV3Format(Excel excel) {
-    final sheetNames = excel.tables.keys.toSet();
+    final sheetNames = _collectSheetNames(excel);
     if (!sheetNames.contains('Anlagen-Katalog')) return false;
-    final blaupausenGefunden = _metaSheets
-        .where(
-          (s) =>
-              s != 'Übersicht' &&
-              s != 'Anleitung' &&
-              s != 'Anlagen-Katalog',
-        )
-        .any(sheetNames.contains);
-    return blaupausenGefunden;
+    final blaupausen = _metaSheets.where(
+      (s) =>
+          s != 'Übersicht' && s != 'Anleitung' && s != 'Anlagen-Katalog',
+    );
+    return blaupausen.any(sheetNames.contains);
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -295,9 +314,11 @@ class ExcelImportServiceV3 {
     int parameter = 0;
     int historien = 0;
 
-    for (final sheetName in excel.tables.keys) {
+    final sheetNames = _collectSheetNames(excel);
+    for (final sheetName in sheetNames) {
       if (_metaSheets.contains(sheetName)) continue;
-      final sheet = excel.tables[sheetName]!;
+      final sheet = excel.tables[sheetName];
+      if (sheet == null) continue;
       final parsed = _parseArtikelSheet(
         sheet,
         sheetName,
@@ -353,9 +374,12 @@ class ExcelImportServiceV3 {
 
     final maschinenNamenSet = parsedMaschinen.map((m) => m.name).toSet();
     final parsedArtikel = <_ParsedProduct>[];
-    for (final sheetName in excel.tables.keys) {
+
+    final sheetNames = _collectSheetNames(excel);
+    for (final sheetName in sheetNames) {
       if (_metaSheets.contains(sheetName)) continue;
-      final sheet = excel.tables[sheetName]!;
+      final sheet = excel.tables[sheetName];
+      if (sheet == null) continue;
       final parsed = _parseArtikelSheet(
         sheet,
         sheetName,

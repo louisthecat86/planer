@@ -9,18 +9,11 @@ import 'excel_import_service_v3.dart';
 
 /// Erkannte Vorlagen-Version einer importierten Excel-Datei.
 enum VorlagenVersion {
-  /// v3: Neue Struktur (stammdaten_vorlage_v3.xlsx).
-  /// Erkennbar an Sheets "Anlagen-Katalog" + Kategorie-Blaupausen.
   v3,
-
-  /// Legacy: Alte Phase-B-Vorlage mit "== STAMMDATEN ==" etc.
   legacy,
-
-  /// Format nicht erkennbar.
   unbekannt,
 }
 
-/// Vereinte Vorschau-Struktur, die beide Parser-Typen darstellt.
 class UnifiedImportPreview {
   const UnifiedImportPreview({
     required this.version,
@@ -40,16 +33,10 @@ class UnifiedImportPreview {
   final int artikelNeu;
   final int artikelAktualisiert;
   final int schritte;
-
-  // v3-spezifisch
   final int parameter;
   final int maschinen;
-
-  // Legacy-spezifisch
   final int rezepturen;
   final int rohwaren;
-
-  // Beide
   final int historien;
   final List<String> warnungen;
   final List<String> fehler;
@@ -66,7 +53,6 @@ class UnifiedImportPreview {
       historien == 0;
 }
 
-/// Vereintes Import-Ergebnis.
 class UnifiedImportResult {
   const UnifiedImportResult({
     required this.version,
@@ -86,13 +72,10 @@ class UnifiedImportResult {
   final int artikelNeu;
   final int artikelAktualisiert;
   final int schritteImportiert;
-
   final int parameterImportiert;
   final int maschinenImportiert;
-
   final int rezepturenImportiert;
   final int rohwarenImportiert;
-
   final int historienVerarbeitet;
   final List<String> warnungen;
   final List<String> fehler;
@@ -101,33 +84,51 @@ class UnifiedImportResult {
   int get artikelGesamt => artikelNeu + artikelAktualisiert;
 }
 
-/// Dispatcher, der die Datei öffnet, das Format erkennt und an den
-/// passenden Parser weitergibt. Vereinheitlicht die Ergebnis-Typen.
 class ExcelImportDispatcher {
   ExcelImportDispatcher(this._db);
 
   final AppDatabase _db;
 
-  /// Erkennt das Format der Datei ohne sie zu importieren.
   Future<VorlagenVersion> erkenneVersion(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
     return _erkenneVersionFromBytes(bytes);
   }
 
+  /// Sammelt Sheet-Namen aus mehreren Quellen der excel-Package, weil
+  /// einige Versionen `.tables` lazy initialisieren.
+  Set<String> _collectSheetNames(Excel excel) {
+    final names = <String>{};
+    try {
+      names.addAll(excel.tables.keys);
+    } catch (_) {}
+    try {
+      // ignore: avoid_dynamic_calls
+      final dyn = (excel as dynamic).sheets;
+      if (dyn is Map) {
+        names.addAll(dyn.keys.map((k) => k.toString()));
+      }
+    } catch (_) {}
+    return names;
+  }
+
   VorlagenVersion _erkenneVersionFromBytes(Uint8List bytes) {
     try {
       final excel = Excel.decodeBytes(bytes);
+      final sheetNames = _collectSheetNames(excel);
+
+      // DEBUG — lässt Sheet-Namen im Log erscheinen, hilft bei Diagnose
+      // ignore: avoid_print
+      print('[ExcelImportDispatcher] Sheets: $sheetNames');
+
       if (ExcelImportServiceV3.istV3Format(excel)) {
         return VorlagenVersion.v3;
       }
-      // Legacy-Erkennung: Sheet "Übersicht" vorhanden UND kein Anlagen-Katalog
-      // ODER: irgendein Sheet enthält "== STAMMDATEN ==" als Zell-Wert.
-      final sheetNames = excel.tables.keys.toSet();
+
       if (sheetNames.contains('Übersicht') &&
           !sheetNames.contains('Anlagen-Katalog')) {
         return VorlagenVersion.legacy;
       }
-      // Fallback-Heuristik: Suche nach STAMMDATEN-Marker
+
       for (final sheet in excel.tables.values) {
         for (final row in sheet.rows.take(50)) {
           for (final cell in row.take(5)) {
@@ -176,7 +177,6 @@ class ExcelImportDispatcher {
       );
     }
 
-    // Legacy
     final svc = legacy.ExcelImportService(_db);
     final p = await svc.preview(filePath);
     return UnifiedImportPreview(
