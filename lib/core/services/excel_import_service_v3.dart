@@ -247,30 +247,25 @@ class ExcelImportServiceV3 {
     'Reifekammer': 'wurstkueche',
     'Pökelei': 'wurstkueche',
     'Aufschnitt': 'schneideabteilung',
+    'Schneideabteilung': 'schneideabteilung',
     'Sous-Vide': 'wurstkueche',
     'Verpackung': 'verpackung',
+    'Verpackung Tef1': 'verpackung_tef1',
+    'Verpackung TEF1': 'verpackung_tef1',
   };
 
-  /// Robuste Sheet-Name-Sammlung: einige excel-Package-Versionen liefern
-  /// `excel.tables` erst lazy, deshalb versuchen wir mehrere Quellen.
   static Set<String> _collectSheetNames(Excel excel) {
     final names = <String>{};
     try {
       names.addAll(excel.tables.keys);
-    } catch (_) {
-      // ignore
-    }
-    // Manche Versionen haben zusätzlich .sheets (gleicher Inhalt, aber
-    // nicht-lazy initialisiert)
+    } catch (_) {}
     try {
       // ignore: avoid_dynamic_calls
       final dyn = (excel as dynamic).sheets;
       if (dyn is Map) {
         names.addAll(dyn.keys.map((k) => k.toString()));
       }
-    } catch (_) {
-      // ignore
-    }
+    } catch (_) {}
     return names;
   }
 
@@ -609,6 +604,24 @@ class ExcelImportServiceV3 {
     return result;
   }
 
+  /// Sucht eine Zelle in einer Zeile tolerant:
+  /// Wenn der erwartete Spaltenindex leer ist, werden die nachfolgenden
+  /// Spalten durchsucht. Das fängt gemergte Zellen ab, bei denen der
+  /// Wert in einer anderen Spalte als erwartet landet.
+  static String? _cellStrToleranteSuche(
+    List<Data?> row,
+    int startCol, {
+    int maxLookahead = 12,
+  }) {
+    final direkt = _cellStr(row, startCol);
+    if (direkt != null && direkt.isNotEmpty) return direkt;
+    for (var c = startCol + 1; c < startCol + maxLookahead && c < row.length; c++) {
+      final v = _cellStr(row, c);
+      if (v != null && v.isNotEmpty) return v;
+    }
+    return null;
+  }
+
   _ParsedProduct? _parseArtikelSheet(
     Sheet sheet,
     String sheetName,
@@ -649,10 +662,9 @@ class ExcelImportServiceV3 {
       );
     }
 
+    // Artikelnummer aus A5 (Zeile 5, Spalte A)
     final artNrCell = rows[4].isNotEmpty ? rows[4][0] : null;
-    final bezCell = rows[4].length > 1 ? rows[4][1] : null;
     String? artikelnummer = _cellStr([artNrCell], 0);
-    final bezeichnung = _cellStr([bezCell], 0);
 
     if (artNrCell?.value is IntCellValue) {
       artikelnummer = (artNrCell!.value as IntCellValue).value.toString();
@@ -673,13 +685,19 @@ class ExcelImportServiceV3 {
       );
       return null;
     }
+
+    // Bezeichnung tolerant suchen: B5 zuerst, sonst C5/D5/... durchsuchen.
+    // Grund: Bei gemergten Zellen (B5:K5) landet der Wert manchmal in einer
+    // anderen Spalte als B, je nach Excel-Version / Re-Save-Verhalten.
+    final bezeichnung = _cellStrToleranteSuche(rows[4], 1);
+
     if (bezeichnung == null || bezeichnung.isEmpty) {
       errors.add(
         _ValidationError(
           sheet: sheetName,
           artikelnr: artikelnummer,
           feld: 'Artikelbezeichnung',
-          grund: 'Zelle B5 leer',
+          grund: 'Zelle B5 (und Nachbarzellen) leer',
         ),
       );
       return null;
