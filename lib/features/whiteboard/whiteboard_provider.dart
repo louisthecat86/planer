@@ -102,6 +102,13 @@ final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
 ///   Gesamtausbeute 0.75, werden 1333 kg Rohware benötigt. Pro Schritt wird
 ///   die eingehende Menge um den Ausbeutefaktor reduziert.
 ///
+/// **Robustheit bei unvollständigen Stammdaten** (v4-Erweiterung):
+/// Wenn `basisMengeKg` oder `basisDauerMinuten` 0 sind (typisch nach einem
+/// v3-Excel-Import ohne gepflegte Zeiten), wird ein Default-Wert verwendet
+/// damit die Planung nicht durch Division durch Null hängenbleibt. Die
+/// resultierenden Zeiten sind dann Platzhalter und müssen in der App
+/// nachgepflegt werden.
+///
 /// Gibt die berechnete Gesamt-Rohwarenmenge (Input Schritt 1) zurück.
 Future<double> createTasksFromProduct({
   required AppDatabase db,
@@ -125,8 +132,8 @@ Future<double> createTasksFromProduct({
   final inputMengen = List<double>.filled(steps.length, mengeKg);
   for (var i = steps.length - 1; i >= 0; i--) {
     final ausbeute = steps[i].ausbeuteFaktor ?? 1.0;
+    // Nur gültige Ausbeute-Faktoren berücksichtigen (0 < a < 1).
     if (ausbeute > 0 && ausbeute < 1.0) {
-      // Dieser Schritt braucht mehr Input als er Output liefert
       inputMengen[i] = inputMengen[i] / ausbeute;
     }
     // Vorheriger Schritt muss genug für diesen liefern
@@ -143,22 +150,46 @@ Future<double> createTasksFromProduct({
     final taskId = uuid.v4();
     final stepMenge = inputMengen[i];
 
-    // Dauer skalieren: fix_zeit + basis_dauer * (menge / basis_menge)
+    // ── Dauer berechnen, robust gegen fehlende Basiswerte ──────────────
     final fixZeit = step.fixZeitMinuten ?? 0.0;
-    var scaledDauer =
-        fixZeit + step.basisDauerMinuten * (stepMenge / step.basisMengeKg);
+    final basisMenge = step.basisMengeKg;
+    final basisDauer = step.basisDauerMinuten;
 
-    // Chargengrößen: Wenn max_chargen_kg gesetzt ist und die Menge
-    // die Kapazität übersteigt, werden mehrere Durchgänge benötigt.
+    double scaledDauer;
+    if (basisMenge > 0 && basisDauer > 0) {
+      // Normaler Fall: Lineare Skalierung auf Auftragsmenge
+      scaledDauer = fixZeit + basisDauer * (stepMenge / basisMenge);
+    } else if (basisDauer > 0) {
+      // Dauer vorhanden, aber keine Basismenge -> Dauer direkt übernehmen
+      scaledDauer = fixZeit + basisDauer;
+    } else {
+      // Weder Basismenge noch Basisdauer gepflegt -> 30 min Platzhalter.
+      // Der User muss diese Zeit später in der App nachpflegen.
+      scaledDauer = fixZeit > 0 ? fixZeit : 30.0;
+    }
+
+    // Chargengrößen: mehrere Durchgänge bei Überschreitung der Kapazität
     final maxCharge = step.maxChargenKg;
     int durchgaenge = 1;
-    if (maxCharge != null && maxCharge > 0 && stepMenge > maxCharge) {
+    if (maxCharge != null &&
+        maxCharge > 0 &&
+        stepMenge > maxCharge &&
+        basisMenge > 0 &&
+        basisDauer > 0) {
       durchgaenge = (stepMenge / maxCharge).ceil();
-      // Jeder Durchgang dauert die skalierte Zeit für maxCharge,
-      // plus Fixzeit für jeden zusätzlichen Durchgang.
       final dauerProCharge =
-          fixZeit + step.basisDauerMinuten * (maxCharge / step.basisMengeKg);
+          fixZeit + basisDauer * (maxCharge / basisMenge);
       scaledDauer = dauerProCharge * durchgaenge;
+    }
+
+    // Sicherheitsnetz: unsinnige Werte abfangen
+    if (!scaledDauer.isFinite || scaledDauer.isNaN || scaledDauer < 0) {
+      scaledDauer = 30.0;
+    }
+    // Obergrenze: mehr als eine Woche pro Schritt ist mit Sicherheit
+    // ein Rechenfehler (oder schlecht gepflegte Daten)
+    if (scaledDauer > 60 * 24 * 7) {
+      scaledDauer = 30.0;
     }
 
     final dauer = scaledDauer.roundToDouble();
@@ -170,14 +201,26 @@ Future<double> createTasksFromProduct({
     // Notizen mit berechneten Details
     final notizen = StringBuffer();
     if (durchgaenge > 1) {
-      notizen.write('$durchgaenge Durchgänge à ${maxCharge!.toStringAsFixed(0)} kg. ');
+      notizen.write(
+        '$durchgaenge Durchgänge à ${maxCharge!.toStringAsFixed(0)} kg. ',
+      );
     }
-    final ausbeute = step.ausbeuteFaktor;
-    if (ausbeute != null && ausbeute < 1.0) {
-      final verlust = ((1 - ausbeute) * 100).toStringAsFixed(0);
-      notizen.write('Ausbeute ${(ausbeute * 100).toStringAsFixed(0)}% '
-          '(Verlust $verlust%). ');
+    final ausbeuteNote = step.ausbeuteFaktor;
+    if (ausbeuteNote != null && ausbeuteNote < 1.0) {
+      final verlust = ((1 - ausbeuteNote) * 100).toStringAsFixed(0);
+      notizen.write(
+        'Ausbeute ${(ausbeuteNote * 100).toStringAsFixed(0)}% '
+        '(Verlust $verlust%). ',
+      );
     }
+    if (basisMenge == 0 || basisDauer == 0) {
+      notizen.write(
+        'Zeit ist Platzhalter (Stammdaten noch nicht gepflegt). ',
+      );
+    }
+
+    // Mitarbeiter: 1 als Default wenn basisMitarbeiter 0 oder negativ
+    final mitarbeiter = step.basisMitarbeiter > 0 ? step.basisMitarbeiter : 1;
 
     await db.into(db.productionTasks).insert(
           ProductionTasksCompanion.insert(
@@ -187,7 +230,7 @@ Future<double> createTasksFromProduct({
             datum: datum,
             abteilung: step.abteilung,
             geplanteDauerMinuten: dauer,
-            geplanteMitarbeiter: step.basisMitarbeiter,
+            geplanteMitarbeiter: mitarbeiter,
             startZeit: Value(startZeit),
             parentTaskId: Value(previousTaskId),
             notizen: Value(
