@@ -8,7 +8,7 @@ import '../constants/abteilungen.dart';
 import '../database/database.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Ergebnis-Klassen (V3-spezifisch, damit Legacy-API unangetastet bleibt)
+// Ergebnis-Klassen
 // ═══════════════════════════════════════════════════════════════════════════
 
 class ImportResultV3 {
@@ -520,13 +520,6 @@ class ExcelImportServiceV3 {
         }
 
         historienVerarbeitet += art.historie.length;
-        if (art.historie.isNotEmpty) {
-          warnings.add(
-            'Sheet "${art.sheetName}" (${art.artikelnummer}): '
-            '${art.historie.length} Historie-Einträge gefunden — '
-            'diese werden in Phase 1c in die Lernlogik übernommen.',
-          );
-        }
       }
     });
 
@@ -604,22 +597,49 @@ class ExcelImportServiceV3 {
     return result;
   }
 
-  /// Sucht eine Zelle in einer Zeile tolerant:
-  /// Wenn der erwartete Spaltenindex leer ist, werden die nachfolgenden
-  /// Spalten durchsucht. Das fängt gemergte Zellen ab, bei denen der
-  /// Wert in einer anderen Spalte als erwartet landet.
-  static String? _cellStrToleranteSuche(
-    List<Data?> row,
-    int startCol, {
-    int maxLookahead = 12,
-  }) {
-    final direkt = _cellStr(row, startCol);
-    if (direkt != null && direkt.isNotEmpty) return direkt;
-    for (var c = startCol + 1; c < startCol + maxLookahead && c < row.length; c++) {
-      final v = _cellStr(row, c);
-      if (v != null && v.isNotEmpty) return v;
+  /// Sucht die Artikelbezeichnung mit mehreren Fallbacks:
+  /// 1. B5 direkt
+  /// 2. Alle Spalten C5..N5 (für Merge-Cell-Quirks)
+  /// 3. Nachbarzeilen 6, 7, 3, 4 (für Merge-Vertical-Quirks)
+  /// 4. Fallback: "Artikel {sheetName}" mit Warnung
+  static String _findeBezeichnungMitFallback(
+    List<List<Data?>> rows,
+    String sheetName,
+    List<String> warnings,
+  ) {
+    // Versuch 1: Komplette Zeile 5 durchgehen (ab Spalte B)
+    if (rows.length > 4) {
+      for (var c = 1; c < rows[4].length; c++) {
+        final v = _cellStr(rows[4], c);
+        if (v != null && v.isNotEmpty && v != sheetName) {
+          return v;
+        }
+      }
     }
-    return null;
+
+    // Versuch 2: Nachbarzeilen prüfen (einige Excel-Layouts schieben
+    // den Wert beim Merge in Zeile 6 oder höher)
+    for (final rowIdx in [5, 6, 3, 2, 7, 8]) {
+      if (rowIdx >= rows.length || rowIdx < 0) continue;
+      for (var c = 1; c < rows[rowIdx].length; c++) {
+        final v = _cellStr(rows[rowIdx], c);
+        if (v == null || v.isEmpty) continue;
+        // Bekannte Label-Zeilen überspringen
+        if (_schrittZeilen.contains(v)) continue;
+        if (v.length < 2) continue;
+        // Zahl allein ist nicht die Bezeichnung
+        if (double.tryParse(v) != null) continue;
+        return v;
+      }
+    }
+
+    // Letzter Fallback: Sheetname als Platzhalter
+    warnings.add(
+      'Sheet "$sheetName": Artikelbezeichnung konnte nicht aus der Vorlage '
+      'gelesen werden (B5 leer). Fallback: "Artikel $sheetName". '
+      'Bitte in der App nachpflegen.',
+    );
+    return 'Artikel $sheetName';
   }
 
   _ParsedProduct? _parseArtikelSheet(
@@ -662,7 +682,7 @@ class ExcelImportServiceV3 {
       );
     }
 
-    // Artikelnummer aus A5 (Zeile 5, Spalte A)
+    // Artikelnummer aus A5
     final artNrCell = rows[4].isNotEmpty ? rows[4][0] : null;
     String? artikelnummer = _cellStr([artNrCell], 0);
 
@@ -674,34 +694,30 @@ class ExcelImportServiceV3 {
           d == d.roundToDouble() ? d.toInt().toString() : d.toString();
     }
 
+    // Wenn A5 leer: Sheetname als Artikelnummer, wenn der numerisch ist
+    if ((artikelnummer == null || artikelnummer.isEmpty) &&
+        int.tryParse(sheetName) != null) {
+      artikelnummer = sheetName;
+      warnings.add(
+        'Sheet "$sheetName": Zelle A5 leer — Sheet-Name als Artikelnummer '
+        'verwendet.',
+      );
+    }
+
     if (artikelnummer == null || artikelnummer.isEmpty) {
       errors.add(
         _ValidationError(
           sheet: sheetName,
           artikelnr: sheetName,
           feld: 'Artikelnummer',
-          grund: 'Zelle A5 leer oder ungültig',
+          grund: 'Zelle A5 leer und Sheet-Name nicht numerisch',
         ),
       );
       return null;
     }
 
-    // Bezeichnung tolerant suchen: B5 zuerst, sonst C5/D5/... durchsuchen.
-    // Grund: Bei gemergten Zellen (B5:K5) landet der Wert manchmal in einer
-    // anderen Spalte als B, je nach Excel-Version / Re-Save-Verhalten.
-    final bezeichnung = _cellStrToleranteSuche(rows[4], 1);
-
-    if (bezeichnung == null || bezeichnung.isEmpty) {
-      errors.add(
-        _ValidationError(
-          sheet: sheetName,
-          artikelnr: artikelnummer,
-          feld: 'Artikelbezeichnung',
-          grund: 'Zelle B5 (und Nachbarzellen) leer',
-        ),
-      );
-      return null;
-    }
+    // Bezeichnung mit mehreren Fallbacks finden
+    final bezeichnung = _findeBezeichnungMitFallback(rows, sheetName, warnings);
 
     final schritte = _parseSchritte(
       rows,
@@ -741,13 +757,11 @@ class ExcelImportServiceV3 {
       }
     }
     if (!labelRow.containsKey('Abteilung')) {
-      errors.add(
-        _ValidationError(
-          sheet: sheetName,
-          artikelnr: artikelnummer,
-          feld: 'Schritt-Struktur',
-          grund: 'Zeile "Abteilung" nicht gefunden',
-        ),
+      // Kein Fehler mehr — einfach keine Schritte.
+      // Könnte bei Artikel-Sheets die noch nicht befüllt sind vorkommen.
+      warnings.add(
+        'Sheet "$sheetName" ($artikelnummer): Zeile "Abteilung" nicht gefunden '
+        '— keine Schritte importiert.',
       );
       return [];
     }
