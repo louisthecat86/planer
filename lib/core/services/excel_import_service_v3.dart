@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' hide Column;
@@ -181,6 +182,17 @@ class _ParsedProduct {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Schlüssel für die app_settings-Tabelle (beim Export wieder ausgelesen)
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Key-Konstanten für die app_settings-Tabelle.
+/// Werden sowohl vom Import-Service (Schreiben) als auch vom Export-Service
+/// (Lesen) verwendet — darum als Top-Level-Konstanten exportiert.
+const String kAppSettingLastImportExcelBytes = 'last_import_excel_bytes';
+const String kAppSettingLastImportExcelFilename = 'last_import_excel_filename';
+const String kAppSettingLastImportDatum = 'last_import_datum';
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ExcelImportServiceV3
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -353,7 +365,10 @@ class ExcelImportServiceV3 {
   // ═════════════════════════════════════════════════════════════════════════
 
   Future<ImportResultV3> import(File file) async {
-    final excel = Excel.decodeBytes(await file.readAsBytes());
+    // Datei-Bytes einmal lesen — werden sowohl geparst als auch für den
+    // späteren Excel-Export in der DB abgelegt.
+    final bytes = await file.readAsBytes();
+    final excel = Excel.decodeBytes(bytes);
 
     if (!istV3Format(excel)) {
       return const ImportResultV3(
@@ -521,6 +536,11 @@ class ExcelImportServiceV3 {
 
         historienVerarbeitet += art.historie.length;
       }
+
+      // ── Excel-Bytes + Dateiname in app_settings ablegen ───────────────
+      // Dient als Basis für den späteren Export (Formatierung, Farben,
+      // Dropdowns und Anlagen-Katalog bleiben so 1:1 erhalten).
+      await _speichereImportierteDatei(file, bytes);
     });
 
     return ImportResultV3(
@@ -533,6 +553,48 @@ class ExcelImportServiceV3 {
       warnungen: warnings,
       fehler: errors.map((e) => e.toString()).toList(),
     );
+  }
+
+  /// Legt die geladene Excel-Datei als Base64-Blob in `app_settings` ab.
+  /// Der Export-Service liest sie dort wieder aus und nutzt sie als
+  /// Template (so bleiben Formatierung, Dropdowns, Farben erhalten).
+  Future<void> _speichereImportierteDatei(File file, List<int> bytes) async {
+    final base64Bytes = base64Encode(bytes);
+    final filename = file.path.split(Platform.pathSeparator).last;
+    final jetzt = DateTime.now();
+
+    await _upsertSetting(kAppSettingLastImportExcelBytes, base64Bytes);
+    await _upsertSetting(kAppSettingLastImportExcelFilename, filename);
+    await _upsertSetting(
+      kAppSettingLastImportDatum,
+      jetzt.toIso8601String(),
+    );
+  }
+
+  /// Insert-or-update auf app_settings (Drift hat kein natives upsert
+  /// zwischen Dialekten, darum manuell).
+  Future<void> _upsertSetting(String key, String value) async {
+    final existing = await (_db.select(_db.appSettings)
+          ..where((t) => t.key.equals(key))
+          ..limit(1))
+        .getSingleOrNull();
+    if (existing == null) {
+      await _db.into(_db.appSettings).insert(
+            AppSettingsCompanion(
+              key: Value(key),
+              value: Value(value),
+            ),
+          );
+    } else {
+      await (_db.update(_db.appSettings)
+            ..where((t) => t.key.equals(key)))
+          .write(
+        AppSettingsCompanion(
+          value: Value(value),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    }
   }
 
   // ═════════════════════════════════════════════════════════════════════════
@@ -597,26 +659,18 @@ class ExcelImportServiceV3 {
     return result;
   }
 
-  /// Liest Artikelnummer und Bezeichnung aus dem Sheet.
-  ///
-  /// Unterstützt drei Strukturen:
-  /// 1. Kombi-Format (aktuelle Vorlage): A6 = "10010 — Bezeichnung"
-  ///    → an " — " splitten
-  /// 2. Getrenntes Format: A5 = Nummer, B5 = Bezeichnung
-  /// 3. Sheet-Name als Fallback für Nummer, "Artikel {name}" für Bezeichnung
   _Artikelkopf? _leseArtikelkopf(
     List<List<Data?>> rows,
     String sheetName,
     List<String> warnings,
   ) {
-    // Strategie 1: Kombi-Format aus Zeile 6
+    // Strategie 1: Kombi-Format aus Zeile 6 ("10010 — Bezeichnung")
     String? a6;
     if (rows.length > 5 && rows[5].isNotEmpty) {
       a6 = _cellStr(rows[5], 0);
     }
 
     if (a6 != null && a6.isNotEmpty) {
-      // Verschiedene Trenner probieren (Gedankenstrich, Bindestrich, Doppelpunkt)
       for (final sep in [' — ', ' – ', ' - ', ': ']) {
         if (a6.contains(sep)) {
           final parts = a6.split(sep);
@@ -629,8 +683,6 @@ class ExcelImportServiceV3 {
           }
         }
       }
-      // Ganzer String in A6 aber kein Trenner: Nutze sheetName als Nummer,
-      // A6 komplett als Bezeichnung
       if (int.tryParse(sheetName) != null) {
         return _Artikelkopf(nummer: sheetName, bezeichnung: a6);
       }
@@ -666,7 +718,6 @@ class ExcelImportServiceV3 {
       return _Artikelkopf(nummer: artNr, bezeichnung: bez);
     }
 
-    // Strategie 3: Fallback — Sheetname als Nummer, Platzhalter-Bezeichnung
     if (int.tryParse(sheetName) != null) {
       warnings.add(
         'Sheet "$sheetName": Artikelbezeichnung nicht gefunden. '
