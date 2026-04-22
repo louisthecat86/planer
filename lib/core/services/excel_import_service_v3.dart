@@ -597,49 +597,88 @@ class ExcelImportServiceV3 {
     return result;
   }
 
-  /// Sucht die Artikelbezeichnung mit mehreren Fallbacks:
-  /// 1. B5 direkt
-  /// 2. Alle Spalten C5..N5 (für Merge-Cell-Quirks)
-  /// 3. Nachbarzeilen 6, 7, 3, 4 (für Merge-Vertical-Quirks)
-  /// 4. Fallback: "Artikel {sheetName}" mit Warnung
-  static String _findeBezeichnungMitFallback(
+  /// Liest Artikelnummer und Bezeichnung aus dem Sheet.
+  ///
+  /// Unterstützt drei Strukturen:
+  /// 1. Kombi-Format (aktuelle Vorlage): A6 = "10010 — Bezeichnung"
+  ///    → an " — " splitten
+  /// 2. Getrenntes Format: A5 = Nummer, B5 = Bezeichnung
+  /// 3. Sheet-Name als Fallback für Nummer, "Artikel {name}" für Bezeichnung
+  _Artikelkopf? _leseArtikelkopf(
     List<List<Data?>> rows,
     String sheetName,
     List<String> warnings,
   ) {
-    // Versuch 1: Komplette Zeile 5 durchgehen (ab Spalte B)
+    // Strategie 1: Kombi-Format aus Zeile 6
+    String? a6;
+    if (rows.length > 5 && rows[5].isNotEmpty) {
+      a6 = _cellStr(rows[5], 0);
+    }
+
+    if (a6 != null && a6.isNotEmpty) {
+      // Verschiedene Trenner probieren (Gedankenstrich, Bindestrich, Doppelpunkt)
+      for (final sep in [' — ', ' – ', ' - ', ': ']) {
+        if (a6.contains(sep)) {
+          final parts = a6.split(sep);
+          if (parts.length >= 2) {
+            final nr = parts[0].trim();
+            final bez = parts.sublist(1).join(sep).trim();
+            if (nr.isNotEmpty && bez.isNotEmpty) {
+              return _Artikelkopf(nummer: nr, bezeichnung: bez);
+            }
+          }
+        }
+      }
+      // Ganzer String in A6 aber kein Trenner: Nutze sheetName als Nummer,
+      // A6 komplett als Bezeichnung
+      if (int.tryParse(sheetName) != null) {
+        return _Artikelkopf(nummer: sheetName, bezeichnung: a6);
+      }
+    }
+
+    // Strategie 2: Getrenntes Format (A5 = Nummer, B5 = Bezeichnung)
+    String? artNr;
+    if (rows.length > 4 && rows[4].isNotEmpty) {
+      final artNrCell = rows[4][0];
+      final v = artNrCell?.value;
+      if (v is IntCellValue) {
+        artNr = v.value.toString();
+      } else if (v is DoubleCellValue) {
+        final d = v.value;
+        artNr = d == d.roundToDouble() ? d.toInt().toString() : d.toString();
+      } else {
+        artNr = _cellStr(rows[4], 0);
+      }
+    }
+
+    String? bez;
     if (rows.length > 4) {
       for (var c = 1; c < rows[4].length; c++) {
         final v = _cellStr(rows[4], c);
-        if (v != null && v.isNotEmpty && v != sheetName) {
-          return v;
+        if (v != null && v.isNotEmpty && v != 'Artikelbezeichnung') {
+          bez = v;
+          break;
         }
       }
     }
 
-    // Versuch 2: Nachbarzeilen prüfen (einige Excel-Layouts schieben
-    // den Wert beim Merge in Zeile 6 oder höher)
-    for (final rowIdx in [5, 6, 3, 2, 7, 8]) {
-      if (rowIdx >= rows.length || rowIdx < 0) continue;
-      for (var c = 1; c < rows[rowIdx].length; c++) {
-        final v = _cellStr(rows[rowIdx], c);
-        if (v == null || v.isEmpty) continue;
-        // Bekannte Label-Zeilen überspringen
-        if (_schrittZeilen.contains(v)) continue;
-        if (v.length < 2) continue;
-        // Zahl allein ist nicht die Bezeichnung
-        if (double.tryParse(v) != null) continue;
-        return v;
-      }
+    if (artNr != null && artNr.isNotEmpty && bez != null && bez.isNotEmpty) {
+      return _Artikelkopf(nummer: artNr, bezeichnung: bez);
     }
 
-    // Letzter Fallback: Sheetname als Platzhalter
-    warnings.add(
-      'Sheet "$sheetName": Artikelbezeichnung konnte nicht aus der Vorlage '
-      'gelesen werden (B5 leer). Fallback: "Artikel $sheetName". '
-      'Bitte in der App nachpflegen.',
-    );
-    return 'Artikel $sheetName';
+    // Strategie 3: Fallback — Sheetname als Nummer, Platzhalter-Bezeichnung
+    if (int.tryParse(sheetName) != null) {
+      warnings.add(
+        'Sheet "$sheetName": Artikelbezeichnung nicht gefunden. '
+        'Fallback: "Artikel $sheetName". Bitte in der App nachpflegen.',
+      );
+      return _Artikelkopf(
+        nummer: sheetName,
+        bezeichnung: 'Artikel $sheetName',
+      );
+    }
+
+    return null;
   }
 
   _ParsedProduct? _parseArtikelSheet(
@@ -682,47 +721,23 @@ class ExcelImportServiceV3 {
       );
     }
 
-    // Artikelnummer aus A5
-    final artNrCell = rows[4].isNotEmpty ? rows[4][0] : null;
-    String? artikelnummer = _cellStr([artNrCell], 0);
-
-    if (artNrCell?.value is IntCellValue) {
-      artikelnummer = (artNrCell!.value as IntCellValue).value.toString();
-    } else if (artNrCell?.value is DoubleCellValue) {
-      final d = (artNrCell!.value as DoubleCellValue).value;
-      artikelnummer =
-          d == d.roundToDouble() ? d.toInt().toString() : d.toString();
-    }
-
-    // Wenn A5 leer: Sheetname als Artikelnummer, wenn der numerisch ist
-    if ((artikelnummer == null || artikelnummer.isEmpty) &&
-        int.tryParse(sheetName) != null) {
-      artikelnummer = sheetName;
-      warnings.add(
-        'Sheet "$sheetName": Zelle A5 leer — Sheet-Name als Artikelnummer '
-        'verwendet.',
-      );
-    }
-
-    if (artikelnummer == null || artikelnummer.isEmpty) {
+    final kopf = _leseArtikelkopf(rows, sheetName, warnings);
+    if (kopf == null) {
       errors.add(
         _ValidationError(
           sheet: sheetName,
           artikelnr: sheetName,
-          feld: 'Artikelnummer',
-          grund: 'Zelle A5 leer und Sheet-Name nicht numerisch',
+          feld: 'Artikel-Kopf',
+          grund: 'Artikelnummer und Bezeichnung konnten nicht gelesen werden',
         ),
       );
       return null;
     }
 
-    // Bezeichnung mit mehreren Fallbacks finden
-    final bezeichnung = _findeBezeichnungMitFallback(rows, sheetName, warnings);
-
     final schritte = _parseSchritte(
       rows,
       sheetName,
-      artikelnummer,
+      kopf.nummer,
       bekannteMaschinen,
       errors,
       warnings,
@@ -731,8 +746,8 @@ class ExcelImportServiceV3 {
 
     return _ParsedProduct(
       sheetName: sheetName,
-      artikelnummer: artikelnummer,
-      bezeichnung: bezeichnung,
+      artikelnummer: kopf.nummer,
+      bezeichnung: kopf.bezeichnung,
       kategorie: kategorie,
       produktgruppeDb: produktgruppeDb,
       schritte: schritte,
@@ -757,8 +772,6 @@ class ExcelImportServiceV3 {
       }
     }
     if (!labelRow.containsKey('Abteilung')) {
-      // Kein Fehler mehr — einfach keine Schritte.
-      // Könnte bei Artikel-Sheets die noch nicht befüllt sind vorkommen.
       warnings.add(
         'Sheet "$sheetName" ($artikelnummer): Zeile "Abteilung" nicht gefunden '
         '— keine Schritte importiert.',
@@ -1029,4 +1042,11 @@ class ExcelImportServiceV3 {
       return null;
     }
   }
+}
+
+/// Hilfsstruktur: Artikelnummer + Bezeichnung nach dem Parsen.
+class _Artikelkopf {
+  _Artikelkopf({required this.nummer, required this.bezeichnung});
+  final String nummer;
+  final String bezeichnung;
 }
