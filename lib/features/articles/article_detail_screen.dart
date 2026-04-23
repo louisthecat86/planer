@@ -319,22 +319,28 @@ class _StepInfoRow extends StatelessWidget {
     final items = <Widget>[];
 
     if (step.basisMitarbeiter > 0) {
-      items.add(_Chip(
-        icon: Icons.person,
-        label: '${step.basisMitarbeiter}',
-      ));
+      items.add(
+        _Chip(
+          icon: Icons.person,
+          label: '${step.basisMitarbeiter}',
+        ),
+      );
     }
     if (step.basisMengeKg > 0) {
-      items.add(_Chip(
-        icon: Icons.scale,
-        label: '${_formatZahl(step.basisMengeKg)} kg',
-      ));
+      items.add(
+        _Chip(
+          icon: Icons.scale,
+          label: '${_formatZahl(step.basisMengeKg)} kg',
+        ),
+      );
     }
     if (step.basisDauerMinuten > 0) {
-      items.add(_Chip(
-        icon: Icons.schedule,
-        label: _formatDauer(step.basisDauerMinuten),
-      ));
+      items.add(
+        _Chip(
+          icon: Icons.schedule,
+          label: _formatDauer(step.basisDauerMinuten),
+        ),
+      );
     }
 
     if (items.isEmpty) {
