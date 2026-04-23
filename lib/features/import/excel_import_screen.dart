@@ -1,13 +1,16 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
+import '../../core/services/excel_export_service_v3.dart';
 import '../../core/services/excel_import_dispatcher.dart';
 import '../articles/article_list_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Excel-Import Screen (v3-fähig, via Dispatcher)
+// Excel-Import / Export Screen (v3-fähig, via Dispatcher)
 // ---------------------------------------------------------------------------
 
 class ExcelImportScreen extends ConsumerStatefulWidget {
@@ -18,12 +21,33 @@ class ExcelImportScreen extends ConsumerStatefulWidget {
 }
 
 class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
+  // ── Import-State ────────────────────────────────────────────────────
   String? _filePath;
   String? _fileName;
   UnifiedImportPreview? _preview;
   UnifiedImportResult? _result;
   bool _isLoading = false;
   String? _error;
+
+  // ── Export-State ────────────────────────────────────────────────────
+  bool _isExporting = false;
+  ExportResultV3? _exportResult;
+  String? _exportError;
+  bool _hasImportedFile = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pruefeObImportVorhanden();
+  }
+
+  Future<void> _pruefeObImportVorhanden() async {
+    final svc = ExcelExportServiceV3(ref.read(databaseProvider));
+    final vorhanden = await svc.hasImportedFile();
+    if (mounted) {
+      setState(() => _hasImportedFile = vorhanden);
+    }
+  }
 
   // ---- Datei wählen ----
 
@@ -44,6 +68,8 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
       _preview = null;
       _result = null;
       _error = null;
+      _exportResult = null;
+      _exportError = null;
     });
 
     await _loadPreview();
@@ -97,6 +123,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
         setState(() {
           _result = result;
           _isLoading = false;
+          _hasImportedFile = true;
         });
       }
     } catch (e) {
@@ -104,6 +131,65 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
         setState(() {
           _error = 'Fehler beim Import: $e';
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // ---- Export ausführen ----
+
+  Future<void> _runExport() async {
+    setState(() {
+      _isExporting = true;
+      _exportError = null;
+      _exportResult = null;
+    });
+
+    try {
+      final svc = ExcelExportServiceV3(ref.read(databaseProvider));
+      final result = await svc.export();
+
+      if (result.hatFehler) {
+        if (mounted) {
+          setState(() {
+            _exportError = result.fehler.join('\n');
+            _isExporting = false;
+          });
+        }
+        return;
+      }
+
+      // Speichern-Dialog
+      final zielPfad = await FilePicker.saveFile(
+        dialogTitle: 'Excel-Export speichern',
+        fileName: result.vorschlagDateiname,
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+      );
+
+      if (zielPfad == null) {
+        // Nutzer hat abgebrochen
+        if (mounted) {
+          setState(() => _isExporting = false);
+        }
+        return;
+      }
+
+      // Datei schreiben
+      final zielDatei = File(zielPfad);
+      await zielDatei.writeAsBytes(result.bytes);
+
+      if (mounted) {
+        setState(() {
+          _exportResult = result;
+          _isExporting = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _exportError = 'Fehler beim Export: $e';
+          _isExporting = false;
         });
       }
     }
@@ -117,12 +203,12 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Excel-Import'),
+        title: const Text('Excel Import / Export'),
       ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // Info-Text
+          // ═════ Info-Text ═══════════════════════════════════════════════
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -135,9 +221,9 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Importiere Artikel-Stammdaten aus einer Excel-Datei. '
-                    'Unterstützt werden: v3-Vorlage (mit Anlagen-Katalog und '
-                    'Kategorie-Blaupausen) sowie die alte Phase-B-Vorlage.',
+                    'Arbeitsweise: Morgens aktuelle Excel importieren → '
+                    'tagsüber in der App oder Excel arbeiten (nicht beides '
+                    'parallel) → abends aktualisierte Excel exportieren.',
                     style: TextStyle(
                       fontSize: 13,
                       color: colors.onPrimaryContainer,
@@ -147,21 +233,28 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 24),
 
-          // Datei-Auswahl
+          // ═════ Sektion: Import ═════════════════════════════════════════
+          _SectionHeader(
+            icon: Icons.upload_file,
+            title: 'Import',
+            subtitle: 'Excel-Datei in die App laden',
+          ),
+          const SizedBox(height: 12),
+
           FilledButton.tonalIcon(
-            onPressed: _isLoading ? null : _pickFile,
+            onPressed: _isLoading || _isExporting ? null : _pickFile,
             icon: const Icon(Icons.upload_file),
             label: Text(
               _fileName ?? 'Excel-Datei auswählen (.xlsx)',
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           if (_isLoading) ...[
             const Center(child: CircularProgressIndicator()),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
           ],
 
           if (_error != null) ...[
@@ -200,6 +293,78 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
 
           if (_result != null) ...[
             _ResultCard(result: _result!),
+            const SizedBox(height: 16),
+          ],
+
+          const SizedBox(height: 24),
+          const Divider(),
+          const SizedBox(height: 24),
+
+          // ═════ Sektion: Export ═════════════════════════════════════════
+          _SectionHeader(
+            icon: Icons.download,
+            title: 'Export',
+            subtitle: 'Aktualisierte Excel-Datei speichern',
+          ),
+          const SizedBox(height: 12),
+
+          if (!_hasImportedFile) ...[
+            _MessageCard(
+              icon: Icons.info_outline,
+              color: colors.outline,
+              title: 'Noch kein Import erfolgt',
+              message: 'Importiere zuerst eine Excel-Vorlage, dann kannst '
+                  'du sie mit den aktuellen Daten aus der App als neue '
+                  'Excel exportieren.',
+            ),
+          ] else ...[
+            Text(
+              'Der Export nimmt deine zuletzt importierte Excel als Basis, '
+              'aktualisiert alle Schritte, Anlagen-Zuordnungen und '
+              'Parameter auf den aktuellen Stand in der App, und lässt '
+              'Formatierung, Dropdowns und Anlagen-Katalog 1:1 erhalten.',
+              style: TextStyle(
+                fontSize: 13,
+                color: colors.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: FilledButton.icon(
+                onPressed: _isExporting || _isLoading ? null : _runExport,
+                icon: _isExporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.save_alt),
+                label: Text(
+                  _isExporting ? 'Wird erstellt …' : 'Excel exportieren',
+                ),
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 16),
+
+          if (_exportError != null) ...[
+            _MessageCard(
+              icon: Icons.error,
+              color: colors.error,
+              title: 'Export-Fehler',
+              message: _exportError!,
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          if (_exportResult != null) ...[
+            _ExportResultCard(result: _exportResult!),
           ],
         ],
       ),
@@ -208,7 +373,55 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Preview-Karte
+// Sektion-Header
+// ---------------------------------------------------------------------------
+
+class _SectionHeader extends StatelessWidget {
+  const _SectionHeader({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Row(
+      children: [
+        Icon(icon, color: colors.primary, size: 28),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colors.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Preview-Karte (Import)
 // ---------------------------------------------------------------------------
 
 class _PreviewCard extends StatelessWidget {
@@ -240,8 +453,10 @@ class _PreviewCard extends StatelessWidget {
                 ),
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: isV3
                         ? Colors.green.withValues(alpha: 0.15)
@@ -350,7 +565,7 @@ class _PreviewCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Ergebnis-Karte
+// Ergebnis-Karte (Import)
 // ---------------------------------------------------------------------------
 
 class _ResultCard extends StatelessWidget {
@@ -439,6 +654,115 @@ class _ResultCard extends StatelessWidget {
                       fontSize: 11,
                       color: Colors.red,
                     ),
+                  ),
+                ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _countRow(String label, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13)),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: count > 0 ? Colors.green.shade700 : Colors.grey,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ergebnis-Karte (Export)
+// ---------------------------------------------------------------------------
+
+class _ExportResultCard extends StatelessWidget {
+  const _ExportResultCard({required this.result});
+
+  final ExportResultV3 result;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      color: Colors.green.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green),
+                const SizedBox(width: 8),
+                Text(
+                  'Export erfolgreich',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.green.shade800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _countRow('Artikel aktualisiert', result.artikelAktualisiert),
+            _countRow('Schritte geschrieben', result.schritteGeschrieben),
+            _countRow('Parameter geschrieben', result.parameterGeschrieben),
+
+            if (result.artikelNichtInVorlage.isNotEmpty) ...[
+              const Divider(),
+              const Text(
+                'Hinweis: Artikel die in der App angelegt wurden, aber '
+                'nicht in der Excel-Vorlage sind, wurden nicht exportiert. '
+                'Füge sie direkt in der Excel als neues Sheet hinzu:',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                result.artikelNichtInVorlage.take(20).join(', ') +
+                    (result.artikelNichtInVorlage.length > 20
+                        ? ', … (${result.artikelNichtInVorlage.length - 20} weitere)'
+                        : ''),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+
+            if (result.warnungen.isNotEmpty) ...[
+              const Divider(),
+              const Text(
+                'Warnungen:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 4),
+              for (final w in result.warnungen.take(10))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 3),
+                  child: Text(
+                    '• $w',
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              if (result.warnungen.length > 10)
+                Text(
+                  '… und ${result.warnungen.length - 10} weitere',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontStyle: FontStyle.italic,
                   ),
                 ),
             ],
