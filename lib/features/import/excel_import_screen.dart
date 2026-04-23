@@ -236,7 +236,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
           const SizedBox(height: 24),
 
           // ═════ Sektion: Import ═════════════════════════════════════════
-          _SectionHeader(
+          const _SectionHeader(
             icon: Icons.upload_file,
             title: 'Import',
             subtitle: 'Excel-Datei in die App laden',
@@ -301,7 +301,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
           const SizedBox(height: 24),
 
           // ═════ Sektion: Export ═════════════════════════════════════════
-          _SectionHeader(
+          const _SectionHeader(
             icon: Icons.download,
             title: 'Export',
             subtitle: 'Aktualisierte Excel-Datei speichern',
