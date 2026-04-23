@@ -74,31 +74,9 @@ class ExcelExportServiceV3 {
 
   final AppDatabase _db;
 
-  /// Namespace für SpreadsheetML.
-  static const _nsMain =
-      'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  /// Namespace für relationships (wird zum Auflösen der Sheet-IDs gebraucht).
   static const _nsRel =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-
-  /// Sheets, die nicht angefasst werden (kommen mit ihrem Originalinhalt
-  /// 1:1 durch das ZIP).
-  static const _metaSheets = <String>{
-    'Übersicht',
-    'Anleitung',
-    'Anlagen-Katalog',
-    'Brühwurst',
-    'Rohwurst',
-    'Kochpökelwaren',
-    'Rohpökelwaren',
-    'Aufschnitt',
-    'Bratstraßenartikel Natur',
-    'Bratstraßenartikel paniert',
-    'Hackprodukte gegart',
-    'Hackprodukte roh',
-    'Braten',
-    'Sous Vide gegarte Produkte',
-    'Angebratene Brühwürste',
-  };
 
   /// Prüft ob eine Excel-Datei als Basis vorliegt. Das UI ruft das vor
   /// dem Export-Button-Click auf, um einen Hinweis zu zeigen falls
@@ -231,9 +209,7 @@ class ExcelExportServiceV3 {
         schritteGeschrieben += aktualisiert.schritte;
         parameterGeschrieben += aktualisiert.parameter;
 
-        final neuesXml = utf8.encode(
-          doc.toXmlString(pretty: false),
-        );
+        final neuesXml = utf8.encode(doc.toXmlString(pretty: false));
         archive.addFile(
           ArchiveFile(
             archiveFile.name,
@@ -275,11 +251,8 @@ class ExcelExportServiceV3 {
     final jetzt = DateTime.now();
     final ts = '${jetzt.year}${_pad(jetzt.month)}${_pad(jetzt.day)}_'
         '${_pad(jetzt.hour)}${_pad(jetzt.minute)}';
-    // Endung abschneiden, Timestamp anhängen, Endung wieder dran
-    final endung =
-        originalname.toLowerCase().endsWith('.xlsx') ? '.xlsx' : '.xlsx';
     final basis = originalname.replaceAll(RegExp(r'\.xlsx$'), '');
-    return '${basis}_export_$ts$endung';
+    return '${basis}_export_$ts.xlsx';
   }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
@@ -317,13 +290,11 @@ class ExcelExportServiceV3 {
     // Sheet-Name → rId
     for (final sheet in workbookDoc.findAllElements('sheet')) {
       final name = sheet.getAttribute('name');
-      // r:id ist im relationships-Namespace
       final rid = sheet.getAttribute('id', namespace: _nsRel) ??
           sheet.getAttribute('r:id');
       if (name != null && rid != null) {
         final target = rIdToTarget[rid];
         if (target != null) {
-          // Pfad ist relativ zu xl/
           final fullPath = 'xl/$target';
           result[name] = fullPath;
         }
@@ -343,35 +314,18 @@ class ExcelExportServiceV3 {
     required List<String> warnungen,
     required String artikelLabel,
   }) {
-    // Struktur des Sheet-XML: <worksheet><sheetData><row r="N">...
-    // Zellen: <c r="B11" t="s"><v>42</v></c>  (t="s" = shared string, Index)
-    //         <c r="B11"><v>230</v></c>       (ohne t = Number)
-    //         <c r="B11" t="inlineStr"><is><t>...</t></is></c>
-    //
-    // Wir arbeiten mit Inline-Strings beim Schreiben, das vermeidet
-    // Shared-String-Verwaltung und ist immer korrekt.
-
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
     if (sheetData == null) return _AktualisierungsStats(0, 0);
 
-    // ─── 1. Spalten der Prozessschritte ermitteln ─────────────────────────
-    // In der Vorlage: Schritt 1 = Spalte B, Schritt 2 = C, ..., Schritt 10 = K
-    // (Entspricht reihenfolge 1..10)
-    // Wir lesen keine Merge-Definitionen — wir schreiben einfach in die
-    // Zellen der Spalten B..K in den relevanten Zeilen.
-
-    // Zeilen-Indizes der Label-Spalte A finden:
-    // Abteilung, Prozessschritt, Anlagen, Personen, Menge (kg), Zeit (hh:mm)
     final labelRows = _findeSchrittLabelZeilen(doc, sharedStrings);
 
     int schritteAktualisiert = 0;
     int parameterAktualisiert = 0;
 
-    // ─── 2. Schritt-Zellen schreiben (Zeilen 11-16 i.d.R.) ────────────────
     for (final step in schritte) {
-      final col = step.reihenfolge; // 1..10 → Spalte B..K (Index 2..11)
+      final col = step.reihenfolge; // 1..10 → Spalte B..K
       if (col < 1 || col > 10) continue;
-      final colLetter = _spaltenBuchstabe(col + 1); // B, C, D...
+      final colLetter = _spaltenBuchstabe(col + 1);
 
       if (labelRows.abteilungRow != null) {
         _setzeZelleInlineStr(
@@ -420,9 +374,7 @@ class ExcelExportServiceV3 {
         );
       }
       if (labelRows.zeitRow != null && step.basisDauerMinuten > 0) {
-        // hh:mm als String — wir wollen nicht mit Excel-Zeit-Formatierung
-        // konkurrieren. Die Zelle hat üblicherweise schon ein hh:mm-Format,
-        // deshalb schreiben wir die Minuten als Bruchteil eines Tages.
+        // hh:mm als Bruchteil eines Tages (Excel-Konvention für Zeiten)
         final bruchteilTag = step.basisDauerMinuten / (24 * 60);
         _setzeZelleZahl(
           sheetData,
@@ -433,10 +385,9 @@ class ExcelExportServiceV3 {
       }
       schritteAktualisiert++;
 
-      // ─── 3. Parameter-Zeilen aktualisieren ──────────────────────────────
+      // Parameter-Zeilen aktualisieren
       final stepParams = paramsByStep[step.id] ?? [];
       for (final param in stepParams) {
-        // Zeile anhand des Labels in Spalte A finden
         final paramRow = _findeZeileMitLabelInA(
           doc,
           sharedStrings,
@@ -446,7 +397,6 @@ class ExcelExportServiceV3 {
         final wert = param.wert ?? '';
         if (wert.isEmpty) continue;
 
-        // Zahl oder String? Heuristik: tryParse
         final zahl = double.tryParse(wert.replaceAll(',', '.'));
         if (zahl != null) {
           _setzeZelleZahl(
@@ -472,7 +422,6 @@ class ExcelExportServiceV3 {
 
   // ─── Zeilen-Lokalisierung ─────────────────────────────────────────────
 
-  /// Liest den Wert der Zelle in Spalte A einer Zeile (aufgelöster String).
   String? _leseZelleA(XmlElement rowElement, _SharedStrings sharedStrings) {
     for (final cell in rowElement.findElements('c')) {
       final ref = cell.getAttribute('r') ?? '';
@@ -498,7 +447,6 @@ class ExcelExportServiceV3 {
     } else if (type == 'str') {
       return cell.findElements('v').firstOrNull?.innerText;
     } else {
-      // Zahl oder Bool
       return cell.findElements('v').firstOrNull?.innerText;
     }
     return null;
@@ -561,8 +509,6 @@ class ExcelExportServiceV3 {
 
   // ─── Zellen-Manipulation ──────────────────────────────────────────────
 
-  /// Setzt eine Zelle auf einen String-Wert (als inlineStr, behält das
-  /// bestehende Style-Attribut bei falls vorhanden).
   void _setzeZelleInlineStr(
     XmlElement sheetData, {
     required int row,
@@ -573,10 +519,8 @@ class ExcelExportServiceV3 {
     final rowElement = _findeOderLegeRowAn(sheetData, row);
     final cell = _findeOderLegeCellAn(rowElement, cellRef);
 
-    // Style-Attribut beibehalten falls vorhanden
     final styleAttr = cell.getAttribute('s');
 
-    // Attribute und Children löschen und neu aufbauen
     cell.attributes.clear();
     cell.children.clear();
     cell.setAttribute('r', cellRef);
@@ -585,14 +529,12 @@ class ExcelExportServiceV3 {
 
     final is_ = XmlElement(XmlName('is'));
     final t = XmlElement(XmlName('t'));
-    // xml:space="preserve" für führende/nachfolgende Leerzeichen
     t.setAttribute('xml:space', 'preserve');
     t.children.add(XmlText(wert));
     is_.children.add(t);
     cell.children.add(is_);
   }
 
-  /// Setzt eine Zelle auf einen numerischen Wert.
   void _setzeZelleZahl(
     XmlElement sheetData, {
     required int row,
@@ -609,10 +551,8 @@ class ExcelExportServiceV3 {
     cell.children.clear();
     cell.setAttribute('r', cellRef);
     if (styleAttr != null) cell.setAttribute('s', styleAttr);
-    // Ohne t-Attribut = number (default)
 
     final v = XmlElement(XmlName('v'));
-    // Ganzzahlige Werte ohne Nachkommastellen schreiben
     final zahlStr = wert == wert.roundToDouble()
         ? wert.toInt().toString()
         : wert.toString();
@@ -625,7 +565,6 @@ class ExcelExportServiceV3 {
       final r = int.tryParse(row.getAttribute('r') ?? '');
       if (r == rowNum) return row;
     }
-    // Einfügen an der richtigen Position (Zeilen müssen sortiert sein)
     final neu = XmlElement(XmlName('row'));
     neu.setAttribute('r', rowNum.toString());
 
@@ -654,7 +593,6 @@ class ExcelExportServiceV3 {
     final neu = XmlElement(XmlName('c'));
     neu.setAttribute('r', cellRef);
 
-    // Zellen innerhalb einer Zeile müssen sortiert sein
     final targetCol = _spaltenIndex(cellRef);
     final cells = rowElement.findElements('c').toList();
     int? insertBefore;
@@ -677,7 +615,6 @@ class ExcelExportServiceV3 {
   // ─── Koordinaten-Utilities ────────────────────────────────────────────
 
   String _spaltenBuchstabe(int index) {
-    // 1 → A, 2 → B, ..., 26 → Z, 27 → AA
     if (index < 1) return 'A';
     var n = index;
     final result = StringBuffer();
@@ -690,7 +627,6 @@ class ExcelExportServiceV3 {
   }
 
   int _spaltenIndex(String cellRef) {
-    // "B11" → 2
     final match = RegExp(r'^([A-Z]+)').firstMatch(cellRef);
     if (match == null) return 0;
     final letters = match.group(1)!;
@@ -702,7 +638,6 @@ class ExcelExportServiceV3 {
   }
 
   String _abteilungLabel(String dbValue) {
-    // Umgekehrtes Mapping zu _abteilungMapping aus dem Import-Service
     switch (dbValue) {
       case 'zerlegung':
         return 'Zerlegung';
@@ -758,7 +693,7 @@ class _SharedStrings {
 
   final List<String> _strings;
   final ArchiveFile? _originalFile;
-  bool _dirty = false;
+  final bool _dirty = false;
 
   factory _SharedStrings.fromArchive(Archive archive) {
     final file = archive.findFile('xl/sharedStrings.xml');
@@ -768,13 +703,11 @@ class _SharedStrings {
     );
     final strings = <String>[];
     for (final si in doc.findAllElements('si')) {
-      // <si><t>text</t></si>  oder <si><r>...</r>...<r>...</r></si>
       final tDirekt = si.findElements('t').firstOrNull;
       if (tDirekt != null) {
         strings.add(tDirekt.innerText);
         continue;
       }
-      // Rich text: Konkatenation aller <r><t>..</t></r>
       final buffer = StringBuffer();
       for (final r in si.findElements('r')) {
         for (final t in r.findElements('t')) {
