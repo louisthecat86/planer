@@ -165,8 +165,9 @@ class ExcelExportServiceV3 {
       }
 
       final schritte = alleSchritte
-          .where((s) =>
-              s.productId == artikel.id && s.deletedAt == null)
+          .where(
+            (s) => s.productId == artikel.id && s.deletedAt == null,
+          )
           .toList()
         ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
 
