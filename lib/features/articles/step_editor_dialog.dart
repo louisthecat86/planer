@@ -190,7 +190,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
             children: [
               // ── Abteilung ────────────────────────────────────────────
               DropdownButtonFormField<String>(
-                value: _abteilungDbValue,
+                initialValue: _abteilungDbValue,
                 decoration: const InputDecoration(
                   labelText: 'Abteilung',
                   border: OutlineInputBorder(),
@@ -259,7 +259,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 )
               else
                 DropdownButtonFormField<String?>(
-                  value: _maschineId,
+                  initialValue: _maschineId,
                   decoration: const InputDecoration(
                     labelText: 'Anlage',
                     border: OutlineInputBorder(),
