@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
 
 /// Dialog zum Bearbeiten eines einzelnen Produktions-Schritts.
 ///
@@ -163,6 +164,13 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
           updatedAt: Value(DateTime.now()),
         ),
       );
+
+      // Auto-Backup nach jeder Schritt-Änderung anstoßen.
+      // Debounced: Wenn der User mehrere Schritte direkt nacheinander
+      // bearbeitet, wird trotzdem nur ein Backup geschrieben.
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Schritt bearbeitet');
 
       if (mounted) {
         Navigator.of(context).pop(true);

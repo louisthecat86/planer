@@ -10,7 +10,6 @@ import '../../core/providers/department_capacity_provider.dart';
 import '../../core/providers/personnel_provider.dart';
 import '../../core/services/demo_data_service.dart';
 import '../../core/services/personnel_service.dart';
-import '../../core/services/template_export_service.dart';
 
 const _dayNames = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
@@ -28,6 +27,10 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
 });
 
 /// Dashboard-Startbildschirm mit Kacheln.
+///
+/// Daten-Operationen (Excel-Import/-Export, Backup, Restore, Speicherort)
+/// laufen alle über das Datei-Icon oben rechts in der AppBar — der führt
+/// zum zentralen Daten-verwalten-Screen.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -40,9 +43,9 @@ class HomeScreen extends ConsumerWidget {
         title: const Text('Produktion Planer'),
         actions: [
           IconButton(
-            onPressed: () => context.pushNamed('backup'),
-            icon: const Icon(Icons.backup),
-            tooltip: 'Backup-Verwaltung',
+            onPressed: () => context.pushNamed('data'),
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Daten verwalten (Excel, Backup, Restore)',
           ),
         ],
       ),
@@ -77,6 +80,7 @@ class HomeScreen extends ConsumerWidget {
             (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
                 crossAxisCount;
 
+        // Reine Domänen-Kacheln. Daten-Operationen sind in der AppBar.
         final tiles = [
           _NavigationTile(
             icon: Icons.dashboard_rounded,
@@ -107,32 +111,11 @@ class HomeScreen extends ConsumerWidget {
             onTap: () => context.pushNamed('personnel'),
           ),
           _NavigationTile(
-            icon: Icons.backup_rounded,
-            label: 'Backup',
-            subtitle: 'Sicherung & Wiederherstellung',
-            color: const Color(0xFF6A1B9A),
-            onTap: () => context.pushNamed('backup'),
-          ),
-          _NavigationTile(
             icon: Icons.inventory_2_rounded,
             label: 'Artikel',
             subtitle: 'Stammdaten & Maschinen',
             color: const Color(0xFF4E342E),
             onTap: () => context.pushNamed('articles'),
-          ),
-          _NavigationTile(
-            icon: Icons.upload_file_rounded,
-            label: 'Excel-Import',
-            subtitle: 'Stammdaten importieren',
-            color: const Color(0xFF00838F),
-            onTap: () => context.pushNamed('import'),
-          ),
-          _NavigationTile(
-            icon: Icons.table_chart_rounded,
-            label: 'Excel-Vorlage',
-            subtitle: 'Vorlage für neue Artikel',
-            color: const Color(0xFF558B2F),
-            onTap: () => _exportTemplate(context),
           ),
         ];
 
@@ -145,23 +128,6 @@ class HomeScreen extends ConsumerWidget {
         );
       },
     );
-  }
-
-  Future<void> _exportTemplate(BuildContext context) async {
-    try {
-      final path = await TemplateExportService.generateAndSave();
-      if (!context.mounted) return;
-      if (path != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Vorlage gespeichert: $path')),
-        );
-      }
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler: $e')),
-      );
-    }
   }
 }
 
@@ -320,8 +286,11 @@ class _DailyOverviewTile extends ConsumerWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.today_rounded,
-                        color: Colors.white, size: 22,),
+                    const Icon(
+                      Icons.today_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                     const SizedBox(width: 8),
                     Text(
                       'Tagesübersicht',
@@ -336,8 +305,8 @@ class _DailyOverviewTile extends ConsumerWidget {
                 const SizedBox(height: 16),
                 if (summary == null)
                   const Center(
-                      child:
-                          CircularProgressIndicator(color: Colors.white70),)
+                    child: CircularProgressIndicator(color: Colors.white70),
+                  )
                 else
                   _buildMetrics(context, summary),
               ],
@@ -643,7 +612,8 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Lade Testdaten, um alle Funktionen sofort auszuprobieren.',
+                    'Lade Testdaten oder importiere eine Excel-Vorlage über '
+                    'das Datei-Icon oben rechts.',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
@@ -686,4 +656,3 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
     );
   }
 }
-

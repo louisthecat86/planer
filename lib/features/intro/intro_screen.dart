@@ -18,7 +18,7 @@ import 'package:go_router/go_router.dart';
 /// Farben bewusst dunkel gehalten: tiefes Marineblau für "Produktions-"
 /// und nahezu-schwarz für "Planer".
 ///
-/// Tipp/Klick bricht die Animation ab und navigiert zur Landing-Page.
+/// Tipp/Klick bricht die Animation ab und navigiert direkt zum Dashboard.
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
 
@@ -84,7 +84,10 @@ class _IntroScreenState extends State<IntroScreen>
   void _finish() {
     if (_alreadyNavigating) return;
     _alreadyNavigating = true;
-    context.go('/');
+    // Direkt zum Dashboard — die alte Landing-Page mit Backup-Wahl
+    // ist jetzt durch den zentralen Daten-Screen (über das
+    // Datei-Icon im Home-Screen erreichbar) ersetzt.
+    context.go('/home');
   }
 
   @override
@@ -224,7 +227,7 @@ class _SchriftzugText extends StatelessWidget {
                 const Color(0xFF0D1117).withValues(alpha: 0.6),
                 const Color(0xFF0D1117).withValues(alpha: 0),
               ],
-              stops: const [0.0, 0.3, 0.7, 1.0],
+              stops: const [0.0, 1.0],
             ),
           ),
         ),
