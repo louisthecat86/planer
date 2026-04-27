@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
+import 'custom_parameter_editor_dialog.dart';
 import 'step_editor_dialog.dart';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +35,6 @@ final productStepsProvider =
 });
 
 /// Lädt alle Parameter eines Schritts, sortiert nach Reihenfolge.
-/// Wird beim Expand eines Schritts gelazy ausgewertet.
 final stepParametersProvider =
     FutureProvider.family<List<ProductStepParameter>, String>(
         (ref, stepId) async {
@@ -45,8 +46,7 @@ final stepParametersProvider =
       .get();
 });
 
-/// Lädt eine Maschine per ID. Für die Anzeige des Anlagen-Namens
-/// in der Schritt-Karte.
+/// Lädt eine Maschine per ID.
 final machineProvider =
     FutureProvider.family<Machine?, String>((ref, machineId) async {
   final db = ref.watch(databaseProvider);
@@ -184,8 +184,6 @@ class _StepCardState extends ConsumerState<_StepCard> {
     );
     if (geaendert) {
       widget.onUpdated();
-      // Parameter-Provider ist pro step.id scoped — der Schritt selbst
-      // bleibt, Parameter ändern wir in Phase A nicht → kein Invalidate nötig.
     }
   }
 
@@ -293,7 +291,7 @@ class _StepCardState extends ConsumerState<_StepCard> {
                   _MaschineInfoRow(step: widget.step),
                   const SizedBox(height: 12),
 
-                  // Parameter (readonly in Phase A)
+                  // Parameter (Standard readonly, Custom editierbar)
                   _ParameterListe(stepId: widget.step.id),
                 ],
               ),
@@ -415,7 +413,6 @@ class _MaschineInfoRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
 
-    // Neue v3-Referenz zuerst
     if (step.maschineId != null) {
       final maschineAsync = ref.watch(machineProvider(step.maschineId!));
       return maschineAsync.when(
@@ -423,10 +420,7 @@ class _MaschineInfoRow extends ConsumerWidget {
           children: [
             Icon(Icons.factory, size: 16, color: theme.colorScheme.primary),
             const SizedBox(width: 8),
-            Text(
-              'Anlage: ',
-              style: theme.textTheme.bodySmall,
-            ),
+            Text('Anlage: ', style: theme.textTheme.bodySmall),
             Text(
               m?.name ?? step.maschine ?? '—',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -440,7 +434,6 @@ class _MaschineInfoRow extends ConsumerWidget {
       );
     }
 
-    // Legacy-Feld als Fallback
     if (step.maschine != null && step.maschine!.isNotEmpty) {
       return Row(
         children: [
@@ -468,13 +461,79 @@ class _MaschineInfoRow extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Parameter-Liste (readonly in Phase A)
+// Parameter-Liste
 // ---------------------------------------------------------------------------
 
 class _ParameterListe extends ConsumerWidget {
   const _ParameterListe({required this.stepId});
 
   final String stepId;
+
+  Future<void> _customLoeschen(
+    BuildContext context,
+    WidgetRef ref,
+    ProductStepParameter param,
+  ) async {
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Parameter löschen?'),
+        content: Text('Parameter „${param.parameterName}" wird gelöscht.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+
+    final db = ref.read(databaseProvider);
+    await (db.update(db.productStepParameters)
+          ..where((p) => p.id.equals(param.id)))
+        .write(
+      ProductStepParametersCompanion(
+        deletedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Custom-Parameter gelöscht',
+        );
+    ref.invalidate(stepParametersProvider(stepId));
+  }
+
+  Future<void> _customNeu(BuildContext context, WidgetRef ref) async {
+    final geaendert = await CustomParameterEditorDialog.show(
+      context,
+      stepId: stepId,
+    );
+    if (geaendert) {
+      ref.invalidate(stepParametersProvider(stepId));
+    }
+  }
+
+  Future<void> _customBearbeiten(
+    BuildContext context,
+    WidgetRef ref,
+    ProductStepParameter param,
+  ) async {
+    final geaendert = await CustomParameterEditorDialog.show(
+      context,
+      stepId: stepId,
+      existingParameter: param,
+    );
+    if (geaendert) {
+      ref.invalidate(stepParametersProvider(stepId));
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -483,20 +542,13 @@ class _ParameterListe extends ConsumerWidget {
 
     return paramsAsync.when(
       data: (params) {
-        if (params.isEmpty) {
-          return Text(
-            'Keine Parameter hinterlegt.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontStyle: FontStyle.italic,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
-          );
-        }
+        final standardParams = params.where((p) => !p.istCustom).toList();
+        final customParams = params.where((p) => p.istCustom).toList();
 
-        // Nach Gruppen sortieren
-        final byGruppe = <String, List<ProductStepParameter>>{};
-        for (final p in params) {
-          byGruppe.putIfAbsent(p.parameterGruppe, () => []).add(p);
+        // Standard-Parameter nach Gruppen aufteilen
+        final standardByGruppe = <String, List<ProductStepParameter>>{};
+        for (final p in standardParams) {
+          standardByGruppe.putIfAbsent(p.parameterGruppe, () => []).add(p);
         }
 
         return Column(
@@ -516,25 +568,41 @@ class _ParameterListe extends ConsumerWidget {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  '(Bearbeiten: Phase B)',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: theme.colorScheme.onSurface
-                        .withValues(alpha: 0.5),
-                  ),
-                ),
               ],
             ),
             const SizedBox(height: 8),
-            for (final entry in byGruppe.entries) ...[
-              _GruppenBlock(
-                gruppenName: entry.key,
-                parameter: entry.value,
-              ),
-              const SizedBox(height: 8),
+
+            // Standard-Parameter (readonly)
+            if (standardByGruppe.isNotEmpty) ...[
+              for (final entry in standardByGruppe.entries) ...[
+                _StandardGruppenBlock(
+                  gruppenName: entry.key,
+                  parameter: entry.value,
+                ),
+                const SizedBox(height: 8),
+              ],
             ],
+
+            // Custom-Parameter (editierbar)
+            _CustomGruppenBlock(
+              parameter: customParams,
+              onAdd: () => _customNeu(context, ref),
+              onEdit: (p) => _customBearbeiten(context, ref, p),
+              onDelete: (p) => _customLoeschen(context, ref, p),
+            ),
+
+            if (standardByGruppe.isEmpty && customParams.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Keine Parameter hinterlegt.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color:
+                        theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
           ],
         );
       },
@@ -550,8 +618,9 @@ class _ParameterListe extends ConsumerWidget {
   }
 }
 
-class _GruppenBlock extends StatelessWidget {
-  const _GruppenBlock({
+/// Block für Standard-Parameter aus der Excel-Vorlage. Readonly.
+class _StandardGruppenBlock extends StatelessWidget {
+  const _StandardGruppenBlock({
     required this.gruppenName,
     required this.parameter,
   });
@@ -562,38 +631,125 @@ class _GruppenBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final istCustom = gruppenName == 'CUSTOM';
-    final anzeigename = istCustom ? 'Zusätzliche Parameter' : gruppenName;
-
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: istCustom
-            ? Colors.amber.withValues(alpha: 0.08)
-            : theme.colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.5),
+        color:
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            anzeigename,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: theme.colorScheme.primary,
-            ),
+          Row(
+            children: [
+              Text(
+                gruppenName,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.lock_outline,
+                size: 12,
+                color:
+                    theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
-          ...parameter.map((p) => _ParameterZeile(param: p)),
+          ...parameter.map((p) => _ParameterZeileReadonly(param: p)),
         ],
       ),
     );
   }
 }
 
-class _ParameterZeile extends StatelessWidget {
-  const _ParameterZeile({required this.param});
+/// Block für Custom-Parameter (vom Nutzer angelegt). Editierbar.
+class _CustomGruppenBlock extends StatelessWidget {
+  const _CustomGruppenBlock({
+    required this.parameter,
+    required this.onAdd,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final List<ProductStepParameter> parameter;
+  final VoidCallback onAdd;
+  final void Function(ProductStepParameter) onEdit;
+  final void Function(ProductStepParameter) onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: Colors.amber.withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Zusätzliche Parameter',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: onAdd,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text(
+                  'Neu',
+                  style: TextStyle(fontSize: 12),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
+          ),
+          if (parameter.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                'Noch keine zusätzlichen Parameter angelegt.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
+              ),
+            )
+          else
+            ...parameter.map(
+              (p) => _ParameterZeileEditierbar(
+                param: p,
+                onEdit: () => onEdit(p),
+                onDelete: () => onDelete(p),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Parameter-Zeile readonly (für Standard-Parameter).
+class _ParameterZeileReadonly extends StatelessWidget {
+  const _ParameterZeileReadonly({required this.param});
 
   final ProductStepParameter param;
 
@@ -621,6 +777,66 @@ class _ParameterZeile extends StatelessWidget {
                 fontFamily: 'monospace',
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Parameter-Zeile mit Bearbeiten/Löschen (für Custom-Parameter).
+class _ParameterZeileEditierbar extends StatelessWidget {
+  const _ParameterZeileEditierbar({
+    required this.param,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final ProductStepParameter param;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            flex: 2,
+            child: Text(
+              param.parameterName,
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+              param.wert ?? '—',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.edit, size: 16),
+            tooltip: 'Bearbeiten',
+            onPressed: onEdit,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.delete_outline, size: 16),
+            tooltip: 'Löschen',
+            onPressed: onDelete,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
           ),
         ],
       ),

@@ -19,27 +19,23 @@ class ExportResultV3 {
     this.artikelAktualisiert = 0,
     this.schritteGeschrieben = 0,
     this.parameterGeschrieben = 0,
+    this.customParameterGeschrieben = 0,
+    this.customParameterUebersprungen = 0,
     this.artikelNichtInVorlage = const [],
     this.warnungen = const [],
     this.fehler = const [],
   });
 
-  /// Die neuen Excel-Bytes — vom UI ins Dateisystem geschrieben.
   final Uint8List bytes;
-
-  /// Vorschlag für den Dateinamen im Speichern-Dialog.
   final String vorschlagDateiname;
 
   final int artikelAktualisiert;
   final int schritteGeschrieben;
   final int parameterGeschrieben;
+  final int customParameterGeschrieben;
+  final int customParameterUebersprungen;
 
-  /// Artikel, die in der DB sind, aber kein entsprechendes Sheet
-  /// in der Vorlage haben (z.B. in der App neu angelegt).
-  /// Die werden aktuell nicht exportiert — das kommt in einem zweiten
-  /// Schritt.
   final List<String> artikelNichtInVorlage;
-
   final List<String> warnungen;
   final List<String> fehler;
 
@@ -53,34 +49,25 @@ class ExportResultV3 {
 /// Exportiert den aktuellen DB-Stand in die zuletzt importierte
 /// Excel-Datei, unter Erhalt aller Formatierung.
 ///
-/// Funktionsweise:
-/// 1. Lädt die importierten Excel-Bytes aus `app_settings`.
-/// 2. Öffnet das ZIP, liest `xl/workbook.xml` + `xl/sharedStrings.xml`
-///    + `xl/_rels/workbook.xml.rels` um zu wissen welcher Sheet
-///    welcher XML-Datei entspricht.
-/// 3. Für jeden Artikel-DB-Eintrag: öffnet das passende Sheet-XML,
-///    setzt die relevanten Zellen auf DB-Werte, schreibt es zurück.
-/// 4. Packt das ZIP neu zusammen und liefert die Bytes.
-///
-/// **Bewusst unangetastete Teile:**
-/// - Styles, Fonts, Fills, Borders (xl/styles.xml)
-/// - Drawings, Charts, Images
-/// - Data Validations (Dropdowns)
-/// - Defined Names (Named Ranges wie "Anlagen_Liste")
-/// - Tab-Farben, Merge-Definitionen
-/// - Anlagen-Katalog, Übersicht, Anleitung, Blaupausen-Sheets
+/// Zusätzlich zu den Standard-Parametern werden Custom-Parameter
+/// (in der App vom Nutzer angelegt) in den „ZUSÄTZLICHE PARAMETER"-Block
+/// der Vorlage geschrieben.
 class ExcelExportServiceV3 {
   ExcelExportServiceV3(this._db);
 
   final AppDatabase _db;
 
-  /// Namespace für relationships (wird zum Auflösen der Sheet-IDs gebraucht).
   static const _nsRel =
       'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 
-  /// Prüft ob eine Excel-Datei als Basis vorliegt. Das UI ruft das vor
-  /// dem Export-Button-Click auf, um einen Hinweis zu zeigen falls
-  /// noch nichts importiert wurde.
+  /// Marker-Text in Spalte A der Vorlage, der den Beginn des
+  /// „ZUSÄTZLICHE PARAMETER"-Blocks markiert.
+  static const _zusaetzlicheParameterMarker = 'ZUSÄTZLICHE PARAMETER';
+
+  /// Marker-Text in Spalte A, der das Ende des Parameter-Bereichs
+  /// markiert (alles danach gehört zur Historie).
+  static const _historieMarker = 'HISTORISCHE DATEN';
+
   Future<bool> hasImportedFile() async {
     final row = await (_db.select(_db.appSettings)
           ..where((t) => t.key.equals(kAppSettingLastImportExcelBytes))
@@ -89,7 +76,6 @@ class ExcelExportServiceV3 {
     return row != null && row.value.isNotEmpty;
   }
 
-  /// Liest den gespeicherten Dateinamen (für den Speichern-Dialog-Vorschlag).
   Future<String> letzterDateiname() async {
     final row = await (_db.select(_db.appSettings)
           ..where((t) => t.key.equals(kAppSettingLastImportExcelFilename))
@@ -98,9 +84,7 @@ class ExcelExportServiceV3 {
     return row?.value ?? 'stammdaten_export.xlsx';
   }
 
-  /// Haupt-Export-Methode. Liefert die Bytes der aktualisierten Excel.
   Future<ExportResultV3> export() async {
-    // ─── 1. Basis-Excel aus app_settings laden ──────────────────────────
     final bytesRow = await (_db.select(_db.appSettings)
           ..where((t) => t.key.equals(kAppSettingLastImportExcelBytes))
           ..limit(1))
@@ -118,11 +102,8 @@ class ExcelExportServiceV3 {
 
     final vorlageBytes = base64Decode(bytesRow.value);
     final dateiname = await letzterDateiname();
-
-    // ─── 2. ZIP entpacken ───────────────────────────────────────────────
     final archive = ZipDecoder().decodeBytes(vorlageBytes);
 
-    // ─── 3. Sheet-Namen → XML-Pfad auflösen ─────────────────────────────
     final sheetInfo = _ermittleSheetXmlPfade(archive);
     if (sheetInfo.isEmpty) {
       return ExportResultV3(
@@ -134,32 +115,27 @@ class ExcelExportServiceV3 {
       );
     }
 
-    // ─── 4. Shared-Strings-Tabelle lesen ────────────────────────────────
     final sharedStrings = _SharedStrings.fromArchive(archive);
 
-    // ─── 5. DB-Artikel laden ────────────────────────────────────────────
     final alleArtikel = await _db.select(_db.products).get();
     final alleSchritte = await _db.select(_db.productSteps).get();
-    final alleParameter =
-        await _db.select(_db.productStepParameters).get();
+    final alleParameter = await _db.select(_db.productStepParameters).get();
     final alleMaschinen = await _db.select(_db.machines).get();
     final maschinenById = {for (final m in alleMaschinen) m.id: m};
 
-    // Artikel nach Artikelnummer gruppieren (= Sheetname der Vorlage)
     int artikelAktualisiert = 0;
     int schritteGeschrieben = 0;
     int parameterGeschrieben = 0;
+    int customParameterGeschrieben = 0;
+    int customParameterUebersprungen = 0;
     final artikelNichtInVorlage = <String>[];
     final warnungen = <String>[];
 
-    // ─── 6. Pro Artikel: Sheet-XML aktualisieren ────────────────────────
     for (final artikel in alleArtikel) {
       if (artikel.deletedAt != null) continue;
 
       final sheetXmlPfad = sheetInfo[artikel.artikelnummer];
       if (sheetXmlPfad == null) {
-        // Artikel in DB, aber nicht in Vorlage → neu angelegter Artikel.
-        // Wird in einem späteren Build als neues Sheet behandelt.
         artikelNichtInVorlage.add(artikel.artikelnummer);
         continue;
       }
@@ -204,11 +180,15 @@ class ExcelExportServiceV3 {
           artikelLabel: artikel.artikelnummer,
         );
 
-        if (aktualisiert.schritte > 0 || aktualisiert.parameter > 0) {
+        if (aktualisiert.schritte > 0 ||
+            aktualisiert.parameter > 0 ||
+            aktualisiert.customParameter > 0) {
           artikelAktualisiert++;
         }
         schritteGeschrieben += aktualisiert.schritte;
         parameterGeschrieben += aktualisiert.parameter;
+        customParameterGeschrieben += aktualisiert.customParameter;
+        customParameterUebersprungen += aktualisiert.customUebersprungen;
 
         final neuesXml = utf8.encode(doc.toXmlString(pretty: false));
         archive.addFile(
@@ -226,12 +206,8 @@ class ExcelExportServiceV3 {
       }
     }
 
-    // ─── 7. Shared-Strings neu schreiben (falls wir welche hinzugefügt
-    //       haben, passiert aktuell nicht weil wir inline strings nutzen,
-    //       aber robust für später) ──────────────────────────────────────
     sharedStrings.writeBackIfDirty(archive);
 
-    // ─── 8. ZIP neu packen ──────────────────────────────────────────────
     final encoder = ZipEncoder();
     final neuesBytes = Uint8List.fromList(encoder.encode(archive)!);
 
@@ -241,13 +217,13 @@ class ExcelExportServiceV3 {
       artikelAktualisiert: artikelAktualisiert,
       schritteGeschrieben: schritteGeschrieben,
       parameterGeschrieben: parameterGeschrieben,
+      customParameterGeschrieben: customParameterGeschrieben,
+      customParameterUebersprungen: customParameterUebersprungen,
       artikelNichtInVorlage: artikelNichtInVorlage,
       warnungen: warnungen,
     );
   }
 
-  /// Generiert einen Dateinamen mit Zeitstempel als Vorschlag
-  /// für den Speichern-Dialog.
   String _generiereExportDateiname(String originalname) {
     final jetzt = DateTime.now();
     final ts = '${jetzt.year}${_pad(jetzt.month)}${_pad(jetzt.day)}_'
@@ -258,12 +234,6 @@ class ExcelExportServiceV3 {
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // ZIP/XML-Hilfsmethoden
-  // ═════════════════════════════════════════════════════════════════════════
-
-  /// Liest `xl/workbook.xml` + `xl/_rels/workbook.xml.rels` und liefert
-  /// ein Mapping Sheet-Name → XML-Pfad im ZIP.
   Map<String, String> _ermittleSheetXmlPfade(Archive archive) {
     final result = <String, String>{};
 
@@ -278,7 +248,6 @@ class ExcelExportServiceV3 {
       utf8.decode(relsFile.content as List<int>),
     );
 
-    // rId → Target (z.B. "rId3" → "worksheets/sheet3.xml")
     final rIdToTarget = <String, String>{};
     for (final rel in relsDoc.findAllElements('Relationship')) {
       final id = rel.getAttribute('Id');
@@ -288,7 +257,6 @@ class ExcelExportServiceV3 {
       }
     }
 
-    // Sheet-Name → rId
     for (final sheet in workbookDoc.findAllElements('sheet')) {
       final name = sheet.getAttribute('name');
       final rid = sheet.getAttribute('id', namespace: _nsRel) ??
@@ -304,7 +272,6 @@ class ExcelExportServiceV3 {
     return result;
   }
 
-  /// Aktualisiert ein einzelnes Sheet-XML mit den DB-Daten.
   _AktualisierungsStats _aktualisiereSheetXml({
     required XmlDocument doc,
     required Product artikel,
@@ -316,18 +283,25 @@ class ExcelExportServiceV3 {
     required String artikelLabel,
   }) {
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
-    if (sheetData == null) return _AktualisierungsStats(0, 0);
+    if (sheetData == null) return _AktualisierungsStats(0, 0, 0, 0);
 
     final labelRows = _findeSchrittLabelZeilen(doc, sharedStrings);
 
     int schritteAktualisiert = 0;
     int parameterAktualisiert = 0;
+    int customGeschrieben = 0;
+    int customUebersprungen = 0;
+
+    // ── Custom-Parameter pro Schritt: Pool aus dem ZUSÄTZLICHE-Block
+    //    in der Vorlage-Excel ermitteln ────────────────────────────────
+    final customSlots = _findeCustomParameterSlots(doc, sharedStrings);
 
     for (final step in schritte) {
       final col = step.reihenfolge; // 1..10 → Spalte B..K
       if (col < 1 || col > 10) continue;
       final colLetter = _spaltenBuchstabe(col + 1);
 
+      // ── Standard-Schritt-Werte ─────────────────────────────────────
       if (labelRows.abteilungRow != null) {
         _setzeZelleInlineStr(
           sheetData,
@@ -375,7 +349,6 @@ class ExcelExportServiceV3 {
         );
       }
       if (labelRows.zeitRow != null && step.basisDauerMinuten > 0) {
-        // hh:mm als Bruchteil eines Tages (Excel-Konvention für Zeiten)
         final bruchteilTag = step.basisDauerMinuten / (24 * 60);
         _setzeZelleZahl(
           sheetData,
@@ -386,9 +359,11 @@ class ExcelExportServiceV3 {
       }
       schritteAktualisiert++;
 
-      // Parameter-Zeilen aktualisieren
+      // ── Standard-Parameter aktualisieren (nur wenn das Label in
+      //    der Vorlage existiert — sonst überspringen) ────────────────
       final stepParams = paramsByStep[step.id] ?? [];
-      for (final param in stepParams) {
+      final standardParams = stepParams.where((p) => !p.istCustom);
+      for (final param in standardParams) {
         final paramRow = _findeZeileMitLabelInA(
           doc,
           sharedStrings,
@@ -416,9 +391,104 @@ class ExcelExportServiceV3 {
         }
         parameterAktualisiert++;
       }
+
+      // ── Custom-Parameter in die ZUSÄTZLICHE-PARAMETER-Slots ───────
+      final customParams = stepParams.where((p) => p.istCustom).toList();
+      for (var i = 0; i < customParams.length; i++) {
+        if (i >= customSlots.length) {
+          customUebersprungen++;
+          continue;
+        }
+        final slot = customSlots[i];
+        final p = customParams[i];
+
+        // Label in Spalte A schreiben (Name des Custom-Parameters)
+        _setzeZelleInlineStr(
+          sheetData,
+          row: slot,
+          colLetter: 'A',
+          wert: p.parameterName,
+        );
+
+        // Wert in der Schritt-Spalte
+        final wert = p.wert ?? '';
+        if (wert.isNotEmpty) {
+          final zahl = double.tryParse(wert.replaceAll(',', '.'));
+          if (zahl != null) {
+            _setzeZelleZahl(
+              sheetData,
+              row: slot,
+              colLetter: colLetter,
+              wert: zahl,
+            );
+          } else {
+            _setzeZelleInlineStr(
+              sheetData,
+              row: slot,
+              colLetter: colLetter,
+              wert: wert,
+            );
+          }
+        }
+        customGeschrieben++;
+      }
+
+      if (customParams.length > customSlots.length) {
+        warnungen.add(
+          'Artikel $artikelLabel, Schritt ${step.reihenfolge}: '
+          'Mehr Custom-Parameter (${customParams.length}) als '
+          'freie Slots in der Vorlage (${customSlots.length}). '
+          'Überschüssige Parameter wurden nicht exportiert.',
+        );
+      }
     }
 
-    return _AktualisierungsStats(schritteAktualisiert, parameterAktualisiert);
+    return _AktualisierungsStats(
+      schritteAktualisiert,
+      parameterAktualisiert,
+      customGeschrieben,
+      customUebersprungen,
+    );
+  }
+
+  /// Findet alle freien Zeilen unterhalb von „ZUSÄTZLICHE PARAMETER"
+  /// die als Custom-Parameter-Slots dienen können.
+  ///
+  /// Ein Slot ist eine Zeile in der die Spalte A entweder leer ist
+  /// oder schon einen Custom-Parameter-Namen enthält. Der Block endet
+  /// bei „HISTORISCHE DATEN" oder am Ende des Sheets.
+  List<int> _findeCustomParameterSlots(
+    XmlDocument doc,
+    _SharedStrings sharedStrings,
+  ) {
+    final sheetData = doc.findAllElements('sheetData').firstOrNull;
+    if (sheetData == null) return [];
+
+    int? markerZeile;
+    int? endZeile;
+
+    for (final row in sheetData.findElements('row')) {
+      final rNum = int.tryParse(row.getAttribute('r') ?? '');
+      if (rNum == null) continue;
+      final label = _leseZelleA(row, sharedStrings)?.trim() ?? '';
+      if (label.contains(_zusaetzlicheParameterMarker)) {
+        markerZeile = rNum;
+      } else if (markerZeile != null && label.contains(_historieMarker)) {
+        endZeile = rNum;
+        break;
+      }
+    }
+
+    if (markerZeile == null) return [];
+
+    // Slots sind alle Zeilen zwischen Marker+1 und endZeile-1.
+    // Das sind in der typischen Vorlage etwa 10 Zeilen.
+    final slots = <int>[];
+    final ende = endZeile ?? (markerZeile + 11);
+    for (var r = markerZeile + 1; r < ende; r++) {
+      slots.add(r);
+    }
+    return slots;
   }
 
   // ─── Zeilen-Lokalisierung ─────────────────────────────────────────────
@@ -613,8 +683,6 @@ class ExcelExportServiceV3 {
     return neu;
   }
 
-  // ─── Koordinaten-Utilities ────────────────────────────────────────────
-
   String _spaltenBuchstabe(int index) {
     if (index < 1) return 'A';
     var n = index;
@@ -665,9 +733,17 @@ class ExcelExportServiceV3 {
 // ═══════════════════════════════════════════════════════════════════════════
 
 class _AktualisierungsStats {
-  _AktualisierungsStats(this.schritte, this.parameter);
+  _AktualisierungsStats(
+    this.schritte,
+    this.parameter,
+    this.customParameter,
+    this.customUebersprungen,
+  );
+
   final int schritte;
   final int parameter;
+  final int customParameter;
+  final int customUebersprungen;
 }
 
 class _SchrittLabelZeilen {
@@ -688,7 +764,6 @@ class _SchrittLabelZeilen {
   final int? zeitRow;
 }
 
-/// Wrapper um die Shared-Strings-Tabelle des Workbooks.
 class _SharedStrings {
   _SharedStrings._(this._strings, this._originalFile);
 
@@ -727,12 +802,9 @@ class _SharedStrings {
 
   void writeBackIfDirty(Archive archive) {
     if (!_dirty || _originalFile == null) return;
-    // Aktuell nicht genutzt — wir schreiben nur mit inlineStr.
-    // Methode bleibt als Platzhalter für spätere Erweiterung.
   }
 }
 
-// Extension für firstOrNull auf Iterable (falls nicht verfügbar)
 extension _IterableX<T> on Iterable<T> {
   T? get firstOrNull {
     final it = iterator;
