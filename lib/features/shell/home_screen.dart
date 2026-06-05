@@ -8,7 +8,6 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/department_capacity_provider.dart';
 import '../../core/providers/personnel_provider.dart';
-import '../../core/services/demo_data_service.dart';
 import '../../core/services/personnel_service.dart';
 
 const _dayNames = [
@@ -501,50 +500,10 @@ class _DateNavigationBar extends ConsumerWidget {
 // Database status card
 // ---------------------------------------------------------------------------
 
-class _DatabaseStatusCard extends ConsumerStatefulWidget {
+class _DatabaseStatusCard extends StatelessWidget {
   const _DatabaseStatusCard({required this.db});
 
   final AppDatabase db;
-
-  @override
-  ConsumerState<_DatabaseStatusCard> createState() =>
-      _DatabaseStatusCardState();
-}
-
-class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
-  bool _isSeeding = false;
-  int _rebuildKey = 0;
-
-  Future<void> _seedDemoData() async {
-    setState(() => _isSeeding = true);
-    try {
-      await DemoDataService.seedDemoData(widget.db);
-      ref.invalidate(departmentCapacityNotifierProvider);
-      ref.invalidate(personnelPlanNotifierProvider);
-      if (mounted) {
-        setState(() {
-          _isSeeding = false;
-          _rebuildKey++;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Testdaten erfolgreich geladen!'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isSeeding = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Fehler beim Laden der Testdaten: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -554,8 +513,7 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: FutureBuilder<int>(
-          key: ValueKey(_rebuildKey),
-          future: widget.db
+          future: db
               .customSelect(
                 'SELECT COUNT(*) AS c FROM products '
                 'WHERE deleted_at IS NULL',
@@ -612,29 +570,9 @@ class _DatabaseStatusCardState extends ConsumerState<_DatabaseStatusCard> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Lade Testdaten oder importiere eine Excel-Vorlage über '
-                    'das Datei-Icon oben rechts.',
+                    'Importiere eine Excel-Stammdaten-Vorlage über das '
+                    'Datei-Icon oben rechts, um die App zu füllen.',
                     style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _isSeeding ? null : _seedDemoData,
-                      icon: _isSeeding
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.science),
-                      label: Text(
-                        _isSeeding ? 'Wird geladen …' : 'Testdaten laden',
-                      ),
-                    ),
                   ),
                 ],
               );
