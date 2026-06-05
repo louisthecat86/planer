@@ -7,6 +7,7 @@ import 'core/theme/app_theme.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
 import 'features/backup/backup_management_screen.dart';
+import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
@@ -50,6 +51,12 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/data',
         name: 'data',
         builder: (context, state) => const DataManagementScreen(),
+      ),
+      // Wochenboard (Planungsboard): Abteilungen x Tage, Ampel-Auslastung.
+      GoRoute(
+        path: '/board',
+        name: 'board',
+        builder: (context, state) => const WeekBoardScreen(),
       ),
       GoRoute(
         path: '/whiteboard',

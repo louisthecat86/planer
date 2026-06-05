@@ -116,6 +116,13 @@ class HomeScreen extends ConsumerWidget {
             color: const Color(0xFF4E342E),
             onTap: () => context.pushNamed('articles'),
           ),
+          _NavigationTile(
+            icon: Icons.calendar_view_week_rounded,
+            label: 'Planungsboard',
+            subtitle: 'Woche planen — Abteilungen × Tage',
+            color: const Color(0xFF00838F),
+            onTap: () => context.pushNamed('board'),
+         ),
         ];
 
         return Wrap(
