@@ -7,8 +7,6 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/department_capacity_provider.dart';
-import '../../core/providers/personnel_provider.dart';
-import '../../core/services/personnel_service.dart';
 
 const _dayNames = [
   'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
@@ -82,11 +80,11 @@ class HomeScreen extends ConsumerWidget {
         // Reine Domänen-Kacheln. Daten-Operationen sind in der AppBar.
         final tiles = [
           _NavigationTile(
-            icon: Icons.dashboard_rounded,
-            label: 'Whiteboard',
-            subtitle: 'Wochenplanung per Drag & Drop',
-            color: const Color(0xFF00695C),
-            onTap: () => context.pushNamed('whiteboard'),
+            icon: Icons.calendar_view_week_rounded,
+            label: 'Planungsboard',
+            subtitle: 'Woche planen — Abteilungen × Tage',
+            color: const Color(0xFF00838F),
+            onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
             icon: Icons.bar_chart_rounded,
@@ -103,26 +101,12 @@ class HomeScreen extends ConsumerWidget {
             onTap: () => context.pushNamed('tasks'),
           ),
           _NavigationTile(
-            icon: Icons.people_rounded,
-            label: 'Personal',
-            subtitle: 'Planung & Urlaub',
-            color: const Color(0xFF2E7D32),
-            onTap: () => context.pushNamed('personnel'),
-          ),
-          _NavigationTile(
             icon: Icons.inventory_2_rounded,
             label: 'Artikel',
             subtitle: 'Stammdaten & Maschinen',
             color: const Color(0xFF4E342E),
             onTap: () => context.pushNamed('articles'),
           ),
-          _NavigationTile(
-            icon: Icons.calendar_view_week_rounded,
-            label: 'Planungsboard',
-            subtitle: 'Woche planen — Abteilungen × Tage',
-            color: const Color(0xFF00838F),
-            onTap: () => context.pushNamed('board'),
-         ),
         ];
 
         return Wrap(
@@ -212,7 +196,6 @@ class _DailyOverviewTile extends ConsumerWidget {
   Future<_DailySummary> _loadSummary(
     DateTime date,
     Map<String, double> capacities,
-    PersonnelPlan plan,
   ) async {
     final startOfDay = date;
     final startOfNextDay = date.add(const Duration(days: 1));
@@ -240,16 +223,11 @@ class _DailyOverviewTile extends ConsumerWidget {
       if (cap > 0 && used / cap > 0.9) criticalDepts++;
     }
 
-    final absenceToday =
-        plan.vacations.where((VacationEntry v) => v.overlapsDate(date)).length;
-
     return _DailySummary(
       taskCount: tasks.length,
       totalUsedMinutes: totalUsed,
       totalCapacityMinutes: totalCapacity,
       criticalDepartments: criticalDepts,
-      totalEmployees: plan.employees.length,
-      absentToday: absenceToday,
     );
   }
 
@@ -257,22 +235,10 @@ class _DailyOverviewTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final selectedDate = ref.watch(selectedDateProvider);
     final capacityState = ref.watch(departmentCapacityNotifierProvider);
-    final personnelState = ref.watch(personnelPlanNotifierProvider);
-
     final capacities = capacityState.valueOrNull ?? {};
-    final plan = personnelState.valueOrNull;
-
-    if (plan == null) {
-      return const Card(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Center(child: CircularProgressIndicator()),
-        ),
-      );
-    }
 
     return FutureBuilder<_DailySummary>(
-      future: _loadSummary(selectedDate, capacities, plan),
+      future: _loadSummary(selectedDate, capacities),
       builder: (context, snapshot) {
         final summary = snapshot.data;
 
@@ -349,18 +315,6 @@ class _DailyOverviewTile extends ConsumerWidget {
             label: 'Abt. kritisch',
             valueColor: const Color(0xFFFF8A65),
           ),
-        _MetricItem(
-          icon: Icons.people_rounded,
-          value: '${summary.totalEmployees - summary.absentToday}',
-          label: 'Verfügbar',
-        ),
-        if (summary.absentToday > 0)
-          _MetricItem(
-            icon: Icons.airline_seat_individual_suite_rounded,
-            value: '${summary.absentToday}',
-            label: 'Abwesend',
-            valueColor: const Color(0xFFFF8A65),
-          ),
       ],
     );
   }
@@ -414,16 +368,12 @@ class _DailySummary {
     required this.totalUsedMinutes,
     required this.totalCapacityMinutes,
     required this.criticalDepartments,
-    required this.totalEmployees,
-    required this.absentToday,
   });
 
   final int taskCount;
   final double totalUsedMinutes;
   final double totalCapacityMinutes;
   final int criticalDepartments;
-  final int totalEmployees;
-  final int absentToday;
 }
 
 // ---------------------------------------------------------------------------

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../production_runs/domain/lernschleife_service.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
@@ -51,9 +52,19 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   late final TextEditingController _notizenController;
   late String _status;
 
+  // Ist-Erfassung (erscheint beim erstmaligen "Fertig"-Melden).
+  late final TextEditingController _istDauerController;
+  late final TextEditingController _istMengeController;
+  late final TextEditingController _istMitarbeiterController;
+  late final String _initialStatus;
+
   ProductStep? _step; // Zugehöriger ProductStep für Skalierung.
   bool _isDirty = false;
   bool _isSaving = false;
+
+  /// Ist-Erfassung anzeigen: nur beim Übergang auf "fertig".
+  bool get _zeigeIstErfassung =>
+      _status == 'fertig' && _initialStatus != 'fertig';
 
   @override
   void initState() {
@@ -65,11 +76,18 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
         TextEditingController(text: t.geplanteDauerMinuten.toStringAsFixed(0));
     _mitarbeiterController =
         TextEditingController(text: t.geplanteMitarbeiter.toString());
-    _startZeitController =
-        TextEditingController(text: t.startZeit ?? '');
-    _notizenController =
-        TextEditingController(text: t.notizen ?? '');
+    _startZeitController = TextEditingController(text: t.startZeit ?? '');
+    _notizenController = TextEditingController(text: t.notizen ?? '');
     _status = t.status;
+    _initialStatus = t.status;
+
+    // Ist-Felder mit den geplanten Werten vorbelegen.
+    _istDauerController =
+        TextEditingController(text: t.geplanteDauerMinuten.toStringAsFixed(0));
+    _istMengeController =
+        TextEditingController(text: t.mengeKg.toStringAsFixed(1));
+    _istMitarbeiterController =
+        TextEditingController(text: t.geplanteMitarbeiter.toString());
 
     _loadProductStep();
   }
@@ -122,6 +140,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       final startZeit = _startZeitController.text.trim();
       final notizen = _notizenController.text.trim();
 
+      // 1. Geplante Felder + Status speichern.
       await (db.update(db.productionTasks)
             ..where((t) => t.id.equals(widget.wbTask.task.id)))
           .write(
@@ -135,6 +154,29 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           updatedAt: Value(DateTime.now()),
         ),
       );
+
+      // 2. Erstmals "fertig": Ist erfassen und Schritt lernen lassen.
+      if (_zeigeIstErfassung) {
+        final istDauer = double.tryParse(
+              _istDauerController.text.replaceAll(',', '.'),
+            ) ??
+            newDauer;
+        final istMenge = double.tryParse(
+              _istMengeController.text.replaceAll(',', '.'),
+            ) ??
+            newMenge;
+        final istMa =
+            int.tryParse(_istMitarbeiterController.text) ?? newMa;
+
+        await LernschleifeService.erfasseIst(
+          db: db,
+          task: widget.wbTask.task,
+          istDauerMinuten: istDauer,
+          istMitarbeiter: istMa,
+          istMengeKg: istMenge,
+          notizen: notizen.isEmpty ? null : notizen,
+        );
+      }
 
       ref.invalidate(dailyTasksProvider);
 
@@ -157,6 +199,9 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     _mitarbeiterController.dispose();
     _startZeitController.dispose();
     _notizenController.dispose();
+    _istDauerController.dispose();
+    _istMengeController.dispose();
+    _istMitarbeiterController.dispose();
     super.dispose();
   }
 
@@ -264,6 +309,17 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 ],
               ),
 
+              // Ist-Erfassung (nur beim erstmaligen "Fertig"-Melden)
+              if (_zeigeIstErfassung) ...[
+                const SizedBox(height: 16),
+                _IstErfassungBlock(
+                  dauerController: _istDauerController,
+                  mengeController: _istMengeController,
+                  mitarbeiterController: _istMitarbeiterController,
+                  onChanged: () => setState(() => _isDirty = true),
+                ),
+              ],
+
               const SizedBox(height: 20),
 
               // Menge + automatische Neuberechnung
@@ -323,8 +379,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                       ],
-                      onChanged: (_) =>
-                          setState(() => _isDirty = true),
+                      onChanged: (_) => setState(() => _isDirty = true),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -339,8 +394,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       inputFormatters: [
                         FilteringTextInputFormatter.digitsOnly,
                       ],
-                      onChanged: (_) =>
-                          setState(() => _isDirty = true),
+                      onChanged: (_) => setState(() => _isDirty = true),
                     ),
                   ),
                 ],
@@ -395,14 +449,132 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                             color: Colors.white,
                           ),
                         )
-                      : const Icon(Icons.save),
-                  label: Text(_isSaving ? 'Speichern …' : 'Speichern'),
+                      : Icon(_zeigeIstErfassung ? Icons.fact_check : Icons.save),
+                  label: Text(
+                    _isSaving
+                        ? 'Speichern …'
+                        : _zeigeIstErfassung
+                            ? 'Fertig melden & speichern'
+                            : 'Speichern',
+                  ),
                 ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ist-Erfassungs-Block
+// ---------------------------------------------------------------------------
+
+class _IstErfassungBlock extends StatelessWidget {
+  const _IstErfassungBlock({
+    required this.dauerController,
+    required this.mengeController,
+    required this.mitarbeiterController,
+    required this.onChanged,
+  });
+
+  final TextEditingController dauerController;
+  final TextEditingController mengeController;
+  final TextEditingController mitarbeiterController;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2E7D32).withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF2E7D32).withValues(alpha: 0.4),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(
+                Icons.fact_check,
+                size: 16,
+                color: Color(0xFF2E7D32),
+              ),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Ist-Erfassung (tatsächliche Werte)',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF2E7D32),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Diese Werte fließen in die Lernlogik ein und verbessern '
+            'künftige Zeitschätzungen für diesen Schritt.',
+            style: TextStyle(
+              fontSize: 11,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: dauerController,
+                  decoration: const InputDecoration(
+                    labelText: 'Ist-Dauer (min)',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => onChanged(),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: mitarbeiterController,
+                  decoration: const InputDecoration(
+                    labelText: 'Ist-Mitarbeiter',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (_) => onChanged(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: mengeController,
+            decoration: const InputDecoration(
+              labelText: 'Ist-Menge (kg)',
+              border: OutlineInputBorder(),
+              isDense: true,
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+            ],
+            onChanged: (_) => onChanged(),
+          ),
+        ],
+      ),
     );
   }
 }

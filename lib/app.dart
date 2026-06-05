@@ -13,10 +13,8 @@ import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/shell/capacity_detail_screen.dart';
 import 'features/shell/home_screen.dart';
-import 'features/shell/personnel_detail_screen.dart';
 import 'features/shell/task_detail_screen.dart';
 import 'features/shell/tasks_detail_screen.dart';
-import 'features/whiteboard/whiteboard_screen.dart';
 
 /// GoRouter-Provider.
 ///
@@ -25,11 +23,8 @@ import 'features/whiteboard/whiteboard_screen.dart';
 /// der Navigations-Zustand verloren.
 ///
 /// Die App startet auf `/intro` (Intro-Animation). Nach der Animation
-/// geht es direkt zum Dashboard (`/home`). Backup-Operationen laufen über
+/// geht es direkt zum Dashboard (`/home`). Datenoperationen laufen über
 /// das Datei-Icon in der AppBar (führt zu `/data`).
-///
-/// Die frühere Landing-Page mit dem Backup-Wahl-Dialog wurde entfernt
-/// (Stufe-0-Aufräumen) — sie war nicht mehr Teil des Standard-Flows.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
@@ -45,23 +40,17 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'home',
         builder: (context, state) => const HomeScreen(),
       ),
-      // Neuer zentraler Daten-Screen (Excel-Import/-Export, Backup,
-      // Restore, Speicherort).
+      // Zentraler Daten-Screen (Excel-Import/-Export, Backup, Restore).
       GoRoute(
         path: '/data',
         name: 'data',
         builder: (context, state) => const DataManagementScreen(),
       ),
-      // Wochenboard (Planungsboard): Abteilungen x Tage, Ampel-Auslastung.
+      // Planungsboard (Wochenboard + Tagesübersicht).
       GoRoute(
         path: '/board',
         name: 'board',
         builder: (context, state) => const WeekBoardScreen(),
-      ),
-      GoRoute(
-        path: '/whiteboard',
-        name: 'whiteboard',
-        builder: (context, state) => const WhiteboardScreen(),
       ),
       // Alte Routen — bleiben erst mal als Notausgang erreichbar,
       // werden aber von der UI nicht mehr direkt verlinkt. Können später
@@ -80,11 +69,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/articles',
         name: 'articles',
         builder: (context, state) => const ArticleListScreen(),
-      ),
-      GoRoute(
-        path: '/personnel',
-        name: 'personnel',
-        builder: (context, state) => const PersonnelDetailScreen(),
       ),
       GoRoute(
         path: '/capacity',
