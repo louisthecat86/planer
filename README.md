@@ -1,97 +1,132 @@
 # Produktion Planer
 
-Offline-first Planungs-Tool für die Produktionsleitung im Fleischbereich.
-Läuft als Android-APK (Tablet) und als Desktop-App (Windows/Linux/macOS)
-aus einer einzigen Flutter-Codebase.
+Offline-first **Produktionsplaner für den Fleischbereich**. Läuft als Desktop-App
+(Windows/Linux/macOS) und als Android-APK (Tablet) aus einer einzigen
+Flutter-Codebase.
 
-## Status
+Das Ziel: Die Abteilungen sollen jeden Arbeitstag möglichst gut ausgelastet
+sein (Richtwert 8 h pro Abteilung). Aus den hinterlegten Produktions-Schritten
+und ihren Zeiten erzeugt die App einen übersichtlichen, per Drag & Drop
+bedienbaren Wochen- und Tagesplan.
 
-**Phase 1a — Datenfundament abgeschlossen.**
-
-- Lokale SQLite-Datenbank via [drift](https://drift.simonbinder.eu/)
-- Komplettes Datenmodell für Produkte, Rezepturen, Rohwaren, Chargen (HACCP),
-  Produktions-Aufträge, Ist-Erfassung und Bestellliste
-- Alle Tabellen offline- und backup-fähig vorbereitet (UUID-IDs, `updated_at`, Soft-Delete)
-- GitHub-Actions-CI mit Analyse, Codegen, Android-APK-Build und Desktop-Builds
-- Backup-Paketfunktion: exportiert `*.planerbackup` als Gesamtpaket für späteren Import
-
-Phase 1a hat **noch keine** Stammdaten-UI — das folgt in Phase 1b.
-
-## Phasenplan
-
-| Phase | Inhalt | Status |
-|---|---|---|
-| 1a | Datenmodell, DB-Schema, CI | ✅ |
-| 1b | Stammdaten-UI (Produkte, Rezepturen, Rohwaren, Chargen) | offen |
-| 1c | Ist-Erfassung + Mittelwert-Lernlogik | offen |
-| 2  | Whiteboard-Dashboard (Wochenplanung) | offen |
-| 3  | Abhängigkeits-Visualisierung zwischen Abteilungen | offen |
-| 4  | Rohwaren-Bedarfsrechnung (MRP) + Bestellliste | offen |
-| 5  | Quality of life, Export, Drucken | offen |
-| 6  | Backup/Restore + optionaler Sync-Ansatz | offen |
-
-## Projektstruktur
+## Das Konzept in einer Schleife
 
 ```
-lib/
-├── main.dart                      App-Einstiegspunkt
-├── app.dart                       MaterialApp, Router, Theme
-│
-├── core/
-│   ├── constants/
-│   │   └── abteilungen.dart       Abteilungen-Enum (Name, Kurzcode, Farbe)
-│   ├── theme/
-│   │   └── app_theme.dart         Material 3 Theme
-│   ├── database/
-│   │   ├── database.dart          AppDatabase (drift)
-│   │   └── tables/                Eine Datei pro Tabelle
-│   └── providers/
-│       └── database_provider.dart Riverpod-Provider für die DB
-│
-├── features/                      Pro Fachbereich: data/ domain/ presentation/
-│   └── shell/
-│       └── home_screen.dart       Platzhalter für Phase 1a
-│
-└── shared/                        Wiederverwendbare Widgets und Utils
-
-.github/workflows/
-├── flutter.yml                    CI: Analyse + APK-Build
-└── desktop_build.yml              CI: Desktop-Builds für Linux/Windows/macOS
+Excel-Vorlage (v3)  ──Import──▶  Stammdaten (Produkte, Schritte, Anlagen, Parameter)
+                                        │
+                                  Schritte werden zu Tasks
+                                        ▼
+                          Planungsboard (Abteilungen × Tage, je 8 h, Drag & Drop)
+                                        │
+                                   Ausführung
+                                        ▼
+                          Ist-Erfassung ──▶ Mittelwerte neu ──┐
+                                        │                      │
+                                   Lernschleife ◀──────────────┘
+                                        ▼
+                          Ausgabe: Excel-Export · Backup · Drucken
 ```
+
+Die Zeit-Schätzungen sind **Statistik, keine KI**: `basis_*`-Werte sind
+gleitende Mittelwerte aus echten `production_runs`. Mit jedem erfassten
+Auftrag wird die Planung genauer.
+
+## Bedien-Bereiche (Screens)
+
+| Bereich            | Zweck                                                            |
+| ------------------ | ---------------------------------------------------------------- |
+| Heute              | Tagesübersicht, Auslastung aller Abteilungen auf einen Blick     |
+| Planungsboard      | Herzstück — Wochenboard (Abteilungen × Tage) und Tagesübersicht  |
+| Artikel            | Produkte und Prozessschritte verwalten                           |
+| Daten              | Excel-Import/-Export, Backup/Restore, Speicherort                |
+| Einstellungen      | Kapazität pro Abteilung, Personalplanung                         |
+
+Das Wochenboard zeigt pro Abteilung und Tag einen Kapazitätsbalken bis 8 h
+(grau = Platz frei, grün = gut gefüllt, rot = überbucht). Die Tagesübersicht
+stellt jede Aufgabe als Zeitbalken dar — je länger die Dauer, desto höher die
+Karte, der leere Platz unten zeigt die freie Zeit. Beide Ansichten lassen sich
+als A4-PDF drucken (Artikel, Menge, Dauer je Abteilung).
+
+## Excel-Vorlage (v3) — das Datenfundament
+
+Die Stammdaten werden in der **v3-Vorlage** gesammelt und importiert. Aufbau:
+
+- `Übersicht` — Artikelnummer + Bezeichnung aller Produkte
+- `Anlagen-Katalog` — Referenz für die Anlagen-Dropdowns (Name, Abteilung, Hilfetext)
+- 12 Produktgruppen-Blaupausen (Brühwurst, Rohwurst, …) als Vorlagen
+- Ein Sheet pro Artikel (benannt nach Artikelnummer). Spalte A = Zeilen-Labels,
+  Spalten B..K = bis zu **10 Prozessschritte**. Pro Schritt: Abteilung,
+  Prozessschritt, Anlage, Personen, Menge, Zeit, danach anlagenspezifische
+  Parameter-Blöcke sowie ein Block `ZUSÄTZLICHE PARAMETER` und `HISTORISCHE DATEN`.
+
+Beim Import wird die Original-Datei **byte-genau in `app_settings` gespeichert**.
+Der Export schreibt die aktuellen DB-Werte zurück in genau diese Datei, sodass
+Formatierung, Farben, Dropdowns und der Anlagen-Katalog vollständig erhalten
+bleiben (ZIP/XML-Manipulation, kein Neu-Erzeugen). **Diese Vorlage ist die
+verbindliche Basis und darf nicht durch ein neu generiertes Format ersetzt werden.**
+
+## Datenmodell
+
+Lokale SQLite-Datenbank via [drift](https://drift.simonbinder.eu/), aktuell
+**Schema v5**. Kern-Tabellen:
+
+- `products` — Produkt-Stammdaten inkl. gruppenspezifischer Felder
+- `product_steps` — Prozessschritte (Abteilung, Reihenfolge 1..10, Anlage,
+  Zeit/Personen, lernende `basis_*`-Werte)
+- `product_step_parameters` — flexible Parameter pro Schritt (Standard + Custom)
+- `machines` — Anlagen-Katalog
+- `raw_materials`, `product_raw_materials`, `raw_material_batches` — Rohwaren + HACCP-Chargen
+- `production_tasks` — geplante Aufträge auf dem Board
+- `production_runs` — Ist-Erfassung (Futter für die Lernlogik)
+- `task_dependencies` — Abhängigkeiten zwischen Tasks
+- `app_settings` — u. a. die zuletzt importierte Excel-Datei
+- `order_list_items` — Wochen-Bestellliste (MRP, spätere Phase)
+
+Die 7 Abteilungen sind ein Dart-Enum (`lib/core/constants/abteilungen.dart`):
+Zerlegung, Wurstküche, Kutterabteilung, Bratstraße, Schneideabteilung,
+Verpackung, Verpackung Tef1.
+
+## Roadmap
+
+| Stufe | Inhalt                                                              | Status     |
+| ----- | ------------------------------------------------------------------- | ---------- |
+| 0     | Repo aufräumen (Altlasten, Dubletten), README ehrlich               | in Arbeit  |
+| 1     | Stammdaten fertig — Schritte verwalten (hinzufügen/löschen/sortieren) | offen      |
+| 2     | Boards bauen — Wochenboard + Tagesübersicht + Drucken               | offen      |
+| 3     | Lernschleife schließen — Ist-Erfassung verdrahten                   | offen      |
+
+## Architektur-Prinzipien
+
+- **Offline-first**: ohne Internet voll funktionsfähig; Backup ist das zentrale Sicherungsmodell.
+- **UUIDs statt Auto-Increment**: vermeidet Kollisionen bei späterem Sync/Import.
+- **Soft-Delete überall**: `deleted_at IS NULL`-Filter in jeder Query.
+- **`updated_at` diszipliniert** in der Repository-Schicht manuell setzen (kein DB-Trigger, bleibt portabel/testbar).
+- **Format-bewahrender Excel-Export**: in die importierte Originaldatei zurückschreiben, nicht neu erzeugen.
+- **Lernlogik = Statistik**: Mittelwerte/Standardabweichung aus `production_runs`, nachvollziehbar.
+- **drift + Riverpod**: lokale DB + State-Management.
 
 ## Entwicklungs-Setup
 
 ```bash
-# Dependencies ziehen
 flutter pub get
 
-# drift & riverpod Code-Generierung (PFLICHT vor erstem Build)
+# Code-Generierung (drift, riverpod) — PFLICHT vor dem ersten Build
 dart run build_runner build --delete-conflicting-outputs
 
 # Starten
-flutter run                         # Default-Plattform
-flutter run -d linux                # Linux Desktop
-flutter run -d windows              # Windows Desktop
-flutter run -d <device-id>          # Android Tablet (vorher via adb verbunden)
+flutter run -d linux        # Desktop Linux
+flutter run -d windows      # Desktop Windows
+flutter run -d <device-id>  # Android Tablet
 
-# Tests & Analyse
-flutter analyze
+# Qualität
+flutter analyze             # muss sauber durchlaufen (strikte Lints)
 flutter test
 ```
 
 Nach Änderungen an den Tabellen-Dateien unter `lib/core/database/tables/`
 **immer** erneut `dart run build_runner build --delete-conflicting-outputs`
-laufen lassen, sonst ist `database.g.dart` veraltet.
+ausführen, sonst ist `database.g.dart` veraltet.
 
-## Architektur-Prinzipien
-
-- **Offline-first**: Die App ist ohne Internet voll funktionsfähig. Backup ist das zentrale Sicherungsmodell.
-- **UUIDs statt Auto-Increment**: Vermeidet ID-Kollisionen bei späteren Datenimporten.
-- **Soft-Delete überall**: `deleted_at IS NULL`-Filter in jeder Query.
-  Harte Löschungen sind risikoreich für Datenintegrität.
-- **updated_at diszipliniert pflegen**: In jedem Repository-Write manuell neu setzen.
-  Das unterstützt konsistente Änderungsinformationen und zukünftige Konfliktlösungen.
-- **Clean Architecture pro Feature**: `data/` (Drift-Queries), `domain/`
-  (reine Dart-Logik, testbar), `presentation/` (Flutter-Widgets).
-- **Lernlogik ist Statistik, keine KI**: Mittelwerte und Standardabweichung
-  aus historischen `ProductionRuns`. Ehrlich, nachvollziehbar, debuggbar.
+Die CI (`.github/workflows/`) führt Analyse, Codegen, Tests sowie Android- und
+Desktop-Builds aus. Lints sind streng (u. a. `require_trailing_commas`,
+`prefer_const_constructors`).
