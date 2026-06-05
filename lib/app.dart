@@ -12,7 +12,6 @@ import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/shell/capacity_detail_screen.dart';
 import 'features/shell/home_screen.dart';
-import 'features/shell/landing_screen.dart';
 import 'features/shell/personnel_detail_screen.dart';
 import 'features/shell/task_detail_screen.dart';
 import 'features/shell/tasks_detail_screen.dart';
@@ -25,10 +24,11 @@ import 'features/whiteboard/whiteboard_screen.dart';
 /// der Navigations-Zustand verloren.
 ///
 /// Die App startet auf `/intro` (Intro-Animation). Nach der Animation
-/// geht es direkt zum Dashboard (`/home`). Die alte Landing-Page mit
-/// dem Backup-Wahl-Dialog ist nicht mehr Teil des Standard-Flows —
-/// Backup-Operationen laufen jetzt über das Datei-Icon in der AppBar
-/// (führt zu `/data`).
+/// geht es direkt zum Dashboard (`/home`). Backup-Operationen laufen über
+/// das Datei-Icon in der AppBar (führt zu `/data`).
+///
+/// Die frühere Landing-Page mit dem Backup-Wahl-Dialog wurde entfernt
+/// (Stufe-0-Aufräumen) — sie war nicht mehr Teil des Standard-Flows.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
@@ -38,14 +38,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/intro',
         name: 'intro',
         builder: (context, state) => const IntroScreen(),
-      ),
-      // Landing-Screen ist noch da, wird aber nicht mehr automatisch
-      // angesteuert. Erreichbar nur falls jemand explizit dorthin
-      // navigiert. Kann später entfernt werden.
-      GoRoute(
-        path: '/',
-        name: 'landing',
-        builder: (context, state) => LandingScreen(database: db),
       ),
       GoRoute(
         path: '/home',
@@ -65,7 +57,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const WhiteboardScreen(),
       ),
       // Alte Routen — bleiben erst mal als Notausgang erreichbar,
-      // werden aber von der UI nicht mehr verlinkt. Können später
+      // werden aber von der UI nicht mehr direkt verlinkt. Können später
       // entfernt werden.
       GoRoute(
         path: '/backup',
