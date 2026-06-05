@@ -8,6 +8,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
+import 'board_print_service.dart';
 import 'board_providers.dart';
 
 const double _kLabelWidth = 116;
@@ -177,6 +178,27 @@ class WeekBoardScreen extends ConsumerWidget {
         title: Text('Planungsboard · KW $kw'),
         centerTitle: true,
         actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.print),
+            tooltip: 'Drucken',
+            onSelected: (wahl) async {
+              if (wahl == 'woche') {
+                final b = ref.read(weekBoardProvider(montag)).valueOrNull;
+                if (b != null) await BoardPrintService.druckeWoche(b);
+              } else {
+                final tag = ref.read(selectedDateProvider);
+                final day = await ref.read(dayBoardProvider(tag).future);
+                await BoardPrintService.druckeTag(day);
+              }
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'woche', child: Text('Woche drucken')),
+              PopupMenuItem(
+                value: 'tag',
+                child: Text('Tag drucken (gewählter Tag)'),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.chevron_left),
             tooltip: 'Vorherige Woche',
@@ -728,7 +750,6 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
-
               Text(
                 'Tag',
                 style: TextStyle(
@@ -755,7 +776,6 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 ],
               ),
               const SizedBox(height: 16),
-
               if (_gewaehlt == null) ...[
                 TextField(
                   controller: _suche,
@@ -793,7 +813,6 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                         ),
                 ),
               ],
-
               if (_gewaehlt != null) ...[
                 Card(
                   child: ListTile(
@@ -832,7 +851,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                             ),
                           )
                         : const Icon(Icons.auto_awesome),
-                    label: Text(_erstellt ? 'Wird angelegt …' : 'Tasks anlegen'),
+                    label:
+                        Text(_erstellt ? 'Wird angelegt …' : 'Tasks anlegen'),
                   ),
                 ),
               ],

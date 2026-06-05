@@ -31,6 +31,8 @@ dependencies:
   # Excel-Export (ZIP/XML-Manipulation für Formatierung-erhaltenden Export)
   archive: ^3.6.1
   xml: ^6.5.0
+  printing: ^5.14.3
+  pdf: ^3.12.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
