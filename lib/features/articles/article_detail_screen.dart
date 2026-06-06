@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import 'custom_parameter_editor_dialog.dart';
+import 'production_entry_dialog.dart';
 import 'step_editor_dialog.dart';
 
 // ---------------------------------------------------------------------------
@@ -159,6 +160,17 @@ class ArticleDetailScreen extends ConsumerWidget {
             _ProcessTab(productId: productId),
             _ProductionTab(productId: productId),
           ],
+        ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () async {
+            final gespeichert =
+                await ProductionEntryDialog.show(context, productId);
+            if (gespeichert) {
+              ref.invalidate(productionHistoryProvider(productId));
+            }
+          },
+          icon: const Icon(Icons.add_chart),
+          label: const Text('Produktion erfassen'),
         ),
       ),
     );
