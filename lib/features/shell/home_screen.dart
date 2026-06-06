@@ -1,33 +1,23 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
-import '../../core/providers/department_capacity_provider.dart';
 
-const _dayNames = [
-  'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
-  'Freitag', 'Samstag', 'Sonntag',
-];
-const _monthNames = [
-  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
-  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember',
-];
-
-/// Ausgewähltes Datum für die Tagesansicht.
+/// Ausgewähltes Datum. Wird von anderen Screens (Board) genutzt und bleibt
+/// daher als gemeinsamer Zustand erhalten, auch wenn das Home es selbst
+/// nicht mehr anzeigt.
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
   return DateTime(now.year, now.month, now.day);
 });
 
-/// Dashboard-Startbildschirm mit Kacheln.
+/// Vier-Kachel-Startbildschirm:
+/// Artikel · Planen · Planung ansehen · Einstellungen.
 ///
-/// Daten-Operationen (Excel-Import/-Export, Backup, Restore, Speicherort)
-/// laufen alle über das Datei-Icon oben rechts in der AppBar — der führt
-/// zum zentralen Daten-verwalten-Screen.
+/// Stammdaten (Excel-Import/-Export, Backup) und die Kapazität liegen
+/// unter „Einstellungen".
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -36,32 +26,12 @@ class HomeScreen extends ConsumerWidget {
     final db = ref.watch(databaseProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Produktion Planer'),
-        actions: [
-          IconButton(
-            onPressed: () => context.pushNamed('data'),
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'Daten verwalten (Excel, Backup, Restore)',
-          ),
-        ],
-      ),
+      appBar: AppBar(title: const Text('Produktion Planer')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           _DatabaseStatusCard(db: db),
-          const SizedBox(height: 12),
-          const _DateNavigationBar(),
           const SizedBox(height: 20),
-          _DailyOverviewTile(db: db),
-          const SizedBox(height: 20),
-          Text(
-            'Bereiche',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-          const SizedBox(height: 12),
           _buildTileGrid(context),
         ],
       ),
@@ -71,41 +41,40 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildTileGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 3 : 2;
+        final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
         const spacing = 12.0;
         final tileWidth =
             (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
                 crossAxisCount;
 
-        // Reine Domänen-Kacheln. Daten-Operationen sind in der AppBar.
         final tiles = [
           _NavigationTile(
+            icon: Icons.inventory_2_rounded,
+            label: 'Artikel',
+            subtitle: 'Abläufe, Zeiten & Mengen pflegen',
+            color: const Color(0xFF4E342E),
+            onTap: () => context.pushNamed('articles'),
+          ),
+          _NavigationTile(
+            icon: Icons.edit_calendar_rounded,
+            label: 'Planen',
+            subtitle: 'Produktion für Tage/Wochen einplanen',
+            color: const Color(0xFF2E7D32),
+            onTap: () => context.pushNamed('boardPlanen'),
+          ),
+          _NavigationTile(
             icon: Icons.calendar_view_week_rounded,
-            label: 'Planungsboard',
-            subtitle: 'Woche planen — Abteilungen × Tage',
+            label: 'Planung ansehen',
+            subtitle: 'Geplante Tage & Wochen im Board',
             color: const Color(0xFF00838F),
             onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
-            icon: Icons.bar_chart_rounded,
-            label: 'Kapazität',
-            subtitle: 'Auslastung je Abteilung',
-            color: const Color(0xFF1565C0),
-            onTap: () => context.pushNamed('capacity'),
-          ),
-          _NavigationTile(
-            icon: Icons.assignment_rounded,
-            label: 'Aufträge',
-            subtitle: 'Tagesaufträge & Status',
-            color: const Color(0xFFFB8C00),
-            onTap: () => context.pushNamed('tasks'),
-          ),
-          _NavigationTile(
-            icon: Icons.inventory_2_rounded,
-            label: 'Artikel',
-            subtitle: 'Stammdaten & Maschinen',
-            color: const Color(0xFF4E342E),
-            onTap: () => context.pushNamed('articles'),
+            icon: Icons.settings_rounded,
+            label: 'Einstellungen',
+            subtitle: 'Stammdaten, Excel, Backup & Kapazität',
+            color: const Color(0xFF455A64),
+            onTap: () => context.pushNamed('settings'),
           ),
         ];
 
@@ -178,275 +147,6 @@ class _NavigationTile extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Daily overview tile
-// ---------------------------------------------------------------------------
-
-class _DailyOverviewTile extends ConsumerWidget {
-  const _DailyOverviewTile({required this.db});
-
-  final AppDatabase db;
-
-  Future<_DailySummary> _loadSummary(
-    DateTime date,
-    Map<String, double> capacities,
-  ) async {
-    final startOfDay = date;
-    final startOfNextDay = date.add(const Duration(days: 1));
-
-    final tasks = await (db.select(db.productionTasks)
-          ..where((tbl) => tbl.deletedAt.isNull())
-          ..where((tbl) => tbl.datum.isBiggerOrEqualValue(startOfDay))
-          ..where((tbl) => tbl.datum.isSmallerThanValue(startOfNextDay))
-          ..where((tbl) => tbl.status.isNotIn(const ['storniert'])))
-        .get();
-
-    double totalUsed = 0;
-    double totalCapacity = 0;
-    final usedByDept = <String, double>{};
-    for (final task in tasks) {
-      usedByDept[task.abteilung] =
-          (usedByDept[task.abteilung] ?? 0) + task.geplanteDauerMinuten;
-    }
-    int criticalDepts = 0;
-    for (final abteilung in Abteilung.values) {
-      final cap = capacities[abteilung.dbValue] ?? 480;
-      final used = usedByDept[abteilung.dbValue] ?? 0;
-      totalCapacity += cap;
-      totalUsed += used;
-      if (cap > 0 && used / cap > 0.9) criticalDepts++;
-    }
-
-    return _DailySummary(
-      taskCount: tasks.length,
-      totalUsedMinutes: totalUsed,
-      totalCapacityMinutes: totalCapacity,
-      criticalDepartments: criticalDepts,
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDate = ref.watch(selectedDateProvider);
-    final capacityState = ref.watch(departmentCapacityNotifierProvider);
-    final capacities = capacityState.valueOrNull ?? {};
-
-    return FutureBuilder<_DailySummary>(
-      future: _loadSummary(selectedDate, capacities),
-      builder: (context, snapshot) {
-        final summary = snapshot.data;
-
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF37474F), Color(0xFF455A64)],
-              ),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.today_rounded,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Tagesübersicht',
-                      style:
-                          Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                              ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                if (summary == null)
-                  const Center(
-                    child: CircularProgressIndicator(color: Colors.white70),
-                  )
-                else
-                  _buildMetrics(context, summary),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildMetrics(BuildContext context, _DailySummary summary) {
-    final avgUtil = summary.totalCapacityMinutes > 0
-        ? (summary.totalUsedMinutes / summary.totalCapacityMinutes * 100)
-        : 0.0;
-
-    return Wrap(
-      spacing: 16,
-      runSpacing: 16,
-      children: [
-        _MetricItem(
-          icon: Icons.assignment_rounded,
-          value: '${summary.taskCount}',
-          label: 'Aufträge',
-        ),
-        _MetricItem(
-          icon: Icons.speed_rounded,
-          value: '${avgUtil.toStringAsFixed(0)}%',
-          label: 'Ø Auslastung',
-        ),
-        if (summary.criticalDepartments > 0)
-          _MetricItem(
-            icon: Icons.warning_amber_rounded,
-            value: '${summary.criticalDepartments}',
-            label: 'Abt. kritisch',
-            valueColor: const Color(0xFFFF8A65),
-          ),
-      ],
-    );
-  }
-}
-
-class _MetricItem extends StatelessWidget {
-  const _MetricItem({
-    required this.icon,
-    required this.value,
-    required this.label,
-    this.valueColor,
-  });
-
-  final IconData icon;
-  final String value;
-  final String label;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: Colors.white70, size: 20),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(
-                color: valueColor ?? Colors.white,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              label,
-              style: const TextStyle(color: Colors.white60, fontSize: 11),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-class _DailySummary {
-  _DailySummary({
-    required this.taskCount,
-    required this.totalUsedMinutes,
-    required this.totalCapacityMinutes,
-    required this.criticalDepartments,
-  });
-
-  final int taskCount;
-  final double totalUsedMinutes;
-  final double totalCapacityMinutes;
-  final int criticalDepartments;
-}
-
-// ---------------------------------------------------------------------------
-// Date navigation bar
-// ---------------------------------------------------------------------------
-
-class _DateNavigationBar extends ConsumerWidget {
-  const _DateNavigationBar();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selectedDate = ref.watch(selectedDateProvider);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final isToday = selectedDate == today;
-
-    final dayName = _dayNames[selectedDate.weekday - 1];
-    final label =
-        '$dayName, ${selectedDate.day}. ${_monthNames[selectedDate.month - 1]} ${selectedDate.year}';
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: () {
-                ref.read(selectedDateProvider.notifier).state =
-                    selectedDate.subtract(const Duration(days: 1));
-              },
-              tooltip: 'Vorheriger Tag',
-            ),
-            Expanded(
-              child: GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: context,
-                    initialDate: selectedDate,
-                    firstDate: DateTime(2024),
-                    lastDate: DateTime(2030),
-                  );
-                  if (picked != null) {
-                    ref.read(selectedDateProvider.notifier).state =
-                        DateTime(picked.year, picked.month, picked.day);
-                  }
-                },
-                child: Text(
-                  label,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            if (!isToday)
-              TextButton(
-                onPressed: () {
-                  ref.read(selectedDateProvider.notifier).state = today;
-                },
-                child: const Text('Heute'),
-              ),
-            IconButton(
-              icon: const Icon(Icons.chevron_right),
-              onPressed: () {
-                ref.read(selectedDateProvider.notifier).state =
-                    selectedDate.add(const Duration(days: 1));
-              },
-              tooltip: 'Nächster Tag',
-            ),
-          ],
         ),
       ),
     );
@@ -527,8 +227,8 @@ class _DatabaseStatusCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Importiere eine Excel-Stammdaten-Vorlage über das '
-                    'Datei-Icon oben rechts, um die App zu füllen.',
+                    'Importiere eine Excel-Stammdaten-Vorlage unter '
+                    'Einstellungen → Stammdaten, um die App zu füllen.',
                     style: TextStyle(color: colors.onSurfaceVariant),
                   ),
                 ],

@@ -11,10 +11,9 @@ import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
+import 'features/settings/settings_screen.dart';
 import 'features/shell/capacity_detail_screen.dart';
 import 'features/shell/home_screen.dart';
-import 'features/shell/task_detail_screen.dart';
-import 'features/shell/tasks_detail_screen.dart';
 
 /// GoRouter-Provider.
 ///
@@ -23,8 +22,9 @@ import 'features/shell/tasks_detail_screen.dart';
 /// der Navigations-Zustand verloren.
 ///
 /// Die App startet auf `/intro` (Intro-Animation). Nach der Animation
-/// geht es direkt zum Dashboard (`/home`). Datenoperationen laufen über
-/// das Datei-Icon in der AppBar (führt zu `/data`).
+/// geht es zum Vier-Kachel-Home (`/home`): Artikel · Planen ·
+/// Planung ansehen · Einstellungen. Stammdaten/Excel/Backup und die
+/// Kapazität sitzen unter `/settings`.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
@@ -40,45 +40,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'home',
         builder: (context, state) => const HomeScreen(),
       ),
-      // Zentraler Daten-Screen (Excel-Import/-Export, Backup, Restore).
-      GoRoute(
-        path: '/data',
-        name: 'data',
-        builder: (context, state) => const DataManagementScreen(),
-      ),
-      // Planungsboard (Wochenboard + Tagesübersicht).
-      GoRoute(
-        path: '/board',
-        name: 'board',
-        builder: (context, state) => const WeekBoardScreen(),
-      ),
-      // Alte Routen — bleiben erst mal als Notausgang erreichbar,
-      // werden aber von der UI nicht mehr direkt verlinkt. Können später
-      // entfernt werden.
-      GoRoute(
-        path: '/backup',
-        name: 'backup',
-        builder: (context, state) => BackupManagementScreen(database: db),
-      ),
-      GoRoute(
-        path: '/import',
-        name: 'import',
-        builder: (context, state) => const ExcelImportScreen(),
-      ),
+      // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
       GoRoute(
         path: '/articles',
         name: 'articles',
         builder: (context, state) => const ArticleListScreen(),
-      ),
-      GoRoute(
-        path: '/capacity',
-        name: 'capacity',
-        builder: (context, state) => const CapacityDetailScreen(),
-      ),
-      GoRoute(
-        path: '/tasks',
-        name: 'tasks',
-        builder: (context, state) => const TasksDetailScreen(),
       ),
       GoRoute(
         path: '/article/:productId',
@@ -88,16 +54,47 @@ final routerProvider = Provider<GoRouter>((ref) {
           return ArticleDetailScreen(productId: productId);
         },
       ),
+      // Planung ansehen: das Board (Woche/Tag).
       GoRoute(
-        path: '/task/:taskId',
-        name: 'taskDetail',
-        builder: (context, state) {
-          final taskId = state.pathParameters['taskId'];
-          return TaskDetailScreen(
-            database: db,
-            taskId: taskId ?? '',
-          );
-        },
+        path: '/board',
+        name: 'board',
+        builder: (context, state) => const WeekBoardScreen(),
+      ),
+      // Planen: dasselbe Board, öffnet direkt den Produkt-planen-Dialog.
+      GoRoute(
+        path: '/board/planen',
+        name: 'boardPlanen',
+        builder: (context, state) =>
+            const WeekBoardScreen(oeffnePlanenDirekt: true),
+      ),
+      // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den
+      // Einstellungen aus verlinkt.
+      GoRoute(
+        path: '/data',
+        name: 'data',
+        builder: (context, state) => const DataManagementScreen(),
+      ),
+      GoRoute(
+        path: '/capacity',
+        name: 'capacity',
+        builder: (context, state) => const CapacityDetailScreen(),
+      ),
+      // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
+      GoRoute(
+        path: '/backup',
+        name: 'backup',
+        builder: (context, state) => BackupManagementScreen(database: db),
+      ),
+      GoRoute(
+        path: '/import',
+        name: 'import',
+        builder: (context, state) => const ExcelImportScreen(),
       ),
     ],
   );
