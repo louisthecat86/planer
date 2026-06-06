@@ -151,6 +151,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     if (changed) {
       ref.invalidate(weekBoardProvider);
       ref.invalidate(dayBoardProvider);
+      ref.invalidate(dailyTasksProvider);
     }
   }
 
@@ -831,8 +832,10 @@ class _DayTaskRow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Produkt-planen-Sheet
+// Produkt-planen-Sheet (zwei Stufen: Auswahl → Tageszuweisung)
 // ---------------------------------------------------------------------------
+
+enum _PlanStufe { auswahl, tage }
 
 class _ProduktPlanenSheet extends ConsumerStatefulWidget {
   const _ProduktPlanenSheet({required this.tage, required this.initialTag});
@@ -850,13 +853,17 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   final _menge = TextEditingController(text: '100');
   List<Product> _produkte = [];
   Product? _gewaehlt;
-  late DateTime _tag;
-  bool _erstellt = false;
+  late DateTime _startTag;
+
+  _PlanStufe _stufe = _PlanStufe.auswahl;
+  List<GeplanterSchritt> _plan = [];
+  double _rohware = 0;
+  bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _tag = widget.initialTag;
+    _startTag = widget.initialTag;
     _ladeProdukte();
   }
 
@@ -869,50 +876,79 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     if (mounted) setState(() => _produkte = list);
   }
 
-  Future<void> _erstelle() async {
+  @override
+  void dispose() {
+    _suche.dispose();
+    _menge.dispose();
+    super.dispose();
+  }
+
+  // ── Stufe 1 → 2: Plan berechnen ───────────────────────────────────────
+  Future<void> _weiter() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
     final menge = double.tryParse(_menge.text.replaceAll(',', '.'));
-    if (menge == null || menge <= 0) return;
-
-    setState(() => _erstellt = true);
-    final db = ref.read(databaseProvider);
-
-    final schritte = await (db.select(db.productSteps)
-          ..where((s) => s.productId.equals(produkt.id))
-          ..where((s) => s.deletedAt.isNull()))
-        .get();
-    if (schritte.isEmpty) {
-      if (mounted) {
-        setState(() => _erstellt = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Dieses Produkt hat keine Schritte. Lege zuerst Schritte '
-              'im Artikel an.',
-            ),
-          ),
-        );
-      }
+    if (menge == null || menge <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte eine gültige Menge (kg) eingeben.'),
+        ),
+      );
       return;
     }
 
-    final rohware = await createTasksFromProduct(
+    setState(() => _busy = true);
+    final db = ref.read(databaseProvider);
+    final plan = await berechneSchrittPlan(
       db: db,
       productId: produkt.id,
       mengeKg: menge,
-      datum: _tag,
+      startTag: _startTag,
+    );
+    if (!mounted) return;
+    if (plan.schritte.isEmpty) {
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Dieses Produkt hat keine Schritte. Lege zuerst Schritte im '
+            'Artikel an.',
+          ),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _plan = plan.schritte;
+      _rohware = plan.rohwareKg;
+      _stufe = _PlanStufe.tage;
+      _busy = false;
+    });
+  }
+
+  // ── Stufe 2: Tasks anlegen ────────────────────────────────────────────
+  Future<void> _anlegen() async {
+    final produkt = _gewaehlt;
+    if (produkt == null) return;
+
+    setState(() => _busy = true);
+    final db = ref.read(databaseProvider);
+    await erstelleTasksAusPlan(
+      db: db,
+      productId: produkt.id,
+      schritte: _plan,
     );
     ref
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Produkt geplant');
 
     if (!mounted) return;
-    if (rohware > menge) {
+    final menge = double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
+    if (_rohware > menge) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Rohwaren-Bedarf: ${rohware.toStringAsFixed(1)} kg '
+            'Rohwaren-Bedarf: ${_rohware.toStringAsFixed(1)} kg '
             'für ${menge.toStringAsFixed(1)} kg Fertigware',
           ),
           duration: const Duration(seconds: 4),
@@ -922,15 +958,59 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     Navigator.of(context).pop(true);
   }
 
-  @override
-  void dispose() {
-    _suche.dispose();
-    _menge.dispose();
-    super.dispose();
+  void _schiebeTag(GeplanterSchritt s, int deltaTage) {
+    setState(() => s.tag = s.tag.add(Duration(days: deltaTage)));
   }
+
+  Future<void> _waehleTag(GeplanterSchritt s) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: s.tag,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null) {
+      setState(() => s.tag = DateTime(picked.year, picked.month, picked.day));
+    }
+  }
+
+  String _fmtTag(DateTime d) =>
+      '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.';
+
+  Widget _griff() => Center(
+        child: Container(
+          width: 40,
+          height: 4,
+          margin: const EdgeInsets.only(bottom: 16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade300,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.8,
+      minChildSize: 0.5,
+      maxChildSize: 0.95,
+      expand: false,
+      builder: (context, scrollController) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: _stufe == _PlanStufe.auswahl
+              ? _buildAuswahl(scrollController)
+              : _buildTage(scrollController),
+        );
+      },
+    );
+  }
+
+  // ── Stufe 1: Produkt + Starttag + Menge ───────────────────────────────
+  Widget _buildAuswahl(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
     final q = _suche.text.toLowerCase();
     final gefiltert = q.isEmpty
@@ -943,152 +1023,319 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             )
             .toList();
 
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (context, scrollController) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
+    return ListView(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        _griff(),
+        const Text(
+          'Produkt planen',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Wähle Produkt, Starttag und Menge — danach weist du jeder '
+          'Abteilung ihren Tag zu.',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Starttag',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: colors.onSurfaceVariant,
           ),
-          child: ListView(
-            controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
+        ),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            for (var i = 0; i < widget.tage.length; i++)
+              ChoiceChip(
+                label: Text(
+                  '${_kDayLabels[i]} '
+                  '${widget.tage[i].day}.${widget.tage[i].month}.',
+                ),
+                selected: _startTag == widget.tage[i],
+                onSelected: (_) => setState(() => _startTag = widget.tage[i]),
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_gewaehlt == null) ...[
+          TextField(
+            controller: _suche,
+            decoration: const InputDecoration(
+              labelText: 'Produkt suchen',
+              prefixIcon: Icon(Icons.search),
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 240),
+            child: gefiltert.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: Text(
+                      'Keine Produkte. Importiere zuerst eine Excel-Vorlage.',
+                      style: TextStyle(color: colors.onSurfaceVariant),
+                    ),
+                  )
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: gefiltert.length,
+                    itemBuilder: (context, index) {
+                      final p = gefiltert[index];
+                      return ListTile(
+                        dense: true,
+                        title: Text(p.artikelbezeichnung),
+                        subtitle: Text(p.artikelnummer),
+                        onTap: () => setState(() => _gewaehlt = p),
+                      );
+                    },
+                  ),
+          ),
+        ],
+        if (_gewaehlt != null) ...[
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.inventory_2),
+              title: Text(_gewaehlt!.artikelbezeichnung),
+              subtitle: Text(_gewaehlt!.artikelnummer),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => _gewaehlt = null),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _menge,
+            decoration: const InputDecoration(
+              labelText: 'Menge Fertigware (kg)',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _weiter,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.arrow_forward),
+              label: Text(_busy ? 'Berechne …' : 'Weiter: Tage zuweisen'),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ── Stufe 2: Tag je Schritt zuweisen ──────────────────────────────────
+  Widget _buildTage(ScrollController sc) {
+    final colors = Theme.of(context).colorScheme;
+    return ListView(
+      controller: sc,
+      padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+      children: [
+        _griff(),
+        Text(
+          _gewaehlt?.artikelbezeichnung ?? 'Tage zuweisen',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Jede Abteilung kann auf einen eigenen Tag. Standard: alle auf dem '
+          'Starttag — schieb einzelne Schritte nach Bedarf.',
+          style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
+        ),
+        if (_rohware > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            'Rohwaren-Bedarf: ${_rohware.toStringAsFixed(1)} kg',
+            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+          ),
+        ],
+        const SizedBox(height: 12),
+        for (final s in _plan)
+          _SchrittTagKarte(
+            schritt: s,
+            tagLabel: _fmtTag(s.tag),
+            dauerLabel: _fmtStunden(s.dauerMinuten),
+            onMinus: () => _schiebeTag(s, -1),
+            onPlus: () => _schiebeTag(s, 1),
+            onPick: () => _waehleTag(s),
+          ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => setState(() => _stufe = _PlanStufe.auswahl),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Zurück'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: _busy ? null : _anlegen,
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.auto_awesome),
+                label: Text(_busy ? 'Wird angelegt …' : 'Tasks anlegen'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Schritt-Karte in der Tageszuweisung
+// ---------------------------------------------------------------------------
+
+class _SchrittTagKarte extends StatelessWidget {
+  const _SchrittTagKarte({
+    required this.schritt,
+    required this.tagLabel,
+    required this.dauerLabel,
+    required this.onMinus,
+    required this.onPlus,
+    required this.onPick,
+  });
+
+  final GeplanterSchritt schritt;
+  final String tagLabel;
+  final String dauerLabel;
+  final VoidCallback onMinus;
+  final VoidCallback onPlus;
+  final VoidCallback onPick;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final abt = schritt.abteilung;
+    final farbe = abt?.farbe ?? Colors.grey;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
-                    borderRadius: BorderRadius.circular(2),
+                    color: farbe,
+                    shape: BoxShape.circle,
                   ),
                 ),
-              ),
-              const Text(
-                'Produkt planen',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        abt?.anzeigeName ?? schritt.abteilungDbValue,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (schritt.prozessschritt != null &&
+                          schritt.prozessschritt!.isNotEmpty)
+                        Text(
+                          schritt.prozessschritt!,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '$dauerLabel h · ${schritt.mitarbeiter} P',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: farbe,
+                  ),
+                ),
+              ],
+            ),
+            if (schritt.ausHistorie || schritt.platzhalter) ...[
               const SizedBox(height: 4),
               Text(
-                'Wähle ein Produkt und einen Tag — alle Abteilungsschritte '
-                'werden als Tasks angelegt.',
-                style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Tag',
+                schritt.ausHistorie
+                    ? 'Dauer aus Historie'
+                    : 'Zeit ist Platzhalter — im Artikel pflegen',
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: colors.onSurfaceVariant,
+                  fontSize: 10,
+                  fontStyle: FontStyle.italic,
+                  color: schritt.ausHistorie
+                      ? const Color(0xFF2E7D32)
+                      : Colors.orange.shade700,
                 ),
               ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  for (var i = 0; i < widget.tage.length; i++)
-                    ChoiceChip(
-                      label: Text(
-                        '${_kDayLabels[i]} '
-                        '${widget.tage[i].day}.${widget.tage[i].month}.',
-                      ),
-                      selected: _tag == widget.tage[i],
-                      onSelected: (_) =>
-                          setState(() => _tag = widget.tage[i]),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (_gewaehlt == null) ...[
-                TextField(
-                  controller: _suche,
-                  decoration: const InputDecoration(
-                    labelText: 'Produkt suchen',
-                    prefixIcon: Icon(Icons.search),
-                    border: OutlineInputBorder(),
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 8),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 240),
-                  child: gefiltert.isEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Text(
-                            'Keine Produkte. Importiere zuerst eine '
-                            'Excel-Vorlage.',
-                            style: TextStyle(color: colors.onSurfaceVariant),
-                          ),
-                        )
-                      : ListView.builder(
-                          shrinkWrap: true,
-                          itemCount: gefiltert.length,
-                          itemBuilder: (context, index) {
-                            final p = gefiltert[index];
-                            return ListTile(
-                              dense: true,
-                              title: Text(p.artikelbezeichnung),
-                              subtitle: Text(p.artikelnummer),
-                              onTap: () => setState(() => _gewaehlt = p),
-                            );
-                          },
-                        ),
-                ),
-              ],
-              if (_gewaehlt != null) ...[
-                Card(
-                  child: ListTile(
-                    leading: const Icon(Icons.inventory_2),
-                    title: Text(_gewaehlt!.artikelbezeichnung),
-                    subtitle: Text(_gewaehlt!.artikelnummer),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _gewaehlt = null),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _menge,
-                  decoration: const InputDecoration(
-                    labelText: 'Menge (kg)',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: FilledButton.icon(
-                    onPressed: _erstellt ? null : _erstelle,
-                    icon: _erstellt
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : const Icon(Icons.auto_awesome),
-                    label:
-                        Text(_erstellt ? 'Wird angelegt …' : 'Tasks anlegen'),
-                  ),
-                ),
-              ],
             ],
-          ),
-        );
-      },
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: onMinus,
+                  icon: const Icon(Icons.chevron_left),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Einen Tag früher',
+                ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onPick,
+                    icon: const Icon(Icons.event, size: 16),
+                    label: Text(tagLabel),
+                  ),
+                ),
+                IconButton(
+                  onPressed: onPlus,
+                  icon: const Icon(Icons.chevron_right),
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Einen Tag später',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
