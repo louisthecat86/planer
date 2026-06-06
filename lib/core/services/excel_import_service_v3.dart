@@ -110,6 +110,7 @@ class _ParsedStep {
     this.personen,
     this.mengeKg,
     this.zeitMinuten,
+    this.fixZeitMinuten,
   });
 
   final int reihenfolge;
@@ -119,6 +120,7 @@ class _ParsedStep {
   int? personen;
   double? mengeKg;
   double? zeitMinuten;
+  double? fixZeitMinuten;
 
   final Map<String, List<_ParsedParam>> parameterByGruppe = {};
 }
@@ -227,7 +229,10 @@ class ExcelImportServiceV3 {
     'Personen',
     'Menge (kg)',
     'Zeit (hh:mm)',
+    'Fixe Zeit (min)',
   };
+
+  static const _fixZeitLabel = 'Fixe Zeit (min)';
 
   static const _customBlockMarker = 'ZUSÄTZLICHE PARAMETER';
   static const _sonstigeBlockMarker = 'Sonstige Informationen';
@@ -454,6 +459,9 @@ class ExcelImportServiceV3 {
             .getSingleOrNull();
 
         String productId;
+        // Bestehende fixe Zeiten je Reihenfolge merken, falls die Excel
+        // (alte Vorlage ohne Zeile) keinen Wert liefert → kein Datenverlust.
+        final altFixZeit = <int, double?>{};
         if (existing == null) {
           productId = _uuid.v4();
           await _db.into(_db.products).insert(
@@ -478,13 +486,13 @@ class ExcelImportServiceV3 {
           );
           artikelAktualisiert++;
 
-          final oldStepIds = await (_db.select(_db.productSteps)
+          final oldSteps = await (_db.select(_db.productSteps)
                 ..where((t) => t.productId.equals(productId)))
-              .map((s) => s.id)
               .get();
-          for (final sid in oldStepIds) {
+          for (final old in oldSteps) {
+            altFixZeit[old.reihenfolge] = old.fixZeitMinuten;
             await (_db.delete(_db.productStepParameters)
-                  ..where((t) => t.stepId.equals(sid)))
+                  ..where((t) => t.stepId.equals(old.id)))
                 .go();
           }
           await (_db.delete(_db.productSteps)
@@ -509,6 +517,8 @@ class ExcelImportServiceV3 {
                   mengeKg: Value(s.mengeKg),
                   basisMengeKg: Value(s.mengeKg ?? 0.0),
                   basisDauerMinuten: Value(s.zeitMinuten ?? 0.0),
+                  fixZeitMinuten:
+                      Value(s.fixZeitMinuten ?? altFixZeit[s.reihenfolge]),
                   basisMitarbeiter: Value(s.personen ?? 1),
                   maschine: Value(s.maschineName),
                 ),
@@ -888,6 +898,7 @@ class ExcelImportServiceV3 {
         personen: _parseInt(rows[labelRow['Personen'] ?? -1], col),
         mengeKg: _parseDouble(rows[labelRow['Menge (kg)'] ?? -1], col),
         zeitMinuten: _parseZeit(rows[labelRow['Zeit (hh:mm)'] ?? -1], col),
+        fixZeitMinuten: _parseDouble(rows[labelRow[_fixZeitLabel] ?? -1], col),
       );
 
       if (step.maschineName != null && step.maschineName!.isNotEmpty) {
@@ -905,7 +916,13 @@ class ExcelImportServiceV3 {
       schritte.add(step);
     }
 
-    final startParamRow = (labelRow['Zeit (hh:mm)'] ?? abtRow + 5) + 1;
+    // Parameter-Block beginnt nach der letzten Schritt-Wert-Zeile
+    // (Zeit bzw. — falls vorhanden — Fixe Zeit).
+    var letzteWertZeile = abtRow + 5;
+    for (final z in [labelRow['Zeit (hh:mm)'], labelRow[_fixZeitLabel]]) {
+      if (z != null && z > letzteWertZeile) letzteWertZeile = z;
+    }
+    final startParamRow = letzteWertZeile + 1;
     _parseParameter(rows, startParamRow, schritte, maxSchritt);
 
     return schritte;

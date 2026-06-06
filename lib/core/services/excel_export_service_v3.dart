@@ -373,6 +373,17 @@ class ExcelExportServiceV3 {
           wert: bruchteilTag,
         );
       }
+      // Fixe Zeit / Durchlauf — als Minuten-Zahl (nur wenn Zeile vorhanden).
+      if (labelRows.fixZeitRow != null &&
+          step.fixZeitMinuten != null &&
+          step.fixZeitMinuten! > 0) {
+        _setzeZelleZahl(
+          sheetData,
+          row: labelRows.fixZeitRow!,
+          colLetter: colLetter,
+          wert: step.fixZeitMinuten!,
+        );
+      }
       schritteAktualisiert++;
 
       // ── Standard-Parameter aktualisieren (nur wenn das Label in
@@ -830,7 +841,7 @@ class ExcelExportServiceV3 {
     XmlDocument doc,
     _SharedStrings sharedStrings,
   ) {
-    int? abteilung, prozess, anlagen, personen, menge, zeit;
+    int? abteilung, prozess, anlagen, personen, menge, zeit, fixZeit;
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
     if (sheetData == null) return _SchrittLabelZeilen();
 
@@ -852,6 +863,8 @@ class ExcelExportServiceV3 {
           menge = rNum;
         case 'Zeit (hh:mm)':
           zeit = rNum;
+        case 'Fixe Zeit (min)':
+          fixZeit = rNum;
       }
     }
     return _SchrittLabelZeilen(
@@ -861,6 +874,7 @@ class ExcelExportServiceV3 {
       personenRow: personen,
       mengeRow: menge,
       zeitRow: zeit,
+      fixZeitRow: fixZeit,
     );
   }
 
@@ -1059,6 +1073,7 @@ class _SchrittLabelZeilen {
     this.personenRow,
     this.mengeRow,
     this.zeitRow,
+    this.fixZeitRow,
   });
 
   final int? abteilungRow;
@@ -1067,6 +1082,7 @@ class _SchrittLabelZeilen {
   final int? personenRow;
   final int? mengeRow;
   final int? zeitRow;
+  final int? fixZeitRow;
 }
 
 class _SharedStrings {
