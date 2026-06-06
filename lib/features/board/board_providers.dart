@@ -54,6 +54,7 @@ class BoardTask {
     required this.startZeit,
     required this.dauerMinuten,
     required this.mengeKg,
+    required this.sortierung,
     required this.status,
   });
 
@@ -70,6 +71,9 @@ class BoardTask {
 
   final double dauerMinuten;
   final double mengeKg;
+
+  /// Manuelle Reihenfolge innerhalb der Abteilung an einem Tag.
+  final int sortierung;
 
   /// 'geplant' | 'in_arbeit' | 'fertig' (storniert wird gar nicht geladen).
   final String status;
@@ -289,6 +293,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
         startZeit: t.startZeit,
         dauerMinuten: t.geplanteDauerMinuten,
         mengeKg: t.mengeKg,
+        sortierung: t.sortierung,
         status: t.status,
       ),
     );
@@ -296,10 +301,14 @@ Future<List<BoardTask>> _ladeBoardTasks(
   return result;
 }
 
-/// Sortiert Tasks innerhalb einer Zelle/Spur: zuerst nach Startzeit (Tasks
-/// ohne Startzeit hinten), dann nach Dauer absteigend.
+/// Sortiert Tasks innerhalb einer Zelle/Spur: zuerst nach der manuellen
+/// [BoardTask.sortierung], dann nach Startzeit (Tasks ohne Startzeit hinten),
+/// zuletzt nach Dauer absteigend.
 void _sortiereTasks(List<BoardTask> tasks) {
   tasks.sort((a, b) {
+    final sort = a.sortierung.compareTo(b.sortierung);
+    if (sort != 0) return sort;
+
     final sa = a.startZeit;
     final sb = b.startZeit;
     if (sa != null && sb != null) {

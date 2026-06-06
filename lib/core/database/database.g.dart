@@ -6561,6 +6561,14 @@ class $ProductionTasksTable extends ProductionTasks
   late final GeneratedColumn<int> geplanteMitarbeiter = GeneratedColumn<int>(
       'geplante_mitarbeiter', aliasedName, false,
       type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _sortierungMeta =
+      const VerificationMeta('sortierung');
+  @override
+  late final GeneratedColumn<int> sortierung = GeneratedColumn<int>(
+      'sortierung', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
   static const VerificationMeta _statusMeta = const VerificationMeta('status');
   @override
   late final GeneratedColumn<String> status = GeneratedColumn<String>(
@@ -6612,6 +6620,7 @@ class $ProductionTasksTable extends ProductionTasks
         startZeit,
         geplanteDauerMinuten,
         geplanteMitarbeiter,
+        sortierung,
         status,
         parentTaskId,
         notizen,
@@ -6678,6 +6687,12 @@ class $ProductionTasksTable extends ProductionTasks
     } else if (isInserting) {
       context.missing(_geplanteMitarbeiterMeta);
     }
+    if (data.containsKey('sortierung')) {
+      context.handle(
+          _sortierungMeta,
+          sortierung.isAcceptableOrUnknown(
+              data['sortierung']!, _sortierungMeta));
+    }
     if (data.containsKey('status')) {
       context.handle(_statusMeta,
           status.isAcceptableOrUnknown(data['status']!, _statusMeta));
@@ -6730,6 +6745,8 @@ class $ProductionTasksTable extends ProductionTasks
           data['${effectivePrefix}geplante_dauer_minuten'])!,
       geplanteMitarbeiter: attachedDatabase.typeMapping.read(
           DriftSqlType.int, data['${effectivePrefix}geplante_mitarbeiter'])!,
+      sortierung: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sortierung'])!,
       status: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
       parentTaskId: attachedDatabase.typeMapping
@@ -6772,6 +6789,11 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
   final double geplanteDauerMinuten;
   final int geplanteMitarbeiter;
 
+  /// Manuelle Reihenfolge innerhalb einer Abteilung an einem Tag.
+  /// Kleinere Werte zuerst. Standard 0 (dann greift die Sekundär-Sortierung
+  /// nach Startzeit/Dauer). Wird über Hoch/Runter im Tagesplan gesetzt.
+  final int sortierung;
+
   /// Status des Auftrags. Erlaubte Werte (als Konstanten im Repo-Layer):
   /// 'geplant', 'in_arbeit', 'fertig', 'storniert'.
   final String status;
@@ -6794,6 +6816,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       this.startZeit,
       required this.geplanteDauerMinuten,
       required this.geplanteMitarbeiter,
+      required this.sortierung,
       required this.status,
       this.parentTaskId,
       this.notizen,
@@ -6813,6 +6836,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
     }
     map['geplante_dauer_minuten'] = Variable<double>(geplanteDauerMinuten);
     map['geplante_mitarbeiter'] = Variable<int>(geplanteMitarbeiter);
+    map['sortierung'] = Variable<int>(sortierung);
     map['status'] = Variable<String>(status);
     if (!nullToAbsent || parentTaskId != null) {
       map['parent_task_id'] = Variable<String>(parentTaskId);
@@ -6840,6 +6864,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           : Value(startZeit),
       geplanteDauerMinuten: Value(geplanteDauerMinuten),
       geplanteMitarbeiter: Value(geplanteMitarbeiter),
+      sortierung: Value(sortierung),
       status: Value(status),
       parentTaskId: parentTaskId == null && nullToAbsent
           ? const Value.absent()
@@ -6869,6 +6894,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           serializer.fromJson<double>(json['geplanteDauerMinuten']),
       geplanteMitarbeiter:
           serializer.fromJson<int>(json['geplanteMitarbeiter']),
+      sortierung: serializer.fromJson<int>(json['sortierung']),
       status: serializer.fromJson<String>(json['status']),
       parentTaskId: serializer.fromJson<String?>(json['parentTaskId']),
       notizen: serializer.fromJson<String?>(json['notizen']),
@@ -6889,6 +6915,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       'startZeit': serializer.toJson<String?>(startZeit),
       'geplanteDauerMinuten': serializer.toJson<double>(geplanteDauerMinuten),
       'geplanteMitarbeiter': serializer.toJson<int>(geplanteMitarbeiter),
+      'sortierung': serializer.toJson<int>(sortierung),
       'status': serializer.toJson<String>(status),
       'parentTaskId': serializer.toJson<String?>(parentTaskId),
       'notizen': serializer.toJson<String?>(notizen),
@@ -6907,6 +6934,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           Value<String?> startZeit = const Value.absent(),
           double? geplanteDauerMinuten,
           int? geplanteMitarbeiter,
+          int? sortierung,
           String? status,
           Value<String?> parentTaskId = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
@@ -6922,6 +6950,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
         startZeit: startZeit.present ? startZeit.value : this.startZeit,
         geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
         geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
+        sortierung: sortierung ?? this.sortierung,
         status: status ?? this.status,
         parentTaskId:
             parentTaskId.present ? parentTaskId.value : this.parentTaskId,
@@ -6944,6 +6973,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       geplanteMitarbeiter: data.geplanteMitarbeiter.present
           ? data.geplanteMitarbeiter.value
           : this.geplanteMitarbeiter,
+      sortierung:
+          data.sortierung.present ? data.sortierung.value : this.sortierung,
       status: data.status.present ? data.status.value : this.status,
       parentTaskId: data.parentTaskId.present
           ? data.parentTaskId.value
@@ -6966,6 +6997,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
+          ..write('sortierung: $sortierung, ')
           ..write('status: $status, ')
           ..write('parentTaskId: $parentTaskId, ')
           ..write('notizen: $notizen, ')
@@ -6986,6 +7018,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       startZeit,
       geplanteDauerMinuten,
       geplanteMitarbeiter,
+      sortierung,
       status,
       parentTaskId,
       notizen,
@@ -7004,6 +7037,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           other.startZeit == this.startZeit &&
           other.geplanteDauerMinuten == this.geplanteDauerMinuten &&
           other.geplanteMitarbeiter == this.geplanteMitarbeiter &&
+          other.sortierung == this.sortierung &&
           other.status == this.status &&
           other.parentTaskId == this.parentTaskId &&
           other.notizen == this.notizen &&
@@ -7021,6 +7055,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
   final Value<String?> startZeit;
   final Value<double> geplanteDauerMinuten;
   final Value<int> geplanteMitarbeiter;
+  final Value<int> sortierung;
   final Value<String> status;
   final Value<String?> parentTaskId;
   final Value<String?> notizen;
@@ -7037,6 +7072,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.startZeit = const Value.absent(),
     this.geplanteDauerMinuten = const Value.absent(),
     this.geplanteMitarbeiter = const Value.absent(),
+    this.sortierung = const Value.absent(),
     this.status = const Value.absent(),
     this.parentTaskId = const Value.absent(),
     this.notizen = const Value.absent(),
@@ -7054,6 +7090,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.startZeit = const Value.absent(),
     required double geplanteDauerMinuten,
     required int geplanteMitarbeiter,
+    this.sortierung = const Value.absent(),
     this.status = const Value.absent(),
     this.parentTaskId = const Value.absent(),
     this.notizen = const Value.absent(),
@@ -7077,6 +7114,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     Expression<String>? startZeit,
     Expression<double>? geplanteDauerMinuten,
     Expression<int>? geplanteMitarbeiter,
+    Expression<int>? sortierung,
     Expression<String>? status,
     Expression<String>? parentTaskId,
     Expression<String>? notizen,
@@ -7096,6 +7134,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
         'geplante_dauer_minuten': geplanteDauerMinuten,
       if (geplanteMitarbeiter != null)
         'geplante_mitarbeiter': geplanteMitarbeiter,
+      if (sortierung != null) 'sortierung': sortierung,
       if (status != null) 'status': status,
       if (parentTaskId != null) 'parent_task_id': parentTaskId,
       if (notizen != null) 'notizen': notizen,
@@ -7115,6 +7154,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       Value<String?>? startZeit,
       Value<double>? geplanteDauerMinuten,
       Value<int>? geplanteMitarbeiter,
+      Value<int>? sortierung,
       Value<String>? status,
       Value<String?>? parentTaskId,
       Value<String?>? notizen,
@@ -7131,6 +7171,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       startZeit: startZeit ?? this.startZeit,
       geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
       geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
+      sortierung: sortierung ?? this.sortierung,
       status: status ?? this.status,
       parentTaskId: parentTaskId ?? this.parentTaskId,
       notizen: notizen ?? this.notizen,
@@ -7169,6 +7210,9 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     if (geplanteMitarbeiter.present) {
       map['geplante_mitarbeiter'] = Variable<int>(geplanteMitarbeiter.value);
     }
+    if (sortierung.present) {
+      map['sortierung'] = Variable<int>(sortierung.value);
+    }
     if (status.present) {
       map['status'] = Variable<String>(status.value);
     }
@@ -7204,6 +7248,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
+          ..write('sortierung: $sortierung, ')
           ..write('status: $status, ')
           ..write('parentTaskId: $parentTaskId, ')
           ..write('notizen: $notizen, ')
@@ -14041,6 +14086,7 @@ typedef $$ProductionTasksTableCreateCompanionBuilder = ProductionTasksCompanion
   Value<String?> startZeit,
   required double geplanteDauerMinuten,
   required int geplanteMitarbeiter,
+  Value<int> sortierung,
   Value<String> status,
   Value<String?> parentTaskId,
   Value<String?> notizen,
@@ -14059,6 +14105,7 @@ typedef $$ProductionTasksTableUpdateCompanionBuilder = ProductionTasksCompanion
   Value<String?> startZeit,
   Value<double> geplanteDauerMinuten,
   Value<int> geplanteMitarbeiter,
+  Value<int> sortierung,
   Value<String> status,
   Value<String?> parentTaskId,
   Value<String?> notizen,
@@ -14135,6 +14182,9 @@ class $$ProductionTasksTableFilterComposer
   ColumnFilters<int> get geplanteMitarbeiter => $composableBuilder(
       column: $table.geplanteMitarbeiter,
       builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnFilters(column));
@@ -14228,6 +14278,9 @@ class $$ProductionTasksTableOrderingComposer
       column: $table.geplanteMitarbeiter,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get status => $composableBuilder(
       column: $table.status, builder: (column) => ColumnOrderings(column));
 
@@ -14297,6 +14350,9 @@ class $$ProductionTasksTableAnnotationComposer
 
   GeneratedColumn<int> get geplanteMitarbeiter => $composableBuilder(
       column: $table.geplanteMitarbeiter, builder: (column) => column);
+
+  GeneratedColumn<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => column);
 
   GeneratedColumn<String> get status =>
       $composableBuilder(column: $table.status, builder: (column) => column);
@@ -14390,6 +14446,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> startZeit = const Value.absent(),
             Value<double> geplanteDauerMinuten = const Value.absent(),
             Value<int> geplanteMitarbeiter = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<String?> parentTaskId = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
@@ -14407,6 +14464,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
+            sortierung: sortierung,
             status: status,
             parentTaskId: parentTaskId,
             notizen: notizen,
@@ -14424,6 +14482,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> startZeit = const Value.absent(),
             required double geplanteDauerMinuten,
             required int geplanteMitarbeiter,
+            Value<int> sortierung = const Value.absent(),
             Value<String> status = const Value.absent(),
             Value<String?> parentTaskId = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
@@ -14441,6 +14500,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
+            sortierung: sortierung,
             status: status,
             parentTaskId: parentTaskId,
             notizen: notizen,

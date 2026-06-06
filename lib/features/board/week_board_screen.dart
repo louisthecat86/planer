@@ -179,6 +179,41 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     }
   }
 
+  /// Setzt die manuelle Reihenfolge innerhalb einer Abteilung an einem Tag
+  /// neu (Hoch/Runter im Tagesplan) und speichert sie als `sortierung`.
+  Future<void> _sortiere(
+    List<BoardTask> laneTasks,
+    int von,
+    int nach,
+  ) async {
+    if (nach < 0 || nach >= laneTasks.length || von == nach) return;
+    final neu = [...laneTasks];
+    final item = neu.removeAt(von);
+    neu.insert(nach, item);
+
+    final db = ref.read(databaseProvider);
+    final jetzt = DateTime.now();
+    await db.transaction(() async {
+      for (var i = 0; i < neu.length; i++) {
+        await (db.update(db.productionTasks)
+              ..where((t) => t.id.equals(neu[i].id)))
+            .write(
+          ProductionTasksCompanion(
+            sortierung: Value(i),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      }
+    });
+
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Reihenfolge geändert');
+    ref.invalidate(weekBoardProvider);
+    ref.invalidate(dayBoardProvider);
+    ref.invalidate(dailyTasksProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     final sel = ref.watch(selectedDateProvider);
@@ -293,7 +328,11 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(child: Text('Fehler: $e')),
-                    data: (day) => _DayList(day: day, onTapTask: _bearbeite),
+                    data: (day) => _DayList(
+                      day: day,
+                      onTapTask: _bearbeite,
+                      onReorder: _sortiere,
+                    ),
                   ),
           ),
         ],
@@ -670,10 +709,15 @@ class _LeerHinweis extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _DayList extends StatelessWidget {
-  const _DayList({required this.day, required this.onTapTask});
+  const _DayList({
+    required this.day,
+    required this.onTapTask,
+    required this.onReorder,
+  });
 
   final DayBoard day;
   final void Function(BoardTask) onTapTask;
+  final void Function(List<BoardTask>, int, int) onReorder;
 
   @override
   Widget build(BuildContext context) {
@@ -681,17 +725,26 @@ class _DayList extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       children: [
         for (final lane in day.lanes)
-          _DayDeptCard(lane: lane, onTapTask: onTapTask),
+          _DayDeptCard(
+            lane: lane,
+            onTapTask: onTapTask,
+            onReorder: onReorder,
+          ),
       ],
     );
   }
 }
 
 class _DayDeptCard extends StatelessWidget {
-  const _DayDeptCard({required this.lane, required this.onTapTask});
+  const _DayDeptCard({
+    required this.lane,
+    required this.onTapTask,
+    required this.onReorder,
+  });
 
   final DayLane lane;
   final void Function(BoardTask) onTapTask;
+  final void Function(List<BoardTask>, int, int) onReorder;
 
   @override
   Widget build(BuildContext context) {
@@ -758,8 +811,15 @@ class _DayDeptCard extends StatelessWidget {
                 ),
               )
             else
-              for (final task in lane.tasks)
-                _DayTaskRow(task: task, onTap: () => onTapTask(task)),
+              for (var i = 0; i < lane.tasks.length; i++)
+                _DayTaskRow(
+                  task: lane.tasks[i],
+                  onTap: () => onTapTask(lane.tasks[i]),
+                  onUp: i > 0 ? () => onReorder(lane.tasks, i, i - 1) : null,
+                  onDown: i < lane.tasks.length - 1
+                      ? () => onReorder(lane.tasks, i, i + 1)
+                      : null,
+                ),
           ],
         ),
       ),
@@ -768,10 +828,17 @@ class _DayDeptCard extends StatelessWidget {
 }
 
 class _DayTaskRow extends StatelessWidget {
-  const _DayTaskRow({required this.task, required this.onTap});
+  const _DayTaskRow({
+    required this.task,
+    required this.onTap,
+    this.onUp,
+    this.onDown,
+  });
 
   final BoardTask task;
   final VoidCallback onTap;
+  final VoidCallback? onUp;
+  final VoidCallback? onDown;
 
   @override
   Widget build(BuildContext context) {
@@ -824,6 +891,36 @@ class _DayTaskRow extends StatelessWidget {
                   color: colors.onSurfaceVariant,
                 ),
               ),
+            if (onUp != null || onDown != null) ...[
+              const SizedBox(width: 4),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: onUp,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Icon(
+                      Icons.keyboard_arrow_up,
+                      size: 22,
+                      color: onUp == null
+                          ? Colors.grey.shade300
+                          : colors.onSurfaceVariant,
+                    ),
+                  ),
+                  InkWell(
+                    onTap: onDown,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 22,
+                      color: onDown == null
+                          ? Colors.grey.shade300
+                          : colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

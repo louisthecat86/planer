@@ -49,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -187,6 +187,15 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_production_history_product '
               'ON production_history(product_id, datum)',
+            );
+          }
+
+          // ─── v6 → v7: Manuelle Reihenfolge der Tasks je Abteilung/Tag ─
+          if (from < 7) {
+            await _addColumnIfNotExists(
+              'production_tasks',
+              'sortierung',
+              'INTEGER NOT NULL DEFAULT 0',
             );
           }
         },

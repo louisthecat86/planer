@@ -1,4 +1,5 @@
 import 'package:drift/drift.dart';
+
 import 'products.dart';
 
 /// Ein geplanter Produktions-Auftrag in der Wochenplanung.
@@ -34,6 +35,11 @@ class ProductionTasks extends Table {
   RealColumn get geplanteDauerMinuten => real()();
 
   IntColumn get geplanteMitarbeiter => integer()();
+
+  /// Manuelle Reihenfolge innerhalb einer Abteilung an einem Tag.
+  /// Kleinere Werte zuerst. Standard 0 (dann greift die Sekundär-Sortierung
+  /// nach Startzeit/Dauer). Wird über Hoch/Runter im Tagesplan gesetzt.
+  IntColumn get sortierung => integer().withDefault(const Constant(0))();
 
   /// Status des Auftrags. Erlaubte Werte (als Konstanten im Repo-Layer):
   /// 'geplant', 'in_arbeit', 'fertig', 'storniert'.
