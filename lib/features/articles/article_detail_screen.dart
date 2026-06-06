@@ -342,15 +342,55 @@ class _StepsList extends ConsumerWidget {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: steps.length,
-      itemBuilder: (context, index) {
-        final step = steps[index];
-        return _StepCard(
-          step: step,
-          stepNumber: index + 1,
+    final karten = [
+      for (var i = 0; i < steps.length; i++)
+        _StepCard(
+          step: steps[i],
+          stepNumber: i + 1,
           onUpdated: () => ref.invalidate(productStepsProvider(productId)),
+        ),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Ab ~700px zwei Spalten, darunter einspaltig (Telefon).
+        final zweiSpaltig = constraints.maxWidth >= 700;
+
+        if (!zweiSpaltig) {
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: karten,
+          );
+        }
+
+        // Karten abwechselnd auf zwei Spalten verteilen — so behält jede
+        // Karte ihre natürliche Höhe (kein Abschneiden bei vielen Parametern).
+        final links = <Widget>[];
+        final rechts = <Widget>[];
+        for (var i = 0; i < karten.length; i++) {
+          (i.isEven ? links : rechts).add(karten[i]);
+        }
+
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: links,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: rechts,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -377,8 +417,6 @@ class _StepCard extends ConsumerStatefulWidget {
 }
 
 class _StepCardState extends ConsumerState<_StepCard> {
-  bool _expanded = false;
-
   Abteilung? get _abteilung {
     try {
       return Abteilung.fromDbValue(widget.step.abteilung);
@@ -409,105 +447,91 @@ class _StepCardState extends ConsumerState<_StepCard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(
-          color: _expanded ? color : color.withValues(alpha: 0.3),
-          width: _expanded ? 2 : 1,
+          color: color.withValues(alpha: 0.5),
+          width: 1.5,
         ),
       ),
       child: Column(
         children: [
-          // Header
-          InkWell(
-            onTap: () => setState(() => _expanded = !_expanded),
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  // Schrittnummer
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                    ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${widget.stepNumber}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+          // Header (immer sichtbar)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Schrittnummer
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${widget.stepNumber}',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                ),
+                const SizedBox(width: 12),
 
-                  // Abteilungsname + Infos
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+                // Abteilungsname + Infos
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        abt?.anzeigeName ?? widget.step.abteilung,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      if (widget.step.prozessschritt != null &&
+                          widget.step.prozessschritt!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
                         Text(
-                          abt?.anzeigeName ?? widget.step.abteilung,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                          widget.step.prozessschritt!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.7),
                           ),
                         ),
-                        if (widget.step.prozessschritt != null &&
-                            widget.step.prozessschritt!.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            widget.step.prozessschritt!,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.7),
-                            ),
-                          ),
-                        ],
-                        const SizedBox(height: 4),
-                        _StepInfoRow(step: widget.step),
                       ],
-                    ),
+                      const SizedBox(height: 4),
+                      _StepInfoRow(step: widget.step),
+                    ],
                   ),
+                ),
 
-                  // Bearbeiten-Button
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 20),
-                    tooltip: 'Schritt bearbeiten',
-                    onPressed: _openEditor,
-                  ),
-
-                  // Expand Arrow
-                  Icon(
-                    _expanded
-                        ? Icons.keyboard_arrow_up
-                        : Icons.keyboard_arrow_down,
-                  ),
-                ],
-              ),
+                // Bearbeiten-Button
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  tooltip: 'Schritt bearbeiten',
+                  onPressed: _openEditor,
+                ),
+              ],
             ),
           ),
 
-          // Expanded Content
-          if (_expanded) ...[
-            const Divider(height: 1),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Anlagen-Info
-                  _MaschineInfoRow(step: widget.step),
-                  const SizedBox(height: 12),
+          const Divider(height: 1),
 
-                  // Parameter (Standard readonly, Custom editierbar)
-                  _ParameterListe(stepId: widget.step.id),
-                ],
-              ),
+          // Detail (immer aufgeklappt)
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Anlagen-Info
+                _MaschineInfoRow(step: widget.step),
+                const SizedBox(height: 12),
+
+                // Parameter (Standard readonly, Custom editierbar)
+                _ParameterListe(stepId: widget.step.id),
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
