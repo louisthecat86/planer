@@ -11,6 +11,7 @@ import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/excel_export_service_v3.dart';
 import '../../core/services/excel_import_dispatcher.dart';
+import '../articles/article_detail_screen.dart';
 import '../articles/article_list_screen.dart';
 
 /// Zentraler „Daten verwalten"-Screen.
@@ -83,6 +84,18 @@ class _DataManagementScreenState
     });
   }
 
+  /// Lädt alle Daten-Provider neu, deren Inhalt sich durch Import oder
+  /// Backup-Restore geändert haben kann. Ohne dies zeigen Artikelkarte,
+  /// Schritte und Historie weiterhin den alten (gecachten) Stand.
+  void _invalidiereDatenProvider() {
+    ref.invalidate(articlesProvider);
+    ref.invalidate(productProvider);
+    ref.invalidate(productStepsProvider);
+    ref.invalidate(stepParametersProvider);
+    ref.invalidate(machineProvider);
+    ref.invalidate(productionHistoryProvider);
+  }
+
   // ──────────────────────────────────────────────────────────────────────
   // EXCEL-IMPORT
   // ──────────────────────────────────────────────────────────────────────
@@ -102,7 +115,7 @@ class _DataManagementScreenState
       final dispatcher = ExcelImportDispatcher(ref.read(databaseProvider));
       final result = await dispatcher.importFile(filePath);
 
-      ref.invalidate(articlesProvider);
+      _invalidiereDatenProvider();
 
       // Auto-Backup nach Import — die Excel hat einen großen Datenstand
       // gebracht, der Schutzwert eines Backups ist hier am höchsten.
@@ -230,7 +243,7 @@ class _DataManagementScreenState
       final db = ref.read(databaseProvider);
       await BackupService.importBackup(info.filepath, db, clearExisting: true);
 
-      ref.invalidate(articlesProvider);
+      _invalidiereDatenProvider();
 
       // Bewusst KEIN Auto-Backup nach Restore — wir haben gerade von
       // einem Backup wiederhergestellt, ein neues Backup wäre redundant
@@ -269,7 +282,7 @@ class _DataManagementScreenState
       final db = ref.read(databaseProvider);
       await BackupService.importBackup(filePath, db, clearExisting: true);
 
-      ref.invalidate(articlesProvider);
+      _invalidiereDatenProvider();
 
       _setBusy(false, msg: 'Backup wiederhergestellt');
     } catch (e) {

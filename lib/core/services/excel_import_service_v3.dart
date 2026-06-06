@@ -1005,17 +1005,42 @@ class ExcelImportServiceV3 {
       if (datumCell == null || datumCell.value == null) continue;
       final dt = _parseDatum(datumCell);
       if (dt == null) continue;
+
+      final roh = _parseDouble(rows[r], 1);
+      final fertig = _parseDouble(rows[r], 2);
+      final start = _cellStr(rows[r], 4);
+      final ende = _cellStr(rows[r], 5);
+
+      // Produktionszeit bevorzugt aus Start/Ende, sonst aus Spalte G.
+      var prod = _produktionszeitAus(start, ende);
+      prod ??= _parseZeit(rows[r], 6);
+
+      // Verlust und kg/h berechnet die App selbst (die Vorlage hat keine
+      // Formeln); gelesene Spaltenwerte dienen nur als Rückfall.
+      var verlust = _parseDouble(rows[r], 3);
+      if (roh != null && roh > 0 && fertig != null) {
+        verlust = 1 - (fertig / roh);
+      }
+      var kghRoh = _parseDouble(rows[r], 7);
+      if (roh != null && prod != null && prod > 0) {
+        kghRoh = roh / (prod / 60);
+      }
+      var kghGegart = _parseDouble(rows[r], 8);
+      if (fertig != null && prod != null && prod > 0) {
+        kghGegart = fertig / (prod / 60);
+      }
+
       result.add(
         _ParsedHistorie(
           datum: dt,
-          kgRohware: _parseDouble(rows[r], 1),
-          kgFertigware: _parseDouble(rows[r], 2),
-          verlustProzent: _parseDouble(rows[r], 3),
-          startzeit: _cellStr(rows[r], 4),
-          endzeit: _cellStr(rows[r], 5),
-          produktionszeitMinuten: _parseZeit(rows[r], 6),
-          kgProStundeRoh: _parseDouble(rows[r], 7),
-          kgProStundeGegart: _parseDouble(rows[r], 8),
+          kgRohware: roh,
+          kgFertigware: fertig,
+          verlustProzent: verlust,
+          startzeit: start,
+          endzeit: ende,
+          produktionszeitMinuten: prod,
+          kgProStundeRoh: kghRoh,
+          kgProStundeGegart: kghGegart,
           notizen: _cellStr(rows[r], 9),
         ),
       );
@@ -1104,9 +1129,37 @@ class ExcelImportServiceV3 {
       return DateTime(v.year, v.month, v.day);
     }
     if (v is TextCellValue) {
-      return DateTime.tryParse(v.value.text ?? '');
+      final t = v.value.text?.trim() ?? '';
+      if (t.isEmpty) return null;
+      final iso = DateTime.tryParse(t);
+      if (iso != null) return iso;
+      // Deutsches Format: dd.MM.yyyy oder dd.MM.yy
+      final m = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{2,4})$').firstMatch(t);
+      if (m != null) {
+        var jahr = int.parse(m.group(3)!);
+        if (jahr < 100) jahr += 2000;
+        return DateTime(jahr, int.parse(m.group(2)!), int.parse(m.group(1)!));
+      }
     }
     return null;
+  }
+
+  /// Produktionszeit in Minuten aus "HH:MM"-Start/Ende.
+  static double? _produktionszeitAus(String? start, String? ende) {
+    final s = _minutenVon(start);
+    final e = _minutenVon(ende);
+    if (s == null || e == null || e <= s) return null;
+    return (e - s).toDouble();
+  }
+
+  static int? _minutenVon(String? hhmm) {
+    if (hhmm == null) return null;
+    final p = hhmm.trim().split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    if (h == null || m == null) return null;
+    return h * 60 + m;
   }
 
   String? _mapAbteilung(String text) {

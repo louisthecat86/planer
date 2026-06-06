@@ -520,8 +520,14 @@ class ExcelExportServiceV3 {
 
   /// Schreibt alle [historie]-Zeilen in den HISTORISCHE-DATEN-Block.
   /// Bestehende Datenzeilen unterhalb der „Datum"-Kopfzeile werden ersetzt.
-  /// Datum und Zeiten als Text (re-import-sicher), Mengen/Verlust/kg-h als
-  /// Zahlen. Liefert die Anzahl geschriebener Zeilen.
+  ///
+  /// Datum wird als Excel-Seriennummer, Zeiten als Tagesbruchteil und Verlust
+  /// als Bruch geschrieben — jeweils mit dem Zellformat (Style) der ersten
+  /// vorhandenen Datenzeile, damit Format und Datentyp exakt der Vorlage
+  /// entsprechen (und ein Re-Import sie wieder als Datum/Zeit erkennt).
+  /// Ohne erfassbaren Style wird auf Text zurückgefallen (re-import-sicher).
+  /// Spalten: A Datum, B Roh, C Fertig, D Verlust, E Start, F Ende,
+  /// G Produktionszeit, H kg/h roh, I kg/h gegart, J Notizen.
   int _schreibeHistorie({
     required XmlElement sheetData,
     required XmlDocument doc,
@@ -530,6 +536,10 @@ class ExcelExportServiceV3 {
   }) {
     final headerRow = _findeHistorieHeaderZeile(doc, sharedStrings);
     if (headerRow == null) return 0;
+
+    // Zell-Styles der ersten Datenzeile je Spalte erfassen (VOR dem Löschen),
+    // damit neue Zeilen identisch formatiert werden.
+    final stilByCol = _erfasseHistorieStile(sheetData, headerRow);
 
     // Alte Datenzeilen (alles unterhalb der „Datum"-Kopfzeile) entfernen.
     final alteZeilen = sheetData
@@ -550,58 +560,205 @@ class ExcelExportServiceV3 {
     var count = 0;
     for (final h in sortiert) {
       r++;
-      _setzeZelleInlineStr(
+
+      // A — Datum: Seriennummer + Datums-Style, sonst ISO-Text.
+      _schreibeZelle(
         sheetData,
         row: r,
         colLetter: 'A',
-        wert: _isoDatum(h.datum),
+        stil: stilByCol['A'],
+        zahl: _excelDatumSerial(h.datum).toDouble(),
+        textFallback: _isoDatum(h.datum),
       );
+
       if (h.kgRohware != null) {
-        _setzeZelleZahl(sheetData, row: r, colLetter: 'B', wert: h.kgRohware!);
+        _schreibeZelle(
+          sheetData,
+          row: r,
+          colLetter: 'B',
+          stil: stilByCol['B'],
+          zahl: h.kgRohware,
+        );
       }
       if (h.kgFertigware != null) {
-        _setzeZelleZahl(
+        _schreibeZelle(
           sheetData,
           row: r,
           colLetter: 'C',
-          wert: h.kgFertigware!,
+          stil: stilByCol['C'],
+          zahl: h.kgFertigware,
         );
       }
       if (h.verlustAnteil != null) {
-        _setzeZelleZahl(
+        _schreibeZelle(
           sheetData,
           row: r,
           colLetter: 'D',
-          wert: h.verlustAnteil!,
+          stil: stilByCol['D'],
+          zahl: h.verlustAnteil,
         );
       }
-      final s = h.startzeit;
-      if (s != null && s.isNotEmpty) {
-        _setzeZelleInlineStr(sheetData, row: r, colLetter: 'E', wert: s);
+
+      // E/F — Start/Ende: Tagesbruchteil + Zeit-Style, sonst "HH:MM"-Text.
+      final bsStart = _zeitBruchteil(h.startzeit);
+      if (bsStart != null) {
+        _schreibeZelle(
+          sheetData,
+          row: r,
+          colLetter: 'E',
+          stil: stilByCol['E'],
+          zahl: bsStart,
+          textFallback: h.startzeit,
+        );
       }
-      final e = h.endzeit;
-      if (e != null && e.isNotEmpty) {
-        _setzeZelleInlineStr(sheetData, row: r, colLetter: 'F', wert: e);
+      final bsEnde = _zeitBruchteil(h.endzeit);
+      if (bsEnde != null) {
+        _schreibeZelle(
+          sheetData,
+          row: r,
+          colLetter: 'F',
+          stil: stilByCol['F'],
+          zahl: bsEnde,
+          textFallback: h.endzeit,
+        );
       }
+
+      // G — Produktionszeit: Minuten → Tagesbruchteil.
       if (h.produktionszeitMinuten != null) {
-        _setzeZelleInlineStr(
+        _schreibeZelle(
           sheetData,
           row: r,
           colLetter: 'G',
-          wert: _hhmmVonMinuten(h.produktionszeitMinuten!),
+          stil: stilByCol['G'],
+          zahl: h.produktionszeitMinuten! / 1440,
+          textFallback: _hhmmVonMinuten(h.produktionszeitMinuten!),
         );
       }
+
       if (h.kgProStundeRoh != null) {
-        _setzeZelleZahl(
+        _schreibeZelle(
           sheetData,
           row: r,
           colLetter: 'H',
-          wert: h.kgProStundeRoh!,
+          stil: stilByCol['H'],
+          zahl: h.kgProStundeRoh,
+        );
+      }
+      if (h.kgProStundeGegart != null) {
+        _schreibeZelle(
+          sheetData,
+          row: r,
+          colLetter: 'I',
+          stil: stilByCol['I'],
+          zahl: h.kgProStundeGegart,
+        );
+      }
+      final notiz = h.notizen;
+      if (notiz != null && notiz.isNotEmpty) {
+        _schreibeZelle(
+          sheetData,
+          row: r,
+          colLetter: 'J',
+          stil: stilByCol['J'],
+          text: notiz,
         );
       }
       count++;
     }
     return count;
+  }
+
+  /// Erfasst die Style-IDs (`s`-Attribut) je Spalte aus der ersten Datenzeile
+  /// (headerRow + 1) des Historie-Blocks.
+  Map<String, String> _erfasseHistorieStile(
+    XmlElement sheetData,
+    int headerRow,
+  ) {
+    final result = <String, String>{};
+    for (final row in sheetData.findElements('row')) {
+      final n = int.tryParse(row.getAttribute('r') ?? '');
+      if (n != headerRow + 1) continue;
+      for (final cell in row.findElements('c')) {
+        final ref = cell.getAttribute('r') ?? '';
+        final m = RegExp(r'^([A-Z]+)').firstMatch(ref);
+        final s = cell.getAttribute('s');
+        if (m != null && s != null) result[m.group(1)!] = s;
+      }
+      break;
+    }
+    return result;
+  }
+
+  /// Schreibt eine Zelle wahlweise als Zahl oder Text, optional mit
+  /// vorgegebenem Style. Bei [zahl] ohne Style wird – falls vorhanden –
+  /// auf [textFallback] zurückgegriffen, damit das Format (Datum/Zeit)
+  /// nicht verloren geht.
+  void _schreibeZelle(
+    XmlElement sheetData, {
+    required int row,
+    required String colLetter,
+    String? stil,
+    double? zahl,
+    String? text,
+    String? textFallback,
+  }) {
+    if (text != null) {
+      _setzeMitStil(sheetData, row, colLetter, stil);
+      _setzeZelleInlineStr(
+        sheetData,
+        row: row,
+        colLetter: colLetter,
+        wert: text,
+      );
+      return;
+    }
+    if (zahl == null) return;
+    if (stil != null) {
+      _setzeMitStil(sheetData, row, colLetter, stil);
+      _setzeZelleZahl(sheetData, row: row, colLetter: colLetter, wert: zahl);
+    } else if (textFallback != null) {
+      _setzeZelleInlineStr(
+        sheetData,
+        row: row,
+        colLetter: colLetter,
+        wert: textFallback,
+      );
+    } else {
+      _setzeZelleZahl(sheetData, row: row, colLetter: colLetter, wert: zahl);
+    }
+  }
+
+  /// Legt die Zelle an (falls nötig) und setzt das `s`-Attribut, sofern noch
+  /// keines vorhanden ist. Die anschließenden Schreib-Helfer erhalten den
+  /// Style.
+  void _setzeMitStil(
+    XmlElement sheetData,
+    int row,
+    String colLetter,
+    String? stil,
+  ) {
+    if (stil == null) return;
+    final rowEl = _findeOderLegeRowAn(sheetData, row);
+    final cell = _findeOderLegeCellAn(rowEl, '$colLetter$row');
+    if (cell.getAttribute('s') == null) cell.setAttribute('s', stil);
+  }
+
+  /// Excel-Datums-Seriennummer (Tage seit 1899-12-30, UTC-sicher).
+  int _excelDatumSerial(DateTime d) {
+    final tag = DateTime.utc(d.year, d.month, d.day);
+    final epoch = DateTime.utc(1899, 12, 30);
+    return tag.difference(epoch).inDays;
+  }
+
+  /// "HH:MM" → Tagesbruchteil (z. B. "06:35" → 0.27430…).
+  double? _zeitBruchteil(String? hhmm) {
+    if (hhmm == null || hhmm.isEmpty) return null;
+    final p = hhmm.trim().split(':');
+    if (p.length < 2) return null;
+    final h = int.tryParse(p[0]);
+    final m = int.tryParse(p[1]);
+    if (h == null || m == null) return null;
+    return (h * 60 + m) / 1440;
   }
 
   /// Findet die „Datum"-Kopfzeile innerhalb/unterhalb des
