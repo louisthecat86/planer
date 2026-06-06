@@ -117,6 +117,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   late TextEditingController _personenCtrl;
   late TextEditingController _mengeCtrl;
   late TextEditingController _dauerMinCtrl;
+  late TextEditingController _fixZeitCtrl;
 
   List<Machine> _alleMaschinen = [];
   bool _maschinenGeladen = false;
@@ -148,6 +149,11 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
             ? _formatZahl(step.basisDauerMinuten)
             : '',
       );
+      _fixZeitCtrl = TextEditingController(
+        text: (step.fixZeitMinuten ?? 0) > 0
+            ? _formatZahl(step.fixZeitMinuten!)
+            : '',
+      );
     } else {
       // Insert-Modus: leere Felder mit sinnvollen Defaults
       _abteilungDbValue = Abteilung.values.first.dbValue;
@@ -156,6 +162,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       _personenCtrl = TextEditingController(text: '1');
       _mengeCtrl = TextEditingController();
       _dauerMinCtrl = TextEditingController();
+      _fixZeitCtrl = TextEditingController();
     }
     _ladeMaschinen();
   }
@@ -166,6 +173,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     _personenCtrl.dispose();
     _mengeCtrl.dispose();
     _dauerMinCtrl.dispose();
+    _fixZeitCtrl.dispose();
     super.dispose();
   }
 
@@ -239,6 +247,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     final personen = int.tryParse(_personenCtrl.text.trim()) ?? 1;
     final menge = _parseZahl(_mengeCtrl.text) ?? 0.0;
     final dauer = _parseZahl(_dauerMinCtrl.text) ?? 0.0;
+    final fixZeit = _parseZahl(_fixZeitCtrl.text) ?? 0.0;
     final prozess = _prozessschrittCtrl.text.trim();
     final maschineName = _ermittleMaschinenName();
 
@@ -266,6 +275,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
           personen: personen,
           menge: menge,
           dauer: dauer,
+          fixZeit: fixZeit,
           prozess: prozess,
           maschineName: maschineName,
         );
@@ -275,6 +285,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
           personen: personen,
           menge: menge,
           dauer: dauer,
+          fixZeit: fixZeit,
           prozess: prozess,
           maschineName: maschineName,
         );
@@ -299,6 +310,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     required int personen,
     required double menge,
     required double dauer,
+    required double fixZeit,
     required String prozess,
     required String? maschineName,
   }) async {
@@ -317,6 +329,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
             mengeKg: Value(menge > 0 ? menge : null),
             basisMengeKg: Value(menge),
             basisDauerMinuten: Value(dauer),
+            fixZeitMinuten: Value(fixZeit > 0 ? fixZeit : null),
             basisMitarbeiter: Value(personen),
             // basisAnzahlMessungen: Default 0 aus dem Schema
             // createdAt / updatedAt: Default currentDateAndTime aus Schema
@@ -333,6 +346,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     required int personen,
     required double menge,
     required double dauer,
+    required double fixZeit,
     required String prozess,
     required String? maschineName,
   }) async {
@@ -348,6 +362,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
         basisMengeKg: Value(menge),
         mengeKg: Value(menge > 0 ? menge : null),
         basisDauerMinuten: Value(dauer),
+        fixZeitMinuten: Value(fixZeit > 0 ? fixZeit : null),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -524,6 +539,25 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                     ),
                   ),
                 ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── Fixe Zeit / Durchlauf (mengenunabhängig) ──────────────
+              TextField(
+                controller: _fixZeitCtrl,
+                enabled: !_isSaving,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Fixe Zeit / Durchlauf',
+                  suffixText: 'min',
+                  border: OutlineInputBorder(),
+                  helperText: 'Mengenunabhängig — z.B. Tunnel-Durchlauf, '
+                      'Schockfrost, Transport + Verpacken. Wird bei der '
+                      'Bratstraße auf die Auflagezeit aufaddiert.',
+                  helperMaxLines: 3,
+                ),
               ),
 
               if (_saveError != null) ...[

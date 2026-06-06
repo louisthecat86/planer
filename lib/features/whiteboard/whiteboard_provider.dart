@@ -236,10 +236,23 @@ Future<GeplanterPlan> berechneSchrittPlan({
     double dauer;
 
     if (istBratstrasse && histAvgKgh != null && histAvgKgh > 0) {
-      // Historie misst die ganze Bratstraßen-Kette → ein Ø für den Block.
-      dauer = blockMenge / histAvgKgh * 60.0;
+      // Auflagezeit (erste bis letzte Auflage aufs Band) aus dem gemessenen
+      // Durchsatz; fixe Durchlauf-/Verpackzeiten der Maschinen oben drauf.
+      final auflage = blockMenge / histAvgKgh * 60.0;
+      final durchlauf = block.fold<double>(
+        0,
+        (summe, b) => summe + (b.step.fixZeitMinuten ?? 0.0),
+      );
+      dauer = auflage + durchlauf;
       ausHistorie = true;
-      notizen.write('Dauer aus Historie (Ø kg/h). ');
+      if (durchlauf > 0) {
+        notizen.write(
+          'Auflage ${auflage.round()} min + Durchlauf/Verpacken '
+          '${durchlauf.round()} min. ',
+        );
+      } else {
+        notizen.write('Dauer aus Historie (Ø kg/h, Auflagezeit). ');
+      }
     } else {
       dauer = block.fold<double>(0, (summe, b) => summe + b.dauer);
       platzhalter = block.any((b) => b.platzhalter);
