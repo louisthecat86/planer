@@ -189,51 +189,82 @@ Future<GeplanterPlan> berechneSchrittPlan({
   final histAvgKgh = await _avgKghRohAusHistorie(db, productId);
 
   final tagNorm = DateTime(startTag.year, startTag.month, startTag.day);
-  final result = <GeplanterSchritt>[];
 
+  // Pro Schritt zunächst Dauer + Platzhalter + Bezeichnung berechnen.
+  final perStep =
+      <({ProductStep step, double menge, double dauer, bool platzhalter, String label})>[];
   for (var i = 0; i < steps.length; i++) {
     final step = steps[i];
     final menge = inputMengen[i];
+    final muell = StringBuffer();
+    final (d, ph) = _skaliereDauer(step, menge, muell);
+    final label = (step.prozessschritt != null &&
+            step.prozessschritt!.isNotEmpty)
+        ? step.prozessschritt!
+        : (step.maschine ?? '');
+    perStep.add(
+      (step: step, menge: menge, dauer: d, platzhalter: ph, label: label),
+    );
+  }
+
+  // Aufeinanderfolgende Schritte derselben Abteilung zu EINEM Block bündeln
+  // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → ein Eintrag).
+  final result = <GeplanterSchritt>[];
+  var i = 0;
+  while (i < perStep.length) {
+    final abt = perStep[i].step.abteilung;
+    final block = [perStep[i]];
+    var j = i + 1;
+    while (j < perStep.length && perStep[j].step.abteilung == abt) {
+      block.add(perStep[j]);
+      j++;
+    }
+    i = j;
+
+    final blockMenge = block.first.menge;
+    final istBratstrasse = abt == _kBratstrasseDbValue;
     final notizen = StringBuffer();
+
+    final labels =
+        block.map((b) => b.label).where((l) => l.isNotEmpty).toList();
+    if (labels.length > 1) {
+      notizen.write('Maschinen/Schritte: ${labels.join(' · ')}. ');
+    }
 
     var ausHistorie = false;
     var platzhalter = false;
     double dauer;
 
-    final istBratstrasse = step.abteilung == _kBratstrasseDbValue;
     if (istBratstrasse && histAvgKgh != null && histAvgKgh > 0) {
-      // Realistische Dauer aus dem gemessenen Durchsatz.
-      dauer = menge / histAvgKgh * 60.0;
+      // Historie misst die ganze Bratstraßen-Kette → ein Ø für den Block.
+      dauer = blockMenge / histAvgKgh * 60.0;
       ausHistorie = true;
       notizen.write('Dauer aus Historie (Ø kg/h). ');
     } else {
-      final (d, ph) = _skaliereDauer(step, menge, notizen);
-      dauer = d;
-      platzhalter = ph;
-    }
-
-    final ausbeute = step.ausbeuteFaktor;
-    if (ausbeute != null && ausbeute < 1.0) {
-      final verlust = ((1 - ausbeute) * 100).toStringAsFixed(0);
-      notizen.write(
-        'Ausbeute ${(ausbeute * 100).toStringAsFixed(0)}% '
-        '(Verlust $verlust%). ',
-      );
+      dauer = block.fold<double>(0, (summe, b) => summe + b.dauer);
+      platzhalter = block.any((b) => b.platzhalter);
+      if (platzhalter) {
+        notizen.write('Zeit teils Platzhalter (Stammdaten pflegen). ');
+      }
     }
 
     // Sicherheitsnetz gegen unsinnige Werte.
     if (!dauer.isFinite || dauer.isNaN || dauer < 0) dauer = 30.0;
     if (dauer > 60 * 24 * 7) dauer = 30.0;
 
+    final mitarbeiter = block
+        .map((b) => b.step.basisMitarbeiter)
+        .fold<int>(1, (m, v) => v > m ? v : m);
+
     result.add(
       GeplanterSchritt(
-        stepId: step.id,
-        reihenfolge: step.reihenfolge,
-        abteilungDbValue: step.abteilung,
-        prozessschritt: step.prozessschritt,
-        mengeKg: menge,
+        stepId: block.first.step.id,
+        reihenfolge: block.first.step.reihenfolge,
+        abteilungDbValue: abt,
+        prozessschritt: labels.isEmpty ? null : labels.join(' · '),
+        mengeKg: blockMenge,
         dauerMinuten: dauer.roundToDouble(),
-        mitarbeiter: step.basisMitarbeiter > 0 ? step.basisMitarbeiter : 1,
+        mitarbeiter: mitarbeiter,
         ausHistorie: ausHistorie,
         platzhalter: platzhalter,
         notizen: notizen.isEmpty ? null : notizen.toString().trim(),
