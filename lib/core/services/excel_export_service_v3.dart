@@ -21,6 +21,7 @@ class ExportResultV3 {
     this.parameterGeschrieben = 0,
     this.customParameterGeschrieben = 0,
     this.customParameterUebersprungen = 0,
+    this.historienGeschrieben = 0,
     this.artikelNichtInVorlage = const [],
     this.warnungen = const [],
     this.fehler = const [],
@@ -34,6 +35,7 @@ class ExportResultV3 {
   final int parameterGeschrieben;
   final int customParameterGeschrieben;
   final int customParameterUebersprungen;
+  final int historienGeschrieben;
 
   final List<String> artikelNichtInVorlage;
   final List<String> warnungen;
@@ -49,9 +51,9 @@ class ExportResultV3 {
 /// Exportiert den aktuellen DB-Stand in die zuletzt importierte
 /// Excel-Datei, unter Erhalt aller Formatierung.
 ///
-/// Zusätzlich zu den Standard-Parametern werden Custom-Parameter
-/// (in der App vom Nutzer angelegt) in den „ZUSÄTZLICHE PARAMETER"-Block
-/// der Vorlage geschrieben.
+/// Geschrieben werden: Schritt-Matrix, Standard- und Custom-Parameter sowie
+/// der Block „HISTORISCHE DATEN" (aus production_history — sowohl importierte
+/// als auch in der App erfasste Zeilen).
 class ExcelExportServiceV3 {
   ExcelExportServiceV3(this._db);
 
@@ -123,11 +125,20 @@ class ExcelExportServiceV3 {
     final alleMaschinen = await _db.select(_db.machines).get();
     final maschinenById = {for (final m in alleMaschinen) m.id: m};
 
+    // Historie je Artikel (importierte + in der App erfasste Zeilen).
+    final alleHistorie = await _db.select(_db.productionHistory).get();
+    final historieByProduct = <String, List<ProductionHistoryData>>{};
+    for (final h in alleHistorie) {
+      if (h.deletedAt != null) continue;
+      historieByProduct.putIfAbsent(h.productId, () => []).add(h);
+    }
+
     int artikelAktualisiert = 0;
     int schritteGeschrieben = 0;
     int parameterGeschrieben = 0;
     int customParameterGeschrieben = 0;
     int customParameterUebersprungen = 0;
+    int historienGeschrieben = 0;
     final artikelNichtInVorlage = <String>[];
     final warnungen = <String>[];
 
@@ -175,6 +186,7 @@ class ExcelExportServiceV3 {
           schritte: schritte,
           paramsByStep: paramsByStep,
           maschinenById: maschinenById,
+          historie: historieByProduct[artikel.id] ?? const [],
           sharedStrings: sharedStrings,
           warnungen: warnungen,
           artikelLabel: artikel.artikelnummer,
@@ -182,13 +194,15 @@ class ExcelExportServiceV3 {
 
         if (aktualisiert.schritte > 0 ||
             aktualisiert.parameter > 0 ||
-            aktualisiert.customParameter > 0) {
+            aktualisiert.customParameter > 0 ||
+            aktualisiert.historie > 0) {
           artikelAktualisiert++;
         }
         schritteGeschrieben += aktualisiert.schritte;
         parameterGeschrieben += aktualisiert.parameter;
         customParameterGeschrieben += aktualisiert.customParameter;
         customParameterUebersprungen += aktualisiert.customUebersprungen;
+        historienGeschrieben += aktualisiert.historie;
 
         final neuesXml = utf8.encode(doc.toXmlString(pretty: false));
         archive.addFile(
@@ -219,6 +233,7 @@ class ExcelExportServiceV3 {
       parameterGeschrieben: parameterGeschrieben,
       customParameterGeschrieben: customParameterGeschrieben,
       customParameterUebersprungen: customParameterUebersprungen,
+      historienGeschrieben: historienGeschrieben,
       artikelNichtInVorlage: artikelNichtInVorlage,
       warnungen: warnungen,
     );
@@ -278,12 +293,13 @@ class ExcelExportServiceV3 {
     required List<ProductStep> schritte,
     required Map<String, List<ProductStepParameter>> paramsByStep,
     required Map<String, Machine> maschinenById,
+    required List<ProductionHistoryData> historie,
     required _SharedStrings sharedStrings,
     required List<String> warnungen,
     required String artikelLabel,
   }) {
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
-    if (sheetData == null) return _AktualisierungsStats(0, 0, 0, 0);
+    if (sheetData == null) return _AktualisierungsStats(0, 0, 0, 0, 0);
 
     final labelRows = _findeSchrittLabelZeilen(doc, sharedStrings);
 
@@ -443,11 +459,20 @@ class ExcelExportServiceV3 {
       }
     }
 
+    // ── Historische Produktionsdaten in den HISTORISCHE-DATEN-Block ───
+    final historieGeschrieben = _schreibeHistorie(
+      sheetData: sheetData,
+      doc: doc,
+      sharedStrings: sharedStrings,
+      historie: historie,
+    );
+
     return _AktualisierungsStats(
       schritteAktualisiert,
       parameterAktualisiert,
       customGeschrieben,
       customUebersprungen,
+      historieGeschrieben,
     );
   }
 
@@ -489,6 +514,127 @@ class ExcelExportServiceV3 {
       slots.add(r);
     }
     return slots;
+  }
+
+  // ─── Historie zurückschreiben ─────────────────────────────────────────
+
+  /// Schreibt alle [historie]-Zeilen in den HISTORISCHE-DATEN-Block.
+  /// Bestehende Datenzeilen unterhalb der „Datum"-Kopfzeile werden ersetzt.
+  /// Datum und Zeiten als Text (re-import-sicher), Mengen/Verlust/kg-h als
+  /// Zahlen. Liefert die Anzahl geschriebener Zeilen.
+  int _schreibeHistorie({
+    required XmlElement sheetData,
+    required XmlDocument doc,
+    required _SharedStrings sharedStrings,
+    required List<ProductionHistoryData> historie,
+  }) {
+    final headerRow = _findeHistorieHeaderZeile(doc, sharedStrings);
+    if (headerRow == null) return 0;
+
+    // Alte Datenzeilen (alles unterhalb der „Datum"-Kopfzeile) entfernen.
+    final alteZeilen = sheetData
+        .findElements('row')
+        .where((r) {
+          final n = int.tryParse(r.getAttribute('r') ?? '');
+          return n != null && n > headerRow;
+        })
+        .toList();
+    for (final z in alteZeilen) {
+      sheetData.children.remove(z);
+    }
+
+    final sortiert = [...historie]
+      ..sort((a, b) => a.datum.compareTo(b.datum));
+
+    var r = headerRow;
+    var count = 0;
+    for (final h in sortiert) {
+      r++;
+      _setzeZelleInlineStr(
+        sheetData,
+        row: r,
+        colLetter: 'A',
+        wert: _isoDatum(h.datum),
+      );
+      if (h.kgRohware != null) {
+        _setzeZelleZahl(sheetData, row: r, colLetter: 'B', wert: h.kgRohware!);
+      }
+      if (h.kgFertigware != null) {
+        _setzeZelleZahl(
+          sheetData,
+          row: r,
+          colLetter: 'C',
+          wert: h.kgFertigware!,
+        );
+      }
+      if (h.verlustAnteil != null) {
+        _setzeZelleZahl(
+          sheetData,
+          row: r,
+          colLetter: 'D',
+          wert: h.verlustAnteil!,
+        );
+      }
+      final s = h.startzeit;
+      if (s != null && s.isNotEmpty) {
+        _setzeZelleInlineStr(sheetData, row: r, colLetter: 'E', wert: s);
+      }
+      final e = h.endzeit;
+      if (e != null && e.isNotEmpty) {
+        _setzeZelleInlineStr(sheetData, row: r, colLetter: 'F', wert: e);
+      }
+      if (h.produktionszeitMinuten != null) {
+        _setzeZelleInlineStr(
+          sheetData,
+          row: r,
+          colLetter: 'G',
+          wert: _hhmmVonMinuten(h.produktionszeitMinuten!),
+        );
+      }
+      if (h.kgProStundeRoh != null) {
+        _setzeZelleZahl(
+          sheetData,
+          row: r,
+          colLetter: 'H',
+          wert: h.kgProStundeRoh!,
+        );
+      }
+      count++;
+    }
+    return count;
+  }
+
+  /// Findet die „Datum"-Kopfzeile innerhalb/unterhalb des
+  /// HISTORISCHE-DATEN-Markers.
+  int? _findeHistorieHeaderZeile(
+    XmlDocument doc,
+    _SharedStrings sharedStrings,
+  ) {
+    final sheetData = doc.findAllElements('sheetData').firstOrNull;
+    if (sheetData == null) return null;
+
+    var imBlock = false;
+    for (final row in sheetData.findElements('row')) {
+      final rNum = int.tryParse(row.getAttribute('r') ?? '');
+      if (rNum == null) continue;
+      final label = _leseZelleA(row, sharedStrings)?.trim() ?? '';
+      if (label.contains(_historieMarker)) {
+        imBlock = true;
+        continue;
+      }
+      if (imBlock && label == 'Datum') return rNum;
+    }
+    return null;
+  }
+
+  String _isoDatum(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${_pad(d.month)}-${_pad(d.day)}';
+
+  String _hhmmVonMinuten(double minuten) {
+    final t = minuten.round();
+    final h = t ~/ 60;
+    final m = t % 60;
+    return '${_pad(h)}:${_pad(m)}';
   }
 
   // ─── Zeilen-Lokalisierung ─────────────────────────────────────────────
@@ -738,12 +884,14 @@ class _AktualisierungsStats {
     this.parameter,
     this.customParameter,
     this.customUebersprungen,
+    this.historie,
   );
 
   final int schritte;
   final int parameter;
   final int customParameter;
   final int customUebersprungen;
+  final int historie;
 }
 
 class _SchrittLabelZeilen {

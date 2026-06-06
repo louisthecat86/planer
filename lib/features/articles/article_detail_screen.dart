@@ -6,6 +6,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import 'article_info_editor_dialog.dart';
 import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
 import 'step_editor_dialog.dart';
@@ -236,6 +237,18 @@ class _InfoTab extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: () async {
+                final geaendert =
+                    await ArticleInfoEditorDialog.show(context, p);
+                if (geaendert) {
+                  ref.invalidate(productProvider(productId));
+                }
+              },
+              icon: const Icon(Icons.edit),
+              label: const Text('Stammdaten bearbeiten'),
             ),
           ],
         );
@@ -1087,7 +1100,20 @@ class _ProductionTab extends ConsumerWidget {
                   ),
             ),
             const SizedBox(height: 8),
-            for (final r in rows) _HistorieCard(eintrag: r),
+            for (final r in rows)
+              _HistorieCard(
+                eintrag: r,
+                onTap: () async {
+                  final geaendert = await ProductionEntryDialog.show(
+                    context,
+                    productId,
+                    existing: r,
+                  );
+                  if (geaendert) {
+                    ref.invalidate(productionHistoryProvider(productId));
+                  }
+                },
+              ),
           ],
         );
       },
@@ -1229,9 +1255,10 @@ class _Kennzahl extends StatelessWidget {
 
 /// Eine vergangene Produktion als Karte.
 class _HistorieCard extends StatelessWidget {
-  const _HistorieCard({required this.eintrag});
+  const _HistorieCard({required this.eintrag, this.onTap});
 
   final ProductionHistoryData eintrag;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1252,8 +1279,11 @@ class _HistorieCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1352,6 +1382,7 @@ class _HistorieCard extends StatelessWidget {
               ),
             ],
           ],
+          ),
         ),
       ),
     );

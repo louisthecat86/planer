@@ -8,19 +8,29 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 
-/// Bottom-Sheet zum Erfassen einer abgeschlossenen Produktion.
+/// Bottom-Sheet zum Erfassen **oder Bearbeiten** einer Produktion.
 ///
-/// Schreibt eine Zeile in `production_history` mit `quelle = 'app'`.
-/// Garverlust-Anteil, Produktionszeit und kg/h werden aus Rohware,
-/// Fertigware und Start-/Endzeit berechnet — identisch zur Excel-Vorlage
-/// (Verlust = 1 − Fertig/Roh, kg/h roh = Roh ÷ Produktionszeit in Stunden).
+/// Ohne [existing] wird eine neue Zeile in `production_history` angelegt
+/// (`quelle = 'app'`); mit [existing] wird die bestehende Zeile aktualisiert
+/// oder gelöscht. Garverlust-Anteil, Produktionszeit und kg/h werden aus
+/// Rohware, Fertigware und Start-/Endzeit berechnet — identisch zur
+/// Excel-Vorlage (Verlust = 1 − Fertig/Roh, kg/h roh = Roh ÷ Stunden).
 class ProductionEntryDialog extends ConsumerStatefulWidget {
-  const ProductionEntryDialog({super.key, required this.productId});
+  const ProductionEntryDialog({
+    super.key,
+    required this.productId,
+    this.existing,
+  });
 
   final String productId;
+  final ProductionHistoryData? existing;
 
-  /// Öffnet den Dialog. Gibt `true` zurück, wenn gespeichert wurde.
-  static Future<bool> show(BuildContext context, String productId) async {
+  /// Öffnet den Dialog. Gibt `true` zurück, wenn gespeichert/gelöscht wurde.
+  static Future<bool> show(
+    BuildContext context,
+    String productId, {
+    ProductionHistoryData? existing,
+  }) async {
     final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -30,7 +40,10 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
       ),
       builder: (_) => UncontrolledProviderScope(
         container: ProviderScope.containerOf(context),
-        child: ProductionEntryDialog(productId: productId),
+        child: ProductionEntryDialog(
+          productId: productId,
+          existing: existing,
+        ),
       ),
     );
     return result ?? false;
@@ -54,11 +67,23 @@ class _ProductionEntryDialogState
 
   bool _saving = false;
 
+  bool get _istBearbeitung => widget.existing != null;
+
   @override
   void initState() {
     super.initState();
-    final now = DateTime.now();
-    _datum = DateTime(now.year, now.month, now.day);
+    final e = widget.existing;
+    if (e != null) {
+      _datum = DateTime(e.datum.year, e.datum.month, e.datum.day);
+      _rohController.text = _kgText(e.kgRohware);
+      _fertigController.text = _kgText(e.kgFertigware);
+      _startController.text = e.startzeit ?? '';
+      _endController.text = e.endzeit ?? '';
+      _notizenController.text = e.notizen ?? '';
+    } else {
+      final now = DateTime.now();
+      _datum = DateTime(now.year, now.month, now.day);
+    }
   }
 
   @override
@@ -84,6 +109,11 @@ class _ProductionEntryDialogState
     final m = int.tryParse(parts[1]);
     if (h == null || m == null) return null;
     return h * 60 + m;
+  }
+
+  static String _kgText(double? v) {
+    if (v == null) return '';
+    return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
   }
 
   // ── Berechnete Werte (live) ───────────────────────────────────────────
@@ -168,28 +198,49 @@ class _ProductionEntryDialogState
       final start = _startController.text.trim();
       final end = _endController.text.trim();
       final notizen = _notizenController.text.trim();
+      final jetzt = DateTime.now();
 
-      await db.into(db.productionHistory).insert(
-            ProductionHistoryCompanion(
-              id: Value(_uuid.v4()),
-              productId: Value(widget.productId),
-              datum: Value(_datum),
-              kgRohware: Value(roh),
-              kgFertigware: Value(_fertig),
-              verlustAnteil: Value(_verlustAnteil),
-              startzeit: Value(start.isEmpty ? null : start),
-              endzeit: Value(end.isEmpty ? null : end),
-              produktionszeitMinuten: Value(_produktionszeitMinuten),
-              kgProStundeRoh: Value(_kgProStundeRoh),
-              kgProStundeGegart: Value(_kgProStundeGegart),
-              notizen: Value(notizen.isEmpty ? null : notizen),
-              quelle: const Value('app'),
-            ),
-          );
+      if (_istBearbeitung) {
+        await (db.update(db.productionHistory)
+              ..where((t) => t.id.equals(widget.existing!.id)))
+            .write(
+          ProductionHistoryCompanion(
+            datum: Value(_datum),
+            kgRohware: Value(roh),
+            kgFertigware: Value(_fertig),
+            verlustAnteil: Value(_verlustAnteil),
+            startzeit: Value(start.isEmpty ? null : start),
+            endzeit: Value(end.isEmpty ? null : end),
+            produktionszeitMinuten: Value(_produktionszeitMinuten),
+            kgProStundeRoh: Value(_kgProStundeRoh),
+            kgProStundeGegart: Value(_kgProStundeGegart),
+            notizen: Value(notizen.isEmpty ? null : notizen),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      } else {
+        await db.into(db.productionHistory).insert(
+              ProductionHistoryCompanion(
+                id: Value(_uuid.v4()),
+                productId: Value(widget.productId),
+                datum: Value(_datum),
+                kgRohware: Value(roh),
+                kgFertigware: Value(_fertig),
+                verlustAnteil: Value(_verlustAnteil),
+                startzeit: Value(start.isEmpty ? null : start),
+                endzeit: Value(end.isEmpty ? null : end),
+                produktionszeitMinuten: Value(_produktionszeitMinuten),
+                kgProStundeRoh: Value(_kgProStundeRoh),
+                kgProStundeGegart: Value(_kgProStundeGegart),
+                notizen: Value(notizen.isEmpty ? null : notizen),
+                quelle: const Value('app'),
+              ),
+            );
+      }
 
       ref
           .read(autoBackupTriggerProvider)
-          .fireDebounced(reason: 'Produktion erfasst');
+          .fireDebounced(reason: 'Produktion erfasst/bearbeitet');
 
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
@@ -203,6 +254,56 @@ class _ProductionEntryDialogState
     }
   }
 
+  Future<void> _loeschen() async {
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Produktion löschen?'),
+        content: const Text(
+          'Diese historische Produktion wird entfernt. Beim nächsten '
+          'Excel-Export ist sie nicht mehr enthalten.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+
+    setState(() => _saving = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final jetzt = DateTime.now();
+      await (db.update(db.productionHistory)
+            ..where((t) => t.id.equals(widget.existing!.id)))
+          .write(
+        ProductionHistoryCompanion(
+          deletedAt: Value(jetzt),
+          updatedAt: Value(jetzt),
+        ),
+      );
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Produktion gelöscht');
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _saving = false);
+      }
+    }
+  }
+
   // ── UI ────────────────────────────────────────────────────────────────
 
   @override
@@ -210,7 +311,7 @@ class _ProductionEntryDialogState
     final colors = Theme.of(context).colorScheme;
 
     return DraggableScrollableSheet(
-      initialChildSize: 0.8,
+      initialChildSize: 0.85,
       minChildSize: 0.5,
       maxChildSize: 0.95,
       expand: false,
@@ -234,14 +335,19 @@ class _ProductionEntryDialogState
                   ),
                 ),
               ),
-              const Text(
-                'Produktion erfassen',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              Text(
+                _istBearbeitung
+                    ? 'Produktion bearbeiten'
+                    : 'Produktion erfassen',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               const SizedBox(height: 4),
               Text(
                 'Die Werte landen in der Historie dieses Artikels und '
-                'können später in die Excel zurückgeschrieben werden.',
+                'können in die Excel zurückgeschrieben werden.',
                 style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
@@ -363,9 +469,29 @@ class _ProductionEntryDialogState
                           ),
                         )
                       : const Icon(Icons.save),
-                  label: Text(_saving ? 'Speichern …' : 'Produktion speichern'),
+                  label: Text(
+                    _saving
+                        ? 'Speichern …'
+                        : (_istBearbeitung
+                            ? 'Änderungen speichern'
+                            : 'Produktion speichern'),
+                  ),
                 ),
               ),
+
+              if (_istBearbeitung) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: TextButton.icon(
+                    onPressed: _saving ? null : _loeschen,
+                    icon: const Icon(Icons.delete_outline, color: Colors.red),
+                    label: const Text(
+                      'Produktion löschen',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         );
