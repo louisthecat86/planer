@@ -7,6 +7,7 @@ import 'tables/order_list_items.dart';
 import 'tables/product_raw_materials.dart';
 import 'tables/product_step_parameters.dart';
 import 'tables/product_steps.dart';
+import 'tables/production_history.dart';
 import 'tables/production_runs.dart';
 import 'tables/production_tasks.dart';
 import 'tables/products.dart';
@@ -35,6 +36,7 @@ part 'database.g.dart';
     RawMaterialBatches,
     ProductionTasks,
     ProductionRuns,
+    ProductionHistory,
     TaskDependencies,
     OrderListItems,
     AppSettings,
@@ -47,7 +49,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -178,6 +180,15 @@ class AppDatabase extends _$AppDatabase {
           if (from < 5) {
             await m.createTable(appSettings);
           }
+
+          // ─── v5 → v6: Historische Produktionsdaten je Artikel ────────
+          if (from < 6) {
+            await m.createTable(productionHistory);
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_production_history_product '
+              'ON production_history(product_id, datum)',
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -205,6 +216,10 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_production_runs_task_id '
       'ON production_runs(task_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_production_history_product '
+      'ON production_history(product_id, datum)',
     );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_batches_raw_material_id '

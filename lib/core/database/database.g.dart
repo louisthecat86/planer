@@ -7871,6 +7871,822 @@ class ProductionRunsCompanion extends UpdateCompanion<ProductionRun> {
   }
 }
 
+class $ProductionHistoryTable extends ProductionHistory
+    with TableInfo<$ProductionHistoryTable, ProductionHistoryData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProductionHistoryTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: true,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('REFERENCES products (id)'));
+  static const VerificationMeta _datumMeta = const VerificationMeta('datum');
+  @override
+  late final GeneratedColumn<DateTime> datum = GeneratedColumn<DateTime>(
+      'datum', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _kgRohwareMeta =
+      const VerificationMeta('kgRohware');
+  @override
+  late final GeneratedColumn<double> kgRohware = GeneratedColumn<double>(
+      'kg_rohware', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kgFertigwareMeta =
+      const VerificationMeta('kgFertigware');
+  @override
+  late final GeneratedColumn<double> kgFertigware = GeneratedColumn<double>(
+      'kg_fertigware', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _verlustAnteilMeta =
+      const VerificationMeta('verlustAnteil');
+  @override
+  late final GeneratedColumn<double> verlustAnteil = GeneratedColumn<double>(
+      'verlust_anteil', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _startzeitMeta =
+      const VerificationMeta('startzeit');
+  @override
+  late final GeneratedColumn<String> startzeit = GeneratedColumn<String>(
+      'startzeit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _endzeitMeta =
+      const VerificationMeta('endzeit');
+  @override
+  late final GeneratedColumn<String> endzeit = GeneratedColumn<String>(
+      'endzeit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _produktionszeitMinutenMeta =
+      const VerificationMeta('produktionszeitMinuten');
+  @override
+  late final GeneratedColumn<double> produktionszeitMinuten =
+      GeneratedColumn<double>('produktionszeit_minuten', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kgProStundeRohMeta =
+      const VerificationMeta('kgProStundeRoh');
+  @override
+  late final GeneratedColumn<double> kgProStundeRoh = GeneratedColumn<double>(
+      'kg_pro_stunde_roh', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kgProStundeGegartMeta =
+      const VerificationMeta('kgProStundeGegart');
+  @override
+  late final GeneratedColumn<double> kgProStundeGegart =
+      GeneratedColumn<double>('kg_pro_stunde_gegart', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _notizenMeta =
+      const VerificationMeta('notizen');
+  @override
+  late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
+      'notizen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _quelleMeta = const VerificationMeta('quelle');
+  @override
+  late final GeneratedColumn<String> quelle = GeneratedColumn<String>(
+      'quelle', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('import'));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        datum,
+        kgRohware,
+        kgFertigware,
+        verlustAnteil,
+        startzeit,
+        endzeit,
+        produktionszeitMinuten,
+        kgProStundeRoh,
+        kgProStundeGegart,
+        notizen,
+        quelle,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'production_history';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<ProductionHistoryData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('datum')) {
+      context.handle(
+          _datumMeta, datum.isAcceptableOrUnknown(data['datum']!, _datumMeta));
+    } else if (isInserting) {
+      context.missing(_datumMeta);
+    }
+    if (data.containsKey('kg_rohware')) {
+      context.handle(_kgRohwareMeta,
+          kgRohware.isAcceptableOrUnknown(data['kg_rohware']!, _kgRohwareMeta));
+    }
+    if (data.containsKey('kg_fertigware')) {
+      context.handle(
+          _kgFertigwareMeta,
+          kgFertigware.isAcceptableOrUnknown(
+              data['kg_fertigware']!, _kgFertigwareMeta));
+    }
+    if (data.containsKey('verlust_anteil')) {
+      context.handle(
+          _verlustAnteilMeta,
+          verlustAnteil.isAcceptableOrUnknown(
+              data['verlust_anteil']!, _verlustAnteilMeta));
+    }
+    if (data.containsKey('startzeit')) {
+      context.handle(_startzeitMeta,
+          startzeit.isAcceptableOrUnknown(data['startzeit']!, _startzeitMeta));
+    }
+    if (data.containsKey('endzeit')) {
+      context.handle(_endzeitMeta,
+          endzeit.isAcceptableOrUnknown(data['endzeit']!, _endzeitMeta));
+    }
+    if (data.containsKey('produktionszeit_minuten')) {
+      context.handle(
+          _produktionszeitMinutenMeta,
+          produktionszeitMinuten.isAcceptableOrUnknown(
+              data['produktionszeit_minuten']!, _produktionszeitMinutenMeta));
+    }
+    if (data.containsKey('kg_pro_stunde_roh')) {
+      context.handle(
+          _kgProStundeRohMeta,
+          kgProStundeRoh.isAcceptableOrUnknown(
+              data['kg_pro_stunde_roh']!, _kgProStundeRohMeta));
+    }
+    if (data.containsKey('kg_pro_stunde_gegart')) {
+      context.handle(
+          _kgProStundeGegartMeta,
+          kgProStundeGegart.isAcceptableOrUnknown(
+              data['kg_pro_stunde_gegart']!, _kgProStundeGegartMeta));
+    }
+    if (data.containsKey('notizen')) {
+      context.handle(_notizenMeta,
+          notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('quelle')) {
+      context.handle(_quelleMeta,
+          quelle.isAcceptableOrUnknown(data['quelle']!, _quelleMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProductionHistoryData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProductionHistoryData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      datum: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
+      kgRohware: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}kg_rohware']),
+      kgFertigware: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}kg_fertigware']),
+      verlustAnteil: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}verlust_anteil']),
+      startzeit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}startzeit']),
+      endzeit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}endzeit']),
+      produktionszeitMinuten: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}produktionszeit_minuten']),
+      kgProStundeRoh: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}kg_pro_stunde_roh']),
+      kgProStundeGegart: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}kg_pro_stunde_gegart']),
+      notizen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      quelle: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}quelle'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $ProductionHistoryTable createAlias(String alias) {
+    return $ProductionHistoryTable(attachedDatabase, alias);
+  }
+}
+
+class ProductionHistoryData extends DataClass
+    implements Insertable<ProductionHistoryData> {
+  final String id;
+  final String productId;
+
+  /// Produktionsdatum (tagesgenau).
+  final DateTime datum;
+
+  /// Eingesetzte Rohware in kg (Excel: „Kg Rohware").
+  final double? kgRohware;
+
+  /// Erzeugte Fertigware in kg (Excel: „Kg Fertigware").
+  final double? kgFertigware;
+
+  /// Garverlust als Anteil 0..1 (Excel: „Verlust %", dort als 0,25 gespeichert).
+  /// = 1 − Fertig/Roh. Beim Import direkt übernommen, beim App-Erfassen
+  /// aus Roh/Fertig berechnet.
+  final double? verlustAnteil;
+
+  /// Startzeit der Produktion als "HH:MM".
+  final String? startzeit;
+
+  /// Endzeit der Produktion als "HH:MM".
+  final String? endzeit;
+
+  /// Reine Produktionsdauer in Minuten (Excel: „Produktionszeit").
+  final double? produktionszeitMinuten;
+
+  /// kg Rohware pro Stunde (Excel: „kg/h roh").
+  final double? kgProStundeRoh;
+
+  /// kg Fertigware pro Stunde (optionale Excel-Spalte „kg/h gegart").
+  final double? kgProStundeGegart;
+  final String? notizen;
+
+  /// Herkunft der Zeile: 'import' (aus Excel geladen) oder 'app' (in der
+  /// App erfasst). Steuert später, wie beim Export zurückgeschrieben wird.
+  final String quelle;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const ProductionHistoryData(
+      {required this.id,
+      required this.productId,
+      required this.datum,
+      this.kgRohware,
+      this.kgFertigware,
+      this.verlustAnteil,
+      this.startzeit,
+      this.endzeit,
+      this.produktionszeitMinuten,
+      this.kgProStundeRoh,
+      this.kgProStundeGegart,
+      this.notizen,
+      required this.quelle,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['product_id'] = Variable<String>(productId);
+    map['datum'] = Variable<DateTime>(datum);
+    if (!nullToAbsent || kgRohware != null) {
+      map['kg_rohware'] = Variable<double>(kgRohware);
+    }
+    if (!nullToAbsent || kgFertigware != null) {
+      map['kg_fertigware'] = Variable<double>(kgFertigware);
+    }
+    if (!nullToAbsent || verlustAnteil != null) {
+      map['verlust_anteil'] = Variable<double>(verlustAnteil);
+    }
+    if (!nullToAbsent || startzeit != null) {
+      map['startzeit'] = Variable<String>(startzeit);
+    }
+    if (!nullToAbsent || endzeit != null) {
+      map['endzeit'] = Variable<String>(endzeit);
+    }
+    if (!nullToAbsent || produktionszeitMinuten != null) {
+      map['produktionszeit_minuten'] = Variable<double>(produktionszeitMinuten);
+    }
+    if (!nullToAbsent || kgProStundeRoh != null) {
+      map['kg_pro_stunde_roh'] = Variable<double>(kgProStundeRoh);
+    }
+    if (!nullToAbsent || kgProStundeGegart != null) {
+      map['kg_pro_stunde_gegart'] = Variable<double>(kgProStundeGegart);
+    }
+    if (!nullToAbsent || notizen != null) {
+      map['notizen'] = Variable<String>(notizen);
+    }
+    map['quelle'] = Variable<String>(quelle);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ProductionHistoryCompanion toCompanion(bool nullToAbsent) {
+    return ProductionHistoryCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      datum: Value(datum),
+      kgRohware: kgRohware == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kgRohware),
+      kgFertigware: kgFertigware == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kgFertigware),
+      verlustAnteil: verlustAnteil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verlustAnteil),
+      startzeit: startzeit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startzeit),
+      endzeit: endzeit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endzeit),
+      produktionszeitMinuten: produktionszeitMinuten == null && nullToAbsent
+          ? const Value.absent()
+          : Value(produktionszeitMinuten),
+      kgProStundeRoh: kgProStundeRoh == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kgProStundeRoh),
+      kgProStundeGegart: kgProStundeGegart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kgProStundeGegart),
+      notizen: notizen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notizen),
+      quelle: Value(quelle),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ProductionHistoryData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProductionHistoryData(
+      id: serializer.fromJson<String>(json['id']),
+      productId: serializer.fromJson<String>(json['productId']),
+      datum: serializer.fromJson<DateTime>(json['datum']),
+      kgRohware: serializer.fromJson<double?>(json['kgRohware']),
+      kgFertigware: serializer.fromJson<double?>(json['kgFertigware']),
+      verlustAnteil: serializer.fromJson<double?>(json['verlustAnteil']),
+      startzeit: serializer.fromJson<String?>(json['startzeit']),
+      endzeit: serializer.fromJson<String?>(json['endzeit']),
+      produktionszeitMinuten:
+          serializer.fromJson<double?>(json['produktionszeitMinuten']),
+      kgProStundeRoh: serializer.fromJson<double?>(json['kgProStundeRoh']),
+      kgProStundeGegart:
+          serializer.fromJson<double?>(json['kgProStundeGegart']),
+      notizen: serializer.fromJson<String?>(json['notizen']),
+      quelle: serializer.fromJson<String>(json['quelle']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'productId': serializer.toJson<String>(productId),
+      'datum': serializer.toJson<DateTime>(datum),
+      'kgRohware': serializer.toJson<double?>(kgRohware),
+      'kgFertigware': serializer.toJson<double?>(kgFertigware),
+      'verlustAnteil': serializer.toJson<double?>(verlustAnteil),
+      'startzeit': serializer.toJson<String?>(startzeit),
+      'endzeit': serializer.toJson<String?>(endzeit),
+      'produktionszeitMinuten':
+          serializer.toJson<double?>(produktionszeitMinuten),
+      'kgProStundeRoh': serializer.toJson<double?>(kgProStundeRoh),
+      'kgProStundeGegart': serializer.toJson<double?>(kgProStundeGegart),
+      'notizen': serializer.toJson<String?>(notizen),
+      'quelle': serializer.toJson<String>(quelle),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ProductionHistoryData copyWith(
+          {String? id,
+          String? productId,
+          DateTime? datum,
+          Value<double?> kgRohware = const Value.absent(),
+          Value<double?> kgFertigware = const Value.absent(),
+          Value<double?> verlustAnteil = const Value.absent(),
+          Value<String?> startzeit = const Value.absent(),
+          Value<String?> endzeit = const Value.absent(),
+          Value<double?> produktionszeitMinuten = const Value.absent(),
+          Value<double?> kgProStundeRoh = const Value.absent(),
+          Value<double?> kgProStundeGegart = const Value.absent(),
+          Value<String?> notizen = const Value.absent(),
+          String? quelle,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      ProductionHistoryData(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        datum: datum ?? this.datum,
+        kgRohware: kgRohware.present ? kgRohware.value : this.kgRohware,
+        kgFertigware:
+            kgFertigware.present ? kgFertigware.value : this.kgFertigware,
+        verlustAnteil:
+            verlustAnteil.present ? verlustAnteil.value : this.verlustAnteil,
+        startzeit: startzeit.present ? startzeit.value : this.startzeit,
+        endzeit: endzeit.present ? endzeit.value : this.endzeit,
+        produktionszeitMinuten: produktionszeitMinuten.present
+            ? produktionszeitMinuten.value
+            : this.produktionszeitMinuten,
+        kgProStundeRoh:
+            kgProStundeRoh.present ? kgProStundeRoh.value : this.kgProStundeRoh,
+        kgProStundeGegart: kgProStundeGegart.present
+            ? kgProStundeGegart.value
+            : this.kgProStundeGegart,
+        notizen: notizen.present ? notizen.value : this.notizen,
+        quelle: quelle ?? this.quelle,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  ProductionHistoryData copyWithCompanion(ProductionHistoryCompanion data) {
+    return ProductionHistoryData(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      datum: data.datum.present ? data.datum.value : this.datum,
+      kgRohware: data.kgRohware.present ? data.kgRohware.value : this.kgRohware,
+      kgFertigware: data.kgFertigware.present
+          ? data.kgFertigware.value
+          : this.kgFertigware,
+      verlustAnteil: data.verlustAnteil.present
+          ? data.verlustAnteil.value
+          : this.verlustAnteil,
+      startzeit: data.startzeit.present ? data.startzeit.value : this.startzeit,
+      endzeit: data.endzeit.present ? data.endzeit.value : this.endzeit,
+      produktionszeitMinuten: data.produktionszeitMinuten.present
+          ? data.produktionszeitMinuten.value
+          : this.produktionszeitMinuten,
+      kgProStundeRoh: data.kgProStundeRoh.present
+          ? data.kgProStundeRoh.value
+          : this.kgProStundeRoh,
+      kgProStundeGegart: data.kgProStundeGegart.present
+          ? data.kgProStundeGegart.value
+          : this.kgProStundeGegart,
+      notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      quelle: data.quelle.present ? data.quelle.value : this.quelle,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductionHistoryData(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('datum: $datum, ')
+          ..write('kgRohware: $kgRohware, ')
+          ..write('kgFertigware: $kgFertigware, ')
+          ..write('verlustAnteil: $verlustAnteil, ')
+          ..write('startzeit: $startzeit, ')
+          ..write('endzeit: $endzeit, ')
+          ..write('produktionszeitMinuten: $produktionszeitMinuten, ')
+          ..write('kgProStundeRoh: $kgProStundeRoh, ')
+          ..write('kgProStundeGegart: $kgProStundeGegart, ')
+          ..write('notizen: $notizen, ')
+          ..write('quelle: $quelle, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      productId,
+      datum,
+      kgRohware,
+      kgFertigware,
+      verlustAnteil,
+      startzeit,
+      endzeit,
+      produktionszeitMinuten,
+      kgProStundeRoh,
+      kgProStundeGegart,
+      notizen,
+      quelle,
+      createdAt,
+      updatedAt,
+      deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProductionHistoryData &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.datum == this.datum &&
+          other.kgRohware == this.kgRohware &&
+          other.kgFertigware == this.kgFertigware &&
+          other.verlustAnteil == this.verlustAnteil &&
+          other.startzeit == this.startzeit &&
+          other.endzeit == this.endzeit &&
+          other.produktionszeitMinuten == this.produktionszeitMinuten &&
+          other.kgProStundeRoh == this.kgProStundeRoh &&
+          other.kgProStundeGegart == this.kgProStundeGegart &&
+          other.notizen == this.notizen &&
+          other.quelle == this.quelle &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ProductionHistoryCompanion
+    extends UpdateCompanion<ProductionHistoryData> {
+  final Value<String> id;
+  final Value<String> productId;
+  final Value<DateTime> datum;
+  final Value<double?> kgRohware;
+  final Value<double?> kgFertigware;
+  final Value<double?> verlustAnteil;
+  final Value<String?> startzeit;
+  final Value<String?> endzeit;
+  final Value<double?> produktionszeitMinuten;
+  final Value<double?> kgProStundeRoh;
+  final Value<double?> kgProStundeGegart;
+  final Value<String?> notizen;
+  final Value<String> quelle;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ProductionHistoryCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.datum = const Value.absent(),
+    this.kgRohware = const Value.absent(),
+    this.kgFertigware = const Value.absent(),
+    this.verlustAnteil = const Value.absent(),
+    this.startzeit = const Value.absent(),
+    this.endzeit = const Value.absent(),
+    this.produktionszeitMinuten = const Value.absent(),
+    this.kgProStundeRoh = const Value.absent(),
+    this.kgProStundeGegart = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.quelle = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProductionHistoryCompanion.insert({
+    required String id,
+    required String productId,
+    required DateTime datum,
+    this.kgRohware = const Value.absent(),
+    this.kgFertigware = const Value.absent(),
+    this.verlustAnteil = const Value.absent(),
+    this.startzeit = const Value.absent(),
+    this.endzeit = const Value.absent(),
+    this.produktionszeitMinuten = const Value.absent(),
+    this.kgProStundeRoh = const Value.absent(),
+    this.kgProStundeGegart = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.quelle = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        productId = Value(productId),
+        datum = Value(datum);
+  static Insertable<ProductionHistoryData> custom({
+    Expression<String>? id,
+    Expression<String>? productId,
+    Expression<DateTime>? datum,
+    Expression<double>? kgRohware,
+    Expression<double>? kgFertigware,
+    Expression<double>? verlustAnteil,
+    Expression<String>? startzeit,
+    Expression<String>? endzeit,
+    Expression<double>? produktionszeitMinuten,
+    Expression<double>? kgProStundeRoh,
+    Expression<double>? kgProStundeGegart,
+    Expression<String>? notizen,
+    Expression<String>? quelle,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (datum != null) 'datum': datum,
+      if (kgRohware != null) 'kg_rohware': kgRohware,
+      if (kgFertigware != null) 'kg_fertigware': kgFertigware,
+      if (verlustAnteil != null) 'verlust_anteil': verlustAnteil,
+      if (startzeit != null) 'startzeit': startzeit,
+      if (endzeit != null) 'endzeit': endzeit,
+      if (produktionszeitMinuten != null)
+        'produktionszeit_minuten': produktionszeitMinuten,
+      if (kgProStundeRoh != null) 'kg_pro_stunde_roh': kgProStundeRoh,
+      if (kgProStundeGegart != null) 'kg_pro_stunde_gegart': kgProStundeGegart,
+      if (notizen != null) 'notizen': notizen,
+      if (quelle != null) 'quelle': quelle,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProductionHistoryCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? productId,
+      Value<DateTime>? datum,
+      Value<double?>? kgRohware,
+      Value<double?>? kgFertigware,
+      Value<double?>? verlustAnteil,
+      Value<String?>? startzeit,
+      Value<String?>? endzeit,
+      Value<double?>? produktionszeitMinuten,
+      Value<double?>? kgProStundeRoh,
+      Value<double?>? kgProStundeGegart,
+      Value<String?>? notizen,
+      Value<String>? quelle,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return ProductionHistoryCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      datum: datum ?? this.datum,
+      kgRohware: kgRohware ?? this.kgRohware,
+      kgFertigware: kgFertigware ?? this.kgFertigware,
+      verlustAnteil: verlustAnteil ?? this.verlustAnteil,
+      startzeit: startzeit ?? this.startzeit,
+      endzeit: endzeit ?? this.endzeit,
+      produktionszeitMinuten:
+          produktionszeitMinuten ?? this.produktionszeitMinuten,
+      kgProStundeRoh: kgProStundeRoh ?? this.kgProStundeRoh,
+      kgProStundeGegart: kgProStundeGegart ?? this.kgProStundeGegart,
+      notizen: notizen ?? this.notizen,
+      quelle: quelle ?? this.quelle,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (datum.present) {
+      map['datum'] = Variable<DateTime>(datum.value);
+    }
+    if (kgRohware.present) {
+      map['kg_rohware'] = Variable<double>(kgRohware.value);
+    }
+    if (kgFertigware.present) {
+      map['kg_fertigware'] = Variable<double>(kgFertigware.value);
+    }
+    if (verlustAnteil.present) {
+      map['verlust_anteil'] = Variable<double>(verlustAnteil.value);
+    }
+    if (startzeit.present) {
+      map['startzeit'] = Variable<String>(startzeit.value);
+    }
+    if (endzeit.present) {
+      map['endzeit'] = Variable<String>(endzeit.value);
+    }
+    if (produktionszeitMinuten.present) {
+      map['produktionszeit_minuten'] =
+          Variable<double>(produktionszeitMinuten.value);
+    }
+    if (kgProStundeRoh.present) {
+      map['kg_pro_stunde_roh'] = Variable<double>(kgProStundeRoh.value);
+    }
+    if (kgProStundeGegart.present) {
+      map['kg_pro_stunde_gegart'] = Variable<double>(kgProStundeGegart.value);
+    }
+    if (notizen.present) {
+      map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (quelle.present) {
+      map['quelle'] = Variable<String>(quelle.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProductionHistoryCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('datum: $datum, ')
+          ..write('kgRohware: $kgRohware, ')
+          ..write('kgFertigware: $kgFertigware, ')
+          ..write('verlustAnteil: $verlustAnteil, ')
+          ..write('startzeit: $startzeit, ')
+          ..write('endzeit: $endzeit, ')
+          ..write('produktionszeitMinuten: $produktionszeitMinuten, ')
+          ..write('kgProStundeRoh: $kgProStundeRoh, ')
+          ..write('kgProStundeGegart: $kgProStundeGegart, ')
+          ..write('notizen: $notizen, ')
+          ..write('quelle: $quelle, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TaskDependenciesTable extends TaskDependencies
     with TableInfo<$TaskDependenciesTable, TaskDependency> {
   @override
@@ -9179,6 +9995,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ProductionTasksTable productionTasks =
       $ProductionTasksTable(this);
   late final $ProductionRunsTable productionRuns = $ProductionRunsTable(this);
+  late final $ProductionHistoryTable productionHistory =
+      $ProductionHistoryTable(this);
   late final $TaskDependenciesTable taskDependencies =
       $TaskDependenciesTable(this);
   late final $OrderListItemsTable orderListItems = $OrderListItemsTable(this);
@@ -9197,6 +10015,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         rawMaterialBatches,
         productionTasks,
         productionRuns,
+        productionHistory,
         taskDependencies,
         orderListItems,
         appSettings
@@ -9360,6 +10179,24 @@ final class $$ProductsTableReferences
 
     final cache =
         $_typedResult.readTableOrNull(_productionTasksRefsTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$ProductionHistoryTable,
+      List<ProductionHistoryData>> _productionHistoryRefsTable(
+          _$AppDatabase db) =>
+      MultiTypedResultKey.fromTable(db.productionHistory,
+          aliasName: $_aliasNameGenerator(
+              db.products.id, db.productionHistory.productId));
+
+  $$ProductionHistoryTableProcessedTableManager get productionHistoryRefs {
+    final manager = $$ProductionHistoryTableTableManager(
+            $_db, $_db.productionHistory)
+        .filter((f) => f.productId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_productionHistoryRefsTable($_db));
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
@@ -9601,6 +10438,27 @@ class $$ProductsTableFilterComposer
             $$ProductionTasksTableFilterComposer(
               $db: $db,
               $table: $db.productionTasks,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> productionHistoryRefs(
+      Expression<bool> Function($$ProductionHistoryTableFilterComposer f) f) {
+    final $$ProductionHistoryTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.productionHistory,
+        getReferencedColumn: (t) => t.productId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductionHistoryTableFilterComposer(
+              $db: $db,
+              $table: $db.productionHistory,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -10025,6 +10883,28 @@ class $$ProductsTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> productionHistoryRefs<T extends Object>(
+      Expression<T> Function($$ProductionHistoryTableAnnotationComposer a) f) {
+    final $$ProductionHistoryTableAnnotationComposer composer =
+        $composerBuilder(
+            composer: this,
+            getCurrentColumn: (t) => t.id,
+            referencedTable: $db.productionHistory,
+            getReferencedColumn: (t) => t.productId,
+            builder: (joinBuilder,
+                    {$addJoinBuilderToRootComposer,
+                    $removeJoinBuilderFromRootComposer}) =>
+                $$ProductionHistoryTableAnnotationComposer(
+                  $db: $db,
+                  $table: $db.productionHistory,
+                  $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+                  joinBuilder: joinBuilder,
+                  $removeJoinBuilderFromRootComposer:
+                      $removeJoinBuilderFromRootComposer,
+                ));
+    return f(composer);
+  }
 }
 
 class $$ProductsTableTableManager extends RootTableManager<
@@ -10041,7 +10921,8 @@ class $$ProductsTableTableManager extends RootTableManager<
     PrefetchHooks Function(
         {bool productStepsRefs,
         bool productRawMaterialsRefs,
-        bool productionTasksRefs})> {
+        bool productionTasksRefs,
+        bool productionHistoryRefs})> {
   $$ProductsTableTableManager(_$AppDatabase db, $ProductsTable table)
       : super(TableManagerState(
           db: db,
@@ -10271,13 +11152,15 @@ class $$ProductsTableTableManager extends RootTableManager<
           prefetchHooksCallback: (
               {productStepsRefs = false,
               productRawMaterialsRefs = false,
-              productionTasksRefs = false}) {
+              productionTasksRefs = false,
+              productionHistoryRefs = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
                 if (productStepsRefs) db.productSteps,
                 if (productRawMaterialsRefs) db.productRawMaterials,
-                if (productionTasksRefs) db.productionTasks
+                if (productionTasksRefs) db.productionTasks,
+                if (productionHistoryRefs) db.productionHistory
               ],
               addJoins: null,
               getPrefetchedDataCallback: (items) async {
@@ -10320,6 +11203,19 @@ class $$ProductsTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem:
                             (item, referencedItems) => referencedItems
                                 .where((e) => e.productId == item.id),
+                        typedResults: items),
+                  if (productionHistoryRefs)
+                    await $_getPrefetchedData<Product, $ProductsTable,
+                            ProductionHistoryData>(
+                        currentTable: table,
+                        referencedTable: $$ProductsTableReferences
+                            ._productionHistoryRefsTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductsTableReferences(db, table, p0)
+                                .productionHistoryRefs,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.productId == item.id),
                         typedResults: items)
                 ];
               },
@@ -10342,7 +11238,8 @@ typedef $$ProductsTableProcessedTableManager = ProcessedTableManager<
     PrefetchHooks Function(
         {bool productStepsRefs,
         bool productRawMaterialsRefs,
-        bool productionTasksRefs})>;
+        bool productionTasksRefs,
+        bool productionHistoryRefs})>;
 typedef $$MachinesTableCreateCompanionBuilder = MachinesCompanion Function({
   required String id,
   required String name,
@@ -14016,6 +14913,458 @@ typedef $$ProductionRunsTableProcessedTableManager = ProcessedTableManager<
     (ProductionRun, $$ProductionRunsTableReferences),
     ProductionRun,
     PrefetchHooks Function({bool taskId})>;
+typedef $$ProductionHistoryTableCreateCompanionBuilder
+    = ProductionHistoryCompanion Function({
+  required String id,
+  required String productId,
+  required DateTime datum,
+  Value<double?> kgRohware,
+  Value<double?> kgFertigware,
+  Value<double?> verlustAnteil,
+  Value<String?> startzeit,
+  Value<String?> endzeit,
+  Value<double?> produktionszeitMinuten,
+  Value<double?> kgProStundeRoh,
+  Value<double?> kgProStundeGegart,
+  Value<String?> notizen,
+  Value<String> quelle,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$ProductionHistoryTableUpdateCompanionBuilder
+    = ProductionHistoryCompanion Function({
+  Value<String> id,
+  Value<String> productId,
+  Value<DateTime> datum,
+  Value<double?> kgRohware,
+  Value<double?> kgFertigware,
+  Value<double?> verlustAnteil,
+  Value<String?> startzeit,
+  Value<String?> endzeit,
+  Value<double?> produktionszeitMinuten,
+  Value<double?> kgProStundeRoh,
+  Value<double?> kgProStundeGegart,
+  Value<String?> notizen,
+  Value<String> quelle,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+final class $$ProductionHistoryTableReferences extends BaseReferences<
+    _$AppDatabase, $ProductionHistoryTable, ProductionHistoryData> {
+  $$ProductionHistoryTableReferences(
+      super.$_db, super.$_table, super.$_typedResult);
+
+  static $ProductsTable _productIdTable(_$AppDatabase db) =>
+      db.products.createAlias(
+          $_aliasNameGenerator(db.productionHistory.productId, db.products.id));
+
+  $$ProductsTableProcessedTableManager get productId {
+    final $_column = $_itemColumn<String>('product_id')!;
+
+    final manager = $$ProductsTableTableManager($_db, $_db.products)
+        .filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_productIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: [item]));
+  }
+}
+
+class $$ProductionHistoryTableFilterComposer
+    extends Composer<_$AppDatabase, $ProductionHistoryTable> {
+  $$ProductionHistoryTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kgRohware => $composableBuilder(
+      column: $table.kgRohware, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kgFertigware => $composableBuilder(
+      column: $table.kgFertigware, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get verlustAnteil => $composableBuilder(
+      column: $table.verlustAnteil, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get startzeit => $composableBuilder(
+      column: $table.startzeit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get endzeit => $composableBuilder(
+      column: $table.endzeit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get produktionszeitMinuten => $composableBuilder(
+      column: $table.produktionszeitMinuten,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kgProStundeRoh => $composableBuilder(
+      column: $table.kgProStundeRoh,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kgProStundeGegart => $composableBuilder(
+      column: $table.kgProStundeGegart,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get quelle => $composableBuilder(
+      column: $table.quelle, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+
+  $$ProductsTableFilterComposer get productId {
+    final $$ProductsTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableFilterComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductionHistoryTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProductionHistoryTable> {
+  $$ProductionHistoryTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kgRohware => $composableBuilder(
+      column: $table.kgRohware, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kgFertigware => $composableBuilder(
+      column: $table.kgFertigware,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get verlustAnteil => $composableBuilder(
+      column: $table.verlustAnteil,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get startzeit => $composableBuilder(
+      column: $table.startzeit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get endzeit => $composableBuilder(
+      column: $table.endzeit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get produktionszeitMinuten => $composableBuilder(
+      column: $table.produktionszeitMinuten,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kgProStundeRoh => $composableBuilder(
+      column: $table.kgProStundeRoh,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kgProStundeGegart => $composableBuilder(
+      column: $table.kgProStundeGegart,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get quelle => $composableBuilder(
+      column: $table.quelle, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+
+  $$ProductsTableOrderingComposer get productId {
+    final $$ProductsTableOrderingComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableOrderingComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductionHistoryTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProductionHistoryTable> {
+  $$ProductionHistoryTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get datum =>
+      $composableBuilder(column: $table.datum, builder: (column) => column);
+
+  GeneratedColumn<double> get kgRohware =>
+      $composableBuilder(column: $table.kgRohware, builder: (column) => column);
+
+  GeneratedColumn<double> get kgFertigware => $composableBuilder(
+      column: $table.kgFertigware, builder: (column) => column);
+
+  GeneratedColumn<double> get verlustAnteil => $composableBuilder(
+      column: $table.verlustAnteil, builder: (column) => column);
+
+  GeneratedColumn<String> get startzeit =>
+      $composableBuilder(column: $table.startzeit, builder: (column) => column);
+
+  GeneratedColumn<String> get endzeit =>
+      $composableBuilder(column: $table.endzeit, builder: (column) => column);
+
+  GeneratedColumn<double> get produktionszeitMinuten => $composableBuilder(
+      column: $table.produktionszeitMinuten, builder: (column) => column);
+
+  GeneratedColumn<double> get kgProStundeRoh => $composableBuilder(
+      column: $table.kgProStundeRoh, builder: (column) => column);
+
+  GeneratedColumn<double> get kgProStundeGegart => $composableBuilder(
+      column: $table.kgProStundeGegart, builder: (column) => column);
+
+  GeneratedColumn<String> get notizen =>
+      $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<String> get quelle =>
+      $composableBuilder(column: $table.quelle, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  $$ProductsTableAnnotationComposer get productId {
+    final $$ProductsTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.productId,
+        referencedTable: $db.products,
+        getReferencedColumn: (t) => t.id,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$ProductsTableAnnotationComposer(
+              $db: $db,
+              $table: $db.products,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return composer;
+  }
+}
+
+class $$ProductionHistoryTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ProductionHistoryTable,
+    ProductionHistoryData,
+    $$ProductionHistoryTableFilterComposer,
+    $$ProductionHistoryTableOrderingComposer,
+    $$ProductionHistoryTableAnnotationComposer,
+    $$ProductionHistoryTableCreateCompanionBuilder,
+    $$ProductionHistoryTableUpdateCompanionBuilder,
+    (ProductionHistoryData, $$ProductionHistoryTableReferences),
+    ProductionHistoryData,
+    PrefetchHooks Function({bool productId})> {
+  $$ProductionHistoryTableTableManager(
+      _$AppDatabase db, $ProductionHistoryTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProductionHistoryTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProductionHistoryTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProductionHistoryTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> productId = const Value.absent(),
+            Value<DateTime> datum = const Value.absent(),
+            Value<double?> kgRohware = const Value.absent(),
+            Value<double?> kgFertigware = const Value.absent(),
+            Value<double?> verlustAnteil = const Value.absent(),
+            Value<String?> startzeit = const Value.absent(),
+            Value<String?> endzeit = const Value.absent(),
+            Value<double?> produktionszeitMinuten = const Value.absent(),
+            Value<double?> kgProStundeRoh = const Value.absent(),
+            Value<double?> kgProStundeGegart = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<String> quelle = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductionHistoryCompanion(
+            id: id,
+            productId: productId,
+            datum: datum,
+            kgRohware: kgRohware,
+            kgFertigware: kgFertigware,
+            verlustAnteil: verlustAnteil,
+            startzeit: startzeit,
+            endzeit: endzeit,
+            produktionszeitMinuten: produktionszeitMinuten,
+            kgProStundeRoh: kgProStundeRoh,
+            kgProStundeGegart: kgProStundeGegart,
+            notizen: notizen,
+            quelle: quelle,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String productId,
+            required DateTime datum,
+            Value<double?> kgRohware = const Value.absent(),
+            Value<double?> kgFertigware = const Value.absent(),
+            Value<double?> verlustAnteil = const Value.absent(),
+            Value<String?> startzeit = const Value.absent(),
+            Value<String?> endzeit = const Value.absent(),
+            Value<double?> produktionszeitMinuten = const Value.absent(),
+            Value<double?> kgProStundeRoh = const Value.absent(),
+            Value<double?> kgProStundeGegart = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<String> quelle = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ProductionHistoryCompanion.insert(
+            id: id,
+            productId: productId,
+            datum: datum,
+            kgRohware: kgRohware,
+            kgFertigware: kgFertigware,
+            verlustAnteil: verlustAnteil,
+            startzeit: startzeit,
+            endzeit: endzeit,
+            produktionszeitMinuten: produktionszeitMinuten,
+            kgProStundeRoh: kgProStundeRoh,
+            kgProStundeGegart: kgProStundeGegart,
+            notizen: notizen,
+            quelle: quelle,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (
+                    e.readTable(table),
+                    $$ProductionHistoryTableReferences(db, table, e)
+                  ))
+              .toList(),
+          prefetchHooksCallback: ({productId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins: <
+                  T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic>>(state) {
+                if (productId) {
+                  state = state.withJoin(
+                    currentTable: table,
+                    currentColumn: table.productId,
+                    referencedTable:
+                        $$ProductionHistoryTableReferences._productIdTable(db),
+                    referencedColumn: $$ProductionHistoryTableReferences
+                        ._productIdTable(db)
+                        .id,
+                  ) as T;
+                }
+
+                return state;
+              },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ));
+}
+
+typedef $$ProductionHistoryTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ProductionHistoryTable,
+    ProductionHistoryData,
+    $$ProductionHistoryTableFilterComposer,
+    $$ProductionHistoryTableOrderingComposer,
+    $$ProductionHistoryTableAnnotationComposer,
+    $$ProductionHistoryTableCreateCompanionBuilder,
+    $$ProductionHistoryTableUpdateCompanionBuilder,
+    (ProductionHistoryData, $$ProductionHistoryTableReferences),
+    ProductionHistoryData,
+    PrefetchHooks Function({bool productId})>;
 typedef $$TaskDependenciesTableCreateCompanionBuilder
     = TaskDependenciesCompanion Function({
   required String id,
@@ -14963,6 +16312,8 @@ class $AppDatabaseManager {
       $$ProductionTasksTableTableManager(_db, _db.productionTasks);
   $$ProductionRunsTableTableManager get productionRuns =>
       $$ProductionRunsTableTableManager(_db, _db.productionRuns);
+  $$ProductionHistoryTableTableManager get productionHistory =>
+      $$ProductionHistoryTableTableManager(_db, _db.productionHistory);
   $$TaskDependenciesTableTableManager get taskDependencies =>
       $$TaskDependenciesTableTableManager(_db, _db.taskDependencies);
   $$OrderListItemsTableTableManager get orderListItems =>

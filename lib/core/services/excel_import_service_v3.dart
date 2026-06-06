@@ -534,7 +534,34 @@ class ExcelImportServiceV3 {
           }
         }
 
-        historienVerarbeitet += art.historie.length;
+        // ── Historische Produktionsdaten in production_history ──────────
+        // Re-Import: vorhandene Import-Zeilen dieses Artikels ersetzen.
+        // In der App erfasste Zeilen (quelle='app') bleiben erhalten.
+        await (_db.delete(_db.productionHistory)
+              ..where((t) => t.productId.equals(productId))
+              ..where((t) => t.quelle.equals('import')))
+            .go();
+        for (final h in art.historie) {
+          if (h.datum == null) continue;
+          await _db.into(_db.productionHistory).insert(
+                ProductionHistoryCompanion(
+                  id: Value(_uuid.v4()),
+                  productId: Value(productId),
+                  datum: Value(h.datum!),
+                  kgRohware: Value(h.kgRohware),
+                  kgFertigware: Value(h.kgFertigware),
+                  verlustAnteil: Value(h.verlustProzent),
+                  startzeit: Value(h.startzeit),
+                  endzeit: Value(h.endzeit),
+                  produktionszeitMinuten: Value(h.produktionszeitMinuten),
+                  kgProStundeRoh: Value(h.kgProStundeRoh),
+                  kgProStundeGegart: Value(h.kgProStundeGegart),
+                  notizen: Value(h.notizen),
+                  quelle: const Value('import'),
+                ),
+              );
+          historienVerarbeitet++;
+        }
       }
 
       // ── Excel-Bytes + Dateiname in app_settings ablegen ───────────────
