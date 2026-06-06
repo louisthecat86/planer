@@ -13,6 +13,9 @@ import 'board_providers.dart';
 
 const double _kLabelWidth = 116;
 const _kDayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
+const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+enum _Modus { woche, tag }
 
 /// ISO-8601-Kalenderwoche.
 int _isoKw(DateTime date) {
@@ -27,6 +30,9 @@ int _isoKw(DateTime date) {
   }
   return wn;
 }
+
+String _fmtTagTitel(DateTime d) =>
+    '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.${d.year}';
 
 /// Minuten als Stunden mit max. einer Nachkommastelle ("6.5", "8").
 String _fmtStunden(double minuten) {
@@ -60,36 +66,52 @@ String _ampelWort(CapacityStatus status) {
 // WeekBoardScreen
 // ---------------------------------------------------------------------------
 
-/// Das Wochenboard: Abteilungen als Zeilen, Mo–Fr als Spalten, Ampelbalken
-/// pro Tag. Karten lassen sich innerhalb ihrer Abteilungs-Zeile auf einen
-/// anderen Tag ziehen (ändert das Datum des Auftrags).
-class WeekBoardScreen extends ConsumerWidget {
-  const WeekBoardScreen({super.key});
+/// Das Planungsboard mit zwei Ansichten:
+/// - **Woche**: Abteilungen als Zeilen, Mo–Fr als Spalten, Ampelbalken,
+///   Karten per Drag auf einen anderen Tag verschiebbar.
+/// - **Tag**: schlanke Liste pro Abteilung (Auslastung + Aufträge) für den
+///   gewählten Tag.
+///
+/// [oeffnePlanenDirekt] = true öffnet beim Aufruf sofort den
+/// „Produkt planen"-Dialog (für die „Planen"-Kachel auf dem Home-Screen).
+class WeekBoardScreen extends ConsumerStatefulWidget {
+  const WeekBoardScreen({super.key, this.oeffnePlanenDirekt = false});
 
-  void _vorWoche(WidgetRef ref) {
+  final bool oeffnePlanenDirekt;
+
+  @override
+  ConsumerState<WeekBoardScreen> createState() => _WeekBoardScreenState();
+}
+
+class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
+  _Modus _modus = _Modus.woche;
+  bool _planenGeoeffnet = false;
+
+  // ---- Navigation (je nach Modus Woche oder Tag) ----
+
+  void _zurueck() {
     final d = ref.read(selectedDateProvider);
+    final delta = _modus == _Modus.woche ? 7 : 1;
     ref.read(selectedDateProvider.notifier).state =
-        d.subtract(const Duration(days: 7));
+        d.subtract(Duration(days: delta));
   }
 
-  void _naechsteWoche(WidgetRef ref) {
+  void _vor() {
     final d = ref.read(selectedDateProvider);
+    final delta = _modus == _Modus.woche ? 7 : 1;
     ref.read(selectedDateProvider.notifier).state =
-        d.add(const Duration(days: 7));
+        d.add(Duration(days: delta));
   }
 
-  void _heute(WidgetRef ref) {
+  void _heute() {
     final now = DateTime.now();
     ref.read(selectedDateProvider.notifier).state =
         DateTime(now.year, now.month, now.day);
   }
 
-  /// Verschiebt einen Auftrag auf einen anderen Tag (gleiche Abteilung).
-  Future<void> _verschiebe(
-    WidgetRef ref,
-    BoardTask task,
-    DateTime zielTag,
-  ) async {
+  // ---- Aktionen ----
+
+  Future<void> _verschiebe(BoardTask task, DateTime zielTag) async {
     final ziel = DateTime(zielTag.year, zielTag.month, zielTag.day);
     if (task.datum == ziel) return;
 
@@ -105,15 +127,11 @@ class WeekBoardScreen extends ConsumerWidget {
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Auftrag verschoben');
     ref.invalidate(weekBoardProvider);
+    ref.invalidate(dayBoardProvider);
     ref.invalidate(dailyTasksProvider);
   }
 
-  /// Öffnet den Bearbeiten-Sheet (wiederverwendet aus dem Whiteboard).
-  Future<void> _bearbeite(
-    BuildContext context,
-    WidgetRef ref,
-    BoardTask bt,
-  ) async {
+  Future<void> _bearbeite(BoardTask bt) async {
     final db = ref.read(databaseProvider);
     final task = await (db.select(db.productionTasks)
           ..where((t) => t.id.equals(bt.id)))
@@ -122,7 +140,7 @@ class WeekBoardScreen extends ConsumerWidget {
     final product = await (db.select(db.products)
           ..where((p) => p.id.equals(task.productId)))
         .getSingleOrNull();
-    if (!context.mounted) return;
+    if (!mounted) return;
 
     final wb = WhiteboardTask(
       task: task,
@@ -132,20 +150,14 @@ class WeekBoardScreen extends ConsumerWidget {
     final changed = await showTaskDetailSheet(context, ref, wb);
     if (changed) {
       ref.invalidate(weekBoardProvider);
-      // dailyTasksProvider wird vom Sheet selbst invalidiert.
+      ref.invalidate(dayBoardProvider);
     }
   }
 
-  /// Öffnet den „Produkt planen"-Sheet.
-  Future<void> _planen(
-    BuildContext context,
-    WidgetRef ref,
-    WeekBoard board,
-  ) async {
+  Future<void> _planen(WeekBoard board) async {
     final sel = ref.read(selectedDateProvider);
     final selTag = DateTime(sel.year, sel.month, sel.day);
-    final initial =
-        board.tage.contains(selTag) ? selTag : board.tage.first;
+    final initial = board.tage.contains(selTag) ? selTag : board.tage.first;
 
     final geaendert = await showModalBottomSheet<bool>(
       context: context,
@@ -161,21 +173,40 @@ class WeekBoardScreen extends ConsumerWidget {
     );
     if (geaendert == true) {
       ref.invalidate(weekBoardProvider);
+      ref.invalidate(dayBoardProvider);
       ref.invalidate(dailyTasksProvider);
     }
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final sel = ref.watch(selectedDateProvider);
     final montag = mondayOfWeek(sel);
-    final boardAsync = ref.watch(weekBoardProvider(montag));
-    final kw = _isoKw(montag);
+    final weekAsync = ref.watch(weekBoardProvider(montag));
+    final dayAsync = ref.watch(dayBoardProvider(sel));
+
+    // „Planen"-Direkteinstieg: einmalig den Dialog öffnen, sobald die
+    // Wochendaten geladen sind.
+    if (widget.oeffnePlanenDirekt && !_planenGeoeffnet) {
+      final board = weekAsync.valueOrNull;
+      if (board != null) {
+        _planenGeoeffnet = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _planen(board);
+        });
+      }
+    }
+
+    final istWoche = _modus == _Modus.woche;
 
     return Scaffold(
       appBar: AppBar(
         leading: const BackButton(),
-        title: Text('Planungsboard · KW $kw'),
+        title: Text(
+          istWoche
+              ? 'Planungsboard · KW ${_isoKw(montag)}'
+              : 'Tagesplan · ${_fmtTagTitel(sel)}',
+        ),
         centerTitle: true,
         actions: [
           PopupMenuButton<String>(
@@ -186,59 +217,92 @@ class WeekBoardScreen extends ConsumerWidget {
                 final b = ref.read(weekBoardProvider(montag)).valueOrNull;
                 if (b != null) await BoardPrintService.druckeWoche(b);
               } else {
-                final tag = ref.read(selectedDateProvider);
-                final day = await ref.read(dayBoardProvider(tag).future);
+                final day = await ref.read(dayBoardProvider(sel).future);
                 await BoardPrintService.druckeTag(day);
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'woche', child: Text('Woche drucken')),
-              PopupMenuItem(
-                value: 'tag',
-                child: Text('Tag drucken (gewählter Tag)'),
-              ),
+              PopupMenuItem(value: 'tag', child: Text('Tag drucken')),
             ],
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left),
-            tooltip: 'Vorherige Woche',
-            onPressed: () => _vorWoche(ref),
+            tooltip: istWoche ? 'Vorherige Woche' : 'Vorheriger Tag',
+            onPressed: _zurueck,
           ),
           IconButton(
             icon: const Icon(Icons.today),
-            tooltip: 'Diese Woche',
-            onPressed: () => _heute(ref),
+            tooltip: 'Heute',
+            onPressed: _heute,
           ),
           IconButton(
             icon: const Icon(Icons.chevron_right),
-            tooltip: 'Nächste Woche',
-            onPressed: () => _naechsteWoche(ref),
+            tooltip: istWoche ? 'Nächste Woche' : 'Nächster Tag',
+            onPressed: _vor,
           ),
         ],
       ),
-      floatingActionButton: boardAsync.maybeWhen(
+      floatingActionButton: weekAsync.maybeWhen(
         data: (board) => FloatingActionButton.extended(
-          onPressed: () => _planen(context, ref, board),
+          onPressed: () => _planen(board),
           icon: const Icon(Icons.add),
           label: const Text('Produkt planen'),
         ),
         orElse: () => null,
       ),
-      body: boardAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
-        data: (board) => _BoardGrid(
-          board: board,
-          onTapTask: (bt) => _bearbeite(context, ref, bt),
-          onMoveTask: (bt, tag) => _verschiebe(ref, bt, tag),
-        ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SegmentedButton<_Modus>(
+                segments: const [
+                  ButtonSegment(
+                    value: _Modus.woche,
+                    label: Text('Woche'),
+                    icon: Icon(Icons.calendar_view_week),
+                  ),
+                  ButtonSegment(
+                    value: _Modus.tag,
+                    label: Text('Tag'),
+                    icon: Icon(Icons.calendar_view_day),
+                  ),
+                ],
+                selected: {_modus},
+                onSelectionChanged: (s) =>
+                    setState(() => _modus = s.first),
+              ),
+            ),
+          ),
+          Expanded(
+            child: istWoche
+                ? weekAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Fehler: $e')),
+                    data: (board) => _BoardGrid(
+                      board: board,
+                      onTapTask: _bearbeite,
+                      onMoveTask: _verschiebe,
+                    ),
+                  )
+                : dayAsync.when(
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(child: Text('Fehler: $e')),
+                    data: (day) => _DayList(day: day, onTapTask: _bearbeite),
+                  ),
+          ),
+        ],
       ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Grid
+// Wochen-Grid
 // ---------------------------------------------------------------------------
 
 class _BoardGrid extends StatelessWidget {
@@ -601,6 +665,172 @@ class _LeerHinweis extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Tagesansicht (abgespeckt)
+// ---------------------------------------------------------------------------
+
+class _DayList extends StatelessWidget {
+  const _DayList({required this.day, required this.onTapTask});
+
+  final DayBoard day;
+  final void Function(BoardTask) onTapTask;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(12),
+      children: [
+        for (final lane in day.lanes)
+          _DayDeptCard(lane: lane, onTapTask: onTapTask),
+      ],
+    );
+  }
+}
+
+class _DayDeptCard extends StatelessWidget {
+  const _DayDeptCard({required this.lane, required this.onTapTask});
+
+  final DayLane lane;
+  final void Function(BoardTask) onTapTask;
+
+  @override
+  Widget build(BuildContext context) {
+    final farbe = _ampelFarbe(lane.status);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: lane.abteilung.farbe,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    lane.abteilung.anzeigeName,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${_fmtStunden(lane.belegtMinuten)} / '
+                  '${_fmtStunden(lane.kapazitaetMinuten)} h',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: farbe,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: lane.auslastung.clamp(0.0, 1.0).toDouble(),
+                minHeight: 6,
+                backgroundColor: Colors.grey.shade200,
+                color: farbe,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (lane.tasks.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Text(
+                  '— keine Aufträge —',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.grey.shade500,
+                  ),
+                ),
+              )
+            else
+              for (final task in lane.tasks)
+                _DayTaskRow(task: task, onTap: () => onTapTask(task)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DayTaskRow extends StatelessWidget {
+  const _DayTaskRow({required this.task, required this.onTap});
+
+  final BoardTask task;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+        child: Row(
+          children: [
+            Container(
+              width: 3,
+              height: 30,
+              decoration: BoxDecoration(
+                color: task.abteilung.farbe,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    task.productName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    '${task.mengeKg.toStringAsFixed(0)} kg · '
+                    '${_fmtStunden(task.dauerMinuten)} h',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (task.startZeit != null)
+              Text(
+                task.startZeit!,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Produkt-planen-Sheet
 // ---------------------------------------------------------------------------
 
@@ -648,7 +878,6 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     setState(() => _erstellt = true);
     final db = ref.read(databaseProvider);
 
-    // Vorab prüfen: hat das Produkt überhaupt Schritte?
     final schritte = await (db.select(db.productSteps)
           ..where((s) => s.productId.equals(produkt.id))
           ..where((s) => s.deletedAt.isNull()))

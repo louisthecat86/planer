@@ -7,7 +7,6 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../database/database.dart';
-import 'personnel_service.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
@@ -154,8 +153,6 @@ class BackupService {
         'machines': await _exportMachines(database),
         'product_step_parameters': await _exportProductStepParameters(database),
         'app_settings': await _exportAppSettings(database),
-        // ── Externes ─────────────────────────────────────────────────
-        'personnel_planning': (await PersonnelService.loadPlan()).toJson(),
       },
     };
   }
@@ -211,17 +208,6 @@ class BackupService {
         await _importOrderListItems(database, data);
         await _importAppSettings(database, data);
       });
-
-      if (backupJson['data'] is Map<String, dynamic>) {
-        final data = backupJson['data'] as Map<String, dynamic>;
-        if (data['personnel_planning'] is Map<String, dynamic>) {
-          final personnelJson =
-              data['personnel_planning'] as Map<String, dynamic>;
-          await PersonnelService.savePlan(
-            PersonnelPlan.fromJson(personnelJson),
-          );
-        }
-      }
     } catch (e) {
       throw Exception('Backup-Import fehlgeschlagen: $e');
     }
