@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
 import '../production_runs/domain/lernschleife_service.dart';
 import 'whiteboard_provider.dart';
 
@@ -190,6 +191,108 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Löscht den Task (Soft-Delete). Fragt, ob nur dieser Schritt oder die
+  /// gesamte verkettete Produktion (alle Abteilungs-Schritte) entfernt wird.
+  Future<void> _loeschen() async {
+    final wahl = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aus der Planung löschen?'),
+        content: const Text(
+          'Nur diesen einen Schritt (diese Abteilung) entfernen oder die '
+          'gesamte Produktion dieses Artikels — also alle verketteten '
+          'Abteilungs-Schritte?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('abbrechen'),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('einzel'),
+            child: const Text('Nur dieser Schritt'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop('ganze'),
+            child: const Text('Ganze Produktion'),
+          ),
+        ],
+      ),
+    );
+    if (wahl == null || wahl == 'abbrechen') return;
+
+    setState(() => _isSaving = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final jetzt = DateTime.now();
+      final ids = wahl == 'ganze'
+          ? await _produktionsKettenIds(db, widget.wbTask.task)
+          : [widget.wbTask.task.id];
+
+      await (db.update(db.productionTasks)..where((t) => t.id.isIn(ids)))
+          .write(
+        ProductionTasksCompanion(
+          deletedAt: Value(jetzt),
+          updatedAt: Value(jetzt),
+        ),
+      );
+
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Produktion aus Planung gelöscht');
+      ref.invalidate(dailyTasksProvider);
+
+      if (mounted) Navigator.of(context).pop(true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+        );
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  /// Sammelt alle Task-IDs der verketteten Produktion (über
+  /// [ProductionTask.parentTaskId]) zu der [start] gehört. Geht zur Wurzel
+  /// hoch und von dort über alle Nachfahren — getrennte Planungen desselben
+  /// Produkts bleiben unberührt, weil sie eigene Ketten bilden.
+  Future<List<String>> _produktionsKettenIds(
+    AppDatabase db,
+    ProductionTask start,
+  ) async {
+    final alle = await (db.select(db.productionTasks)
+          ..where((t) => t.productId.equals(start.productId))
+          ..where((t) => t.deletedAt.isNull()))
+        .get();
+    final byId = {for (final t in alle) t.id: t};
+
+    // Zur Wurzel hochlaufen.
+    var root = start;
+    final besucht = <String>{root.id};
+    while (root.parentTaskId != null &&
+        byId.containsKey(root.parentTaskId)) {
+      final parent = byId[root.parentTaskId]!;
+      if (!besucht.add(parent.id)) break; // Zyklus-Schutz
+      root = parent;
+    }
+
+    // Von der Wurzel alle Nachfahren einsammeln.
+    final kette = <String>{root.id};
+    var geaendert = true;
+    while (geaendert) {
+      geaendert = false;
+      for (final t in alle) {
+        final p = t.parentTaskId;
+        if (p != null && kette.contains(p) && kette.add(t.id)) {
+          geaendert = true;
+        }
+      }
+    }
+    return kette.toList();
   }
 
   @override
@@ -456,6 +559,18 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                         : _zeigeIstErfassung
                             ? 'Fertig melden & speichern'
                             : 'Speichern',
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _isSaving ? null : _loeschen,
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  label: const Text(
+                    'Aus Planung löschen',
+                    style: TextStyle(color: Colors.red),
                   ),
                 ),
               ),
