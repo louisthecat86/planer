@@ -893,12 +893,12 @@ class ExcelImportServiceV3 {
       final step = _ParsedStep(
         reihenfolge: col,
         abteilungDb: abtDb,
-        prozessschritt: _cellStr(rows[labelRow['Prozessschritt'] ?? -1], col),
-        maschineName: _cellStr(rows[labelRow['Anlagen'] ?? -1], col),
-        personen: _parseInt(rows[labelRow['Personen'] ?? -1], col),
-        mengeKg: _parseDouble(rows[labelRow['Menge (kg)'] ?? -1], col),
-        zeitMinuten: _parseZeit(rows[labelRow['Zeit (hh:mm)'] ?? -1], col),
-        fixZeitMinuten: _parseDouble(rows[labelRow[_fixZeitLabel] ?? -1], col),
+        prozessschritt: _cellStr(_zeile(rows, labelRow['Prozessschritt']), col),
+        maschineName: _cellStr(_zeile(rows, labelRow['Anlagen']), col),
+        personen: _parseInt(_zeile(rows, labelRow['Personen']), col),
+        mengeKg: _parseDouble(_zeile(rows, labelRow['Menge (kg)']), col),
+        zeitMinuten: _parseZeit(_zeile(rows, labelRow['Zeit (hh:mm)']), col),
+        fixZeitMinuten: _parseDouble(_zeile(rows, labelRow[_fixZeitLabel]), col),
       );
 
       if (step.maschineName != null && step.maschineName!.isNotEmpty) {
@@ -1090,6 +1090,14 @@ class ExcelImportServiceV3 {
   }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  /// Sichere Zeilen-Auswahl: liefert eine leere Zeile, wenn das Label fehlt
+  /// (idx == null) oder außerhalb des Bereichs liegt. Verhindert `rows[-1]`
+  /// bei optionalen Zeilen wie „Fixe Zeit (min)".
+  static List<Data?> _zeile(List<List<Data?>> rows, int? idx) =>
+      (idx != null && idx >= 0 && idx < rows.length)
+          ? rows[idx]
+          : const <Data?>[];
 
   static int? _parseInt(List<Data?> row, int col) {
     if (col < 0 || col >= row.length) return null;
