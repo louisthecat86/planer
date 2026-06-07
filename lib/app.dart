@@ -10,6 +10,7 @@ import 'features/backup/backup_management_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/history/week_snapshot_archive_screen.dart';
+import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -72,6 +73,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/history',
         name: 'wochenHistorie',
         builder: (context, state) => const WeekSnapshotArchiveScreen(),
+      ),
+      GoRoute(
+        path: '/history/:snapshotId',
+        name: 'wochenHistorieDetail',
+        builder: (context, state) => WeekSnapshotDetailScreen(
+          snapshotId: state.pathParameters['snapshotId']!,
+        ),
       ),
       // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
       GoRoute(

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
@@ -199,13 +200,30 @@ class _SnapshotKarte extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-              label: const Text('Löschen', style: TextStyle(color: Colors.red)),
-            ),
+          Row(
+            children: [
+              FilledButton.tonalIcon(
+                onPressed: () => context.pushNamed(
+                  'wochenHistorieDetail',
+                  pathParameters: {'snapshotId': snap.id},
+                ),
+                icon: const Icon(Icons.insights, size: 18),
+                label: const Text('Auswertung öffnen'),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: onDelete,
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: Colors.red,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Löschen',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
           ),
         ],
       ),
