@@ -56,6 +56,7 @@ class BoardTask {
     required this.mengeKg,
     required this.sortierung,
     required this.status,
+    required this.mitgliederIds,
   });
 
   final String id;
@@ -77,6 +78,10 @@ class BoardTask {
 
   /// 'geplant' | 'in_arbeit' | 'fertig' (storniert wird gar nicht geladen).
   final String status;
+
+  /// IDs aller zusammengefassten Tasks (gleiches Produkt + Abteilung + Tag).
+  /// Bei einem einzelnen Task = [id]. Verschieben/Sortieren wirkt auf alle.
+  final List<String> mitgliederIds;
 }
 
 /// Eine Zelle im Wochenboard: eine Abteilung an einem Tag.
@@ -279,11 +284,11 @@ Future<List<BoardTask>> _ladeBoardTasks(
     for (final p in produkte) p.id: p.artikelbezeichnung,
   };
 
-  final result = <BoardTask>[];
+  final perRow = <BoardTask>[];
   for (final t in rows) {
     final abteilung = _abteilungOf(t.abteilung);
     if (abteilung == null) continue; // unbekannte Abteilung überspringen
-    result.add(
+    perRow.add(
       BoardTask(
         id: t.id,
         productId: t.productId,
@@ -295,6 +300,53 @@ Future<List<BoardTask>> _ladeBoardTasks(
         mengeKg: t.mengeKg,
         sortierung: t.sortierung,
         status: t.status,
+        mitgliederIds: [t.id],
+      ),
+    );
+  }
+
+  // Tasks mit gleichem Produkt + Abteilung + Tag zu EINEM Feld bündeln
+  // (Dauer summiert, Menge repräsentativ). So erscheint eine Abteilung je
+  // Artikel/Tag nur einmal — egal ob aus alter oder neuer Planung.
+  final gruppen = <String, List<BoardTask>>{};
+  for (final bt in perRow) {
+    final key = '${bt.productId}|${bt.abteilung.dbValue}'
+        '|${bt.datum.toIso8601String()}';
+    (gruppen[key] ??= []).add(bt);
+  }
+
+  final result = <BoardTask>[];
+  for (final g in gruppen.values) {
+    if (g.length == 1) {
+      result.add(g.first);
+      continue;
+    }
+    var dauer = 0.0;
+    var menge = 0.0;
+    var sortierung = g.first.sortierung;
+    String? start;
+    for (final t in g) {
+      dauer += t.dauerMinuten;
+      if (t.mengeKg > menge) menge = t.mengeKg; // repräsentativ, nicht addieren
+      if (t.sortierung < sortierung) sortierung = t.sortierung;
+      if (t.startZeit != null &&
+          (start == null || t.startZeit!.compareTo(start) < 0)) {
+        start = t.startZeit;
+      }
+    }
+    result.add(
+      BoardTask(
+        id: g.first.id,
+        productId: g.first.productId,
+        productName: g.first.productName,
+        abteilung: g.first.abteilung,
+        datum: g.first.datum,
+        startZeit: start,
+        dauerMinuten: dauer,
+        mengeKg: menge,
+        sortierung: sortierung,
+        status: g.first.status,
+        mitgliederIds: [for (final t in g) t.id],
       ),
     );
   }

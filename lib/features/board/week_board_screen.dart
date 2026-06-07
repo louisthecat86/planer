@@ -116,7 +116,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     if (task.datum == ziel) return;
 
     final db = ref.read(databaseProvider);
-    await (db.update(db.productionTasks)..where((t) => t.id.equals(task.id)))
+    await (db.update(db.productionTasks)
+          ..where((t) => t.id.isIn(task.mitgliederIds)))
         .write(
       ProductionTasksCompanion(
         datum: Value(ziel),
@@ -196,7 +197,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     await db.transaction(() async {
       for (var i = 0; i < neu.length; i++) {
         await (db.update(db.productionTasks)
-              ..where((t) => t.id.equals(neu[i].id)))
+              ..where((t) => t.id.isIn(neu[i].mitgliederIds)))
             .write(
           ProductionTasksCompanion(
             sortierung: Value(i),
