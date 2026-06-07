@@ -10024,6 +10024,520 @@ class AppSettingsCompanion extends UpdateCompanion<AppSetting> {
   }
 }
 
+class $WeekSnapshotsTable extends WeekSnapshots
+    with TableInfo<$WeekSnapshotsTable, WeekSnapshot> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WeekSnapshotsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _wochenStartMeta =
+      const VerificationMeta('wochenStart');
+  @override
+  late final GeneratedColumn<DateTime> wochenStart = GeneratedColumn<DateTime>(
+      'wochen_start', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _kwMeta = const VerificationMeta('kw');
+  @override
+  late final GeneratedColumn<int> kw = GeneratedColumn<int>(
+      'kw', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _jahrMeta = const VerificationMeta('jahr');
+  @override
+  late final GeneratedColumn<int> jahr = GeneratedColumn<int>(
+      'jahr', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _titelMeta = const VerificationMeta('titel');
+  @override
+  late final GeneratedColumn<String> titel = GeneratedColumn<String>(
+      'titel', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _notizMeta = const VerificationMeta('notiz');
+  @override
+  late final GeneratedColumn<String> notiz = GeneratedColumn<String>(
+      'notiz', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _datenJsonMeta =
+      const VerificationMeta('datenJson');
+  @override
+  late final GeneratedColumn<String> datenJson = GeneratedColumn<String>(
+      'daten_json', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        wochenStart,
+        kw,
+        jahr,
+        titel,
+        notiz,
+        datenJson,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'week_snapshots';
+  @override
+  VerificationContext validateIntegrity(Insertable<WeekSnapshot> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('wochen_start')) {
+      context.handle(
+          _wochenStartMeta,
+          wochenStart.isAcceptableOrUnknown(
+              data['wochen_start']!, _wochenStartMeta));
+    } else if (isInserting) {
+      context.missing(_wochenStartMeta);
+    }
+    if (data.containsKey('kw')) {
+      context.handle(_kwMeta, kw.isAcceptableOrUnknown(data['kw']!, _kwMeta));
+    } else if (isInserting) {
+      context.missing(_kwMeta);
+    }
+    if (data.containsKey('jahr')) {
+      context.handle(
+          _jahrMeta, jahr.isAcceptableOrUnknown(data['jahr']!, _jahrMeta));
+    } else if (isInserting) {
+      context.missing(_jahrMeta);
+    }
+    if (data.containsKey('titel')) {
+      context.handle(
+          _titelMeta, titel.isAcceptableOrUnknown(data['titel']!, _titelMeta));
+    }
+    if (data.containsKey('notiz')) {
+      context.handle(
+          _notizMeta, notiz.isAcceptableOrUnknown(data['notiz']!, _notizMeta));
+    }
+    if (data.containsKey('daten_json')) {
+      context.handle(_datenJsonMeta,
+          datenJson.isAcceptableOrUnknown(data['daten_json']!, _datenJsonMeta));
+    } else if (isInserting) {
+      context.missing(_datenJsonMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WeekSnapshot map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WeekSnapshot(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      wochenStart: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}wochen_start'])!,
+      kw: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}kw'])!,
+      jahr: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}jahr'])!,
+      titel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}titel']),
+      notiz: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notiz']),
+      datenJson: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}daten_json'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $WeekSnapshotsTable createAlias(String alias) {
+    return $WeekSnapshotsTable(attachedDatabase, alias);
+  }
+}
+
+class WeekSnapshot extends DataClass implements Insertable<WeekSnapshot> {
+  final String id;
+
+  /// Montag der Woche, 00:00 Uhr.
+  final DateTime wochenStart;
+
+  /// ISO-Kalenderwoche (1..53).
+  final int kw;
+
+  /// Jahr der Kalenderwoche.
+  final int jahr;
+
+  /// Optionaler Titel/Label für den Snapshot.
+  final String? titel;
+
+  /// Frei eingebbare Notiz/Erkenntnis zur Woche.
+  final String? notiz;
+
+  /// Eingefrorene Wochendaten als JSON (Aufträge + Tageskapazitäten).
+  final String datenJson;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const WeekSnapshot(
+      {required this.id,
+      required this.wochenStart,
+      required this.kw,
+      required this.jahr,
+      this.titel,
+      this.notiz,
+      required this.datenJson,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['wochen_start'] = Variable<DateTime>(wochenStart);
+    map['kw'] = Variable<int>(kw);
+    map['jahr'] = Variable<int>(jahr);
+    if (!nullToAbsent || titel != null) {
+      map['titel'] = Variable<String>(titel);
+    }
+    if (!nullToAbsent || notiz != null) {
+      map['notiz'] = Variable<String>(notiz);
+    }
+    map['daten_json'] = Variable<String>(datenJson);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  WeekSnapshotsCompanion toCompanion(bool nullToAbsent) {
+    return WeekSnapshotsCompanion(
+      id: Value(id),
+      wochenStart: Value(wochenStart),
+      kw: Value(kw),
+      jahr: Value(jahr),
+      titel:
+          titel == null && nullToAbsent ? const Value.absent() : Value(titel),
+      notiz:
+          notiz == null && nullToAbsent ? const Value.absent() : Value(notiz),
+      datenJson: Value(datenJson),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory WeekSnapshot.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WeekSnapshot(
+      id: serializer.fromJson<String>(json['id']),
+      wochenStart: serializer.fromJson<DateTime>(json['wochenStart']),
+      kw: serializer.fromJson<int>(json['kw']),
+      jahr: serializer.fromJson<int>(json['jahr']),
+      titel: serializer.fromJson<String?>(json['titel']),
+      notiz: serializer.fromJson<String?>(json['notiz']),
+      datenJson: serializer.fromJson<String>(json['datenJson']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'wochenStart': serializer.toJson<DateTime>(wochenStart),
+      'kw': serializer.toJson<int>(kw),
+      'jahr': serializer.toJson<int>(jahr),
+      'titel': serializer.toJson<String?>(titel),
+      'notiz': serializer.toJson<String?>(notiz),
+      'datenJson': serializer.toJson<String>(datenJson),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  WeekSnapshot copyWith(
+          {String? id,
+          DateTime? wochenStart,
+          int? kw,
+          int? jahr,
+          Value<String?> titel = const Value.absent(),
+          Value<String?> notiz = const Value.absent(),
+          String? datenJson,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      WeekSnapshot(
+        id: id ?? this.id,
+        wochenStart: wochenStart ?? this.wochenStart,
+        kw: kw ?? this.kw,
+        jahr: jahr ?? this.jahr,
+        titel: titel.present ? titel.value : this.titel,
+        notiz: notiz.present ? notiz.value : this.notiz,
+        datenJson: datenJson ?? this.datenJson,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  WeekSnapshot copyWithCompanion(WeekSnapshotsCompanion data) {
+    return WeekSnapshot(
+      id: data.id.present ? data.id.value : this.id,
+      wochenStart:
+          data.wochenStart.present ? data.wochenStart.value : this.wochenStart,
+      kw: data.kw.present ? data.kw.value : this.kw,
+      jahr: data.jahr.present ? data.jahr.value : this.jahr,
+      titel: data.titel.present ? data.titel.value : this.titel,
+      notiz: data.notiz.present ? data.notiz.value : this.notiz,
+      datenJson: data.datenJson.present ? data.datenJson.value : this.datenJson,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeekSnapshot(')
+          ..write('id: $id, ')
+          ..write('wochenStart: $wochenStart, ')
+          ..write('kw: $kw, ')
+          ..write('jahr: $jahr, ')
+          ..write('titel: $titel, ')
+          ..write('notiz: $notiz, ')
+          ..write('datenJson: $datenJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, wochenStart, kw, jahr, titel, notiz,
+      datenJson, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WeekSnapshot &&
+          other.id == this.id &&
+          other.wochenStart == this.wochenStart &&
+          other.kw == this.kw &&
+          other.jahr == this.jahr &&
+          other.titel == this.titel &&
+          other.notiz == this.notiz &&
+          other.datenJson == this.datenJson &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class WeekSnapshotsCompanion extends UpdateCompanion<WeekSnapshot> {
+  final Value<String> id;
+  final Value<DateTime> wochenStart;
+  final Value<int> kw;
+  final Value<int> jahr;
+  final Value<String?> titel;
+  final Value<String?> notiz;
+  final Value<String> datenJson;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const WeekSnapshotsCompanion({
+    this.id = const Value.absent(),
+    this.wochenStart = const Value.absent(),
+    this.kw = const Value.absent(),
+    this.jahr = const Value.absent(),
+    this.titel = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.datenJson = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WeekSnapshotsCompanion.insert({
+    required String id,
+    required DateTime wochenStart,
+    required int kw,
+    required int jahr,
+    this.titel = const Value.absent(),
+    this.notiz = const Value.absent(),
+    required String datenJson,
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        wochenStart = Value(wochenStart),
+        kw = Value(kw),
+        jahr = Value(jahr),
+        datenJson = Value(datenJson);
+  static Insertable<WeekSnapshot> custom({
+    Expression<String>? id,
+    Expression<DateTime>? wochenStart,
+    Expression<int>? kw,
+    Expression<int>? jahr,
+    Expression<String>? titel,
+    Expression<String>? notiz,
+    Expression<String>? datenJson,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (wochenStart != null) 'wochen_start': wochenStart,
+      if (kw != null) 'kw': kw,
+      if (jahr != null) 'jahr': jahr,
+      if (titel != null) 'titel': titel,
+      if (notiz != null) 'notiz': notiz,
+      if (datenJson != null) 'daten_json': datenJson,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WeekSnapshotsCompanion copyWith(
+      {Value<String>? id,
+      Value<DateTime>? wochenStart,
+      Value<int>? kw,
+      Value<int>? jahr,
+      Value<String?>? titel,
+      Value<String?>? notiz,
+      Value<String>? datenJson,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return WeekSnapshotsCompanion(
+      id: id ?? this.id,
+      wochenStart: wochenStart ?? this.wochenStart,
+      kw: kw ?? this.kw,
+      jahr: jahr ?? this.jahr,
+      titel: titel ?? this.titel,
+      notiz: notiz ?? this.notiz,
+      datenJson: datenJson ?? this.datenJson,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (wochenStart.present) {
+      map['wochen_start'] = Variable<DateTime>(wochenStart.value);
+    }
+    if (kw.present) {
+      map['kw'] = Variable<int>(kw.value);
+    }
+    if (jahr.present) {
+      map['jahr'] = Variable<int>(jahr.value);
+    }
+    if (titel.present) {
+      map['titel'] = Variable<String>(titel.value);
+    }
+    if (notiz.present) {
+      map['notiz'] = Variable<String>(notiz.value);
+    }
+    if (datenJson.present) {
+      map['daten_json'] = Variable<String>(datenJson.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WeekSnapshotsCompanion(')
+          ..write('id: $id, ')
+          ..write('wochenStart: $wochenStart, ')
+          ..write('kw: $kw, ')
+          ..write('jahr: $jahr, ')
+          ..write('titel: $titel, ')
+          ..write('notiz: $notiz, ')
+          ..write('datenJson: $datenJson, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10046,6 +10560,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $TaskDependenciesTable(this);
   late final $OrderListItemsTable orderListItems = $OrderListItemsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
+  late final $WeekSnapshotsTable weekSnapshots = $WeekSnapshotsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10063,7 +10578,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         productionHistory,
         taskDependencies,
         orderListItems,
-        appSettings
+        appSettings,
+        weekSnapshots
       ];
 }
 
@@ -16350,6 +16866,254 @@ typedef $$AppSettingsTableProcessedTableManager = ProcessedTableManager<
     (AppSetting, BaseReferences<_$AppDatabase, $AppSettingsTable, AppSetting>),
     AppSetting,
     PrefetchHooks Function()>;
+typedef $$WeekSnapshotsTableCreateCompanionBuilder = WeekSnapshotsCompanion
+    Function({
+  required String id,
+  required DateTime wochenStart,
+  required int kw,
+  required int jahr,
+  Value<String?> titel,
+  Value<String?> notiz,
+  required String datenJson,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$WeekSnapshotsTableUpdateCompanionBuilder = WeekSnapshotsCompanion
+    Function({
+  Value<String> id,
+  Value<DateTime> wochenStart,
+  Value<int> kw,
+  Value<int> jahr,
+  Value<String?> titel,
+  Value<String?> notiz,
+  Value<String> datenJson,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$WeekSnapshotsTableFilterComposer
+    extends Composer<_$AppDatabase, $WeekSnapshotsTable> {
+  $$WeekSnapshotsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get wochenStart => $composableBuilder(
+      column: $table.wochenStart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get kw => $composableBuilder(
+      column: $table.kw, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get jahr => $composableBuilder(
+      column: $table.jahr, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get titel => $composableBuilder(
+      column: $table.titel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get datenJson => $composableBuilder(
+      column: $table.datenJson, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$WeekSnapshotsTableOrderingComposer
+    extends Composer<_$AppDatabase, $WeekSnapshotsTable> {
+  $$WeekSnapshotsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get wochenStart => $composableBuilder(
+      column: $table.wochenStart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get kw => $composableBuilder(
+      column: $table.kw, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get jahr => $composableBuilder(
+      column: $table.jahr, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get titel => $composableBuilder(
+      column: $table.titel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get datenJson => $composableBuilder(
+      column: $table.datenJson, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$WeekSnapshotsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WeekSnapshotsTable> {
+  $$WeekSnapshotsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get wochenStart => $composableBuilder(
+      column: $table.wochenStart, builder: (column) => column);
+
+  GeneratedColumn<int> get kw =>
+      $composableBuilder(column: $table.kw, builder: (column) => column);
+
+  GeneratedColumn<int> get jahr =>
+      $composableBuilder(column: $table.jahr, builder: (column) => column);
+
+  GeneratedColumn<String> get titel =>
+      $composableBuilder(column: $table.titel, builder: (column) => column);
+
+  GeneratedColumn<String> get notiz =>
+      $composableBuilder(column: $table.notiz, builder: (column) => column);
+
+  GeneratedColumn<String> get datenJson =>
+      $composableBuilder(column: $table.datenJson, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$WeekSnapshotsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $WeekSnapshotsTable,
+    WeekSnapshot,
+    $$WeekSnapshotsTableFilterComposer,
+    $$WeekSnapshotsTableOrderingComposer,
+    $$WeekSnapshotsTableAnnotationComposer,
+    $$WeekSnapshotsTableCreateCompanionBuilder,
+    $$WeekSnapshotsTableUpdateCompanionBuilder,
+    (
+      WeekSnapshot,
+      BaseReferences<_$AppDatabase, $WeekSnapshotsTable, WeekSnapshot>
+    ),
+    WeekSnapshot,
+    PrefetchHooks Function()> {
+  $$WeekSnapshotsTableTableManager(_$AppDatabase db, $WeekSnapshotsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WeekSnapshotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WeekSnapshotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WeekSnapshotsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<DateTime> wochenStart = const Value.absent(),
+            Value<int> kw = const Value.absent(),
+            Value<int> jahr = const Value.absent(),
+            Value<String?> titel = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<String> datenJson = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              WeekSnapshotsCompanion(
+            id: id,
+            wochenStart: wochenStart,
+            kw: kw,
+            jahr: jahr,
+            titel: titel,
+            notiz: notiz,
+            datenJson: datenJson,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required DateTime wochenStart,
+            required int kw,
+            required int jahr,
+            Value<String?> titel = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            required String datenJson,
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              WeekSnapshotsCompanion.insert(
+            id: id,
+            wochenStart: wochenStart,
+            kw: kw,
+            jahr: jahr,
+            titel: titel,
+            notiz: notiz,
+            datenJson: datenJson,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$WeekSnapshotsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $WeekSnapshotsTable,
+    WeekSnapshot,
+    $$WeekSnapshotsTableFilterComposer,
+    $$WeekSnapshotsTableOrderingComposer,
+    $$WeekSnapshotsTableAnnotationComposer,
+    $$WeekSnapshotsTableCreateCompanionBuilder,
+    $$WeekSnapshotsTableUpdateCompanionBuilder,
+    (
+      WeekSnapshot,
+      BaseReferences<_$AppDatabase, $WeekSnapshotsTable, WeekSnapshot>
+    ),
+    WeekSnapshot,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -16380,4 +17144,6 @@ class $AppDatabaseManager {
       $$OrderListItemsTableTableManager(_db, _db.orderListItems);
   $$AppSettingsTableTableManager get appSettings =>
       $$AppSettingsTableTableManager(_db, _db.appSettings);
+  $$WeekSnapshotsTableTableManager get weekSnapshots =>
+      $$WeekSnapshotsTableTableManager(_db, _db.weekSnapshots);
 }

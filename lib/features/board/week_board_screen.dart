@@ -639,16 +639,11 @@ class _KartenInhalt extends StatelessWidget {
   Widget build(BuildContext context) {
     final abtColor = task.abteilung.farbe;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(7),
-        border: Border(
-          left: BorderSide(color: abtColor, width: 3),
-          top: BorderSide(color: Colors.grey.shade300),
-          right: BorderSide(color: Colors.grey.shade300),
-          bottom: BorderSide(color: Colors.grey.shade300),
-        ),
+        border: Border.all(color: Colors.grey.shade300),
         boxShadow: dragging
             ? [
                 BoxShadow(
@@ -660,23 +655,46 @@ class _KartenInhalt extends StatelessWidget {
             : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
-            task.productName,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+          // Farbkopf mit Abteilungs-Kurzcode
+          Container(
+            color: abtColor,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            child: Text(
+              task.abteilung.kurzcode,
+              style: const TextStyle(
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: 0.5,
+              ),
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 1),
-          Text(
-            '${task.mengeKg.toStringAsFixed(0)} kg · '
-            '${_fmtStunden(task.dauerMinuten)} h',
-            style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  task.productName,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '${task.mengeKg.toStringAsFixed(0)} kg · '
+                  '${_fmtStunden(task.dauerMinuten)} h',
+                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -852,11 +870,20 @@ class _DayTaskRow extends StatelessWidget {
         child: Row(
           children: [
             Container(
-              width: 3,
-              height: 30,
+              width: 36,
+              padding: const EdgeInsets.symmetric(vertical: 5),
               decoration: BoxDecoration(
                 color: task.abteilung.farbe,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                task.abteilung.kurzcode,
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                ),
               ),
             ),
             const SizedBox(width: 10),
