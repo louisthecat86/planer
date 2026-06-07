@@ -745,6 +745,55 @@ class _ParameterListe extends ConsumerWidget {
     ref.invalidate(stepParametersProvider(stepId));
   }
 
+  Future<void> _standardBearbeiten(
+    BuildContext context,
+    WidgetRef ref,
+    ProductStepParameter param,
+  ) async {
+    final ctrl = TextEditingController(text: param.wert ?? '');
+    final neuerWert = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(param.parameterName),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Wert',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    if (neuerWert == null) return;
+
+    final db = ref.read(databaseProvider);
+    await (db.update(db.productStepParameters)
+          ..where((p) => p.id.equals(param.id)))
+        .write(
+      ProductStepParametersCompanion(
+        wert: Value(neuerWert.isEmpty ? null : neuerWert),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Parameter geändert',
+        );
+    ref.invalidate(stepParametersProvider(stepId));
+  }
+
   Future<void> _customNeu(BuildContext context, WidgetRef ref) async {
     final geaendert = await CustomParameterEditorDialog.show(
       context,
@@ -813,6 +862,7 @@ class _ParameterListe extends ConsumerWidget {
                 _StandardGruppenBlock(
                   gruppenName: entry.key,
                   parameter: entry.value,
+                  onEdit: (p) => _standardBearbeiten(context, ref, p),
                 ),
                 const SizedBox(height: 8),
               ],
@@ -853,15 +903,18 @@ class _ParameterListe extends ConsumerWidget {
   }
 }
 
-/// Block für Standard-Parameter aus der Excel-Vorlage. Readonly.
+/// Block für Standard-Parameter aus der Excel-Vorlage. Editierbar
+/// (Werte werden beim Export wieder in die Excel zurückgeschrieben).
 class _StandardGruppenBlock extends StatelessWidget {
   const _StandardGruppenBlock({
     required this.gruppenName,
     required this.parameter,
+    required this.onEdit,
   });
 
   final String gruppenName;
   final List<ProductStepParameter> parameter;
+  final void Function(ProductStepParameter) onEdit;
 
   @override
   Widget build(BuildContext context) {
@@ -887,15 +940,19 @@ class _StandardGruppenBlock extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Icon(
-                Icons.lock_outline,
+                Icons.edit_outlined,
                 size: 12,
-                color:
-                    theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          ...parameter.map((p) => _ParameterZeileReadonly(param: p)),
+          ...parameter.map(
+            (p) => _ParameterZeileStandard(
+              param: p,
+              onEdit: () => onEdit(p),
+            ),
+          ),
         ],
       ),
     );
@@ -982,38 +1039,51 @@ class _CustomGruppenBlock extends StatelessWidget {
   }
 }
 
-/// Eine Parameter-Zeile readonly (für Standard-Parameter).
-class _ParameterZeileReadonly extends StatelessWidget {
-  const _ParameterZeileReadonly({required this.param});
+/// Eine Standard-Parameter-Zeile — tippen zum Bearbeiten des Werts.
+class _ParameterZeileStandard extends StatelessWidget {
+  const _ParameterZeileStandard({
+    required this.param,
+    required this.onEdit,
+  });
 
   final ProductStepParameter param;
+  final VoidCallback onEdit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 2,
-            child: Text(
-              param.parameterName,
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          Expanded(
-            flex: 1,
-            child: Text(
-              param.wert ?? '—',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
+    return InkWell(
+      onTap: onEdit,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                param.parameterName,
+                style: theme.textTheme.bodySmall,
               ),
             ),
-          ),
-        ],
+            Expanded(
+              flex: 1,
+              child: Text(
+                param.wert ?? '—',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            Icon(
+              Icons.edit,
+              size: 14,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            ),
+          ],
+        ),
       ),
     );
   }
