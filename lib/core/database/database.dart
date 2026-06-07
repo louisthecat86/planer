@@ -14,6 +14,7 @@ import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
 import 'tables/task_dependencies.dart';
+import 'tables/week_snapshots.dart';
 
 part 'database.g.dart';
 
@@ -40,6 +41,7 @@ part 'database.g.dart';
     TaskDependencies,
     OrderListItems,
     AppSettings,
+    WeekSnapshots,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -49,7 +51,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -196,6 +198,15 @@ class AppDatabase extends _$AppDatabase {
               'production_tasks',
               'sortierung',
               'INTEGER NOT NULL DEFAULT 0',
+            );
+          }
+
+          // ─── v7 → v8: Eingefrorene Wochen-Snapshots ──────────────────
+          if (from < 8) {
+            await m.createTable(weekSnapshots);
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_week_snapshots_start '
+              'ON week_snapshots(wochen_start)',
             );
           }
         },
