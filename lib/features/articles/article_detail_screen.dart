@@ -342,11 +342,23 @@ class _StepsList extends ConsumerWidget {
       );
     }
 
+    // Aufeinanderfolgende Schritte derselben Abteilung zu EINER Karte bündeln
+    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → eine Karte).
+    final gruppen = <List<({ProductStep step, int nummer})>>[];
+    for (var i = 0; i < steps.length; i++) {
+      final eintrag = (step: steps[i], nummer: i + 1);
+      if (gruppen.isNotEmpty &&
+          gruppen.last.first.step.abteilung == steps[i].abteilung) {
+        gruppen.last.add(eintrag);
+      } else {
+        gruppen.add([eintrag]);
+      }
+    }
+
     final karten = [
-      for (var i = 0; i < steps.length; i++)
-        _StepCard(
-          step: steps[i],
-          stepNumber: i + 1,
+      for (final gruppe in gruppen)
+        _AbteilungsKarte(
+          gruppe: gruppe,
           onUpdated: () => ref.invalidate(productStepsProvider(productId)),
         ),
     ];
@@ -398,41 +410,20 @@ class _StepsList extends ConsumerWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Einzelne Schritt-Karte
+// Abteilungs-Karte (bündelt alle Maschinen einer Abteilung)
 // ---------------------------------------------------------------------------
 
-class _StepCard extends ConsumerStatefulWidget {
-  const _StepCard({
-    required this.step,
-    required this.stepNumber,
-    required this.onUpdated,
-  });
+class _AbteilungsKarte extends StatelessWidget {
+  const _AbteilungsKarte({required this.gruppe, required this.onUpdated});
 
-  final ProductStep step;
-  final int stepNumber;
+  final List<({ProductStep step, int nummer})> gruppe;
   final VoidCallback onUpdated;
 
-  @override
-  ConsumerState<_StepCard> createState() => _StepCardState();
-}
-
-class _StepCardState extends ConsumerState<_StepCard> {
   Abteilung? get _abteilung {
     try {
-      return Abteilung.fromDbValue(widget.step.abteilung);
+      return Abteilung.fromDbValue(gruppe.first.step.abteilung);
     } catch (_) {
       return null;
-    }
-  }
-
-  Future<void> _openEditor() async {
-    final geaendert = await StepEditorDialog.show(
-      context,
-      step: widget.step,
-      stepNumber: widget.stepNumber,
-    );
-    if (geaendert) {
-      widget.onUpdated();
     }
   }
 
@@ -446,92 +437,56 @@ class _StepCardState extends ConsumerState<_StepCard> {
       margin: const EdgeInsets.only(bottom: 12),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: color.withValues(alpha: 0.5),
-          width: 1.5,
-        ),
+        side: BorderSide(color: color.withValues(alpha: 0.5), width: 1.5),
       ),
       child: Column(
         children: [
-          // Header (immer sichtbar)
-          Padding(
+          // Abteilungs-Header
+          Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.08),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
             child: Row(
               children: [
-                // Schrittnummer
                 Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                  ),
-                  alignment: Alignment.center,
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
                   child: Text(
-                    '${widget.stepNumber}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                    abt?.anzeigeName ?? gruppe.first.step.abteilung,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
-
-                // Abteilungsname + Infos
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        abt?.anzeigeName ?? widget.step.abteilung,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      if (widget.step.prozessschritt != null &&
-                          widget.step.prozessschritt!.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.step.prozessschritt!,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.7),
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 4),
-                      _StepInfoRow(step: widget.step),
-                    ],
+                Text(
+                  gruppe.length == 1
+                      ? '1 Maschine'
+                      : '${gruppe.length} Maschinen',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
-
-                // Bearbeiten-Button
-                IconButton(
-                  icon: const Icon(Icons.edit, size: 20),
-                  tooltip: 'Schritt bearbeiten',
-                  onPressed: _openEditor,
-                ),
               ],
             ),
           ),
 
-          const Divider(height: 1),
-
-          // Detail (immer aufgeklappt)
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Anlagen-Info
-                _MaschineInfoRow(step: widget.step),
-                const SizedBox(height: 12),
-
-                // Parameter (Standard readonly, Custom editierbar)
-                _ParameterListe(stepId: widget.step.id),
-              ],
+          // Maschinen-Blöcke (alle ausgeklappt untereinander)
+          for (var i = 0; i < gruppe.length; i++) ...[
+            if (i > 0) const Divider(height: 1),
+            _MaschinenBlock(
+              step: gruppe[i].step,
+              stepNumber: gruppe[i].nummer,
+              onUpdated: onUpdated,
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -539,161 +494,256 @@ class _StepCardState extends ConsumerState<_StepCard> {
 }
 
 // ---------------------------------------------------------------------------
-// Info-Zeile: Personen, Menge, Dauer
+// Maschinen-Block (eine Maschine innerhalb der Abteilungs-Karte)
 // ---------------------------------------------------------------------------
 
-class _StepInfoRow extends StatelessWidget {
-  const _StepInfoRow({required this.step});
+class _MaschinenBlock extends ConsumerStatefulWidget {
+  const _MaschinenBlock({
+    required this.step,
+    required this.stepNumber,
+    required this.onUpdated,
+  });
 
   final ProductStep step;
+  final int stepNumber;
+  final VoidCallback onUpdated;
+
+  @override
+  ConsumerState<_MaschinenBlock> createState() => _MaschinenBlockState();
+}
+
+class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
+  Future<void> _openEditor() async {
+    final geaendert = await StepEditorDialog.show(
+      context,
+      step: widget.step,
+      stepNumber: widget.stepNumber,
+    );
+    if (geaendert) widget.onUpdated();
+  }
+
+  Future<void> _editNumber({
+    required String titel,
+    required double? aktuell,
+    String? suffix,
+    required ProductStepsCompanion Function(double) bauen,
+  }) async {
+    final ctrl = TextEditingController(
+      text: (aktuell != null && aktuell > 0) ? _fmtZahl(aktuell) : '',
+    );
+    final res = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(titel),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Wert',
+            suffixText: suffix,
+            border: const OutlineInputBorder(),
+          ),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    if (res == null) return;
+    final zahl = double.tryParse(res.replaceAll(',', '.')) ?? 0.0;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.productSteps)
+          ..where((s) => s.id.equals(widget.step.id)))
+        .write(bauen(zahl));
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Schritt-Wert geändert',
+        );
+    widget.onUpdated();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = <Widget>[];
+    final theme = Theme.of(context);
+    final s = widget.step;
+    final maschineName = (s.maschine != null && s.maschine!.isNotEmpty)
+        ? s.maschine!
+        : ((s.prozessschritt != null && s.prozessschritt!.isNotEmpty)
+            ? s.prozessschritt!
+            : 'Maschine ${widget.stepNumber}');
+    final zeigeProzess = s.prozessschritt != null &&
+        s.prozessschritt!.isNotEmpty &&
+        s.maschine != null &&
+        s.maschine!.isNotEmpty;
 
-    if (step.basisMitarbeiter > 0) {
-      items.add(
-        _Chip(
-          icon: Icons.person,
-          label: '${step.basisMitarbeiter}',
-        ),
-      );
-    }
-    if (step.basisMengeKg > 0) {
-      items.add(
-        _Chip(
-          icon: Icons.scale,
-          label: '${_formatZahl(step.basisMengeKg)} kg',
-        ),
-      );
-    }
-    if (step.basisDauerMinuten > 0) {
-      items.add(
-        _Chip(
-          icon: Icons.schedule,
-          label: _formatDauer(step.basisDauerMinuten),
-        ),
-      );
-    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Maschinen-Kopf
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.factory, size: 16, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      maschineName,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (zeigeProzess) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        s.prozessschritt!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color:
+                              theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.edit, size: 18),
+                tooltip: 'Maschine/Schritt bearbeiten',
+                visualDensity: VisualDensity.compact,
+                onPressed: _openEditor,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
 
-    if (items.isEmpty) {
-      return Text(
-        'Zeiten nicht gepflegt — auf Bearbeiten tippen',
-        style: TextStyle(
-          fontSize: 12,
-          color: Colors.orange.shade700,
-          fontStyle: FontStyle.italic,
-        ),
-      );
-    }
+          // Editierbare Werte (tippen zum Ändern)
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _EditChip(
+                icon: Icons.person,
+                label: s.basisMitarbeiter > 0 ? '${s.basisMitarbeiter}' : '–',
+                onTap: () => _editNumber(
+                  titel: 'Personen',
+                  aktuell: s.basisMitarbeiter.toDouble(),
+                  bauen: (v) => ProductStepsCompanion(
+                    basisMitarbeiter: Value(v.round() < 1 ? 1 : v.round()),
+                    updatedAt: Value(DateTime.now()),
+                  ),
+                ),
+              ),
+              _EditChip(
+                icon: Icons.scale,
+                label: s.basisMengeKg > 0 ? '${_fmtZahl(s.basisMengeKg)} kg' : 'kg –',
+                onTap: () => _editNumber(
+                  titel: 'Menge (kg)',
+                  aktuell: s.basisMengeKg,
+                  suffix: 'kg',
+                  bauen: (v) => ProductStepsCompanion(
+                    basisMengeKg: Value(v),
+                    mengeKg: Value(v > 0 ? v : null),
+                    updatedAt: Value(DateTime.now()),
+                  ),
+                ),
+              ),
+              _EditChip(
+                icon: Icons.schedule,
+                label: s.basisDauerMinuten > 0
+                    ? _fmtDauer(s.basisDauerMinuten)
+                    : 'Dauer –',
+                onTap: () => _editNumber(
+                  titel: 'Dauer (min)',
+                  aktuell: s.basisDauerMinuten,
+                  suffix: 'min',
+                  bauen: (v) => ProductStepsCompanion(
+                    basisDauerMinuten: Value(v),
+                    updatedAt: Value(DateTime.now()),
+                  ),
+                ),
+              ),
+              _EditChip(
+                icon: Icons.timer_outlined,
+                label: (s.fixZeitMinuten ?? 0) > 0
+                    ? 'fix ${_fmtDauer(s.fixZeitMinuten!)}'
+                    : 'fix –',
+                onTap: () => _editNumber(
+                  titel: 'Fixe Zeit / Durchlauf (min)',
+                  aktuell: s.fixZeitMinuten,
+                  suffix: 'min',
+                  bauen: (v) => ProductStepsCompanion(
+                    fixZeitMinuten: Value(v > 0 ? v : null),
+                    updatedAt: Value(DateTime.now()),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 4,
-      children: items,
+          // Parameter (Standard + Custom, beide editierbar)
+          _ParameterListe(stepId: s.id),
+        ],
+      ),
     );
-  }
-
-  static String _formatZahl(double v) =>
-      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
-
-  static String _formatDauer(double minuten) {
-    if (minuten < 60) return '${minuten.toInt()} min';
-    final h = (minuten / 60).floor();
-    final m = (minuten % 60).round();
-    if (m == 0) return '${h}h';
-    return '${h}h ${m}min';
   }
 }
 
-class _Chip extends StatelessWidget {
-  const _Chip({required this.icon, required this.label});
+// ---------------------------------------------------------------------------
+// Editierbarer Wert-Chip
+// ---------------------------------------------------------------------------
+
+class _EditChip extends StatelessWidget {
+  const _EditChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
 
   final IconData icon;
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: Colors.blueGrey.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13),
-          const SizedBox(width: 4),
-          Text(
-            label,
-            style: const TextStyle(fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Anlagen-Info im Expanded-Bereich
-// ---------------------------------------------------------------------------
-
-class _MaschineInfoRow extends ConsumerWidget {
-  const _MaschineInfoRow({required this.step});
-
-  final ProductStep step;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-
-    if (step.maschineId != null) {
-      final maschineAsync = ref.watch(machineProvider(step.maschineId!));
-      return maschineAsync.when(
-        data: (m) => Row(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.blueGrey.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.factory, size: 16, color: theme.colorScheme.primary),
-            const SizedBox(width: 8),
-            Text('Anlage: ', style: theme.textTheme.bodySmall),
-            Text(
-              m?.name ?? step.maschine ?? '—',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            Icon(icon, size: 13),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 12)),
+            const SizedBox(width: 4),
+            Icon(Icons.edit, size: 11, color: Colors.blueGrey.shade400),
           ],
         ),
-        loading: () => const SizedBox(height: 18),
-        error: (_, __) => const SizedBox.shrink(),
-      );
-    }
-
-    if (step.maschine != null && step.maschine!.isNotEmpty) {
-      return Row(
-        children: [
-          Icon(Icons.factory, size: 16, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
-          Text('Anlage: ', style: theme.textTheme.bodySmall),
-          Text(
-            step.maschine!,
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Text(
-      'Keine Anlage zugeordnet',
-      style: theme.textTheme.bodySmall?.copyWith(
-        fontStyle: FontStyle.italic,
-        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
       ),
     );
   }
 }
+
+String _fmtZahl(double v) =>
+    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
 // ---------------------------------------------------------------------------
 // Parameter-Liste
