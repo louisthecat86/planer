@@ -13,8 +13,8 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month, now.day);
 });
 
-/// Vier-Kachel-Startbildschirm:
-/// Artikel · Planen · Planung ansehen · Einstellungen.
+/// Drei-Kachel-Startbildschirm:
+/// Artikel · Planung · Einstellungen.
 ///
 /// Stammdaten (Excel-Import/-Export, Backup) und die Kapazität liegen
 /// unter „Einstellungen".
@@ -51,23 +51,23 @@ class HomeScreen extends ConsumerWidget {
           _NavigationTile(
             icon: Icons.inventory_2_rounded,
             label: 'Artikel',
-            subtitle: 'Abläufe, Zeiten & Mengen pflegen',
-            color: const Color(0xFF4E342E),
+            subtitle: 'Abläufe, Maschinen, Zeiten & Historie pflegen',
+            color: const Color(0xFF1565C0),
             onTap: () => context.pushNamed('articles'),
           ),
           _NavigationTile(
-            icon: Icons.edit_calendar_rounded,
-            label: 'Planen',
-            subtitle: 'Produktion für Tage/Wochen einplanen',
+            icon: Icons.calendar_view_week_rounded,
+            label: 'Planung',
+            subtitle: 'Produktion einplanen & Woche/Tag im Board',
             color: const Color(0xFF2E7D32),
-            onTap: () => context.pushNamed('boardPlanen'),
+            onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
-            icon: Icons.calendar_view_week_rounded,
-            label: 'Planung ansehen',
-            subtitle: 'Geplante Tage & Wochen im Board',
-            color: const Color(0xFF00838F),
-            onTap: () => context.pushNamed('board'),
+            icon: Icons.history_rounded,
+            label: 'Wochen-Historie',
+            subtitle: 'Archivierte Wochenpläne & Kennzahlen',
+            color: const Color(0xFF00897B),
+            onTap: () => context.pushNamed('wochenHistorie'),
           ),
           _NavigationTile(
             icon: Icons.settings_rounded,
@@ -113,39 +113,53 @@ class _NavigationTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+        child: Ink(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color,
+                Color.alphaBlend(Colors.black.withValues(alpha: 0.20), color),
+              ],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.22),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 30),
                 ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
+                const SizedBox(height: 14),
+                Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -9,6 +9,7 @@ import 'features/articles/article_list_screen.dart';
 import 'features/backup/backup_management_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
+import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -22,9 +23,9 @@ import 'features/shell/home_screen.dart';
 /// der Navigations-Zustand verloren.
 ///
 /// Die App startet auf `/intro` (Intro-Animation). Nach der Animation
-/// geht es zum Vier-Kachel-Home (`/home`): Artikel · Planen ·
-/// Planung ansehen · Einstellungen. Stammdaten/Excel/Backup und die
-/// Kapazität sitzen unter `/settings`.
+/// geht es zum Home (`/home`): Artikel · Planung · Wochen-Historie ·
+/// Einstellungen. Stammdaten/Excel/Backup und die Kapazität sitzen
+/// unter `/settings`.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
@@ -66,6 +67,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'boardPlanen',
         builder: (context, state) =>
             const WeekBoardScreen(oeffnePlanenDirekt: true),
+      ),
+      GoRoute(
+        path: '/history',
+        name: 'wochenHistorie',
+        builder: (context, state) => const WeekSnapshotArchiveScreen(),
       ),
       // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
       GoRoute(
