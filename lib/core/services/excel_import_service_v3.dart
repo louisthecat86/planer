@@ -902,7 +902,10 @@ class ExcelImportServiceV3 {
       );
 
       if (step.maschineName != null && step.maschineName!.isNotEmpty) {
-        if (!bekannteMaschinen.contains(step.maschineName)) {
+        if (_istLeerPlatzhalter(step.maschineName!)) {
+          // Platzhalter wie „—" bedeuten: keine Maschine — keine Warnung.
+          step.maschineName = null;
+        } else if (!bekannteMaschinen.contains(step.maschineName)) {
           warnings.add(
             'Sheet "$sheetName" ($artikelnummer): '
             'Schritt $col: Anlage "${step.maschineName}" nicht im '
@@ -1090,6 +1093,18 @@ class ExcelImportServiceV3 {
   }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  /// Platzhalter, die „keine Maschine" bedeuten (z. B. „—" in der Anlagen-Zeile).
+  static bool _istLeerPlatzhalter(String s) {
+    final t = s.trim();
+    return t.isEmpty ||
+        t == '—' ||
+        t == '–' ||
+        t == '-' ||
+        t == '--' ||
+        t == '/' ||
+        t == '.';
+  }
 
   /// Sichere Zeilen-Auswahl: liefert eine leere Zeile, wenn das Label fehlt
   /// (idx == null) oder außerhalb des Bereichs liegt. Verhindert `rows[-1]`

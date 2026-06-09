@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -123,11 +125,13 @@ class ProduktionPlanerApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
+    // Windows-Build fest im Dunkelmodus; andere Plattformen folgen dem System.
+    final themeMode = Platform.isWindows ? ThemeMode.dark : ThemeMode.system;
     return MaterialApp.router(
       title: 'Produktion Planer',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
-      themeMode: ThemeMode.system,
+      themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
     );

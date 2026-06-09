@@ -115,6 +115,20 @@ class BratstrasseSchema extends StatelessWidget {
     );
   }
 
+  Future<void> _setzeAlle(BuildContext context, bool oben) async {
+    final res = await _ZahlDialog.show(
+      context,
+      titel: 'Alle Platten ${oben ? "oben" : "unten"} (°C)',
+      aktuell: null,
+    );
+    if (res == null) return; // abgebrochen
+    final anzahl = (oben ? werte.oben : werte.unten).length;
+    final liste = List<double?>.filled(anzahl, res.wert);
+    onChanged(
+      oben ? werte.copyWith(oben: liste) : werte.copyWith(unten: liste),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -144,13 +158,13 @@ class BratstrasseSchema extends StatelessWidget {
               ),
               const Spacer(),
               Icon(
-                Icons.arrow_forward,
+                Icons.arrow_back,
                 size: 13,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
               ),
               const SizedBox(width: 4),
               Text(
-                'Laufrichtung',
+                'Laufrichtung: rechts → links',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
                 ),
@@ -163,6 +177,7 @@ class BratstrasseSchema extends StatelessWidget {
               label: 'oben',
               werte: werte.oben,
               onTap: (i) => _bearbeite(context, true, i),
+              onSetAll: () => _setzeAlle(context, true),
             ),
             const SizedBox(height: 6),
             _BandBalken(),
@@ -172,6 +187,7 @@ class BratstrasseSchema extends StatelessWidget {
             label: 'unten',
             werte: werte.unten,
             onTap: (i) => _bearbeite(context, false, i),
+            onSetAll: () => _setzeAlle(context, false),
           ),
         ],
       ),
@@ -180,16 +196,19 @@ class BratstrasseSchema extends StatelessWidget {
 }
 
 /// Eine Zonen-Reihe (Platten oben oder unten) mit antippbaren Zellen.
+/// Anzeige rechts→links (Laufrichtung); „Alle"-Knopf setzt die ganze Reihe.
 class _ZonenReihe extends StatelessWidget {
   const _ZonenReihe({
     required this.label,
     required this.werte,
     required this.onTap,
+    required this.onSetAll,
   });
 
   final String label;
   final List<double?> werte;
   final void Function(int) onTap;
+  final VoidCallback onSetAll;
 
   @override
   Widget build(BuildContext context) {
@@ -198,31 +217,66 @@ class _ZonenReihe extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 48,
-          child: Padding(
-            padding: const EdgeInsets.only(top: 6),
-            child: Text(
-              'Platten\n$label',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                height: 1.1,
+          width: 60,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Platten\n$label',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    height: 1.1,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(height: 2),
+              InkWell(
+                onTap: onSetAll,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.format_color_fill,
+                        size: 12,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 2),
+                      Text(
+                        'Alle',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
         const SizedBox(width: 8),
+        // Zellen rechts→links: Zone 1 (Einlauf) rechts, höchste Zone links.
         Expanded(
-          child: Wrap(
-            spacing: 4,
-            runSpacing: 4,
-            children: [
-              for (var i = 0; i < werte.length; i++)
-                _ZonenZelle(
-                  index: i,
-                  wert: werte[i],
-                  onTap: () => onTap(i),
-                ),
-            ],
+          child: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Wrap(
+              spacing: 4,
+              runSpacing: 4,
+              children: [
+                for (var i = 0; i < werte.length; i++)
+                  _ZonenZelle(
+                    index: i,
+                    wert: werte[i],
+                    onTap: () => onTap(i),
+                  ),
+              ],
+            ),
           ),
         ),
       ],
