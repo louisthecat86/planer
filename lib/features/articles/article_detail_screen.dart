@@ -1,15 +1,39 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import 'article_info_editor_dialog.dart';
+import 'bratstrasse_schema.dart';
 import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
 import 'step_editor_dialog.dart';
+
+// ---------------------------------------------------------------------------
+// Plattentemperatur-Schema: Konstanten + Helfer
+// ---------------------------------------------------------------------------
+
+/// dbValue der Abteilung Bratstraße (Schema nur dort anbieten).
+const String kAbteilungBratstrasseDb = 'bratstrasse';
+
+/// Marker-Parameter: welcher Schema-Typ am Schritt aktiv ist
+/// ('bratstrasse' | 'kombiofen' | leer).
+const String kPlattenSchemaParam = 'Plattenschema';
+
+/// Excel-Gruppen, in die die Zonen-Parameter geschrieben werden.
+const String kPlattenGruppeBrat = 'BRATSTRASSE';
+const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
+
+final RegExp _kZonenRegExp = RegExp(r'^Platte (Oben|Unten) \d+$');
+
+/// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
+/// normalen Parameter-Liste auftauchen sollen.
+bool istVerstecktesPlattenParam(String name) =>
+    name == kPlattenSchemaParam || _kZonenRegExp.hasMatch(name);
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -1111,9 +1135,247 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
           const SizedBox(height: 12),
 
+          // Plattentemperatur-Schema (nur in der Abteilung Bratstraße)
+          if (s.abteilung == kAbteilungBratstrasseDb) ...[
+            _PlattenSchemaBereich(step: s, onUpdated: widget.onUpdated),
+            const SizedBox(height: 12),
+          ],
+
           // Parameter (Standard + Custom, beide editierbar)
           _ParameterListe(stepId: s.id),
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Plattentemperatur-Schema-Bereich (Typ-Auswahl + Schema, speichert als
+// benannte Parameter „Platte Oben/Unten N")
+// ---------------------------------------------------------------------------
+
+class _PlattenSchemaBereich extends ConsumerWidget {
+  const _PlattenSchemaBereich({required this.step, required this.onUpdated});
+
+  final ProductStep step;
+  final VoidCallback onUpdated;
+
+  static ProductStepParameter? _find(
+    List<ProductStepParameter> params,
+    String name,
+  ) {
+    for (final p in params) {
+      if (p.parameterName == name) return p;
+    }
+    return null;
+  }
+
+  static String _zahlText(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
+
+  BratschemaTyp? _typVon(String? wert) {
+    switch (wert) {
+      case 'bratstrasse':
+        return BratschemaTyp.bratstrasse;
+      case 'kombiofen':
+        return BratschemaTyp.kombiofen;
+      default:
+        return null;
+    }
+  }
+
+  String _gruppeVon(BratschemaTyp typ) =>
+      typ == BratschemaTyp.kombiofen ? kPlattenGruppeKombi : kPlattenGruppeBrat;
+
+  PlattenTemperaturen _leseWerte(
+    List<ProductStepParameter> params,
+    BratschemaTyp typ,
+  ) {
+    final leer = PlattenTemperaturen.leer(typ);
+    double? wertVon(String name) {
+      final w = _find(params, name)?.wert;
+      if (w == null || w.trim().isEmpty) return null;
+      return double.tryParse(w.replaceAll(',', '.'));
+    }
+
+    final oben = [
+      for (var i = 0; i < leer.oben.length; i++) wertVon('Platte Oben ${i + 1}'),
+    ];
+    final unten = [
+      for (var i = 0; i < leer.unten.length; i++)
+        wertVon('Platte Unten ${i + 1}'),
+    ];
+    return PlattenTemperaturen(oben: oben, unten: unten);
+  }
+
+  Future<void> _upsert(
+    WidgetRef ref,
+    List<ProductStepParameter> params,
+    String name,
+    String gruppe,
+    String? wert,
+  ) async {
+    final db = ref.read(databaseProvider);
+    final vorhanden = _find(params, name);
+    if (vorhanden != null) {
+      await (db.update(db.productStepParameters)
+            ..where((p) => p.id.equals(vorhanden.id)))
+          .write(
+        ProductStepParametersCompanion(
+          wert: Value(wert),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    } else {
+      await db.into(db.productStepParameters).insert(
+            ProductStepParametersCompanion(
+              id: Value(const Uuid().v4()),
+              stepId: Value(step.id),
+              parameterGruppe: Value(gruppe),
+              parameterName: Value(name),
+              wert: Value(wert),
+              reihenfolge: const Value(100),
+              istCustom: const Value(false),
+            ),
+          );
+    }
+  }
+
+  Future<void> _setzeTyp(
+    WidgetRef ref,
+    List<ProductStepParameter> params,
+    String? v,
+  ) async {
+    final wert = (v == null || v == 'keine') ? null : v;
+    await _upsert(
+      ref,
+      params,
+      kPlattenSchemaParam,
+      kPlattenGruppeBrat,
+      wert,
+    );
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Plattenschema geändert',
+        );
+    ref.invalidate(stepParametersProvider(step.id));
+    onUpdated();
+  }
+
+  Future<void> _speichereWerte(
+    WidgetRef ref,
+    List<ProductStepParameter> params,
+    BratschemaTyp typ,
+    PlattenTemperaturen neu,
+  ) async {
+    final gruppe = _gruppeVon(typ);
+    final alt = _leseWerte(params, typ);
+    for (var i = 0; i < neu.oben.length; i++) {
+      if (neu.oben[i] != alt.oben[i]) {
+        await _upsert(
+          ref,
+          params,
+          'Platte Oben ${i + 1}',
+          gruppe,
+          neu.oben[i] == null ? null : _zahlText(neu.oben[i]!),
+        );
+      }
+    }
+    for (var i = 0; i < neu.unten.length; i++) {
+      if (neu.unten[i] != alt.unten[i]) {
+        await _upsert(
+          ref,
+          params,
+          'Platte Unten ${i + 1}',
+          gruppe,
+          neu.unten[i] == null ? null : _zahlText(neu.unten[i]!),
+        );
+      }
+    }
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Plattentemperatur geändert',
+        );
+    ref.invalidate(stepParametersProvider(step.id));
+    onUpdated();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final paramsAsync = ref.watch(stepParametersProvider(step.id));
+
+    return paramsAsync.when(
+      data: (params) {
+        final typ = _typVon(_find(params, kPlattenSchemaParam)?.wert);
+        final auswahl = typ == null
+            ? 'keine'
+            : (typ == BratschemaTyp.kombiofen ? 'kombiofen' : 'bratstrasse');
+
+        return Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHighest
+                .withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'Plattentemperaturen',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.4,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const Spacer(),
+                  DropdownButton<String>(
+                    value: auswahl,
+                    isDense: true,
+                    underline: const SizedBox.shrink(),
+                    items: const [
+                      DropdownMenuItem(value: 'keine', child: Text('Keine')),
+                      DropdownMenuItem(
+                        value: 'bratstrasse',
+                        child: Text('Bratstraße (10+10)'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'kombiofen',
+                        child: Text('Kombiofen (12 unten)'),
+                      ),
+                    ],
+                    onChanged: (v) => _setzeTyp(ref, params, v),
+                  ),
+                ],
+              ),
+              if (typ != null) ...[
+                const SizedBox(height: 8),
+                BratstrasseSchema(
+                  typ: typ,
+                  werte: _leseWerte(params, typ),
+                  onChanged: (neu) =>
+                      _speichereWerte(ref, params, typ, neu),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 24,
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      error: (e, _) => Text(
+        'Schema-Fehler: $e',
+        style: const TextStyle(color: Colors.red, fontSize: 12),
       ),
     );
   }
@@ -1318,7 +1580,10 @@ class _ParameterListe extends ConsumerWidget {
     final paramsAsync = ref.watch(stepParametersProvider(stepId));
 
     return paramsAsync.when(
-      data: (params) {
+      data: (alleParams) {
+        final params = alleParams
+            .where((p) => !istVerstecktesPlattenParam(p.parameterName))
+            .toList();
         final standardParams = params.where((p) => !p.istCustom).toList();
         final customParams = params.where((p) => p.istCustom).toList();
 
