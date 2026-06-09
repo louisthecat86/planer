@@ -1187,6 +1187,24 @@ class _PlattenSchemaBereich extends ConsumerWidget {
   String _gruppeVon(BratschemaTyp typ) =>
       typ == BratschemaTyp.kombiofen ? kPlattenGruppeKombi : kPlattenGruppeBrat;
 
+  /// Ermittelt den aktiven Schema-Typ: expliziter Marker hat Vorrang
+  /// ('keine' = bewusst aus); sonst aus vorhandenen Zonen-Parametern
+  /// abgeleitet — wichtig nach einem Excel-Re-Import, der den Marker entfernt.
+  BratschemaTyp? _ermittleTyp(List<ProductStepParameter> params) {
+    final markerWert = _find(params, kPlattenSchemaParam)?.wert;
+    if (markerWert == 'keine') return null;
+    final marker = _typVon(markerWert);
+    if (marker != null) return marker;
+    bool hat(RegExp re) => params.any(
+          (p) =>
+              re.hasMatch(p.parameterName) &&
+              (p.wert?.trim().isNotEmpty ?? false),
+        );
+    if (hat(RegExp(r'^Platte Oben \d+$'))) return BratschemaTyp.bratstrasse;
+    if (hat(RegExp(r'^Platte Unten \d+$'))) return BratschemaTyp.kombiofen;
+    return null;
+  }
+
   PlattenTemperaturen _leseWerte(
     List<ProductStepParameter> params,
     BratschemaTyp typ,
@@ -1246,7 +1264,7 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     List<ProductStepParameter> params,
     String? v,
   ) async {
-    final wert = (v == null || v == 'keine') ? null : v;
+    final wert = v ?? 'keine';
     await _upsert(
       ref,
       params,
@@ -1305,7 +1323,7 @@ class _PlattenSchemaBereich extends ConsumerWidget {
 
     return paramsAsync.when(
       data: (params) {
-        final typ = _typVon(_find(params, kPlattenSchemaParam)?.wert);
+        final typ = _ermittleTyp(params);
         final auswahl = typ == null
             ? 'keine'
             : (typ == BratschemaTyp.kombiofen ? 'kombiofen' : 'bratstrasse');
