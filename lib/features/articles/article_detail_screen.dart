@@ -466,6 +466,26 @@ class _AbteilungsKarte extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (abt != null) ...[
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      abt.kurzcode,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 Text(
                   gruppe.length == 1
                       ? '1 Maschine'
@@ -628,64 +648,73 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
           const SizedBox(height: 8),
 
-          // Editierbare Werte (tippen zum Ändern)
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+          // Editierbare Werte als ruhige, gleichmäßige Leiste
+          Row(
             children: [
-              _EditChip(
-                icon: Icons.person,
-                label: s.basisMitarbeiter > 0 ? '${s.basisMitarbeiter}' : '–',
-                onTap: () => _editNumber(
-                  titel: 'Personen',
-                  aktuell: s.basisMitarbeiter.toDouble(),
-                  bauen: (v) => ProductStepsCompanion(
-                    basisMitarbeiter: Value(v.round() < 1 ? 1 : v.round()),
-                    updatedAt: Value(DateTime.now()),
+              Expanded(
+                child: _WertFeld(
+                  label: 'Personen',
+                  wert: s.basisMitarbeiter > 0 ? '${s.basisMitarbeiter}' : '–',
+                  onTap: () => _editNumber(
+                    titel: 'Personen',
+                    aktuell: s.basisMitarbeiter.toDouble(),
+                    bauen: (v) => ProductStepsCompanion(
+                      basisMitarbeiter: Value(v.round() < 1 ? 1 : v.round()),
+                      updatedAt: Value(DateTime.now()),
+                    ),
                   ),
                 ),
               ),
-              _EditChip(
-                icon: Icons.scale,
-                label: s.basisMengeKg > 0 ? '${_fmtZahl(s.basisMengeKg)} kg' : 'kg –',
-                onTap: () => _editNumber(
-                  titel: 'Menge (kg)',
-                  aktuell: s.basisMengeKg,
-                  suffix: 'kg',
-                  bauen: (v) => ProductStepsCompanion(
-                    basisMengeKg: Value(v),
-                    mengeKg: Value(v > 0 ? v : null),
-                    updatedAt: Value(DateTime.now()),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _WertFeld(
+                  label: 'Menge',
+                  wert: s.basisMengeKg > 0 ? '${_fmtZahl(s.basisMengeKg)} kg' : '–',
+                  onTap: () => _editNumber(
+                    titel: 'Menge (kg)',
+                    aktuell: s.basisMengeKg,
+                    suffix: 'kg',
+                    bauen: (v) => ProductStepsCompanion(
+                      basisMengeKg: Value(v),
+                      mengeKg: Value(v > 0 ? v : null),
+                      updatedAt: Value(DateTime.now()),
+                    ),
                   ),
                 ),
               ),
-              _EditChip(
-                icon: Icons.schedule,
-                label: s.basisDauerMinuten > 0
-                    ? _fmtDauer(s.basisDauerMinuten)
-                    : 'Dauer –',
-                onTap: () => _editNumber(
-                  titel: 'Dauer (min)',
-                  aktuell: s.basisDauerMinuten,
-                  suffix: 'min',
-                  bauen: (v) => ProductStepsCompanion(
-                    basisDauerMinuten: Value(v),
-                    updatedAt: Value(DateTime.now()),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _WertFeld(
+                  label: 'Dauer',
+                  wert: s.basisDauerMinuten > 0
+                      ? _fmtDauer(s.basisDauerMinuten)
+                      : '–',
+                  onTap: () => _editNumber(
+                    titel: 'Dauer (min)',
+                    aktuell: s.basisDauerMinuten,
+                    suffix: 'min',
+                    bauen: (v) => ProductStepsCompanion(
+                      basisDauerMinuten: Value(v),
+                      updatedAt: Value(DateTime.now()),
+                    ),
                   ),
                 ),
               ),
-              _EditChip(
-                icon: Icons.timer_outlined,
-                label: (s.fixZeitMinuten ?? 0) > 0
-                    ? 'fix ${_fmtDauer(s.fixZeitMinuten!)}'
-                    : 'fix –',
-                onTap: () => _editNumber(
-                  titel: 'Fixe Zeit / Durchlauf (min)',
-                  aktuell: s.fixZeitMinuten,
-                  suffix: 'min',
-                  bauen: (v) => ProductStepsCompanion(
-                    fixZeitMinuten: Value(v > 0 ? v : null),
-                    updatedAt: Value(DateTime.now()),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _WertFeld(
+                  label: 'Fixe Zeit',
+                  wert: (s.fixZeitMinuten ?? 0) > 0
+                      ? _fmtDauer(s.fixZeitMinuten!)
+                      : '–',
+                  onTap: () => _editNumber(
+                    titel: 'Fixe Zeit / Durchlauf (min)',
+                    aktuell: s.fixZeitMinuten,
+                    suffix: 'min',
+                    bauen: (v) => ProductStepsCompanion(
+                      fixZeitMinuten: Value(v > 0 ? v : null),
+                      updatedAt: Value(DateTime.now()),
+                    ),
                   ),
                 ),
               ),
@@ -702,39 +731,64 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
 }
 
 // ---------------------------------------------------------------------------
-// Editierbarer Wert-Chip
+// Werte-Feld (Label oben, Wert unten — antippbar zum Bearbeiten)
 // ---------------------------------------------------------------------------
 
-class _EditChip extends StatelessWidget {
-  const _EditChip({
-    required this.icon,
+class _WertFeld extends StatelessWidget {
+  const _WertFeld({
     required this.label,
+    required this.wert,
     required this.onTap,
   });
 
-  final IconData icon;
   final String label;
+  final String wert;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: Colors.blueGrey.withValues(alpha: 0.12),
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 13),
-            const SizedBox(width: 4),
-            Text(label, style: const TextStyle(fontSize: 12)),
-            const SizedBox(width: 4),
-            Icon(Icons.edit, size: 11, color: Colors.blueGrey.shade400),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Icon(
+                  Icons.edit,
+                  size: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              wert,
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ],
         ),
       ),
