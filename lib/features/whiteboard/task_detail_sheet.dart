@@ -292,42 +292,59 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 ),
               ),
 
-              // Titel
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: abt.farbe,
-                    child: Text(
-                      abt.kurzcode,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
+              // Kopf — Abteilungs-Farbband mit Kurzcode (einheitliche Kartensprache)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: abt.farbe.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: abt.farbe,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        abt.kurzcode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          letterSpacing: 0.5,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.wbTask.produktName,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.wbTask.produktName,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        Text(
-                          '${widget.wbTask.artikelnummer} · ${abt.anzeigeName}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: colors.onSurfaceVariant,
+                          const SizedBox(height: 2),
+                          Text(
+                            '${widget.wbTask.artikelnummer} · ${abt.anzeigeName}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               const SizedBox(height: 20),
@@ -500,8 +517,8 @@ class _HistoryInfoBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(10),
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
