@@ -58,6 +58,16 @@ final machineProvider =
       .getSingleOrNull();
 });
 
+/// Lädt alle angelegten Maschinen (Produktionsmittel-Katalog), nach Name
+/// sortiert. Basis für die Produktionsmittel-Sidebar.
+final alleMaschinenProvider = FutureProvider<List<Machine>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  return (db.select(db.machines)
+        ..where((m) => m.deletedAt.isNull())
+        ..orderBy([(m) => OrderingTerm.asc(m.name)]))
+      .get();
+});
+
 /// Lädt die historischen Produktionen eines Artikels (neueste zuerst).
 final productionHistoryProvider =
     FutureProvider.family<List<ProductionHistoryData>, String>(
@@ -327,20 +337,7 @@ class _StepsList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (steps.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(24),
-          child: Text(
-            'Keine Produktionsschritte vorhanden.\n\n'
-            'Importiere eine Excel-Vorlage oder füge Schritte '
-            'manuell hinzu.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
-          ),
-        ),
-      );
-    }
+    final theme = Theme.of(context);
 
     // Aufeinanderfolgende Schritte derselben Abteilung zu EINER Karte bündeln
     // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → eine Karte).
@@ -365,46 +362,386 @@ class _StepsList extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Ab ~700px zwei Spalten, darunter einspaltig (Telefon).
-        final zweiSpaltig = constraints.maxWidth >= 700;
+        // Ab ~900px: feste Produktionsmittel-Sidebar links.
+        final mitSidebar = constraints.maxWidth >= 900;
 
-        if (!zweiSpaltig) {
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: karten,
+        if (mitSidebar) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              SizedBox(
+                width: 236,
+                child: ColoredBox(
+                  color: theme.colorScheme.surfaceContainerHighest
+                      .withValues(alpha: 0.35),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: _ProduktionsmittelKatalog(productId: productId),
+                  ),
+                ),
+              ),
+              const VerticalDivider(width: 1),
+              Expanded(child: _kartenBereich(false, karten)),
+            ],
           );
         }
 
-        // Karten abwechselnd auf zwei Spalten verteilen — so behält jede
-        // Karte ihre natürliche Höhe (kein Abschneiden bei vielen Parametern).
-        final links = <Widget>[];
-        final rechts = <Widget>[];
-        for (var i = 0; i < karten.length; i++) {
-          (i.isEven ? links : rechts).add(karten[i]);
-        }
+        // Schmaler: „+ Produktionsmittel"-Button oben, dann die Karten.
+        final zweiSpaltig = constraints.maxWidth >= 700;
+        return Column(
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: _ProduktionsmittelButton(productId: productId),
+              ),
+            ),
+            Expanded(child: _kartenBereich(zweiSpaltig, karten)),
+          ],
+        );
+      },
+    );
+  }
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: links,
+  /// Karten-Bereich: leerer Hinweis, einspaltig oder zweispaltig verteilt.
+  Widget _kartenBereich(bool zweiSpaltig, List<Widget> karten) {
+    if (karten.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Noch keine Produktionsschritte.\n\n'
+            'Füge ein Produktionsmittel hinzu oder importiere eine '
+            'Excel-Vorlage.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    if (!zweiSpaltig) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: karten,
+      );
+    }
+
+    // Zwei Spalten — jede Karte behält ihre natürliche Höhe.
+    final links = <Widget>[];
+    final rechts = <Widget>[];
+    for (var i = 0; i < karten.length; i++) {
+      (i.isEven ? links : rechts).add(karten[i]);
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: links,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rechts,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Produktionsmittel-Katalog (Sidebar / Sheet)
+// ---------------------------------------------------------------------------
+
+/// Listet alle angelegten Maschinen, nach Abteilung gruppiert. Tippen legt
+/// einen Prozess-Schritt mit dieser Maschine an (Editor öffnet vorausgewählt).
+/// Häkchen = bereits im Prozess, Plus = noch nicht.
+class _ProduktionsmittelKatalog extends ConsumerWidget {
+  const _ProduktionsmittelKatalog({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final maschinenAsync = ref.watch(alleMaschinenProvider);
+    final steps = ref.watch(productStepsProvider(productId)).valueOrNull ??
+        const <ProductStep>[];
+    final imProzess =
+        steps.map((s) => s.maschineId).whereType<String>().toSet();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.precision_manufacturing,
+              size: 16,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+            const SizedBox(width: 6),
+            Text(
+              'Produktionsmittel',
+              style: theme.textTheme.titleSmall
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Tippen, um es dem Prozess hinzuzufügen.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+          ),
+        ),
+        const SizedBox(height: 10),
+        maschinenAsync.when(
+          data: (maschinen) {
+            if (maschinen.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'Noch keine Maschinen angelegt.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
                 ),
+              );
+            }
+
+            final byAbt = <String, List<Machine>>{};
+            for (final m in maschinen) {
+              byAbt.putIfAbsent(m.abteilung, () => []).add(m);
+            }
+
+            final zeilen = <Widget>[];
+            final bekannt = <String>{};
+            for (final abt in Abteilung.values) {
+              final liste = byAbt[abt.dbValue];
+              if (liste == null || liste.isEmpty) continue;
+              bekannt.add(abt.dbValue);
+              zeilen.add(_KatalogGruppe(abt: abt));
+              for (final m in liste) {
+                zeilen.add(
+                  _KatalogZeile(
+                    farbe: abt.farbe,
+                    name: m.name,
+                    imProzess: imProzess.contains(m.id),
+                    onTap: () => _hinzufuegen(context, ref, m, steps.length),
+                  ),
+                );
+              }
+            }
+
+            // Maschinen mit unbekannter Abteilung ans Ende.
+            final rest =
+                maschinen.where((m) => !bekannt.contains(m.abteilung)).toList();
+            if (rest.isNotEmpty) {
+              zeilen.add(const _KatalogGruppe());
+              for (final m in rest) {
+                zeilen.add(
+                  _KatalogZeile(
+                    farbe: theme.colorScheme.outline,
+                    name: m.name,
+                    imProzess: imProzess.contains(m.id),
+                    onTap: () => _hinzufuegen(context, ref, m, steps.length),
+                  ),
+                );
+              }
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: zeilen,
+            );
+          },
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: rechts,
-                ),
+            ),
+          ),
+          error: (e, _) => Text(
+            'Fehler: $e',
+            style: const TextStyle(color: Colors.red, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _hinzufuegen(
+    BuildContext context,
+    WidgetRef ref,
+    Machine m,
+    int anzahlSchritte,
+  ) async {
+    final ok = await StepEditorDialog.show(
+      context,
+      productId: productId,
+      startMaschine: m,
+      stepNumber: anzahlSchritte + 1,
+    );
+    if (ok) ref.invalidate(productStepsProvider(productId));
+  }
+}
+
+/// Gruppen-Überschrift im Katalog (Abteilung oder „Weitere" bei abt == null).
+class _KatalogGruppe extends StatelessWidget {
+  const _KatalogGruppe({this.abt});
+
+  final Abteilung? abt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = abt?.farbe ?? theme.colorScheme.outline;
+    final name = abt?.anzeigeName ?? 'Weitere';
+    return Padding(
+      padding: const EdgeInsets.only(top: 10, bottom: 2),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: farbe, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            name,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Maschinen-Zeile im Katalog — tippen fügt sie dem Prozess hinzu.
+class _KatalogZeile extends StatelessWidget {
+  const _KatalogZeile({
+    required this.farbe,
+    required this.name,
+    required this.imProzess,
+    required this.onTap,
+  });
+
+  final Color farbe;
+  final String name;
+  final bool imProzess;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: farbe, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                name,
+                style: theme.textTheme.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
+            ),
+            const SizedBox(width: 6),
+            Icon(
+              imProzess ? Icons.check_circle : Icons.add_circle_outline,
+              size: 16,
+              color: imProzess
+                  ? Colors.green.shade600
+                  : theme.colorScheme.primary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Button (schmale Screens) — öffnet den Katalog als Bottom-Sheet.
+class _ProduktionsmittelButton extends StatelessWidget {
+  const _ProduktionsmittelButton({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () {
+        final container = ProviderScope.containerOf(context);
+        showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          showDragHandle: true,
+          shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          builder: (_) => UncontrolledProviderScope(
+            container: container,
+            child: _ProduktionsmittelSheet(productId: productId),
           ),
         );
       },
+      icon: const Icon(Icons.add, size: 18),
+      label: const Text('Produktionsmittel'),
+    );
+  }
+}
+
+/// Inhalt des Produktionsmittel-Bottom-Sheets.
+class _ProduktionsmittelSheet extends StatelessWidget {
+  const _ProduktionsmittelSheet({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding:
+          EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.7,
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: _ProduktionsmittelKatalog(productId: productId),
+        ),
+      ),
     );
   }
 }
