@@ -879,6 +879,51 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
     if (geaendert) widget.onUpdated();
   }
 
+  Future<void> _loescheSchritt() async {
+    final name = (widget.step.maschine != null &&
+            widget.step.maschine!.isNotEmpty)
+        ? widget.step.maschine!
+        : 'Dieser Schritt';
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aus Prozess entfernen?'),
+        content: Text(
+          '„$name" wird aus dem Prozess dieses Artikels entfernt. '
+          'Die Maschine selbst bleibt erhalten und kann jederzeit wieder '
+          'hinzugefügt werden.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Entfernen'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+    final db = ref.read(databaseProvider);
+    await (db.update(db.productSteps)
+          ..where((s) => s.id.equals(widget.step.id)))
+        .write(
+      ProductStepsCompanion(
+        deletedAt: Value(DateTime.now()),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Schritt aus Prozess entfernt',
+        );
+    widget.onUpdated();
+  }
+
   Future<void> _editNumber({
     required String titel,
     required double? aktuell,
@@ -980,6 +1025,13 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
                 tooltip: 'Maschine/Schritt bearbeiten',
                 visualDensity: VisualDensity.compact,
                 onPressed: _openEditor,
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 18),
+                tooltip: 'Aus Prozess entfernen',
+                visualDensity: VisualDensity.compact,
+                color: theme.colorScheme.error,
+                onPressed: _loescheSchritt,
               ),
             ],
           ),
