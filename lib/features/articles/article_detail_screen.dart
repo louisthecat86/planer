@@ -1037,16 +1037,11 @@ class _StandardGruppenBlock extends StatelessWidget {
             children: [
               Text(
                 gruppenName,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.primary,
+                  letterSpacing: 0.4,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Icons.edit_outlined,
-                size: 12,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ],
           ),
@@ -1083,11 +1078,9 @@ class _CustomGruppenBlock extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: Colors.amber.withValues(alpha: 0.08),
+        color:
+            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: Colors.amber.withValues(alpha: 0.4),
-        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1096,9 +1089,10 @@ class _CustomGruppenBlock extends StatelessWidget {
             children: [
               Text(
                 'Zusätzliche Parameter',
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.labelSmall?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: Colors.orange.shade800,
+                  letterSpacing: 0.4,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
               const Spacer(),
