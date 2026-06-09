@@ -50,6 +50,7 @@ class StepEditorDialog extends ConsumerStatefulWidget {
     this.step,
     this.stepNumber,
     this.productId,
+    this.startMaschine,
   }) : assert(
           step != null || productId != null,
           'Entweder step (Edit-Modus) oder productId (Insert-Modus) muss '
@@ -68,6 +69,10 @@ class StepEditorDialog extends ConsumerStatefulWidget {
   /// Produkt-ID, für die ein neuer Schritt angelegt wird.
   /// Im Edit-Modus ignoriert (kommt aus [step]).
   final String? productId;
+
+  /// Optional im Insert-Modus: vorausgewählte Maschine (z. B. aus der
+  /// Produktionsmittel-Sidebar). Belegt Abteilung + Maschine vor.
+  final Machine? startMaschine;
 
   bool get _isInsertMode => step == null;
 
@@ -92,6 +97,7 @@ class StepEditorDialog extends ConsumerStatefulWidget {
     ProductStep? step,
     int? stepNumber,
     String? productId,
+    Machine? startMaschine,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -100,6 +106,7 @@ class StepEditorDialog extends ConsumerStatefulWidget {
         step: step,
         stepNumber: stepNumber,
         productId: productId,
+        startMaschine: startMaschine,
       ),
     );
     return result ?? false;
@@ -156,9 +163,10 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       );
     } else {
       // Insert-Modus: leere Felder mit sinnvollen Defaults
-      _abteilungDbValue = Abteilung.values.first.dbValue;
+      final start = widget.startMaschine;
+      _abteilungDbValue = start?.abteilung ?? Abteilung.values.first.dbValue;
       _prozessschrittCtrl = TextEditingController();
-      _maschineId = null;
+      _maschineId = start?.id;
       _personenCtrl = TextEditingController(text: '1');
       _mengeCtrl = TextEditingController();
       _dauerMinCtrl = TextEditingController();
