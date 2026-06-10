@@ -539,7 +539,7 @@ class _StepsList extends ConsumerWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 236,
+                width: 212,
                 child: ColoredBox(
                   color: theme.colorScheme.surfaceContainerHighest
                       .withValues(alpha: 0.35),
@@ -695,63 +695,47 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
         const SizedBox(height: 10),
         maschinenAsync.when(
           data: (maschinen) {
-            if (maschinen.isEmpty) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Noch keine Maschinen angelegt.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              );
-            }
-
             final byAbt = <String, List<Machine>>{};
             for (final m in maschinen) {
               byAbt.putIfAbsent(m.abteilung, () => []).add(m);
             }
 
-            final zeilen = <Widget>[];
+            final gruppen = <Widget>[];
             final bekannt = <String>{};
             for (final abt in Abteilung.values) {
-              final liste = byAbt[abt.dbValue];
-              if (liste == null || liste.isEmpty) continue;
+              final liste = byAbt[abt.dbValue] ?? const <Machine>[];
               bekannt.add(abt.dbValue);
-              zeilen.add(_KatalogGruppe(abt: abt));
-              for (final m in liste) {
-                zeilen.add(
-                  _KatalogZeile(
-                    farbe: abt.farbe,
-                    name: m.name,
-                    imProzess: imProzess.contains(m.id),
-                    onTap: () => _hinzufuegen(context, ref, m, steps.length),
-                  ),
-                );
-              }
+              gruppen.add(
+                _KatalogAbteilung(
+                  abt: abt,
+                  maschinen: liste,
+                  imProzess: imProzess,
+                  onTapMaschine: (m) =>
+                      _hinzufuegen(context, ref, m, steps.length),
+                  onNeueAnlage: () => _neueAnlage(context, ref, abt),
+                ),
+              );
             }
 
             // Maschinen mit unbekannter Abteilung ans Ende.
             final rest =
                 maschinen.where((m) => !bekannt.contains(m.abteilung)).toList();
             if (rest.isNotEmpty) {
-              zeilen.add(const _KatalogGruppe());
-              for (final m in rest) {
-                zeilen.add(
-                  _KatalogZeile(
-                    farbe: theme.colorScheme.outline,
-                    name: m.name,
-                    imProzess: imProzess.contains(m.id),
-                    onTap: () => _hinzufuegen(context, ref, m, steps.length),
-                  ),
-                );
-              }
+              gruppen.add(
+                _KatalogAbteilung(
+                  abt: null,
+                  maschinen: rest,
+                  imProzess: imProzess,
+                  onTapMaschine: (m) =>
+                      _hinzufuegen(context, ref, m, steps.length),
+                  onNeueAnlage: null,
+                ),
+              );
             }
 
             return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: zeilen,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: gruppen,
             );
           },
           loading: () => const Padding(
@@ -787,39 +771,234 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
     );
     if (ok) ref.invalidate(productStepsProvider(productId));
   }
+
+  /// Legt eine neue Anlage in der gewählten Abteilung an.
+  ///
+  /// Sie steht danach sofort im Katalog und wird beim nächsten
+  /// Excel-Export automatisch in den Anlagen-Katalog der Vorlage
+  /// eingetragen (inkl. Abteilung).
+  Future<void> _neueAnlage(
+    BuildContext context,
+    WidgetRef ref,
+    Abteilung abt,
+  ) async {
+    final ctrl = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Neue Anlage · ${abt.anzeigeName}'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Name der Anlage',
+            hintText: 'z.B. Kochkammer 5',
+          ),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: const Text('Anlegen'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+
+    final db = ref.read(databaseProvider);
+
+    // Doppelte Namen vermeiden (Katalog + Excel sind namensbasiert).
+    final vorhandene =
+        ref.read(alleMaschinenProvider).valueOrNull ?? const <Machine>[];
+    if (vorhandene.any(
+      (m) => m.name.trim().toLowerCase() == name.toLowerCase(),
+    )) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Anlage "$name" existiert bereits.')),
+        );
+      }
+      return;
+    }
+
+    await db.into(db.machines).insert(
+          MachinesCompanion(
+            id: Value(const Uuid().v4()),
+            name: Value(name),
+            abteilung: Value(abt.dbValue),
+          ),
+        );
+
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Neue Anlage angelegt',
+        );
+    ref.invalidate(alleMaschinenProvider);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Anlage "$name" in ${abt.anzeigeName} angelegt — wird beim '
+            'nächsten Excel-Export in den Anlagen-Katalog übernommen.',
+          ),
+        ),
+      );
+    }
+  }
 }
 
-/// Gruppen-Überschrift im Katalog (Abteilung oder „Weitere" bei abt == null).
-class _KatalogGruppe extends StatelessWidget {
-  const _KatalogGruppe({this.abt});
+/// Aufklappbare Abteilungs-Gruppe im Katalog. Standard: zugeklappt —
+/// so bleibt die Sidebar kurz und das Diagramm bekommt die Bühne.
+class _KatalogAbteilung extends StatefulWidget {
+  const _KatalogAbteilung({
+    required this.abt,
+    required this.maschinen,
+    required this.imProzess,
+    required this.onTapMaschine,
+    required this.onNeueAnlage,
+  });
 
+  /// null = Gruppe „Weitere" (unbekannte Abteilung).
   final Abteilung? abt;
+  final List<Machine> maschinen;
+  final Set<String> imProzess;
+  final void Function(Machine) onTapMaschine;
+  final VoidCallback? onNeueAnlage;
+
+  @override
+  State<_KatalogAbteilung> createState() => _KatalogAbteilungState();
+}
+
+class _KatalogAbteilungState extends State<_KatalogAbteilung> {
+  bool _offen = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final farbe = abt?.farbe ?? theme.colorScheme.outline;
-    final name = abt?.anzeigeName ?? 'Weitere';
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 2),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: farbe, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            name,
-            style: theme.textTheme.labelSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.4,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    final farbe = widget.abt?.farbe ?? theme.colorScheme.outline;
+    final name = widget.abt?.anzeigeName ?? 'Weitere';
+    final anzahlImProzess = widget.maschinen
+        .where((m) => widget.imProzess.contains(m.id))
+        .length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _offen = !_offen),
+          borderRadius: BorderRadius.circular(8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  turns: _offen ? 0.25 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: Icon(
+                    Icons.chevron_right,
+                    size: 17,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Container(
+                  width: 9,
+                  height: 9,
+                  decoration:
+                      BoxDecoration(color: farbe, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Anzahl (grün, wenn welche im Prozess sind)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: anzahlImProzess > 0
+                        ? const Color(0xFF2E7D32).withValues(alpha: 0.25)
+                        : theme.colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    anzahlImProzess > 0
+                        ? '$anzahlImProzess/${widget.maschinen.length}'
+                        : '${widget.maschinen.length}',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: anzahlImProzess > 0
+                          ? (theme.brightness == Brightness.dark
+                              ? const Color(0xFF9CCC65)
+                              : const Color(0xFF2E7D32))
+                          : theme.colorScheme.onSurface
+                              .withValues(alpha: 0.6),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        ),
+        if (_offen)
+          Padding(
+            padding: const EdgeInsets.only(left: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final m in widget.maschinen)
+                  _KatalogZeile(
+                    farbe: farbe,
+                    name: m.name,
+                    imProzess: widget.imProzess.contains(m.id),
+                    onTap: () => widget.onTapMaschine(m),
+                  ),
+                if (widget.onNeueAnlage != null)
+                  InkWell(
+                    onTap: widget.onNeueAnlage,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 7,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.add_circle_outline,
+                            size: 15,
+                            color: theme.colorScheme.primary,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Neue Anlage …',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: theme.colorScheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -2681,7 +2860,7 @@ class _DiagrammStation extends StatelessWidget {
                       Expanded(
                         child: Text(
                           abt.anzeigeName,
-                          style: theme.textTheme.titleSmall?.copyWith(
+                          style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.3,
                           ),
@@ -2721,10 +2900,10 @@ class _DiagrammStation extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 10,
+                    runSpacing: 10,
                     children: [
                       for (var i = 0; i < gruppe.length; i++)
                         _DraggableKnoten(
@@ -2855,7 +3034,7 @@ class _ProzessKnoten extends ConsumerWidget {
       ),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
         decoration: BoxDecoration(
           color: hatDaten
               ? accent.withValues(alpha: dark ? 0.20 : 0.10)
@@ -2909,7 +3088,7 @@ class _ProzessKnoten extends ConsumerWidget {
                 Text(
                   name,
                   style: const TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -2927,7 +3106,7 @@ class _ProzessKnoten extends ConsumerWidget {
                 child: Text(
                   step.prozessschritt!,
                   style: TextStyle(
-                    fontSize: 10.5,
+                    fontSize: 11.5,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),

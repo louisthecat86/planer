@@ -52,7 +52,6 @@ class ArticleListScreen extends ConsumerStatefulWidget {
 
 class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   String _search = '';
-  String? _gruppenFilter;
   _SortField _sortField = _SortField.bezeichnung;
   bool _sortAsc = true;
 
@@ -71,13 +70,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
       }).toList();
     }
 
-    // Planungsgruppen-Filter
-    if (_gruppenFilter != null) {
-      list = list
-          .where((a) => a.product.planungsgruppe == _gruppenFilter)
-          .toList();
-    }
-
     // Sortierung
     list.sort((a, b) {
       int cmp;
@@ -89,9 +81,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
           cmp = a.product.artikelnummer.compareTo(b.product.artikelnummer);
         case _SortField.schritte:
           cmp = a.steps.length.compareTo(b.steps.length);
-        case _SortField.gruppe:
-          cmp = (a.product.planungsgruppe ?? '')
-              .compareTo(b.product.planungsgruppe ?? '');
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -135,12 +124,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   }
 
   Widget _buildBody(List<_ArticleInfo> all) {
-    final gruppen = all
-        .map((a) => a.product.planungsgruppe)
-        .whereType<String>()
-        .toSet()
-        .toList()
-      ..sort();
     final filtered = _filtered(all);
 
     return Column(
@@ -168,34 +151,14 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
           child: Row(
             children: [
-              // Planungsgruppen-Chips
+              // Ergebnis-Zähler links, Sortierung rechts
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChip(
-                        label: const Text('Alle'),
-                        selected: _gruppenFilter == null,
-                        onSelected: (_) =>
-                            setState(() => _gruppenFilter = null),
+                child: Text(
+                  '${filtered.length} von ${all.length} Artikel',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant,
                       ),
-                      const SizedBox(width: 6),
-                      ...gruppen.map(
-                        (g) => Padding(
-                          padding: const EdgeInsets.only(right: 6),
-                          child: FilterChip(
-                            label: Text(g),
-                            selected: _gruppenFilter == g,
-                            onSelected: (_) => setState(
-                              () => _gruppenFilter =
-                                  _gruppenFilter == g ? null : g,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ),
 
@@ -226,21 +189,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
                       ),
                     )
                     .toList(),
-              ),
-            ],
-          ),
-        ),
-
-        // --- Ergebnis-Zähler ---
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-          child: Row(
-            children: [
-              Text(
-                '${filtered.length} von ${all.length} Artikel',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
               ),
             ],
           ),
@@ -285,8 +233,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
 enum _SortField {
   bezeichnung('Bezeichnung'),
   artikelnr('Artikelnr'),
-  schritte('Schritte'),
-  gruppe('Planungsgruppe');
+  schritte('Schritte');
 
   const _SortField(this.label);
   final String label;

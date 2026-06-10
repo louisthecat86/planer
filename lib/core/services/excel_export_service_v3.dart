@@ -22,6 +22,8 @@ class ExportResultV3 {
     this.customParameterGeschrieben = 0,
     this.customParameterUebersprungen = 0,
     this.historienGeschrieben = 0,
+    this.artikelSheetsAngelegt = 0,
+    this.maschinenInKatalog = 0,
     this.artikelNichtInVorlage = const [],
     this.warnungen = const [],
     this.fehler = const [],
@@ -36,6 +38,13 @@ class ExportResultV3 {
   final int customParameterGeschrieben;
   final int customParameterUebersprungen;
   final int historienGeschrieben;
+
+  /// Neu in der Vorlage angelegte Artikel-Sheets (Artikel, die es nur
+  /// in der App gab).
+  final int artikelSheetsAngelegt;
+
+  /// Neu in den Anlagen-Katalog der Vorlage eingetragene Maschinen.
+  final int maschinenInKatalog;
 
   final List<String> artikelNichtInVorlage;
   final List<String> warnungen;
@@ -142,6 +151,25 @@ class ExcelExportServiceV3 {
     final artikelNichtInVorlage = <String>[];
     final warnungen = <String>[];
 
+    // App-Artikel ohne Sheet in der Vorlage: neues Sheet anlegen
+    // (Blueprint der passenden Kategorie klonen) — damit App und Excel
+    // immer denselben Artikelbestand haben.
+    final artikelSheetsAngelegt = _legeFehlendeArtikelSheetsAn(
+      archive: archive,
+      sheetInfo: sheetInfo,
+      artikel: alleArtikel,
+      warnungen: warnungen,
+    );
+
+    // In der App angelegte Maschinen in den Anlagen-Katalog übernehmen.
+    final maschinenInKatalog = _ergaenzeAnlagenKatalog(
+      archive: archive,
+      sheetInfo: sheetInfo,
+      sharedStrings: sharedStrings,
+      maschinen: alleMaschinen,
+      warnungen: warnungen,
+    );
+
     for (final artikel in alleArtikel) {
       if (artikel.deletedAt != null) continue;
 
@@ -234,6 +262,8 @@ class ExcelExportServiceV3 {
       customParameterGeschrieben: customParameterGeschrieben,
       customParameterUebersprungen: customParameterUebersprungen,
       historienGeschrieben: historienGeschrieben,
+      artikelSheetsAngelegt: artikelSheetsAngelegt,
+      maschinenInKatalog: maschinenInKatalog,
       artikelNichtInVorlage: artikelNichtInVorlage,
       warnungen: warnungen,
     );
@@ -248,6 +278,294 @@ class ExcelExportServiceV3 {
   }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
+
+  /// Kategorie-Titel der Blueprint-Sheets je Produktgruppe (Umkehrung des
+  /// Import-Mappings) — bestimmt, welches Blueprint geklont wird.
+  static const Map<String, String> _produktgruppeZuKategorie = {
+    'bruehwurst': 'Brühwurst',
+    'rohwurst': 'Rohwurst',
+    'kochpoekelware': 'Kochpökelwaren',
+    'rohpoekelware': 'Rohpökelwaren',
+    'aufschnitt': 'Aufschnitt',
+    'bratstrasse_natur': 'Bratstraßenartikel Natur',
+    'bratstrasse_paniert': 'Bratstraßenartikel paniert',
+    'hackprodukt_gegart': 'Hackprodukte gegart',
+    'hackprodukt_roh': 'Hackprodukte roh',
+    'braten': 'Braten',
+    'sous_vide': 'Sous Vide gegarte Produkte',
+    'angebratene_bruehwurst': 'Angebratene Brühwürste',
+  };
+
+  /// Legt für App-Artikel ohne Vorlage-Sheet ein neues Sheet an, indem das
+  /// Blueprint-Sheet der passenden Kategorie geklont wird. Der Artikelkopf
+  /// (A6 = "Nr — Bezeichnung") wird gesetzt; Schritte/Parameter/Historie
+  /// schreibt anschließend die normale Export-Schleife.
+  ///
+  /// `sheetInfo` wird um die neuen Sheets ergänzt. Liefert die Anzahl
+  /// angelegter Sheets.
+  int _legeFehlendeArtikelSheetsAn({
+    required Archive archive,
+    required Map<String, String> sheetInfo,
+    required List<Product> artikel,
+    required List<String> warnungen,
+  }) {
+    final fehlende = artikel
+        .where(
+          (a) =>
+              a.deletedAt == null &&
+              !sheetInfo.containsKey(a.artikelnummer),
+        )
+        .toList();
+    if (fehlende.isEmpty) return 0;
+
+    final workbookFile = archive.findFile('xl/workbook.xml');
+    final relsFile = archive.findFile('xl/_rels/workbook.xml.rels');
+    final ctFile = archive.findFile('[Content_Types].xml');
+    if (workbookFile == null || relsFile == null || ctFile == null) {
+      warnungen.add(
+        'Neue Artikel-Sheets: Workbook-Struktur unvollständig — '
+        '${fehlende.length} Artikel nicht angelegt.',
+      );
+      return 0;
+    }
+
+    final workbookDoc = XmlDocument.parse(
+      utf8.decode(workbookFile.content as List<int>),
+    );
+    final relsDoc = XmlDocument.parse(
+      utf8.decode(relsFile.content as List<int>),
+    );
+    final ctDoc = XmlDocument.parse(
+      utf8.decode(ctFile.content as List<int>),
+    );
+
+    final sheetsElement =
+        workbookDoc.findAllElements('sheets').firstOrNull;
+    final relsRoot =
+        relsDoc.findAllElements('Relationships').firstOrNull;
+    final ctRoot = ctDoc.findAllElements('Types').firstOrNull;
+    if (sheetsElement == null || relsRoot == null || ctRoot == null) {
+      warnungen.add(
+        'Neue Artikel-Sheets: Workbook-XML unerwartet — nicht angelegt.',
+      );
+      return 0;
+    }
+
+    // Höchste vorhandene Indizes ermitteln (Datei-Nr., sheetId, rId).
+    var maxDateiNr = 0;
+    for (final f in archive.files) {
+      final m = RegExp(r'^xl/worksheets/sheet(\d+)\.xml$').firstMatch(f.name);
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        if (n > maxDateiNr) maxDateiNr = n;
+      }
+    }
+    var maxSheetId = 0;
+    for (final s in workbookDoc.findAllElements('sheet')) {
+      final n = int.tryParse(s.getAttribute('sheetId') ?? '') ?? 0;
+      if (n > maxSheetId) maxSheetId = n;
+    }
+    var maxRid = 0;
+    for (final r in relsDoc.findAllElements('Relationship')) {
+      final m = RegExp(r'^rId(\d+)$').firstMatch(r.getAttribute('Id') ?? '');
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        if (n > maxRid) maxRid = n;
+      }
+    }
+
+    var angelegt = 0;
+    for (final art in fehlende) {
+      // Blueprint der Kategorie finden (Fallback: irgendein Blueprint).
+      String? blueprintName = art.produktgruppe == null
+          ? null
+          : _produktgruppeZuKategorie[art.produktgruppe];
+      if (blueprintName == null || !sheetInfo.containsKey(blueprintName)) {
+        blueprintName = _produktgruppeZuKategorie.values
+            .where(sheetInfo.containsKey)
+            .firstOrNull;
+      }
+      final quellPfad =
+          blueprintName == null ? null : sheetInfo[blueprintName];
+      final quellFile =
+          quellPfad == null ? null : archive.findFile(quellPfad);
+      if (quellFile == null) {
+        warnungen.add(
+          'Artikel ${art.artikelnummer}: Kein Blueprint-Sheet gefunden — '
+          'Sheet nicht angelegt.',
+        );
+        continue;
+      }
+
+      try {
+        // Blueprint klonen + Artikelkopf setzen (A6 = "Nr — Bezeichnung",
+        // exakt das Format, das der Import wieder einliest).
+        final doc = XmlDocument.parse(
+          utf8.decode(quellFile.content as List<int>),
+        );
+        final sheetData = doc.findAllElements('sheetData').firstOrNull;
+        if (sheetData == null) {
+          warnungen.add(
+            'Artikel ${art.artikelnummer}: Blueprint ohne sheetData — '
+            'Sheet nicht angelegt.',
+          );
+          continue;
+        }
+        _setzeZelleInlineStr(
+          sheetData,
+          row: 6,
+          colLetter: 'A',
+          wert: '${art.artikelnummer} — ${art.artikelbezeichnung}',
+        );
+
+        maxDateiNr++;
+        maxSheetId++;
+        maxRid++;
+        final neuerPfad = 'xl/worksheets/sheet$maxDateiNr.xml';
+        final xmlBytes = utf8.encode(doc.toXmlString(pretty: false));
+        archive.addFile(ArchiveFile(neuerPfad, xmlBytes.length, xmlBytes));
+
+        // Relationship (Target RELATIV — absolute Pfade crashen den
+        // Dart-Excel-Parser beim Re-Import).
+        final rel = XmlElement(XmlName('Relationship'));
+        rel.setAttribute('Id', 'rId$maxRid');
+        rel.setAttribute(
+          'Type',
+          'http://schemas.openxmlformats.org/officeDocument/2006/'
+              'relationships/worksheet',
+        );
+        rel.setAttribute('Target', 'worksheets/sheet$maxDateiNr.xml');
+        relsRoot.children.add(rel);
+
+        // Workbook-Eintrag (Sheet-Name = Artikelnummer).
+        final sheetEl = XmlElement(XmlName('sheet'));
+        sheetEl.setAttribute('name', art.artikelnummer);
+        sheetEl.setAttribute('sheetId', '$maxSheetId');
+        sheetEl.setAttribute('r:id', 'rId$maxRid');
+        sheetsElement.children.add(sheetEl);
+
+        // Content-Types-Override.
+        final ov = XmlElement(XmlName('Override'));
+        ov.setAttribute('PartName', '/$neuerPfad');
+        ov.setAttribute(
+          'ContentType',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+              'worksheet+xml',
+        );
+        ctRoot.children.add(ov);
+
+        sheetInfo[art.artikelnummer] = neuerPfad;
+        angelegt++;
+      } catch (e) {
+        warnungen.add(
+          'Artikel ${art.artikelnummer}: Sheet-Anlage fehlgeschlagen ($e).',
+        );
+      }
+    }
+
+    if (angelegt > 0) {
+      final wb = utf8.encode(workbookDoc.toXmlString(pretty: false));
+      archive.addFile(ArchiveFile('xl/workbook.xml', wb.length, wb));
+      final rl = utf8.encode(relsDoc.toXmlString(pretty: false));
+      archive.addFile(
+        ArchiveFile('xl/_rels/workbook.xml.rels', rl.length, rl),
+      );
+      final ct = utf8.encode(ctDoc.toXmlString(pretty: false));
+      archive.addFile(ArchiveFile('[Content_Types].xml', ct.length, ct));
+    }
+    return angelegt;
+  }
+
+  /// Trägt in der App angelegte Maschinen in den Anlagen-Katalog der
+  /// Vorlage ein (Spalte A = Name, Spalte B = Abteilung; Zeilen 13–88,
+  /// passend zum benannten Bereich "Anlagen_Liste").
+  int _ergaenzeAnlagenKatalog({
+    required Archive archive,
+    required Map<String, String> sheetInfo,
+    required _SharedStrings sharedStrings,
+    required List<Machine> maschinen,
+    required List<String> warnungen,
+  }) {
+    final pfad = sheetInfo['Anlagen-Katalog'];
+    final file = pfad == null ? null : archive.findFile(pfad);
+    if (file == null) {
+      warnungen.add(
+        'Anlagen-Katalog-Sheet nicht gefunden — neue Maschinen wurden '
+        'nicht in die Excel übernommen.',
+      );
+      return 0;
+    }
+
+    try {
+      final doc = XmlDocument.parse(
+        utf8.decode(file.content as List<int>),
+      );
+      final sheetData = doc.findAllElements('sheetData').firstOrNull;
+      if (sheetData == null) return 0;
+
+      // Belegte Zeilen (13..88) und vorhandene Namen einsammeln.
+      final belegt = <int>{};
+      final vorhanden = <String>{};
+      for (final row in sheetData.findElements('row')) {
+        final r = int.tryParse(row.getAttribute('r') ?? '');
+        if (r == null || r < 13 || r > 88) continue;
+        final t = _leseZelleA(row, sharedStrings)?.trim();
+        if (t != null && t.isNotEmpty) {
+          belegt.add(r);
+          vorhanden.add(t.toLowerCase());
+        }
+      }
+
+      final fehlend = maschinen
+          .where(
+            (m) =>
+                m.deletedAt == null &&
+                m.name.trim().isNotEmpty &&
+                !vorhanden.contains(m.name.trim().toLowerCase()),
+          )
+          .toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
+      if (fehlend.isEmpty) return 0;
+
+      var geschrieben = 0;
+      var zeile = 13;
+      for (final m in fehlend) {
+        while (zeile <= 88 && belegt.contains(zeile)) {
+          zeile++;
+        }
+        if (zeile > 88) {
+          warnungen.add(
+            'Anlagen-Katalog voll (Zeile 88 erreicht) — '
+            '"${m.name}" und weitere nicht eingetragen.',
+          );
+          break;
+        }
+        _setzeZelleInlineStr(
+          sheetData,
+          row: zeile,
+          colLetter: 'A',
+          wert: m.name.trim(),
+        );
+        _setzeZelleInlineStr(
+          sheetData,
+          row: zeile,
+          colLetter: 'B',
+          wert: _abteilungLabel(m.abteilung),
+        );
+        belegt.add(zeile);
+        geschrieben++;
+      }
+
+      if (geschrieben > 0) {
+        final xml = utf8.encode(doc.toXmlString(pretty: false));
+        archive.addFile(ArchiveFile(file.name, xml.length, xml));
+      }
+      return geschrieben;
+    } catch (e) {
+      warnungen.add('Anlagen-Katalog konnte nicht ergänzt werden ($e).');
+      return 0;
+    }
+  }
 
   Map<String, String> _ermittleSheetXmlPfade(Archive archive) {
     final result = <String, String>{};

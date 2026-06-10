@@ -197,11 +197,29 @@ class _DataManagementScreenState
 
       await File(zielPfad).writeAsBytes(result.bytes);
 
+      final extras = <String>[];
+      if (result.artikelSheetsAngelegt > 0) {
+        extras.add(
+          '${result.artikelSheetsAngelegt} neue Artikel-Sheets angelegt',
+        );
+      }
+      if (result.maschinenInKatalog > 0) {
+        extras.add(
+          '${result.maschinenInKatalog} Anlagen in den Katalog übernommen',
+        );
+      }
+
       _setBusy(
         false,
         msg: 'Excel exportiert: ${result.artikelAktualisiert} Artikel '
-            'aktualisiert',
+            'aktualisiert'
+            '${extras.isEmpty ? '' : ' · ${extras.join(' · ')}'}',
       );
+
+      // Export-Hinweise (z.B. Katalog voll) ebenfalls anzeigen.
+      if (mounted && result.warnungen.isNotEmpty) {
+        setState(() => _importWarnungen = result.warnungen);
+      }
     } catch (e) {
       _setBusy(false, msg: 'Export-Fehler: $e', color: Colors.red);
     }
