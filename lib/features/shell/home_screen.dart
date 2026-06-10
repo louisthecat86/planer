@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,8 +14,31 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month, now.day);
 });
 
-/// Drei-Kachel-Startbildschirm:
-/// Artikel · Planung · Einstellungen.
+/// Anzahl aktiver Artikel (für die Kennzahl im Kopfbereich).
+final _artikelAnzahlProvider = FutureProvider<int>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final rows = await (db.select(db.products)
+        ..where((p) => p.deletedAt.isNull()))
+      .get();
+  return rows.length;
+});
+
+/// Anzahl der für heute geplanten Aufgaben (für die Kennzahl im Kopf).
+final _heutigeAufgabenProvider = FutureProvider<int>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final jetzt = DateTime.now();
+  final start = DateTime(jetzt.year, jetzt.month, jetzt.day);
+  final ende = start.add(const Duration(days: 1));
+  final rows = await (db.select(db.productionTasks)
+        ..where((t) => t.deletedAt.isNull())
+        ..where((t) => t.datum.isBiggerOrEqualValue(start))
+        ..where((t) => t.datum.isSmallerThanValue(ende)))
+      .get();
+  return rows.length;
+});
+
+/// Startbildschirm:
+/// Kopf mit Datum + Kennzahlen, darunter die vier Bereichs-Kacheln.
 ///
 /// Stammdaten (Excel-Import/-Export, Backup) und die Kapazität liegen
 /// unter „Einstellungen".
@@ -23,14 +47,12 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final db = ref.watch(databaseProvider);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Produktion Planer')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _DatabaseStatusCard(db: db),
+          const _KopfBereich(),
           const SizedBox(height: 20),
           _buildTileGrid(context),
         ],
@@ -82,10 +104,187 @@ class HomeScreen extends ConsumerWidget {
           spacing: spacing,
           runSpacing: spacing,
           children: tiles
-              .map((tile) => SizedBox(width: tileWidth, child: tile))
+              .map(
+                (tile) => SizedBox(
+                  width: tileWidth,
+                  height: 158,
+                  child: tile,
+                ),
+              )
               .toList(),
         );
       },
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Kopfbereich: Datum + Kennzahlen (ersetzt die technische Status-Karte)
+// ---------------------------------------------------------------------------
+
+const _kWochentage = [
+  'Montag',
+  'Dienstag',
+  'Mittwoch',
+  'Donnerstag',
+  'Freitag',
+  'Samstag',
+  'Sonntag',
+];
+
+const _kMonate = [
+  'Januar',
+  'Februar',
+  'März',
+  'April',
+  'Mai',
+  'Juni',
+  'Juli',
+  'August',
+  'September',
+  'Oktober',
+  'November',
+  'Dezember',
+];
+
+class _KopfBereich extends ConsumerWidget {
+  const _KopfBereich();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final artikel = ref.watch(_artikelAnzahlProvider);
+    final aufgaben = ref.watch(_heutigeAufgabenProvider);
+
+    final heute = DateTime.now();
+    final datum = '${_kWochentage[heute.weekday - 1]}, '
+        '${heute.day}. ${_kMonate[heute.month - 1]} ${heute.year}';
+
+    // Datenbank-Fehler weiterhin deutlich anzeigen
+    final fehler = artikel.hasError ? artikel.error : null;
+    if (fehler != null) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.error_outline, color: theme.colorScheme.error),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Datenbank-Fehler: $fehler',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final artikelAnzahl = artikel.valueOrNull;
+    final aufgabenAnzahl = aufgaben.valueOrNull;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          datum,
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            _StatChip(
+              icon: Icons.inventory_2_outlined,
+              label: 'Artikel',
+              wert: artikelAnzahl?.toString() ?? '…',
+            ),
+            const SizedBox(width: 8),
+            _StatChip(
+              icon: Icons.task_alt,
+              label: 'Aufgaben heute',
+              wert: aufgabenAnzahl?.toString() ?? '…',
+            ),
+          ],
+        ),
+        // Erste-Schritte-Hinweis nur, wenn noch keine Artikel da sind
+        if (artikelAnzahl == 0) ...[
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      'Noch keine Artikel vorhanden. Importiere eine '
+                      'Excel-Stammdaten-Vorlage unter Einstellungen → '
+                      'Stammdaten, um die App zu füllen.',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Kleine Kennzahl-Pille im Kopfbereich.
+class _StatChip extends StatelessWidget {
+  const _StatChip({
+    required this.icon,
+    required this.label,
+    required this.wert,
+  });
+
+  final IconData icon;
+  final String label;
+  final String wert;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: theme.colorScheme.primary),
+          const SizedBox(width: 8),
+          Text(
+            wert,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -129,137 +328,50 @@ class _NavigationTile extends StatelessWidget {
             ),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(9),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.22),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Icon(icon, color: Colors.white, size: 30),
+                  child: Icon(icon, color: Colors.white, size: 28),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 10),
                 Text(
                   label,
                   style: const TextStyle(
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.85),
+                const SizedBox(height: 3),
+                Expanded(
+                  child: Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: Colors.white.withValues(alpha: 0.85),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Database status card
-// ---------------------------------------------------------------------------
-
-class _DatabaseStatusCard extends StatelessWidget {
-  const _DatabaseStatusCard({required this.db});
-
-  final AppDatabase db;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: FutureBuilder<int>(
-          future: db
-              .customSelect(
-                'SELECT COUNT(*) AS c FROM products '
-                'WHERE deleted_at IS NULL',
-              )
-              .getSingle()
-              .then((row) => row.read<int>('c')),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState != ConnectionState.done) {
-              return const Row(
-                children: [
-                  SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  ),
-                  SizedBox(width: 12),
-                  Text('Datenbank wird geöffnet …'),
-                ],
-              );
-            }
-            if (snapshot.hasError) {
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.error_outline, color: colors.error),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Datenbank-Fehler: ${snapshot.error}',
-                      style: TextStyle(color: colors.error),
-                    ),
-                  ),
-                ],
-              );
-            }
-
-            final count = snapshot.data ?? 0;
-
-            if (count == 0) {
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.check_circle, color: Colors.green),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Datenbank verbunden — noch keine Produkte',
-                          style: Theme.of(context).textTheme.bodyLarge,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Importiere eine Excel-Stammdaten-Vorlage unter '
-                    'Einstellungen → Stammdaten, um die App zu füllen.',
-                    style: TextStyle(color: colors.onSurfaceVariant),
-                  ),
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green),
-                const SizedBox(width: 12),
-                Text(
-                  'Datenbank verbunden — $count Produkte gespeichert',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ],
-            );
-          },
         ),
       ),
     );
