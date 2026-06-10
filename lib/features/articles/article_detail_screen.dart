@@ -368,6 +368,9 @@ class _ProcessTab extends ConsumerWidget {
 // Schritte-Liste
 // ---------------------------------------------------------------------------
 
+/// Ansichtsmodus des Prozess-Tabs: Fließdiagramm (Standard) oder Karten.
+final prozessDiagrammProvider = StateProvider<bool>((ref) => true);
+
 class _StepsList extends ConsumerWidget {
   const _StepsList({required this.productId, required this.steps});
 
@@ -447,6 +450,40 @@ class _StepsList extends ConsumerWidget {
         ),
     ];
 
+    final diagramm = ref.watch(prozessDiagrammProvider);
+
+    Widget inhalt(bool zweiSpaltig) => diagramm
+        ? _ProzessDiagramm(
+            productId: productId,
+            gruppen: gruppen,
+            onMove: (index, richtung) =>
+                _verschiebeGruppe(ref, gruppen, index, richtung),
+            onUpdated: () => ref.invalidate(productStepsProvider(productId)),
+          )
+        : _kartenBereich(zweiSpaltig, karten);
+
+    Widget umschalter() => SegmentedButton<bool>(
+          segments: const [
+            ButtonSegment(
+              value: true,
+              icon: Icon(Icons.account_tree_outlined, size: 16),
+              label: Text('Diagramm', style: TextStyle(fontSize: 12)),
+            ),
+            ButtonSegment(
+              value: false,
+              icon: Icon(Icons.view_agenda_outlined, size: 16),
+              label: Text('Karten', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+          selected: {diagramm},
+          onSelectionChanged: (sel) =>
+              ref.read(prozessDiagrammProvider.notifier).state = sel.first,
+          style: const ButtonStyle(
+            visualDensity: VisualDensity.compact,
+          ),
+          showSelectedIcon: false,
+        );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Ab ~900px: feste Produktionsmittel-Sidebar links.
@@ -468,23 +505,40 @@ class _StepsList extends ConsumerWidget {
                 ),
               ),
               const VerticalDivider(width: 1),
-              Expanded(child: _kartenBereich(false, karten)),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: umschalter(),
+                      ),
+                    ),
+                    Expanded(child: inhalt(false)),
+                  ],
+                ),
+              ),
             ],
           );
         }
 
-        // Schmaler: „+ Produktionsmittel"-Button oben, dann die Karten.
+        // Schmaler: „+ Produktionsmittel"-Button + Umschalter oben.
         final zweiSpaltig = constraints.maxWidth >= 700;
         return Column(
           children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: _ProduktionsmittelButton(productId: productId),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: Row(
+                children: [
+                  _ProduktionsmittelButton(productId: productId),
+                  const Spacer(),
+                  umschalter(),
+                ],
               ),
             ),
-            Expanded(child: _kartenBereich(zweiSpaltig, karten)),
+            Expanded(child: inhalt(zweiSpaltig)),
           ],
         );
       },
@@ -2400,6 +2454,399 @@ class _HistWert extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Prozess-Fließdiagramm
+//
+// Kompakte Darstellung der gesamten Prozesskette auf einen Blick:
+// nummerierte Abteilungs-Stationen, verbunden durch eine Flusslinie,
+// Maschinen als anklickbare Knoten (grün = Daten hinterlegt).
+// Klick auf einen Knoten öffnet die volle Detailansicht des Schritts.
+// ---------------------------------------------------------------------------
+
+class _ProzessDiagramm extends StatelessWidget {
+  const _ProzessDiagramm({
+    required this.productId,
+    required this.gruppen,
+    required this.onMove,
+    required this.onUpdated,
+  });
+
+  final String productId;
+  final List<List<({ProductStep step, int nummer})>> gruppen;
+  final void Function(int index, int richtung) onMove;
+  final VoidCallback onUpdated;
+
+  @override
+  Widget build(BuildContext context) {
+    if (gruppen.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Text(
+            'Noch keine Produktionsschritte.\n\n'
+            'Füge ein Produktionsmittel hinzu oder importiere eine '
+            'Excel-Vorlage.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey),
+          ),
+        ),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        for (var g = 0; g < gruppen.length; g++)
+          _DiagrammStation(
+            productId: productId,
+            gruppe: gruppen[g],
+            position: g + 1,
+            istLetzte: g == gruppen.length - 1,
+            onMoveUp: g == 0 ? null : () => onMove(g, -1),
+            onMoveDown:
+                g == gruppen.length - 1 ? null : () => onMove(g, 1),
+            onUpdated: onUpdated,
+          ),
+      ],
+    );
+  }
+}
+
+/// Eine Station im Fließdiagramm: Nummern-Kreis + Flusslinie links,
+/// rechts die Abteilungs-Box mit den Maschinen-Knoten.
+class _DiagrammStation extends StatelessWidget {
+  const _DiagrammStation({
+    required this.productId,
+    required this.gruppe,
+    required this.position,
+    required this.istLetzte,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onUpdated,
+  });
+
+  final String productId;
+  final List<({ProductStep step, int nummer})> gruppe;
+  final int position;
+  final bool istLetzte;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
+  final VoidCallback onUpdated;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final abt = Abteilung.fromDbValue(gruppe.first.step.abteilung);
+    final farbe = abt.farbe;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Fluss-Spalte: Nummern-Kreis + Verbindungslinie mit Pfeil
+          SizedBox(
+            width: 44,
+            child: Column(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration:
+                      BoxDecoration(color: farbe, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$position',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                if (!istLetzte) ...[
+                  Expanded(
+                    child: Container(
+                      width: 2,
+                      color: farbe.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down,
+                    size: 20,
+                    color: farbe.withValues(alpha: 0.7),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+
+          // Stations-Box
+          Expanded(
+            child: Container(
+              margin: EdgeInsets.only(bottom: istLetzte ? 0 : 14),
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
+              decoration: BoxDecoration(
+                color: farbe.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: farbe.withValues(alpha: 0.45)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          abt.anzeigeName,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: farbe,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          abt.kurzcode,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_upward, size: 17),
+                        tooltip: 'Abteilung nach oben',
+                        onPressed: onMoveUp,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.arrow_downward, size: 17),
+                        tooltip: 'Abteilung nach unten',
+                        onPressed: onMoveDown,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final eintrag in gruppe)
+                        _ProzessKnoten(
+                          productId: productId,
+                          step: eintrag.step,
+                          nummer: eintrag.nummer,
+                          farbe: farbe,
+                          onUpdated: onUpdated,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ein Maschinen-Knoten im Fließdiagramm — tippen öffnet die Details.
+class _ProzessKnoten extends ConsumerWidget {
+  const _ProzessKnoten({
+    required this.productId,
+    required this.step,
+    required this.nummer,
+    required this.farbe,
+    required this.onUpdated,
+  });
+
+  final String productId;
+  final ProductStep step;
+  final int nummer;
+  final Color farbe;
+  final VoidCallback onUpdated;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+
+    // Maschinenname auflösen: Maschine > Legacy-Text > Prozessschritt
+    String name;
+    final mid = step.maschineId;
+    if (mid != null) {
+      name = ref.watch(machineProvider(mid)).valueOrNull?.name ??
+          'Schritt $nummer';
+    } else if (step.maschine != null && step.maschine!.trim().isNotEmpty) {
+      name = step.maschine!;
+    } else if (step.prozessschritt != null &&
+        step.prozessschritt!.trim().isNotEmpty) {
+      name = step.prozessschritt!;
+    } else {
+      name = 'Schritt $nummer';
+    }
+
+    final hatDaten = step.basisMitarbeiter > 0 ||
+        step.basisMengeKg > 0 ||
+        step.basisDauerMinuten > 0 ||
+        (step.fixZeitMinuten ?? 0) > 0;
+    final accent = dark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
+
+    return InkWell(
+      onTap: () => _zeigeSchrittDetail(
+        context,
+        productId: productId,
+        stepId: step.id,
+        fallback: step,
+        nummer: nummer,
+        onUpdated: onUpdated,
+      ),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        decoration: BoxDecoration(
+          color: hatDaten
+              ? accent.withValues(alpha: dark ? 0.20 : 0.10)
+              : theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: hatDaten
+                ? accent.withValues(alpha: 0.55)
+                : theme.dividerColor,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  name,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                if (hatDaten) ...[
+                  const SizedBox(width: 5),
+                  Icon(Icons.check_circle, size: 14, color: accent),
+                ],
+              ],
+            ),
+            if (step.prozessschritt != null &&
+                step.prozessschritt!.trim().isNotEmpty &&
+                step.prozessschritt != name)
+              Text(
+                step.prozessschritt!,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Öffnet die volle Detailansicht eines Prozessschritts als Bottom-Sheet.
+void _zeigeSchrittDetail(
+  BuildContext context, {
+  required String productId,
+  required String stepId,
+  required ProductStep fallback,
+  required int nummer,
+  required VoidCallback onUpdated,
+}) {
+  final container = ProviderScope.containerOf(context);
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: 820),
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (_) => UncontrolledProviderScope(
+      container: container,
+      child: _SchrittDetailSheet(
+        productId: productId,
+        stepId: stepId,
+        fallback: fallback,
+        nummer: nummer,
+        onUpdated: onUpdated,
+      ),
+    ),
+  );
+}
+
+/// Inhalt des Schritt-Detail-Sheets — zeigt den bestehenden Maschinen-Block
+/// (Kennwerte, Plattenschema, Parameter) und bleibt durch das Watching des
+/// Steps-Providers auch nach Bearbeitungen aktuell.
+class _SchrittDetailSheet extends ConsumerWidget {
+  const _SchrittDetailSheet({
+    required this.productId,
+    required this.stepId,
+    required this.fallback,
+    required this.nummer,
+    required this.onUpdated,
+  });
+
+  final String productId;
+  final String stepId;
+  final ProductStep fallback;
+  final int nummer;
+  final VoidCallback onUpdated;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stepsAsync = ref.watch(productStepsProvider(productId));
+    final steps = stepsAsync.valueOrNull;
+    ProductStep aktuell = fallback;
+    if (steps != null) {
+      for (final s in steps) {
+        if (s.id == stepId) {
+          aktuell = s;
+          break;
+        }
+      }
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: SingleChildScrollView(
+        child: _MaschinenBlock(
+          step: aktuell,
+          stepNumber: nummer,
+          onUpdated: onUpdated,
+        ),
+      ),
     );
   }
 }
