@@ -193,6 +193,20 @@ class ExcelImportDispatcher {
       out.add('DIAGNOSE: excel.sheets nicht verfügbar: $e');
     }
 
+    // Zusätzlich: warum schlägt die v3-Erkennung fehl? Prüfe gezielt auf
+    // das Schlüssel-Sheet "Anlagen-Katalog" (case-insensitive + getrimmt).
+    try {
+      final alle = _collectSheetNames(excel);
+      final hatKatalog = alle.any(
+        (s) => s.trim().toLowerCase() == 'anlagen-katalog',
+      );
+      out.add('DIAGNOSE: Sheet "Anlagen-Katalog" vorhanden: $hatKatalog');
+      out.add('DIAGNOSE: istV3Format() => '
+          '${ExcelImportServiceV3.istV3Format(excel)}');
+    } catch (e) {
+      out.add('DIAGNOSE: v3-Prüfung nicht möglich: $e');
+    }
+
     return out;
   }
 
@@ -257,9 +271,14 @@ class ExcelImportDispatcher {
     final version = _erkenneVersionFromBytes(bytes);
 
     if (version == VorlagenVersion.unbekannt) {
-      return const UnifiedImportResult(
+      // Diagnose anhängen, damit in der Detailanzeige sichtbar wird, WARUM
+      // die Erkennung scheitert (decode-Fehler, fehlendes Sheet, kein ZIP …).
+      return UnifiedImportResult(
         version: VorlagenVersion.unbekannt,
-        fehler: ['Dateiformat nicht erkannt.'],
+        fehler: [
+          'Dateiformat nicht erkannt.',
+          ..._diagnose(bytes, filePath),
+        ],
       );
     }
 
