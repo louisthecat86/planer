@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 
 /// Ausgewähltes Datum. Wird von anderen Screens (Board) genutzt und bleibt

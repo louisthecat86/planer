@@ -145,7 +145,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
 
     return Column(
       children: [
-        // --- Suchleiste ---
+        // --- Suchleiste (Stil kommt zentral aus dem Theme) ---
         Padding(
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
           child: TextField(
@@ -158,11 +158,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
                       onPressed: () => setState(() => _search = ''),
                     )
                   : null,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              contentPadding: const EdgeInsets.symmetric(vertical: 0),
-              filled: true,
             ),
             onChanged: (v) => setState(() => _search = v),
           ),
@@ -346,17 +341,13 @@ class _ArticleTile extends StatelessWidget {
     final p = info.product;
     final steps = info.steps;
 
-    // Abteilungen als farbige Dots
-    final abteilungen = steps
-        .map((s) {
-          try {
-            return Abteilung.fromDbValue(s.abteilung);
-          } catch (_) {
-            return null;
-          }
-        })
-        .whereType<Abteilung>()
-        .toList();
+    // Abteilungen als farbige Kürzel — jede Abteilung nur einmal,
+    // in Reihenfolge ihres ersten Auftretens im Prozess.
+    final abteilungen = <Abteilung>[];
+    for (final s in steps) {
+      final a = Abteilung.fromDbValue(s.abteilung);
+      if (!abteilungen.contains(a)) abteilungen.add(a);
+    }
 
     // Maschinen-Zähler
     final machineCount = steps.fold<int>(
@@ -365,7 +356,7 @@ class _ArticleTile extends StatelessWidget {
     );
 
     return Card(
-      margin: const EdgeInsets.only(bottom: 6),
+      margin: const EdgeInsets.only(bottom: 8),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: () => context.pushNamed(
@@ -418,7 +409,7 @@ class _ArticleTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    // Abteilungs-Dots + Metadaten
+                    // Abteilungs-Kürzel + Metadaten
                     Row(
                       children: [
                         ...abteilungen.map(
@@ -474,7 +465,11 @@ class _ArticleTile extends StatelessWidget {
                 ),
               ),
 
-              const Icon(Icons.chevron_right, size: 20),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ],
           ),
         ),
