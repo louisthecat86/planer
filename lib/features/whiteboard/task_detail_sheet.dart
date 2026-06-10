@@ -120,6 +120,167 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     setState(() => _isDirty = true);
   }
 
+  /// Dialog: Auftrag auf 2–5 aufeinanderfolgende Tage verteilen.
+  ///
+  /// Die Gesamtmenge wird gleichmäßig aufgeteilt; die Dauer je Tag wird —
+  /// wenn Basisdaten vorhanden sind — pro Teilmenge hochgerechnet
+  /// (fixe Zeit fällt dann an jedem Tag an), sonst schlicht geteilt.
+  Future<void> _verteileAufTageDialog() async {
+    final task = widget.wbTask.task;
+    final gesamtMenge = double.tryParse(
+          _mengeController.text.replaceAll(',', '.'),
+        ) ??
+        task.mengeKg;
+    final gesamtDauer =
+        double.tryParse(_dauerController.text) ?? task.geplanteDauerMinuten;
+
+    double dauerJeTag(int tage) {
+      final teilMenge = gesamtMenge / tage;
+      final step = _step;
+      if (step != null && step.basisMengeKg > 0) {
+        final fix = step.fixZeitMinuten ?? 0.0;
+        final d =
+            fix + step.basisDauerMinuten * (teilMenge / step.basisMengeKg);
+        if (d.isFinite && d > 0) return d;
+      }
+      return gesamtDauer / tage;
+    }
+
+    String fmtTag(DateTime d) =>
+        '${d.day.toString().padLeft(2, '0')}.${d.month.toString().padLeft(2, '0')}.';
+
+    final tage = await showDialog<int>(
+      context: context,
+      builder: (ctx) {
+        var auswahl = 2;
+        return StatefulBuilder(
+          builder: (ctx, setState) {
+            final teilMenge = gesamtMenge / auswahl;
+            final dauer = dauerJeTag(auswahl);
+            final tagesliste = List.generate(
+              auswahl,
+              (i) => fmtTag(task.datum.add(Duration(days: i))),
+            ).join(' · ');
+            return AlertDialog(
+              title: const Text('Auf mehrere Tage verteilen'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Der Auftrag wird in gleich große Teil-Aufträge an '
+                    'aufeinanderfolgenden Tagen aufgeteilt.',
+                  ),
+                  const SizedBox(height: 14),
+                  SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 2, label: Text('2 Tage')),
+                      ButtonSegment(value: 3, label: Text('3 Tage')),
+                      ButtonSegment(value: 4, label: Text('4 Tage')),
+                      ButtonSegment(value: 5, label: Text('5 Tage')),
+                    ],
+                    selected: {auswahl},
+                    onSelectionChanged: (s) =>
+                        setState(() => auswahl = s.first),
+                    showSelectedIcon: false,
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Je Tag: ${teilMenge.toStringAsFixed(0)} kg · '
+                    '${dauer.toStringAsFixed(0)} min\n'
+                    'Tage: $tagesliste',
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Abbrechen'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(auswahl),
+                  child: const Text('Verteilen'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (tage == null || tage < 2) return;
+    await _verteileAufTage(tage, gesamtMenge, dauerJeTag(tage));
+  }
+
+  Future<void> _verteileAufTage(
+    int tage,
+    double gesamtMenge,
+    double dauerJeTag,
+  ) async {
+    setState(() => _isSaving = true);
+    try {
+      final db = ref.read(databaseProvider);
+      final task = widget.wbTask.task;
+      final teilMenge = gesamtMenge / tage;
+      final jetzt = DateTime.now();
+
+      // Tag 1: bestehenden Auftrag auf Teilmenge reduzieren
+      await (db.update(db.productionTasks)
+            ..where((t) => t.id.equals(task.id)))
+          .write(
+        ProductionTasksCompanion(
+          mengeKg: Value(teilMenge),
+          geplanteDauerMinuten: Value(dauerJeTag),
+          updatedAt: Value(jetzt),
+        ),
+      );
+
+      // Tag 2..n: neue Teil-Aufträge an den Folgetagen
+      for (var i = 1; i < tage; i++) {
+        await db.into(db.productionTasks).insert(
+              ProductionTasksCompanion(
+                id: Value('${task.id}-t${i + 1}-${jetzt.millisecondsSinceEpoch}'),
+                productId: Value(task.productId),
+                mengeKg: Value(teilMenge),
+                datum: Value(task.datum.add(Duration(days: i))),
+                abteilung: Value(task.abteilung),
+                startZeit: Value(task.startZeit),
+                geplanteDauerMinuten: Value(dauerJeTag),
+                geplanteMitarbeiter: Value(task.geplanteMitarbeiter),
+                sortierung: Value(task.sortierung),
+                parentTaskId: Value(task.parentTaskId),
+                notizen: Value(task.notizen),
+              ),
+            );
+      }
+
+      ref.read(autoBackupTriggerProvider).fireDebounced(
+            reason: 'Auftrag auf $tage Tage verteilt',
+          );
+      ref.invalidate(dailyTasksProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Auftrag auf $tage Tage verteilt '
+              '(je ${(gesamtMenge / tage).toStringAsFixed(0)} kg).',
+            ),
+          ),
+        );
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler beim Verteilen: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _save() async {
     setState(() => _isSaving = true);
     try {
@@ -479,7 +640,20 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 _HistoryInfoBox(step: _step!),
               ],
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+
+              // Mehrtägige Prozesse (z.B. Spießen): Auftrag auf
+              // aufeinanderfolgende Tage aufteilen.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _isSaving ? null : _verteileAufTageDialog,
+                  icon: const Icon(Icons.date_range, size: 18),
+                  label: const Text('Auf mehrere Tage verteilen'),
+                ),
+              ),
+
+              const SizedBox(height: 16),
 
               // Speichern-Button
               SizedBox(
