@@ -861,7 +861,7 @@ class _AbteilungsKarte extends StatelessWidget {
 
           // Maschinen-Blöcke (alle ausgeklappt untereinander)
           for (var i = 0; i < gruppe.length; i++) ...[
-            if (i > 0) const Divider(height: 1),
+            if (i > 0) const Divider(height: 28, thickness: 0.5, indent: 8, endIndent: 8),
             _MaschinenBlock(
               step: gruppe[i].step,
               stepNumber: gruppe[i].nummer,
@@ -1059,7 +1059,7 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
 
           // Editierbare Werte als ruhige, gleichmäßige Leiste
           Row(
@@ -1417,15 +1417,27 @@ class _WertFeld extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final hatWert = wert.trim().isNotEmpty && wert.trim() != '–';
+    final accent = dark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
+    final bg = hatWert
+        ? accent.withValues(alpha: dark ? 0.22 : 0.12)
+        : theme.colorScheme.onSurface.withValues(alpha: 0.05);
+    final border = hatWert
+        ? accent.withValues(alpha: 0.5)
+        : theme.colorScheme.onSurface.withValues(alpha: 0.10);
+    final wertColor = hatWert
+        ? (dark ? const Color(0xFF9CCC65) : accent)
+        : theme.colorScheme.onSurface.withValues(alpha: 0.4);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
         decoration: BoxDecoration(
-          color:
-              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(8),
+          color: bg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: border),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1437,7 +1449,7 @@ class _WertFeld extends StatelessWidget {
                   child: Text(
                     label,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 12,
                       color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                     ),
                     maxLines: 1,
@@ -1446,15 +1458,19 @@ class _WertFeld extends StatelessWidget {
                 ),
                 Icon(
                   Icons.edit,
-                  size: 11,
+                  size: 12,
                   color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
                 ),
               ],
             ),
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
               wert,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: wertColor,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1824,9 +1840,9 @@ class _ParameterZeileStandard extends StatelessWidget {
     final theme = Theme.of(context);
     return InkWell(
       onTap: onEdit,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -1834,25 +1850,60 @@ class _ParameterZeileStandard extends StatelessWidget {
               flex: 2,
               child: Text(
                 param.parameterName,
-                style: theme.textTheme.bodySmall,
+                style: theme.textTheme.bodyMedium,
               ),
             ),
+            const SizedBox(width: 8),
             Expanded(
               flex: 1,
-              child: Text(
-                param.wert ?? '—',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  fontFamily: 'monospace',
-                ),
-              ),
+              child: _ParamWert(wert: param.wert),
             ),
             Icon(
               Icons.edit,
-              size: 14,
+              size: 15,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Wert-Anzeige für Parameter: gefüllt = grüne Pille, leer = gedämpftes „—".
+class _ParamWert extends StatelessWidget {
+  const _ParamWert({required this.wert});
+
+  final String? wert;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final hat = wert != null && wert!.trim().isNotEmpty;
+    if (!hat) {
+      return Text(
+        '—',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+        ),
+      );
+    }
+    final accent = dark ? const Color(0xFF9CCC65) : const Color(0xFF2E7D32);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: dark ? 0.20 : 0.12),
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text(
+          wert!,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: accent,
+          ),
         ),
       ),
     );
@@ -1875,7 +1926,7 @@ class _ParameterZeileEditierbar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1883,18 +1934,13 @@ class _ParameterZeileEditierbar extends StatelessWidget {
             flex: 2,
             child: Text(
               param.parameterName,
-              style: theme.textTheme.bodySmall,
+              style: theme.textTheme.bodyMedium,
             ),
           ),
+          const SizedBox(width: 8),
           Expanded(
             flex: 1,
-            child: Text(
-              param.wert ?? '—',
-              style: theme.textTheme.bodySmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                fontFamily: 'monospace',
-              ),
-            ),
+            child: _ParamWert(wert: param.wert),
           ),
           IconButton(
             icon: const Icon(Icons.edit, size: 16),

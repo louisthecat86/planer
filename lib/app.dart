@@ -134,6 +134,14 @@ class ProduktionPlanerApp extends ConsumerWidget {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      // App-weit etwas größere Schrift (bessere Lesbarkeit am Desktop).
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        return MediaQuery(
+          data: mq.copyWith(textScaler: const TextScaler.linear(1.15)),
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }
