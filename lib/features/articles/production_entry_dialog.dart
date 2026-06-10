@@ -330,7 +330,10 @@ class _ProductionEntryDialogState
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -359,7 +362,6 @@ class _ProductionEntryDialogState
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Datum',
-                    border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.event),
                   ),
                   child: Text(_datumLabel),
@@ -375,7 +377,6 @@ class _ProductionEntryDialogState
                       controller: _rohController,
                       decoration: const InputDecoration(
                         labelText: 'Rohware (kg)',
-                        border: OutlineInputBorder(),
                       ),
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
@@ -391,7 +392,6 @@ class _ProductionEntryDialogState
                       controller: _fertigController,
                       decoration: const InputDecoration(
                         labelText: 'Fertigware (kg)',
-                        border: OutlineInputBorder(),
                       ),
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
@@ -414,7 +414,6 @@ class _ProductionEntryDialogState
                       decoration: const InputDecoration(
                         labelText: 'Startzeit',
                         hintText: '06:35',
-                        border: OutlineInputBorder(),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -426,7 +425,6 @@ class _ProductionEntryDialogState
                       decoration: const InputDecoration(
                         labelText: 'Endzeit',
                         hintText: '09:15',
-                        border: OutlineInputBorder(),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -440,7 +438,6 @@ class _ProductionEntryDialogState
                 controller: _notizenController,
                 decoration: const InputDecoration(
                   labelText: 'Notizen (optional)',
-                  border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
               ),

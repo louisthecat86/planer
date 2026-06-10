@@ -286,7 +286,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -358,7 +361,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       controller: _mengeController,
                       decoration: const InputDecoration(
                         labelText: 'Menge (kg)',
-                        border: OutlineInputBorder(),
                       ),
                       keyboardType:
                           const TextInputType.numberWithOptions(decimal: true),
@@ -397,7 +399,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       controller: _dauerController,
                       decoration: InputDecoration(
                         labelText: 'Dauer (min)',
-                        border: const OutlineInputBorder(),
                         suffixText: _step != null
                             ? '± ${(_step!.dauerStdAbweichung ?? 0).toStringAsFixed(0)}'
                             : null,
@@ -415,7 +416,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       controller: _mitarbeiterController,
                       decoration: const InputDecoration(
                         labelText: 'Mitarbeiter',
-                        border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
                       inputFormatters: [
@@ -434,7 +434,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 controller: _startZeitController,
                 decoration: const InputDecoration(
                   labelText: 'Startzeit (HH:MM)',
-                  border: OutlineInputBorder(),
                   hintText: '08:30',
                 ),
                 onChanged: (_) => setState(() => _isDirty = true),
@@ -447,7 +446,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                 controller: _notizenController,
                 decoration: const InputDecoration(
                   labelText: 'Notizen',
-                  border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
                 onChanged: (_) => setState(() => _isDirty = true),

@@ -147,7 +147,10 @@ class _ArticleInfoEditorDialogState
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -162,7 +165,6 @@ class _ArticleInfoEditorDialogState
               InputDecorator(
                 decoration: InputDecoration(
                   labelText: 'Artikelnummer',
-                  border: const OutlineInputBorder(),
                   prefixIcon: const Icon(Icons.tag),
                   helperText: 'Schlüssel zur Excel — nicht änderbar',
                   helperStyle: TextStyle(color: colors.onSurfaceVariant),
@@ -176,7 +178,6 @@ class _ArticleInfoEditorDialogState
                 controller: _bezeichnung,
                 decoration: const InputDecoration(
                   labelText: 'Bezeichnung',
-                  border: OutlineInputBorder(),
                 ),
                 textCapitalization: TextCapitalization.sentences,
               ),
@@ -188,7 +189,6 @@ class _ArticleInfoEditorDialogState
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Produktgruppe',
-                  border: OutlineInputBorder(),
                 ),
                 items: [
                   const DropdownMenuItem<String?>(
@@ -209,7 +209,6 @@ class _ArticleInfoEditorDialogState
                 controller: _beschreibung,
                 decoration: const InputDecoration(
                   labelText: 'Beschreibung',
-                  border: OutlineInputBorder(),
                 ),
                 maxLines: 2,
                 textCapitalization: TextCapitalization.sentences,
@@ -221,7 +220,6 @@ class _ArticleInfoEditorDialogState
                 controller: _notizen,
                 decoration: const InputDecoration(
                   labelText: 'Notizen',
-                  border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
                 textCapitalization: TextCapitalization.sentences,

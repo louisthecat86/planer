@@ -412,7 +412,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 initialValue: _abteilungDbValue,
                 decoration: const InputDecoration(
                   labelText: 'Abteilung',
-                  border: OutlineInputBorder(),
                 ),
                 items: Abteilung.values
                     .map(
@@ -465,7 +464,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Prozessschritt (Freitext)',
                   hintText: 'z.B. "Braten", "Portionieren"',
-                  border: OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
@@ -481,7 +479,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                   initialValue: _maschineId,
                   decoration: const InputDecoration(
                     labelText: 'Anlage',
-                    border: OutlineInputBorder(),
                   ),
                   items: [
                     const DropdownMenuItem<String?>(
@@ -514,7 +511,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Personen',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -528,7 +524,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Menge',
                         suffixText: 'kg',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -542,7 +537,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                       decoration: const InputDecoration(
                         labelText: 'Dauer',
                         suffixText: 'min',
-                        border: OutlineInputBorder(),
                       ),
                     ),
                   ),
@@ -560,7 +554,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Fixe Zeit / Durchlauf',
                   suffixText: 'min',
-                  border: OutlineInputBorder(),
                   helperText: 'Mengenunabhängig — z.B. Tunnel-Durchlauf, '
                       'Schockfrost, Transport + Verpacken. Wird bei der '
                       'Bratstraße auf die Auflagezeit aufaddiert.',
