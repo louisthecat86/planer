@@ -38,6 +38,10 @@ class _DataManagementScreenState
   String? _statusMessage;
   Color _statusColor = Colors.green;
 
+  // ── Import-Detailmeldungen (Fehler + Hinweise des letzten Imports) ──
+  List<String> _importFehler = [];
+  List<String> _importWarnungen = [];
+
   // ── Speicherort-Pfade (nur Anzeige) ────────────────────────────────
   String? _datenbankPfad;
   String? _backupPfad;
@@ -81,6 +85,11 @@ class _DataManagementScreenState
       _busy = busy;
       _statusMessage = msg;
       _statusColor = color;
+      // Beim Start einer neuen Aktion alte Import-Details ausblenden.
+      if (busy) {
+        _importFehler = [];
+        _importWarnungen = [];
+      }
     });
   }
 
@@ -123,13 +132,28 @@ class _DataManagementScreenState
             reason: 'Excel-Import',
           );
 
+      final fehler = result.fehler;
+      final warnungen = result.warnungen;
+
       _setBusy(
         false,
         msg: result.hatFehler
-            ? 'Import mit Fehlern: ${result.fehler.length} Probleme'
-            : 'Import erfolgreich: ${result.artikelGesamt} Artikel',
+            ? 'Import mit Fehlern: ${fehler.length} Problem(e) '
+                '— Details unten'
+            : warnungen.isEmpty
+                ? 'Import erfolgreich: ${result.artikelGesamt} Artikel'
+                : 'Import: ${result.artikelGesamt} Artikel, '
+                    '${warnungen.length} Hinweis(e) — Details unten',
         color: result.hatFehler ? Colors.red : Colors.green,
       );
+
+      // Detailmeldungen anzeigen (auch reine Hinweise ohne Fehler).
+      if (mounted) {
+        setState(() {
+          _importFehler = fehler;
+          _importWarnungen = warnungen;
+        });
+      }
 
       // Backup-Liste aktualisieren (das frisch erstellte Auto-Backup
       // erscheint nach dem Debounce; wir laden mit kleiner Verzögerung)
@@ -375,6 +399,15 @@ class _DataManagementScreenState
             ),
           if (_busy || _statusMessage != null) const SizedBox(height: 20),
 
+          // ── Import-Detailmeldungen (aufklappbar) ─────────────────────
+          if (_importFehler.isNotEmpty || _importWarnungen.isNotEmpty) ...[
+            _ImportDetails(
+              fehler: _importFehler,
+              warnungen: _importWarnungen,
+            ),
+            const SizedBox(height: 20),
+          ],
+
           // ── Sektion: Excel ───────────────────────────────────────────
           _Sektion(
             icon: Icons.table_chart,
@@ -496,6 +529,132 @@ class _DataManagementScreenState
                     : null,
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Import-Detailmeldungen (aufklappbare Liste der Fehler + Hinweise)
+// ──────────────────────────────────────────────────────────────────────────
+
+class _ImportDetails extends StatelessWidget {
+  const _ImportDetails({
+    required this.fehler,
+    required this.warnungen,
+  });
+
+  final List<String> fehler;
+  final List<String> warnungen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hatFehler = fehler.isNotEmpty;
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: hatFehler
+              ? Colors.red.withValues(alpha: 0.4)
+              : Colors.orange.withValues(alpha: 0.4),
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: ExpansionTile(
+        initiallyExpanded: true,
+        leading: Icon(
+          hatFehler ? Icons.error_outline : Icons.info_outline,
+          color: hatFehler ? Colors.red : Colors.orange.shade800,
+        ),
+        title: Text(
+          'Import-Details',
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        subtitle: Text(
+          '${fehler.length} Fehler · ${warnungen.length} Hinweise',
+          style: theme.textTheme.bodySmall,
+        ),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        children: [
+          if (hatFehler) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Fehler',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: Colors.red,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...fehler.map(
+              (m) => _MeldungsZeile(text: m, farbe: Colors.red),
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (warnungen.isNotEmpty) ...[
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Hinweise',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: Colors.orange.shade800,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            ...warnungen.map(
+              (m) => _MeldungsZeile(text: m, farbe: Colors.orange.shade800),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Einzelne Melde-Zeile mit Aufzählungspunkt; Text ist markier-/kopierbar.
+class _MeldungsZeile extends StatelessWidget {
+  const _MeldungsZeile({
+    required this.text,
+    required this.farbe,
+  });
+
+  final String text;
+  final Color farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: 8),
+            child: Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: farbe,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              text,
+              style: theme.textTheme.bodySmall,
+            ),
           ),
         ],
       ),
