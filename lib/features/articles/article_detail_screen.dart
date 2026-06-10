@@ -8,6 +8,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import 'article_info_editor_dialog.dart';
+import 'article_print_service.dart';
 import 'bratstrasse_schema.dart';
 import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
@@ -168,6 +169,20 @@ class ArticleDetailScreen extends ConsumerWidget {
             error: (_, __) => const Text('Fehler'),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.print),
+              tooltip: 'Prozessblatt drucken',
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await ArticlePrintService.drucke(ref, productId);
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Druck-Fehler: $e')),
+                  );
+                }
+              },
+            ),
             productAsync.maybeWhen(
               data: (p) => p != null
                   ? Padding(
