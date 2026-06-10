@@ -377,25 +377,16 @@ class _StepsList extends ConsumerWidget {
   final String productId;
   final List<ProductStep> steps;
 
-  /// Verschiebt einen Abteilungs-Block (alle konsekutiven Schritte einer
-  /// Abteilung) um eine Position nach oben/unten und nummeriert die
-  /// `reihenfolge` aller Schritte neu durch (1..n).
+  /// Schreibt die `reihenfolge` aller Schritte gemäß der übergebenen
+  /// Gruppen-Anordnung neu durch (1..n) und lädt die Ansicht neu.
   ///
   /// Der Excel-Export schreibt die Schritte nach `reihenfolge` in die
-  /// Spalten B..K — die neue Abfolge landet also automatisch im Export.
-  Future<void> _verschiebeGruppe(
+  /// Spalten B..K — jede neue Abfolge landet also automatisch im Export.
+  Future<void> _schreibeReihenfolge(
     WidgetRef ref,
-    List<List<({ProductStep step, int nummer})>> gruppen,
-    int index,
-    int richtung,
-  ) async {
-    final ziel = index + richtung;
-    if (ziel < 0 || ziel >= gruppen.length) return;
-
-    final neu = [...gruppen];
-    final block = neu.removeAt(index);
-    neu.insert(ziel, block);
-
+    List<List<({ProductStep step, int nummer})>> neu, {
+    required String grund,
+  }) async {
     final db = ref.read(databaseProvider);
     var lauf = 1;
     for (final gruppe in neu) {
@@ -412,10 +403,56 @@ class _StepsList extends ConsumerWidget {
       }
     }
 
-    ref.read(autoBackupTriggerProvider).fireDebounced(
-          reason: 'Abteilungs-Reihenfolge geändert',
-        );
+    ref.read(autoBackupTriggerProvider).fireDebounced(reason: grund);
     ref.invalidate(productStepsProvider(productId));
+  }
+
+  /// Verschiebt einen Abteilungs-Block (alle konsekutiven Schritte einer
+  /// Abteilung) um eine Position nach oben/unten.
+  Future<void> _verschiebeGruppe(
+    WidgetRef ref,
+    List<List<({ProductStep step, int nummer})>> gruppen,
+    int index,
+    int richtung,
+  ) async {
+    final ziel = index + richtung;
+    if (ziel < 0 || ziel >= gruppen.length) return;
+
+    final neu = [...gruppen];
+    final block = neu.removeAt(index);
+    neu.insert(ziel, block);
+
+    await _schreibeReihenfolge(
+      ref,
+      neu,
+      grund: 'Abteilungs-Reihenfolge geändert',
+    );
+  }
+
+  /// Verschiebt einen Schritt INNERHALB seiner Abteilungs-Gruppe.
+  ///
+  /// Drop-Konvention wie bei ReorderableListView: nach rechts gezogen
+  /// landet der Schritt HINTER dem Ziel, nach links gezogen DAVOR.
+  Future<void> _verschiebeSchrittInGruppe(
+    WidgetRef ref,
+    List<List<({ProductStep step, int nummer})>> gruppen,
+    int gruppenIndex,
+    int von,
+    int nach,
+  ) async {
+    if (von == nach) return;
+    final gruppe = [...gruppen[gruppenIndex]];
+    final item = gruppe.removeAt(von);
+    gruppe.insert(nach.clamp(0, gruppe.length), item);
+
+    final neu = [...gruppen];
+    neu[gruppenIndex] = gruppe;
+
+    await _schreibeReihenfolge(
+      ref,
+      neu,
+      grund: 'Schritt-Reihenfolge geändert',
+    );
   }
 
   @override
@@ -458,6 +495,14 @@ class _StepsList extends ConsumerWidget {
             gruppen: gruppen,
             onMove: (index, richtung) =>
                 _verschiebeGruppe(ref, gruppen, index, richtung),
+            onReorderSchritt: (gruppenIndex, von, nach) =>
+                _verschiebeSchrittInGruppe(
+              ref,
+              gruppen,
+              gruppenIndex,
+              von,
+              nach,
+            ),
             onUpdated: () => ref.invalidate(productStepsProvider(productId)),
           )
         : _kartenBereich(zweiSpaltig, karten);
@@ -2472,12 +2517,14 @@ class _ProzessDiagramm extends StatelessWidget {
     required this.productId,
     required this.gruppen,
     required this.onMove,
+    required this.onReorderSchritt,
     required this.onUpdated,
   });
 
   final String productId;
   final List<List<({ProductStep step, int nummer})>> gruppen;
   final void Function(int index, int richtung) onMove;
+  final void Function(int gruppenIndex, int von, int nach) onReorderSchritt;
   final VoidCallback onUpdated;
 
   @override
@@ -2503,12 +2550,14 @@ class _ProzessDiagramm extends StatelessWidget {
         for (var g = 0; g < gruppen.length; g++)
           _DiagrammStation(
             productId: productId,
+            gruppenIndex: g,
             gruppe: gruppen[g],
             position: g + 1,
             istLetzte: g == gruppen.length - 1,
             onMoveUp: g == 0 ? null : () => onMove(g, -1),
             onMoveDown:
                 g == gruppen.length - 1 ? null : () => onMove(g, 1),
+            onReorderSchritt: (von, nach) => onReorderSchritt(g, von, nach),
             onUpdated: onUpdated,
           ),
       ],
@@ -2518,28 +2567,34 @@ class _ProzessDiagramm extends StatelessWidget {
 
 /// Eine Station im Fließdiagramm: Nummern-Kreis + Flusslinie links,
 /// rechts die Abteilungs-Box mit den Maschinen-Knoten.
+/// Knoten lassen sich per Drag & Drop innerhalb der Station umsortieren.
 class _DiagrammStation extends StatelessWidget {
   const _DiagrammStation({
     required this.productId,
+    required this.gruppenIndex,
     required this.gruppe,
     required this.position,
     required this.istLetzte,
     required this.onMoveUp,
     required this.onMoveDown,
+    required this.onReorderSchritt,
     required this.onUpdated,
   });
 
   final String productId;
+  final int gruppenIndex;
   final List<({ProductStep step, int nummer})> gruppe;
   final int position;
   final bool istLetzte;
   final VoidCallback? onMoveUp;
   final VoidCallback? onMoveDown;
+  final void Function(int von, int nach) onReorderSchritt;
   final VoidCallback onUpdated;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final abt = Abteilung.fromDbValue(gruppe.first.step.abteilung);
     final farbe = abt.farbe;
 
@@ -2547,16 +2602,29 @@ class _DiagrammStation extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Fluss-Spalte: Nummern-Kreis + Verbindungslinie mit Pfeil
+          // Fluss-Spalte: Nummern-Kreis mit Ring + Verbindungslinie + Pfeil
           SizedBox(
-            width: 44,
+            width: 46,
             child: Column(
               children: [
                 Container(
-                  width: 30,
-                  height: 30,
-                  decoration:
-                      BoxDecoration(color: farbe, shape: BoxShape.circle),
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: farbe,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: dark ? 0.25 : 0.6),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: farbe.withValues(alpha: 0.45),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
                   alignment: Alignment.center,
                   child: Text(
                     '$position',
@@ -2570,14 +2638,17 @@ class _DiagrammStation extends StatelessWidget {
                 if (!istLetzte) ...[
                   Expanded(
                     child: Container(
-                      width: 2,
-                      color: farbe.withValues(alpha: 0.4),
+                      width: 2.5,
+                      decoration: BoxDecoration(
+                        color: farbe.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
                   ),
                   Icon(
                     Icons.arrow_drop_down,
-                    size: 20,
-                    color: farbe.withValues(alpha: 0.7),
+                    size: 22,
+                    color: farbe.withValues(alpha: 0.8),
                   ),
                 ],
               ],
@@ -2585,15 +2656,22 @@ class _DiagrammStation extends StatelessWidget {
           ),
           const SizedBox(width: 6),
 
-          // Stations-Box
+          // Stations-Box mit dezentem Farbverlauf
           Expanded(
             child: Container(
-              margin: EdgeInsets.only(bottom: istLetzte ? 0 : 14),
+              margin: EdgeInsets.only(bottom: istLetzte ? 0 : 16),
               padding: const EdgeInsets.fromLTRB(12, 8, 8, 12),
               decoration: BoxDecoration(
-                color: farbe.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: farbe.withValues(alpha: 0.45)),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    farbe.withValues(alpha: dark ? 0.14 : 0.09),
+                    farbe.withValues(alpha: dark ? 0.04 : 0.02),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: farbe.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2604,7 +2682,8 @@ class _DiagrammStation extends StatelessWidget {
                         child: Text(
                           abt.anzeigeName,
                           style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.3,
                           ),
                         ),
                       ),
@@ -2642,18 +2721,23 @@ class _DiagrammStation extends StatelessWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
                     children: [
-                      for (final eintrag in gruppe)
-                        _ProzessKnoten(
-                          productId: productId,
-                          step: eintrag.step,
-                          nummer: eintrag.nummer,
-                          farbe: farbe,
-                          onUpdated: onUpdated,
+                      for (var i = 0; i < gruppe.length; i++)
+                        _DraggableKnoten(
+                          gruppenIndex: gruppenIndex,
+                          index: i,
+                          onReorder: onReorderSchritt,
+                          knoten: _ProzessKnoten(
+                            productId: productId,
+                            step: gruppe[i].step,
+                            nummer: gruppe[i].nummer,
+                            farbe: farbe,
+                            onUpdated: onUpdated,
+                          ),
                         ),
                     ],
                   ),
@@ -2663,6 +2747,57 @@ class _DiagrammStation extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Macht einen Prozess-Knoten zieh- und ablegbar (nur innerhalb der
+/// eigenen Station). Beim Drop landet der gezogene Schritt an der
+/// Position des Ziels — nach rechts gezogen dahinter, nach links davor.
+class _DraggableKnoten extends StatelessWidget {
+  const _DraggableKnoten({
+    required this.gruppenIndex,
+    required this.index,
+    required this.onReorder,
+    required this.knoten,
+  });
+
+  final int gruppenIndex;
+  final int index;
+  final void Function(int von, int nach) onReorder;
+  final Widget knoten;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DragTarget<({int gruppe, int index})>(
+      onWillAcceptWithDetails: (d) =>
+          d.data.gruppe == gruppenIndex && d.data.index != index,
+      onAcceptWithDetails: (d) => onReorder(d.data.index, index),
+      builder: (context, candidate, rejected) {
+        final ziel = candidate.isNotEmpty;
+        return Draggable<({int gruppe, int index})>(
+          data: (gruppe: gruppenIndex, index: index),
+          feedback: Material(
+            color: Colors.transparent,
+            child: Opacity(opacity: 0.9, child: knoten),
+          ),
+          childWhenDragging: Opacity(opacity: 0.35, child: knoten),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: ziel
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                width: 2,
+              ),
+            ),
+            child: knoten,
+          ),
+        );
+      },
     );
   }
 }
@@ -2720,7 +2855,7 @@ class _ProzessKnoten extends ConsumerWidget {
       ),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
         decoration: BoxDecoration(
           color: hatDaten
               ? accent.withValues(alpha: dark ? 0.20 : 0.10)
@@ -2731,6 +2866,13 @@ class _ProzessKnoten extends ConsumerWidget {
                 ? accent.withValues(alpha: 0.55)
                 : theme.dividerColor,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: dark ? 0.25 : 0.06),
+              blurRadius: 4,
+              offset: const Offset(0, 1),
+            ),
+          ],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2739,6 +2881,31 @@ class _ProzessKnoten extends ConsumerWidget {
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                Icon(
+                  Icons.drag_indicator,
+                  size: 14,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                ),
+                const SizedBox(width: 3),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 5,
+                    vertical: 1,
+                  ),
+                  decoration: BoxDecoration(
+                    color: farbe.withValues(alpha: dark ? 0.30 : 0.15),
+                    borderRadius: BorderRadius.circular(5),
+                  ),
+                  child: Text(
+                    '$nummer',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: dark ? Colors.white : farbe,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
                 Text(
                   name,
                   style: const TextStyle(
@@ -2755,11 +2922,14 @@ class _ProzessKnoten extends ConsumerWidget {
             if (step.prozessschritt != null &&
                 step.prozessschritt!.trim().isNotEmpty &&
                 step.prozessschritt != name)
-              Text(
-                step.prozessschritt!,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: theme.colorScheme.onSurfaceVariant,
+              Padding(
+                padding: const EdgeInsets.only(left: 17, top: 1),
+                child: Text(
+                  step.prozessschritt!,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
           ],
