@@ -244,7 +244,6 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
               ? 'Planungsboard · KW ${_isoKw(montag)}'
               : 'Tagesplan · ${_fmtTagTitel(sel)}',
         ),
-        centerTitle: true,
         actions: [
           PopupMenuButton<String>(
             icon: const Icon(Icons.print),
@@ -392,14 +391,15 @@ class _HeaderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final now = DateTime.now();
     final heute = DateTime(now.year, now.month, now.day);
 
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceContainerHighest,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade300)),
+        border: Border(bottom: BorderSide(color: theme.dividerColor)),
       ),
       child: Row(
         children: [
@@ -407,26 +407,59 @@ class _HeaderRow extends StatelessWidget {
           for (var i = 0; i < tage.length; i++)
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _kDayLabels[i],
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: tage[i] == heute ? colors.primary : null,
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: tage[i] == heute
+                    ? Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: colors.primary,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _kDayLabels[i],
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: colors.onPrimary,
+                                ),
+                              ),
+                              Text(
+                                '${tage[i].day}.${tage[i].month}.',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color:
+                                      colors.onPrimary.withValues(alpha: 0.85),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(height: 3),
+                          Text(
+                            _kDayLabels[i],
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            '${tage[i].day}.${tage[i].month}.',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                        ],
                       ),
-                    ),
-                    Text(
-                      '${tage[i].day}.${tage[i].month}.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
         ],
@@ -476,14 +509,15 @@ class _AbteilungsLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: _kLabelWidth,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
         color: abteilung.farbe.withValues(alpha: 0.06),
         border: Border(
-          right: BorderSide(color: Colors.grey.shade300),
-          bottom: BorderSide(color: Colors.grey.shade200),
+          right: BorderSide(color: theme.dividerColor),
+          bottom: BorderSide(color: theme.dividerColor),
         ),
       ),
       child: Row(
@@ -527,7 +561,10 @@ class _TagesZelle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final farbe = _ampelFarbe(cell.status);
+    final now = DateTime.now();
+    final istHeute = cell.tag == DateTime(now.year, now.month, now.day);
 
     return DragTarget<BoardTask>(
       onWillAcceptWithDetails: (details) {
@@ -543,10 +580,12 @@ class _TagesZelle extends StatelessWidget {
           decoration: BoxDecoration(
             color: highlight
                 ? cell.abteilung.farbe.withValues(alpha: 0.10)
-                : null,
+                : istHeute
+                    ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                    : null,
             border: Border(
-              right: BorderSide(color: Colors.grey.shade200),
-              bottom: BorderSide(color: Colors.grey.shade200),
+              right: BorderSide(color: theme.dividerColor),
+              bottom: BorderSide(color: theme.dividerColor),
             ),
           ),
           child: Column(
@@ -568,7 +607,7 @@ class _TagesZelle extends StatelessWidget {
                     _ampelWort(cell.status),
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.grey.shade600,
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -579,7 +618,7 @@ class _TagesZelle extends StatelessWidget {
                 child: LinearProgressIndicator(
                   value: cell.auslastung.clamp(0.0, 1.0).toDouble(),
                   minHeight: 5,
-                  backgroundColor: Colors.grey.shade200,
+                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
                   color: farbe,
                 ),
               ),
@@ -637,13 +676,14 @@ class _KartenInhalt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final abtColor = task.abteilung.farbe;
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: Colors.grey.shade300),
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.dividerColor),
         boxShadow: dragging
             ? [
                 BoxShadow(
@@ -661,11 +701,11 @@ class _KartenInhalt extends StatelessWidget {
           // Farbkopf mit Abteilungs-Kurzcode
           Container(
             color: abtColor,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
             child: Text(
               task.abteilung.kurzcode,
               style: const TextStyle(
-                fontSize: 9,
+                fontSize: 10,
                 fontWeight: FontWeight.w800,
                 color: Colors.white,
                 letterSpacing: 0.5,
@@ -673,7 +713,7 @@ class _KartenInhalt extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -681,17 +721,21 @@ class _KartenInhalt extends StatelessWidget {
                 Text(
                   task.productName,
                   style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
                   ),
-                  maxLines: 1,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 1),
+                const SizedBox(height: 2),
                 Text(
                   '${task.mengeKg.toStringAsFixed(0)} kg · '
                   '${_fmtStunden(task.dauerMinuten)} h',
-                  style: TextStyle(fontSize: 10, color: Colors.grey.shade600),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -812,7 +856,8 @@ class _DayDeptCard extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: lane.auslastung.clamp(0.0, 1.0).toDouble(),
                 minHeight: 6,
-                backgroundColor: Colors.grey.shade200,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 color: farbe,
               ),
             ),
@@ -825,7 +870,10 @@ class _DayDeptCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
-                    color: Colors.grey.shade500,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.45),
                   ),
                 ),
               )
@@ -931,7 +979,7 @@ class _DayTaskRow extends StatelessWidget {
                       Icons.keyboard_arrow_up,
                       size: 22,
                       color: onUp == null
-                          ? Colors.grey.shade300
+                          ? colors.onSurface.withValues(alpha: 0.25)
                           : colors.onSurfaceVariant,
                     ),
                   ),
@@ -942,7 +990,7 @@ class _DayTaskRow extends StatelessWidget {
                       Icons.keyboard_arrow_down,
                       size: 22,
                       color: onDown == null
-                          ? Colors.grey.shade300
+                          ? colors.onSurface.withValues(alpha: 0.25)
                           : colors.onSurfaceVariant,
                     ),
                   ),
@@ -1102,14 +1150,19 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   String _fmtTag(DateTime d) =>
       '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.';
 
-  Widget _griff() => Center(
-        child: Container(
-          width: 40,
-          height: 4,
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade300,
-            borderRadius: BorderRadius.circular(2),
+  Widget _griff() => Builder(
+        builder: (context) => Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.25),
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ),
       );
