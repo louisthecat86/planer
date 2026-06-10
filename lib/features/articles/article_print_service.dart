@@ -1,3 +1,15 @@
+import 'package:flutter/material.dart' show
+    AlertDialog,
+    BuildContext,
+    CheckboxListTile,
+    FilledButton,
+    Navigator,
+    StatefulBuilder,
+    SwitchListTile,
+    Text,
+    TextButton,
+    showDialog;
+import 'package:flutter/widgets.dart' as w;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -8,6 +20,10 @@ import '../../core/database/database.dart';
 import 'article_detail_screen.dart';
 import 'bratstrasse_schema.dart';
 
+/// Auswahl des Druck-Dialogs: welche Abteilungen, und ob jede Abteilung
+/// auf einer eigenen Seite gedruckt wird (zum getrennten Verteilen).
+typedef _DruckAuswahl = ({Set<String> abteilungen, bool eigeneSeiten});
+
 /// Erstellt ein druckfertiges DIN-A4-Prozessblatt für einen Artikel.
 ///
 /// Aufbau (angelehnt an die Bratstraßen-Einstellvorlage):
@@ -17,15 +33,25 @@ import 'bratstrasse_schema.dart';
 ///   und alle gefüllten Parameter, nach Gruppe geordnet
 /// - Für Bratstraßen-Schritte: grafisches Plattenraster mit Laufrichtung
 ///   (Zone 1 = Einlauf rechts), Bratstraße 10+10 bzw. Kombiofen 12 Zonen
+///
+/// Vor dem Druck fragt ein Dialog, ob alle Abteilungen auf ein Blatt
+/// sollen oder nur ausgewählte — optional jede auf eigener Seite,
+/// damit die Blätter getrennt an die Abteilungen verteilt werden können.
 class ArticlePrintService {
   ArticlePrintService._();
 
-  /// Lädt alle Daten des Artikels und öffnet die System-Druckvorschau.
-  static Future<void> drucke(WidgetRef ref, String productId) async {
+  /// Lädt alle Daten des Artikels, fragt die Druck-Auswahl ab und öffnet
+  /// die System-Druckvorschau.
+  static Future<void> drucke(
+    BuildContext context,
+    WidgetRef ref,
+    String productId,
+  ) async {
     final produkt = await ref.read(productProvider(productId).future);
     if (produkt == null) return;
 
     final steps = await ref.read(productStepsProvider(productId).future);
+    if (steps.isEmpty) return;
 
     // Parameter + Maschine je Schritt vorab laden
     final parameterJeStep = <String, List<ProductStepParameter>>{};
@@ -38,16 +64,96 @@ class ArticlePrintService {
           mid == null ? null : await ref.read(machineProvider(mid).future);
     }
 
+    // Vorkommende Abteilungen in Prozess-Reihenfolge
+    final abteilungen = <String>[];
+    for (final s in steps) {
+      if (!abteilungen.contains(s.abteilung)) abteilungen.add(s.abteilung);
+    }
+
+    if (!context.mounted) return;
+    final auswahl = await _frageAuswahl(context, abteilungen);
+    if (auswahl == null || auswahl.abteilungen.isEmpty) return;
+
     final doc = _baueDokument(
       produkt: produkt,
       steps: steps,
       parameterJeStep: parameterJeStep,
       maschineJeStep: maschineJeStep,
+      gewaehlt: auswahl.abteilungen,
+      eigeneSeiten: auswahl.eigeneSeiten,
     );
 
     await Printing.layoutPdf(
       name: 'Prozessblatt_${produkt.artikelnummer}',
       onLayout: (format) => doc.save(),
+    );
+  }
+
+  /// Dialog: Abteilungen wählen + „jede Abteilung auf eigener Seite".
+  static Future<_DruckAuswahl?> _frageAuswahl(
+    BuildContext context,
+    List<String> abteilungen,
+  ) {
+    final gewaehlt = {...abteilungen};
+    var eigeneSeiten = false;
+
+    return showDialog<_DruckAuswahl>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Prozessblatt drucken'),
+          content: w.SizedBox(
+            width: 360,
+            child: w.Column(
+              mainAxisSize: w.MainAxisSize.min,
+              crossAxisAlignment: w.CrossAxisAlignment.start,
+              children: [
+                const Text('Welche Abteilungen sollen aufs Blatt?'),
+                const w.SizedBox(height: 8),
+                for (final a in abteilungen)
+                  CheckboxListTile(
+                    dense: true,
+                    contentPadding: w.EdgeInsets.zero,
+                    title: Text(Abteilung.fromDbValue(a).anzeigeName),
+                    value: gewaehlt.contains(a),
+                    onChanged: (v) => setState(() {
+                      if (v ?? false) {
+                        gewaehlt.add(a);
+                      } else {
+                        gewaehlt.remove(a);
+                      }
+                    }),
+                  ),
+                const w.SizedBox(height: 4),
+                SwitchListTile(
+                  dense: true,
+                  contentPadding: w.EdgeInsets.zero,
+                  title: const Text('Jede Abteilung auf eigener Seite'),
+                  subtitle: const Text(
+                    'Zum getrennten Verteilen an die Abteilungen',
+                  ),
+                  value: eigeneSeiten,
+                  onChanged: (v) => setState(() => eigeneSeiten = v),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              onPressed: gewaehlt.isEmpty
+                  ? null
+                  : () => Navigator.of(ctx).pop(
+                        (abteilungen: gewaehlt, eigeneSeiten: eigeneSeiten),
+                      ),
+              child: const Text('Drucken'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -60,17 +166,21 @@ class ArticlePrintService {
     required List<ProductStep> steps,
     required Map<String, List<ProductStepParameter>> parameterJeStep,
     required Map<String, Machine?> maschineJeStep,
+    required Set<String> gewaehlt,
+    required bool eigeneSeiten,
   }) {
     final doc = pw.Document();
 
-    // Abteilungen in Reihenfolge des ersten Auftretens gruppieren
+    // Abteilungen in Reihenfolge des ersten Auftretens gruppieren —
+    // nur die ausgewählten.
     final gruppen = <String, List<ProductStep>>{};
     for (final s in steps) {
+      if (!gewaehlt.contains(s.abteilung)) continue;
       gruppen.putIfAbsent(s.abteilung, () => []).add(s);
     }
 
-    doc.addPage(
-      pw.MultiPage(
+    pw.MultiPage seite(Iterable<MapEntry<String, List<ProductStep>>> teile) {
+      return pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.fromLTRB(28, 26, 28, 30),
         theme: pw.ThemeData.withFont(
@@ -89,7 +199,7 @@ class ArticlePrintService {
         build: (ctx) => [
           _kopf(produkt),
           pw.SizedBox(height: 10),
-          for (final eintrag in gruppen.entries) ...[
+          for (final eintrag in teile) ...[
             _abteilungsBand(eintrag.key),
             pw.SizedBox(height: 4),
             for (final s in eintrag.value) ...[
@@ -103,8 +213,18 @@ class ArticlePrintService {
             pw.SizedBox(height: 4),
           ],
         ],
-      ),
-    );
+      );
+    }
+
+    if (eigeneSeiten) {
+      // Jede Abteilung beginnt auf einer eigenen Seite (eigener Kopf) —
+      // die Blätter lassen sich so getrennt verteilen.
+      for (final eintrag in gruppen.entries) {
+        doc.addPage(seite([eintrag]));
+      }
+    } else {
+      doc.addPage(seite(gruppen.entries));
+    }
 
     return doc;
   }

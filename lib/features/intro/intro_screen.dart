@@ -3,22 +3,18 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Intro-Screen: Schatten in der Mitte, der sich zu einem scharfen,
-/// lesbaren "Produktions-Planer"-Schriftzug entwickelt.
+/// Intro-Screen im dunklen App-Design.
 ///
-/// Der Schriftzug startet:
-///   - klein (scale 0.4) und stark unscharf (blur sigma 20)
-///   - mit niedriger Opacity (0.15) — wie ein Schatten
+/// Eine Logo-Kachel (Zahnrad auf Primär-Verlauf, wie die Home-Kacheln)
+/// und der Schriftzug "Produktion Planer" entwickeln sich aus einem
+/// unscharfen Schatten zu einem scharfen, hellen Erscheinungsbild:
+///   - Start: klein (scale 0.4), stark unscharf (blur 20), fast unsichtbar
+///   - Ende: voll skaliert (leichter Overshoot), scharf, voll sichtbar
 ///
-/// Und endet:
-///   - voll skaliert (scale 1.0) mit leichtem Overshoot
-///   - scharf (blur 0)
-///   - voll sichtbar (opacity 1.0)
+/// Hintergrund: derselbe abgestufte Dunkelverlauf wie die App-Flächen
+/// (0xFF121417 → 0xFF1C2025), dazu ein dezenter Glow in Primärfarbe.
 ///
-/// Farben bewusst dunkel gehalten: tiefes Marineblau für "Produktions-"
-/// und nahezu-schwarz für "Planer".
-///
-/// Tipp/Klick bricht die Animation ab und navigiert direkt zum Dashboard.
+/// Tipp/Klick bricht die Animation ab und navigiert direkt zum Home.
 class IntroScreen extends StatefulWidget {
   const IntroScreen({super.key});
 
@@ -28,8 +24,8 @@ class IntroScreen extends StatefulWidget {
 
 class _IntroScreenState extends State<IntroScreen>
     with SingleTickerProviderStateMixin {
-  static const Duration _gesamtDauer = Duration(milliseconds: 2600);
-  static const Duration _haltzeitAmEnde = Duration(milliseconds: 500);
+  static const Duration _gesamtDauer = Duration(milliseconds: 2400);
+  static const Duration _haltzeitAmEnde = Duration(milliseconds: 450);
 
   late final AnimationController _controller;
   late final Animation<double> _blur;
@@ -61,7 +57,7 @@ class _IntroScreenState extends State<IntroScreen>
       ),
     );
 
-    _opacity = Tween<double>(begin: 0.15, end: 1.0).animate(
+    _opacity = Tween<double>(begin: 0.1, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
         curve: const Interval(0.0, 0.6, curve: Curves.easeIn),
@@ -84,9 +80,6 @@ class _IntroScreenState extends State<IntroScreen>
   void _finish() {
     if (_alreadyNavigating) return;
     _alreadyNavigating = true;
-    // Direkt zum Dashboard — die alte Landing-Page mit Backup-Wahl
-    // ist jetzt durch den zentralen Daten-Screen (über das
-    // Datei-Icon im Home-Screen erreichbar) ersetzt.
     context.go('/home');
   }
 
@@ -99,22 +92,31 @@ class _IntroScreenState extends State<IntroScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F7FA),
       body: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _finish,
-        child: Center(
-          child: AnimatedBuilder(
-            animation: _controller,
-            builder: (context, _) {
-              return Stack(
-                alignment: Alignment.center,
-                children: [
-                  _buildGlow(),
-                  _buildSchriftzug(),
-                ],
-              );
-            },
+        child: DecoratedBox(
+          // Abgestufter Dunkelverlauf — dieselben Flächen wie das Theme.
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF121417), Color(0xFF1C2025)],
+            ),
+          ),
+          child: Center(
+            child: AnimatedBuilder(
+              animation: _controller,
+              builder: (context, _) {
+                return Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _buildGlow(),
+                    _buildInhalt(),
+                  ],
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -125,13 +127,13 @@ class _IntroScreenState extends State<IntroScreen>
     final intensity = _glow.value;
     return IgnorePointer(
       child: Container(
-        width: 600,
-        height: 400,
+        width: 640,
+        height: 460,
         decoration: BoxDecoration(
           gradient: RadialGradient(
             colors: [
-              const Color(0xFF1A237E).withValues(alpha: 0.18 * intensity),
-              const Color(0xFF1A237E).withValues(alpha: 0),
+              const Color(0xFF607D8B).withValues(alpha: 0.22 * intensity),
+              const Color(0xFF607D8B).withValues(alpha: 0),
             ],
             stops: const [0.0, 1.0],
           ),
@@ -140,22 +142,22 @@ class _IntroScreenState extends State<IntroScreen>
     );
   }
 
-  Widget _buildSchriftzug() {
+  Widget _buildInhalt() {
     final blurValue = _blur.value;
     final scaleValue = _scale.value;
     final opacityValue = _opacity.value.clamp(0.0, 1.0);
 
-    Widget text = const _SchriftzugText();
+    Widget inhalt = const _IntroInhalt();
 
     // ImageFiltered erwartet einen echten ImageFilter — bei sigma ≈ 0
     // den Filter auslassen, weil GaussianBlur mit 0 unnötig teuer ist.
     if (blurValue > 0.01) {
-      text = ImageFiltered(
+      inhalt = ImageFiltered(
         imageFilter: ui.ImageFilter.blur(
           sigmaX: blurValue,
           sigmaY: blurValue,
         ),
-        child: text,
+        child: inhalt,
       );
     }
 
@@ -163,72 +165,97 @@ class _IntroScreenState extends State<IntroScreen>
       scale: scaleValue,
       child: Opacity(
         opacity: opacityValue,
-        child: text,
+        child: inhalt,
       ),
     );
   }
 }
 
-/// Der eigentliche Schriftzug "Produktions-Planer" in Corporate-Farben.
-class _SchriftzugText extends StatelessWidget {
-  const _SchriftzugText();
+/// Logo-Kachel + Schriftzug in der dunklen Designsprache der App.
+class _IntroInhalt extends StatelessWidget {
+  const _IntroInhalt();
 
   @override
   Widget build(BuildContext context) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Logo-Kachel — gleiche Formensprache wie die Home-Kacheln
+        Container(
+          padding: const EdgeInsets.all(22),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF546E7A), Color(0xFF37474F)],
+            ),
+            borderRadius: BorderRadius.circular(26),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.precision_manufacturing_rounded,
+            size: 56,
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 28),
         RichText(
           textAlign: TextAlign.center,
-          text: const TextSpan(
+          text: TextSpan(
             children: [
-              TextSpan(
-                text: 'Produktions',
+              const TextSpan(
+                text: 'Produktion ',
                 style: TextStyle(
-                  fontSize: 56,
+                  fontSize: 46,
                   fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A237E),
-                  letterSpacing: 1.5,
-                  height: 1.0,
-                ),
-              ),
-              TextSpan(
-                text: '-',
-                style: TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w300,
-                  color: Color(0xFF455A64),
-                  letterSpacing: 1.5,
+                  color: Colors.white,
+                  letterSpacing: 1.2,
                   height: 1.0,
                 ),
               ),
               TextSpan(
                 text: 'Planer',
                 style: TextStyle(
-                  fontSize: 56,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0D1117),
-                  letterSpacing: 1.5,
+                  fontSize: 46,
+                  fontWeight: FontWeight.w300,
+                  color: Colors.white.withValues(alpha: 0.75),
+                  letterSpacing: 1.2,
                   height: 1.0,
                 ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
+        // Feine Trennlinie mit Verlauf
         Container(
-          width: 120,
+          width: 140,
           height: 2,
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                const Color(0xFF1A237E).withValues(alpha: 0),
-                const Color(0xFF1A237E).withValues(alpha: 0.6),
-                const Color(0xFF0D1117).withValues(alpha: 0.6),
-                const Color(0xFF0D1117).withValues(alpha: 0),
+                Colors.white.withValues(alpha: 0),
+                Colors.white.withValues(alpha: 0.45),
+                Colors.white.withValues(alpha: 0),
               ],
-              stops: const [0.0, 1.0],
             ),
+            borderRadius: BorderRadius.circular(1),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Planung · Prozesse · Produktion',
+          style: TextStyle(
+            fontSize: 14,
+            letterSpacing: 2.5,
+            color: Colors.white.withValues(alpha: 0.55),
           ),
         ),
       ],

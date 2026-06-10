@@ -96,9 +96,25 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     );
     if (newMenge == null || newMenge <= 0) return;
 
+    // Ohne Basismenge ist keine Hochrechnung möglich (Division durch 0
+    // würde NaN erzeugen). Dauer bleibt dann unverändert; der Nutzer
+    // bekommt einen kurzen Hinweis.
+    if (step.basisMengeKg <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Hochrechnen nicht möglich: Der Artikel hat keine Basismenge '
+            'im ersten Prozessschritt hinterlegt.',
+          ),
+        ),
+      );
+      return;
+    }
+
     final fixZeit = step.fixZeitMinuten ?? 0.0;
     final scaledDauer =
         fixZeit + step.basisDauerMinuten * (newMenge / step.basisMengeKg);
+    if (!scaledDauer.isFinite) return;
 
     _dauerController.text = scaledDauer.roundToDouble().toStringAsFixed(0);
     setState(() => _isDirty = true);
@@ -108,11 +124,17 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     setState(() => _isSaving = true);
     try {
       final db = ref.read(databaseProvider);
-      final newMenge = double.tryParse(
-            _mengeController.text.replaceAll(',', '.'),
-          ) ??
+      // double.tryParse akzeptiert auch 'NaN'/'Infinity' — solche Werte
+      // dürfen nie in die Datenbank (NOT-NULL-Constraint schlägt fehl,
+      // weil NaN als NULL gebunden wird).
+      double? sicher(String text) {
+        final v = double.tryParse(text.replaceAll(',', '.'));
+        return (v != null && v.isFinite && v >= 0) ? v : null;
+      }
+
+      final newMenge = sicher(_mengeController.text) ??
           widget.wbTask.task.mengeKg;
-      final newDauer = double.tryParse(_dauerController.text) ??
+      final newDauer = sicher(_dauerController.text) ??
           widget.wbTask.task.geplanteDauerMinuten;
       final newMa = int.tryParse(_mitarbeiterController.text) ??
           widget.wbTask.task.geplanteMitarbeiter;

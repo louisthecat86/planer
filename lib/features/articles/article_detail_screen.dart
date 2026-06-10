@@ -175,7 +175,7 @@ class ArticleDetailScreen extends ConsumerWidget {
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
                 try {
-                  await ArticlePrintService.drucke(ref, productId);
+                  await ArticlePrintService.drucke(context, ref, productId);
                 } catch (e) {
                   messenger.showSnackBar(
                     SnackBar(content: Text('Druck-Fehler: $e')),
@@ -374,6 +374,47 @@ class _StepsList extends ConsumerWidget {
   final String productId;
   final List<ProductStep> steps;
 
+  /// Verschiebt einen Abteilungs-Block (alle konsekutiven Schritte einer
+  /// Abteilung) um eine Position nach oben/unten und nummeriert die
+  /// `reihenfolge` aller Schritte neu durch (1..n).
+  ///
+  /// Der Excel-Export schreibt die Schritte nach `reihenfolge` in die
+  /// Spalten B..K — die neue Abfolge landet also automatisch im Export.
+  Future<void> _verschiebeGruppe(
+    WidgetRef ref,
+    List<List<({ProductStep step, int nummer})>> gruppen,
+    int index,
+    int richtung,
+  ) async {
+    final ziel = index + richtung;
+    if (ziel < 0 || ziel >= gruppen.length) return;
+
+    final neu = [...gruppen];
+    final block = neu.removeAt(index);
+    neu.insert(ziel, block);
+
+    final db = ref.read(databaseProvider);
+    var lauf = 1;
+    for (final gruppe in neu) {
+      for (final eintrag in gruppe) {
+        await (db.update(db.productSteps)
+              ..where((s) => s.id.equals(eintrag.step.id)))
+            .write(
+          ProductStepsCompanion(
+            reihenfolge: Value(lauf),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
+        lauf++;
+      }
+    }
+
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Abteilungs-Reihenfolge geändert',
+        );
+    ref.invalidate(productStepsProvider(productId));
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -392,9 +433,16 @@ class _StepsList extends ConsumerWidget {
     }
 
     final karten = [
-      for (final gruppe in gruppen)
+      for (var g = 0; g < gruppen.length; g++)
         _AbteilungsKarte(
-          gruppe: gruppe,
+          gruppe: gruppen[g],
+          position: g + 1,
+          onMoveUp: g == 0
+              ? null
+              : () => _verschiebeGruppe(ref, gruppen, g, -1),
+          onMoveDown: g == gruppen.length - 1
+              ? null
+              : () => _verschiebeGruppe(ref, gruppen, g, 1),
           onUpdated: () => ref.invalidate(productStepsProvider(productId)),
         ),
     ];
@@ -790,7 +838,17 @@ class _ProduktionsmittelSheet extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _AbteilungsKarte extends StatelessWidget {
-  const _AbteilungsKarte({required this.gruppe, required this.onUpdated});
+  const _AbteilungsKarte({
+    required this.gruppe,
+    required this.position,
+    required this.onMoveUp,
+    required this.onMoveDown,
+    required this.onUpdated,
+  });
+
+  final int position;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
 
   final List<({ProductStep step, int nummer})> gruppe;
   final VoidCallback onUpdated;
@@ -828,10 +886,21 @@ class _AbteilungsKarte extends StatelessWidget {
             ),
             child: Row(
               children: [
+                // Position in der Produktionsabfolge — groß und eindeutig
                 Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  width: 28,
+                  height: 28,
+                  decoration:
+                      BoxDecoration(color: color, shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$position',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -869,6 +938,20 @@ class _AbteilungsKarte extends StatelessWidget {
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
+                ),
+                const SizedBox(width: 6),
+                // Abteilung in der Abfolge verschieben
+                IconButton(
+                  icon: const Icon(Icons.arrow_upward, size: 18),
+                  tooltip: 'Abteilung nach oben',
+                  onPressed: onMoveUp,
+                  visualDensity: VisualDensity.compact,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.arrow_downward, size: 18),
+                  tooltip: 'Abteilung nach unten',
+                  onPressed: onMoveDown,
+                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -1682,19 +1765,6 @@ class _ParameterListe extends ConsumerWidget {
               onEdit: (p) => _customBearbeiten(context, ref, p),
               onDelete: (p) => _customLoeschen(context, ref, p),
             ),
-
-            if (standardByGruppe.isEmpty && customParams.isEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Text(
-                  'Keine Parameter hinterlegt.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontStyle: FontStyle.italic,
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
-              ),
           ],
         );
       },
@@ -1815,18 +1885,7 @@ class _CustomGruppenBlock extends StatelessWidget {
               ),
             ],
           ),
-          if (parameter.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Text(
-                'Noch keine zusätzlichen Parameter angelegt.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontStyle: FontStyle.italic,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
-              ),
-            )
-          else
+          if (parameter.isNotEmpty)
             ...parameter.map(
               (p) => _ParameterZeileEditierbar(
                 param: p,
