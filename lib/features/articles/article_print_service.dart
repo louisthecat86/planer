@@ -188,11 +188,9 @@ class ArticlePrintService {
 
   static pw.Widget _abteilungsBand(String abteilungDb) {
     final abt = Abteilung.fromDbValue(abteilungDb);
-    final farbe = abt == null
-        ? PdfColors.grey700
-        : PdfColor.fromInt(abt.farbe.toARGB32());
-    final name = abt?.anzeigeName ?? abteilungDb;
-    final kurz = abt?.kurzcode ?? '';
+    final farbe = PdfColor.fromInt(abt.farbe.toARGB32());
+    final name = abt.anzeigeName;
+    final kurz = abt.kurzcode;
     return pw.Container(
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: pw.BoxDecoration(
@@ -497,10 +495,12 @@ class ArticlePrintService {
         if (istKombi && anzeige == 6) {
           zellen.add(pw.SizedBox(width: 6));
         }
-        zellen.add(_plattenZelle(
-          zone: zone,
-          wert: _plattenWert(parameter, '$prefix $zone'),
-        ));
+        zellen.add(
+          _plattenZelle(
+            zone: zone,
+            wert: _plattenWert(parameter, '$prefix $zone'),
+          ),
+        );
       }
       return pw.Row(children: zellen);
     }
