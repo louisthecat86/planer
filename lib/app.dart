@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'core/providers/database_provider.dart';
+import 'core/services/backup_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
@@ -119,11 +120,53 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 /// Root-Widget der App.
-class ProduktionPlanerApp extends ConsumerWidget {
+class ProduktionPlanerApp extends ConsumerStatefulWidget {
   const ProduktionPlanerApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProduktionPlanerApp> createState() =>
+      _ProduktionPlanerAppState();
+}
+
+class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
+  AppLifecycleListener? _lifecycle;
+  bool _exitBackupGestartet = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Beim Schließen der App (Fenster-X, Alt+F4, App beenden) wird
+    // automatisch ein Backup erstellt — so ist der letzte Stand immer
+    // gesichert, ohne dass man daran denken muss.
+    _lifecycle = AppLifecycleListener(
+      onExitRequested: _backupBeimBeenden,
+    );
+  }
+
+  Future<AppExitResponse> _backupBeimBeenden() async {
+    if (_exitBackupGestartet) return AppExitResponse.exit;
+    _exitBackupGestartet = true;
+    try {
+      final db = ref.read(databaseProvider);
+      await BackupService.createAutoBackup(db)
+          .timeout(const Duration(seconds: 10));
+      await BackupService.cleanupOldAutoBackups()
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Das Beenden darf nie blockieren — im Zweifel ohne frisches
+      // Backup schließen (die Debounce-Backups existieren weiterhin).
+    }
+    return AppExitResponse.exit;
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
     // Windows-Build fest im Dunkelmodus; andere Plattformen folgen dem System.
     final themeMode = Platform.isWindows ? ThemeMode.dark : ThemeMode.system;

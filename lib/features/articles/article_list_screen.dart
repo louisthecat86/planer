@@ -13,6 +13,10 @@ import '../../core/providers/database_provider.dart';
 // ---------------------------------------------------------------------------
 
 /// Alle aktiven Produkte mit Schritt-Anzahl.
+///
+/// Bewusst nur ZWEI Abfragen (Produkte + alle Schritte, im Speicher
+/// gruppiert) statt einer Abfrage pro Artikel — bei ~60 Artikeln macht
+/// das den Aufbau der Liste spürbar flüssiger.
 final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
   final db = ref.watch(databaseProvider);
 
@@ -21,16 +25,20 @@ final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
         ..orderBy([(p) => OrderingTerm.asc(p.artikelbezeichnung)]))
       .get();
 
-  final result = <_ArticleInfo>[];
-  for (final p in products) {
-    final steps = await (db.select(db.productSteps)
-          ..where((s) => s.productId.equals(p.id))
-          ..where((s) => s.deletedAt.isNull())
-          ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
-        .get();
-    result.add(_ArticleInfo(product: p, steps: steps));
+  final steps = await (db.select(db.productSteps)
+        ..where((s) => s.deletedAt.isNull())
+        ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+      .get();
+
+  final byProduct = <String, List<ProductStep>>{};
+  for (final s in steps) {
+    byProduct.putIfAbsent(s.productId, () => []).add(s);
   }
-  return result;
+
+  return [
+    for (final p in products)
+      _ArticleInfo(product: p, steps: byProduct[p.id] ?? const []),
+  ];
 });
 
 class _ArticleInfo {

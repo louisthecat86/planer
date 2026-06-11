@@ -153,7 +153,10 @@ class ExcelExportServiceV3 {
 
     // App-Artikel ohne Sheet in der Vorlage: neues Sheet anlegen
     // (Blueprint der passenden Kategorie klonen) — damit App und Excel
-    // immer denselben Artikelbestand haben.
+    // immer denselben Artikelbestand haben. Vorher per A6 mappen, damit
+    // abweichend benannte Sheets erkannt und keine Duplikate angelegt
+    // werden.
+    _ergaenzeArtikelnummernAusA6(archive, sheetInfo, sharedStrings);
     final artikelSheetsAngelegt = _legeFehlendeArtikelSheetsAn(
       archive: archive,
       sheetInfo: sheetInfo,
@@ -417,6 +420,10 @@ class ExcelExportServiceV3 {
           colLetter: 'A',
           wert: '${art.artikelnummer} — ${art.artikelbezeichnung}',
         );
+        // Blaupausen-Hinweis ("für jeden neuen Artikel kopieren …")
+        // im geklonten Sheet entfernen — A2 (Kategorie) bleibt, sie
+        // bestimmt beim Re-Import die Produktgruppe.
+        _setzeZelleInlineStr(sheetData, row: 3, colLetter: 'A', wert: '');
 
         maxDateiNr++;
         maxSheetId++;
@@ -567,6 +574,112 @@ class ExcelExportServiceV3 {
     }
   }
 
+  /// Leert die Schritt-Spalten B..K im gesamten Schritt-/Parameter-Bereich
+  /// (von der ersten Schritt-Label-Zeile bis vor den HISTORISCHE-DATEN-
+  /// Block). Spalte A (Labels) und die Historie bleiben unangetastet;
+  /// Zell-Styles bleiben erhalten, nur Werte werden entfernt.
+  void _leereSchrittSpalten(
+    XmlElement sheetData,
+    _SharedStrings sharedStrings,
+    _SchrittLabelZeilen labelRows,
+    List<int> customSlots,
+  ) {
+    final kandidaten = <int>[
+      if (labelRows.abteilungRow != null) labelRows.abteilungRow!,
+      if (labelRows.prozessschrittRow != null) labelRows.prozessschrittRow!,
+      if (labelRows.anlagenRow != null) labelRows.anlagenRow!,
+      if (labelRows.personenRow != null) labelRows.personenRow!,
+      if (labelRows.mengeRow != null) labelRows.mengeRow!,
+      if (labelRows.zeitRow != null) labelRows.zeitRow!,
+      if (labelRows.fixZeitRow != null) labelRows.fixZeitRow!,
+    ];
+    if (kandidaten.isEmpty) return;
+    final von = kandidaten.reduce((a, b) => a < b ? a : b);
+
+    // Endzeile: direkt vor dem HISTORISCHE-DATEN-Marker. Ohne Marker
+    // konservativ nur bis zur größten bekannten Zeile (Labels/Slots),
+    // damit keinesfalls Historie-Daten gelöscht werden.
+    int? historieZeile;
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '');
+      if (r == null) continue;
+      final label = _leseZelleA(row, sharedStrings)?.trim() ?? '';
+      if (label.contains(_historieMarker)) {
+        historieZeile = r;
+        break;
+      }
+    }
+    var bis = kandidaten.reduce((a, b) => a > b ? a : b);
+    for (final s in customSlots) {
+      if (s > bis) bis = s;
+    }
+    if (historieZeile != null) bis = historieZeile - 1;
+
+    const spalten = {'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'};
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '');
+      if (r == null || r < von || r > bis) continue;
+      for (final c in row.findElements('c')) {
+        final ref = c.getAttribute('r') ?? '';
+        final col = RegExp(r'^([A-Z]+)').firstMatch(ref)?.group(1);
+        if (col == null || !spalten.contains(col)) continue;
+        c.children.clear();
+        c.attributes.removeWhere((a) => a.name.local == 't');
+      }
+    }
+  }
+
+  /// Ergänzt `sheetInfo` um Artikelnummern aus Zeile A6 der Sheets
+  /// ("NR — Bezeichnung"). Damit findet der Export einen Artikel auch
+  /// dann, wenn das Sheet nicht exakt nach der Artikelnummer benannt
+  /// ist — und legt kein Duplikat-Sheet an.
+  void _ergaenzeArtikelnummernAusA6(
+    Archive archive,
+    Map<String, String> sheetInfo,
+    _SharedStrings sharedStrings,
+  ) {
+    const meta = {'Übersicht', 'Anleitung', 'Anlagen-Katalog'};
+    final zusatz = <String, String>{};
+
+    for (final eintrag in sheetInfo.entries) {
+      if (meta.contains(eintrag.key)) continue;
+      final file = archive.findFile(eintrag.value);
+      if (file == null) continue;
+      try {
+        final doc = XmlDocument.parse(
+          utf8.decode(file.content as List<int>),
+        );
+        final sheetData = doc.findAllElements('sheetData').firstOrNull;
+        if (sheetData == null) continue;
+        String? a6;
+        for (final row in sheetData.findElements('row')) {
+          if (row.getAttribute('r') == '6') {
+            a6 = _leseZelleA(row, sharedStrings)?.trim();
+            break;
+          }
+        }
+        if (a6 == null || a6.isEmpty) continue;
+
+        String? nummer;
+        for (final sep in [' — ', ' – ', ' - ', ': ']) {
+          if (a6.contains(sep)) {
+            nummer = a6.split(sep).first.trim();
+            break;
+          }
+        }
+        nummer ??= int.tryParse(a6) != null ? a6 : null;
+        if (nummer != null &&
+            nummer.isNotEmpty &&
+            !sheetInfo.containsKey(nummer)) {
+          zusatz[nummer] = eintrag.value;
+        }
+      } catch (_) {
+        // Defektes Einzelsheet ignorieren — betrifft nur das Mapping.
+      }
+    }
+    sheetInfo.addAll(zusatz);
+  }
+
   Map<String, String> _ermittleSheetXmlPfade(Archive archive) {
     final result = <String, String>{};
 
@@ -629,6 +742,13 @@ class ExcelExportServiceV3 {
     // ── Custom-Parameter pro Schritt: Pool aus dem ZUSÄTZLICHE-Block
     //    in der Vorlage-Excel ermitteln ────────────────────────────────
     final customSlots = _findeCustomParameterSlots(doc, sharedStrings);
+
+    // ── Schritt-Bereich komplett leeren (Spalten B..K) ────────────────
+    // Der Export war bisher rein additiv: Felder ohne Wert wurden
+    // übersprungen, wodurch nach Umsortierungen alte „Geister-Werte"
+    // in den Spalten stehen blieben (z.B. Bratstraßen-Parameter unter
+    // einem Verpackungs-Schritt). Deshalb: erst leeren, dann schreiben.
+    _leereSchrittSpalten(sheetData, sharedStrings, labelRows, customSlots);
 
     for (final step in schritte) {
       final col = step.reihenfolge; // 1..10 → Spalte B..K
@@ -1225,7 +1345,18 @@ class ExcelExportServiceV3 {
     final rowElement = _findeOderLegeRowAn(sheetData, row);
     final cell = _findeOderLegeCellAn(rowElement, cellRef);
 
-    final styleAttr = cell.getAttribute('s');
+    var styleAttr = cell.getAttribute('s');
+    // Neu angelegte Zellen erben das Format der B-Zelle derselben Zeile
+    // (Vorlagen formatieren Spalte B durchgängig) — sonst gehen z.B.
+    // Zeit-Formate verloren und es erscheint 0,0833 statt 2:00.
+    if (styleAttr == null && colLetter != 'B') {
+      for (final c in rowElement.findElements('c')) {
+        if (c.getAttribute('r') == 'B$row') {
+          styleAttr = c.getAttribute('s');
+          break;
+        }
+      }
+    }
 
     cell.attributes.clear();
     cell.children.clear();
@@ -1251,7 +1382,16 @@ class ExcelExportServiceV3 {
     final rowElement = _findeOderLegeRowAn(sheetData, row);
     final cell = _findeOderLegeCellAn(rowElement, cellRef);
 
-    final styleAttr = cell.getAttribute('s');
+    var styleAttr = cell.getAttribute('s');
+    // Format-Erbe wie bei _setzeZelleInlineStr (siehe dort).
+    if (styleAttr == null && colLetter != 'B') {
+      for (final c in rowElement.findElements('c')) {
+        if (c.getAttribute('r') == 'B$row') {
+          styleAttr = c.getAttribute('s');
+          break;
+        }
+      }
+    }
 
     cell.attributes.clear();
     cell.children.clear();
