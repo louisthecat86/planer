@@ -445,9 +445,19 @@ class ExcelExportServiceV3 {
         relsRoot.children.add(rel);
 
         // Workbook-Eintrag (Sheet-Name = Artikelnummer).
+        // WICHTIG: xmlns:r muss am Element selbst deklariert sein — die
+        // Vorlage deklariert es pro <sheet> (nicht am Root). Ohne diese
+        // Zeile hätte r:id ein undeklariertes Präfix → Excel meldet die
+        // gesamte Arbeitsmappe als beschädigt.
         final sheetEl = XmlElement(XmlName('sheet'));
+        sheetEl.setAttribute(
+          'xmlns:r',
+          'http://schemas.openxmlformats.org/officeDocument/2006/'
+              'relationships',
+        );
         sheetEl.setAttribute('name', art.artikelnummer);
         sheetEl.setAttribute('sheetId', '$maxSheetId');
+        sheetEl.setAttribute('state', 'visible');
         sheetEl.setAttribute('r:id', 'rId$maxRid');
         sheetsElement.children.add(sheetEl);
 
