@@ -752,6 +752,7 @@ class _KartenInhalt extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final abtColor = task.abteilung.farbe;
+    final kette = _kettenFarbe(task.kettenId, theme.brightness);
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
@@ -768,57 +769,105 @@ class _KartenInhalt extends StatelessWidget {
               ]
             : null,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Farbkopf mit Abteilungs-Kurzcode
-          Container(
-            color: abtColor,
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            child: Text(
-              task.abteilung.kurzcode,
-              style: const TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 0.5,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Ketten-Akzent: alle Karten EINER Produktion (die durch
+            // mehrere Abteilungen läuft) tragen dieselbe Farbe an der
+            // linken Kante — so ist auf einen Blick erkennbar, dass sie
+            // zusammengehören.
+            Container(width: 5, color: kette),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Farbkopf mit Abteilungs-Kurzcode
+                  Container(
+                    color: abtColor,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    child: Text(
+                      task.abteilung.kurzcode,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          task.productName,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            height: 1.25,
+                          ),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          '${task.mengeKg.toStringAsFixed(0)} kg · '
+                          '${_fmtStunden(task.dauerMinuten)} h',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  task.productName,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    height: 1.25,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${task.mengeKg.toStringAsFixed(0)} kg · '
-                  '${_fmtStunden(task.dauerMinuten)} h',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Stabile Akzentfarbe je Auftragskette.
+///
+/// Alle Karten einer Produktion (Kutterabteilung → Bratstraße → Verpackung)
+/// teilen sich dieselbe `kettenId` und damit dieselbe Farbe. Die Farbe wird
+/// deterministisch aus der ID abgeleitet — sie bleibt über App-Neustarts
+/// hinweg gleich und ist bewusst von den Abteilungsfarben unterscheidbar.
+Color _kettenFarbe(String kettenId, Brightness helligkeit) {
+  const palette = [
+    Color(0xFF42A5F5), // Blau
+    Color(0xFFAB47BC), // Violett
+    Color(0xFF26A69A), // Türkis
+    Color(0xFFFFA726), // Orange
+    Color(0xFFEC407A), // Pink
+    Color(0xFF9CCC65), // Limette
+    Color(0xFF7E57C2), // Indigo
+    Color(0xFF29B6F6), // Hellblau
+  ];
+  var hash = 0;
+  for (final einheit in kettenId.codeUnits) {
+    hash = (hash * 31 + einheit) & 0x7fffffff;
+  }
+  final farbe = palette[hash % palette.length];
+  // Im hellen Modus etwas kräftiger, damit die Kante nicht verblasst.
+  return helligkeit == Brightness.dark
+      ? farbe
+      : Color.alphaBlend(Colors.black.withValues(alpha: 0.15), farbe);
 }
 
 class _LeerHinweis extends StatelessWidget {

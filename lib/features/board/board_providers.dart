@@ -57,6 +57,7 @@ class BoardTask {
     required this.sortierung,
     required this.status,
     required this.mitgliederIds,
+    this.parentTaskId,
   });
 
   final String id;
@@ -72,6 +73,15 @@ class BoardTask {
 
   final double dauerMinuten;
   final double mengeKg;
+
+  /// Verkettung: Aufträge derselben Produktion (die durch mehrere
+  /// Abteilungen läuft) teilen sich eine Wurzel. `null` = dieser Auftrag
+  /// IST die Wurzel.
+  final String? parentTaskId;
+
+  /// Stabile Kennung der Auftragskette — alle Karten einer Produktion
+  /// liefern denselben Wert und bekommen dadurch dieselbe Akzentfarbe.
+  String get kettenId => parentTaskId ?? id;
 
   /// Manuelle Reihenfolge innerhalb der Abteilung an einem Tag.
   final int sortierung;
@@ -291,6 +301,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
     perRow.add(
       BoardTask(
         id: t.id,
+        parentTaskId: t.parentTaskId,
         productId: t.productId,
         productName: nameById[t.productId] ?? 'Unbekannt',
         abteilung: abteilung,
@@ -337,6 +348,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
     result.add(
       BoardTask(
         id: g.first.id,
+        parentTaskId: g.first.parentTaskId,
         productId: g.first.productId,
         productName: g.first.productName,
         abteilung: g.first.abteilung,
