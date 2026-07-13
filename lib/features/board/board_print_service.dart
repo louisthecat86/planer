@@ -94,12 +94,19 @@ class BoardPrintService {
                   ),
               ],
             ),
-            for (final abt in board.abteilungen)
+            for (final spur in board.spuren)
               pw.TableRow(
                 children: [
-                  _deptCell(abt.anzeigeName),
+                  // Anlagen-Spuren werden unter ihrer Abteilung eingerückt,
+                  // damit die Gruppierung auch im Ausdruck erkennbar ist.
+                  _deptCell(
+                    spur.istAnlage
+                        ? '   ${spur.anzeigeName}'
+                        : spur.anzeigeName,
+                    einger: spur.istAnlage,
+                  ),
                   for (final tag in board.tage)
-                    _wocheTagZelle(board.cellFor(abt, tag)),
+                    _wocheTagZelle(board.cellFor(spur, tag)),
                 ],
               ),
           ],
@@ -117,11 +124,15 @@ class BoardPrintService {
         ),
       );
 
-  static pw.Widget _deptCell(String name) => pw.Container(
+  static pw.Widget _deptCell(String name, {bool einger = false}) =>
+      pw.Container(
         padding: const pw.EdgeInsets.all(4),
         child: pw.Text(
           name,
-          style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9),
+          style: pw.TextStyle(
+            fontWeight: einger ? pw.FontWeight.normal : pw.FontWeight.bold,
+            fontSize: einger ? 8 : 9,
+          ),
         ),
       );
 
