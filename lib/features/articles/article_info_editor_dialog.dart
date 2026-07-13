@@ -204,16 +204,21 @@ class _ArticleInfoEditorDialogState
               ),
               const SizedBox(height: 14),
 
-              // Beschreibung
+              // Besonderheiten (⇄ Excel-Block „Sonstige Informationen")
               TextField(
                 controller: _beschreibung,
                 decoration: const InputDecoration(
-                  labelText: 'Beschreibung',
+                  labelText: 'Besonderheiten / Sonstige Informationen',
+                  helperText: 'Wird mit der Excel synchronisiert '
+                      '(Block „Sonstige Informationen")',
+                  helperMaxLines: 2,
+                  alignLabelWithHint: true,
                 ),
-                maxLines: 2,
+                maxLines: 4,
+                minLines: 2,
                 textCapitalization: TextCapitalization.sentences,
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 20),
 
               // Notizen
               TextField(

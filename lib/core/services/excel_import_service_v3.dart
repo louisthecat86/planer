@@ -170,6 +170,7 @@ class _ParsedProduct {
     required this.bezeichnung,
     required this.kategorie,
     this.produktgruppeDb,
+    this.sonstigeInfos,
     this.schritte = const [],
     this.historie = const [],
   });
@@ -179,6 +180,11 @@ class _ParsedProduct {
   final String bezeichnung;
   final String kategorie;
   final String? produktgruppeDb;
+
+  /// Freitext aus dem Block „Sonstige Informationen" — Besonderheiten des
+  /// Artikels. Landet in Product.beschreibung.
+  String? sonstigeInfos;
+
   List<_ParsedStep> schritte;
   List<_ParsedHistorie> historie;
 }
@@ -470,6 +476,7 @@ class ExcelImportServiceV3 {
                   artikelnummer: Value(art.artikelnummer),
                   artikelbezeichnung: Value(art.bezeichnung),
                   produktgruppe: Value(art.produktgruppeDb),
+                  beschreibung: Value(art.sonstigeInfos),
                 ),
               );
           artikelNeu++;
@@ -481,6 +488,11 @@ class ExcelImportServiceV3 {
             ProductsCompanion(
               artikelbezeichnung: Value(art.bezeichnung),
               produktgruppe: Value(art.produktgruppeDb),
+              // Nur überschreiben, wenn die Excel etwas liefert — sonst
+              // bliebe eine in der App gepflegte Besonderheit nicht erhalten.
+              beschreibung: art.sonstigeInfos != null
+                  ? Value(art.sonstigeInfos)
+                  : const Value.absent(),
               updatedAt: Value(DateTime.now()),
             ),
           );
@@ -831,6 +843,7 @@ class ExcelImportServiceV3 {
       warnings,
     );
     final historie = _parseHistorie(rows);
+    final sonstige = _parseSonstigeInfos(rows, 0);
 
     return _ParsedProduct(
       sheetName: sheetName,
@@ -838,6 +851,7 @@ class ExcelImportServiceV3 {
       bezeichnung: kopf.bezeichnung,
       kategorie: kategorie,
       produktgruppeDb: produktgruppeDb,
+      sonstigeInfos: sonstige,
       schritte: schritte,
       historie: historie,
     );
@@ -929,6 +943,45 @@ class ExcelImportServiceV3 {
     _parseParameter(rows, startParamRow, schritte, maxSchritt);
 
     return schritte;
+  }
+
+  /// Liest den Freitext aus dem Block „Sonstige Informationen".
+  ///
+  /// Erfasst wird alles zwischen dem Marker und dem HISTORISCHE-DATEN-Block:
+  /// die Wertzellen der Marker-Zeile selbst (B..K) sowie alle folgenden
+  /// Zeilen (inkl. Spalte A, falls dort Freitext steht). Mehrere Fundstellen
+  /// werden zu einem Text zusammengeführt.
+  String? _parseSonstigeInfos(List<List<Data?>> rows, int startRow) {
+    final teile = <String>[];
+    var gefunden = false;
+
+    for (var r = startRow; r < rows.length; r++) {
+      final label = _cellStr(rows[r], 0);
+
+      if (!gefunden) {
+        if (label != null && label.trim() == _sonstigeBlockMarker) {
+          gefunden = true;
+          // Werte in der Marker-Zeile selbst (Spalten B..K)
+          for (var c = 1; c <= 10; c++) {
+            final w = _cellStr(rows[r], c);
+            if (w != null && w.trim().isNotEmpty) teile.add(w.trim());
+          }
+        }
+        continue;
+      }
+
+      // Ab hier: innerhalb des Blocks
+      if (label != null && label.contains(_historieBlockMarker)) break;
+
+      if (label != null && label.trim().isNotEmpty) teile.add(label.trim());
+      for (var c = 1; c <= 10; c++) {
+        final w = _cellStr(rows[r], c);
+        if (w != null && w.trim().isNotEmpty) teile.add(w.trim());
+      }
+    }
+
+    if (teile.isEmpty) return null;
+    return teile.join('\n');
   }
 
   void _parseParameter(

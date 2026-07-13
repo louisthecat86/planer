@@ -584,6 +584,39 @@ class ExcelExportServiceV3 {
     }
   }
 
+  /// Schreibt die Besonderheiten des Artikels (Product.beschreibung) in die
+  /// Zeile direkt unter dem Marker „Sonstige Informationen", Spalte B.
+  ///
+  /// Genau dort liest der Import sie wieder ein — der Roundtrip
+  /// App ⇄ Excel bleibt damit verlustfrei. Ein leerer Text löscht den
+  /// Eintrag (das Feld wurde in der App geleert).
+  void _schreibeSonstigeInfos(
+    XmlDocument doc,
+    XmlElement sheetData,
+    _SharedStrings sharedStrings,
+    String? text,
+  ) {
+    int? markerZeile;
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '');
+      if (r == null) continue;
+      final label = _leseZelleA(row, sharedStrings)?.trim();
+      if (label == 'Sonstige Informationen') {
+        markerZeile = r;
+        break;
+      }
+    }
+    if (markerZeile == null) return; // Vorlage ohne den Block
+
+    final wert = (text ?? '').trim();
+    _setzeZelleInlineStr(
+      sheetData,
+      row: markerZeile + 1,
+      colLetter: 'B',
+      wert: wert,
+    );
+  }
+
   /// Leert die Schritt-Spalten B..K im gesamten Schritt-/Parameter-Bereich
   /// (von der ersten Schritt-Label-Zeile bis vor den HISTORISCHE-DATEN-
   /// Block). Spalte A (Labels) und die Historie bleiben unangetastet;
@@ -760,6 +793,11 @@ class ExcelExportServiceV3 {
     // einem Verpackungs-Schritt). Deshalb: erst leeren, dann schreiben.
     _leereSchrittSpalten(sheetData, sharedStrings, labelRows, customSlots);
 
+    // ── Besonderheiten in den Block „Sonstige Informationen" ──────────
+    // Muss NACH dem Leeren passieren (der Bereich liegt in den Spalten
+    // B..K und würde sonst gleich wieder geleert).
+    _schreibeSonstigeInfos(doc, sheetData, sharedStrings, artikel.beschreibung);
+
     for (final step in schritte) {
       final col = step.reihenfolge; // 1..10 → Spalte B..K
       if (col < 1 || col > 10) continue;
@@ -843,6 +881,7 @@ class ExcelExportServiceV3 {
           doc,
           sharedStrings,
           param.parameterName,
+          gruppe: param.parameterGruppe,
         );
         if (paramRow == null) continue;
         final wert = param.wert ?? '';
@@ -1326,21 +1365,76 @@ class ExcelExportServiceV3 {
     );
   }
 
+  /// Findet die Zeilennummer, deren Spalte A exakt [gesuchtesLabel] enthält.
+  ///
+  /// Ist [gruppe] gesetzt (z.B. "BRATSTRASSE" oder "DAMPFTUNNEL"), wird nur
+  /// INNERHALB dieses Blocks gesucht — vom Block-Header bis zum nächsten
+  /// Block-Header. Das ist nötig, weil identische Label wie
+  /// "Platte Unten 1" in mehreren Blöcken vorkommen (Bratstraße 10 Platten
+  /// vs. Dampftunnel 12 Platten); ohne Gruppen-Eingrenzung landete der
+  /// Wert immer im ersten (Bratstraße-)Block.
+  ///
+  /// Block-Header sind in Spalte A durchgängig GROSS geschrieben
+  /// (BRATSTRASSE, DAMPFTUNNEL, SCHOCKFROSTER …), Parameter-Label dagegen
+  /// gemischt ("Platte Unten 1", "Eingang (°C)"). Wird der Block oder das
+  /// Label darin nicht gefunden, greift der globale Erst-Treffer (altes
+  /// Verhalten — für Parameter ohne Mehrdeutigkeit unverändert korrekt).
   int? _findeZeileMitLabelInA(
     XmlDocument doc,
     _SharedStrings sharedStrings,
-    String gesuchtesLabel,
-  ) {
+    String gesuchtesLabel, {
+    String? gruppe,
+  }) {
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
     if (sheetData == null) return null;
     final ziel = gesuchtesLabel.trim();
+
+    // Zeilen in Dokumentreihenfolge mit ihrem A-Label sammeln.
+    final eintraege = <({int rNum, String label})>[];
     for (final row in sheetData.findElements('row')) {
       final rNum = int.tryParse(row.getAttribute('r') ?? '');
       if (rNum == null) continue;
-      final label = _leseZelleA(row, sharedStrings)?.trim();
-      if (label == ziel) return rNum;
+      eintraege.add(
+        (rNum: rNum, label: _leseZelleA(row, sharedStrings)?.trim() ?? ''),
+      );
+    }
+
+    // 1) Gruppen-Eingrenzung
+    final g = gruppe?.trim() ?? '';
+    if (g.isNotEmpty) {
+      var startIdx = -1;
+      for (var i = 0; i < eintraege.length; i++) {
+        if (eintraege[i].label.toLowerCase() == g.toLowerCase()) {
+          startIdx = i;
+          break;
+        }
+      }
+      if (startIdx >= 0) {
+        for (var i = startIdx + 1; i < eintraege.length; i++) {
+          final e = eintraege[i];
+          if (_istBlockHeader(e.label)) break; // nächster Block → Ende
+          if (e.label == ziel) return e.rNum;
+        }
+        // Im Block nicht gefunden → unten globaler Fallback.
+      }
+    }
+
+    // 2) Globaler Erst-Treffer (altes Verhalten)
+    for (final e in eintraege) {
+      if (e.label == ziel) return e.rNum;
     }
     return null;
+  }
+
+  /// Block-Header-Erkennung: Label enthält Buchstaben und diese sind
+  /// vollständig groß geschrieben (BRATSTRASSE, DAMPFTUNNEL …). Parameter-
+  /// Label ("Platte Unten 1") sind gemischt und damit kein Header.
+  bool _istBlockHeader(String label) {
+    final l = label.trim();
+    if (l.isEmpty) return false;
+    final buchstaben = l.replaceAll(RegExp(r'[^A-Za-zÄÖÜäöüß]'), '');
+    if (buchstaben.isEmpty) return false;
+    return buchstaben == buchstaben.toUpperCase();
   }
 
   // ─── Zellen-Manipulation ──────────────────────────────────────────────

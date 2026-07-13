@@ -258,12 +258,11 @@ class _InfoTab extends ConsumerWidget {
             wert: _produktgruppeLabels[p.produktgruppe] ?? p.produktgruppe!,
           ),);
         }
-        if (p.beschreibung != null && p.beschreibung!.isNotEmpty) {
-          eintraege.add((label: 'Beschreibung', wert: p.beschreibung!));
-        }
         if (p.notizen != null && p.notizen!.isNotEmpty) {
           eintraege.add((label: 'Notizen', wert: p.notizen!));
         }
+
+        final besonderheiten = p.beschreibung?.trim() ?? '';
 
         return ListView(
           padding: const EdgeInsets.all(16),
@@ -286,6 +285,17 @@ class _InfoTab extends ConsumerWidget {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+
+            // Besonderheiten — eigene Karte, damit sie auffällt
+            _BesonderheitenKarte(
+              text: besonderheiten,
+              onEdit: () async {
+                final geaendert =
+                    await ArticleInfoEditorDialog.show(context, p);
+                if (geaendert) ref.invalidate(productProvider(productId));
+              },
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(
@@ -1536,7 +1546,22 @@ class _PlattenSchemaBereich extends ConsumerWidget {
   final ProductStep step;
   final VoidCallback onUpdated;
 
+  /// Sucht einen Parameter NAME + GRUPPE — beide Gruppen enthalten Zeilen
+  /// namens "Platte Unten N" (Bratstraße 1–10, Dampftunnel 1–12). Ohne die
+  /// Gruppe würden die Werte des Dampftunnels mit denen der Bratstraße
+  /// verwechselt.
   static ProductStepParameter? _find(
+    List<ProductStepParameter> params,
+    String name,
+    String gruppe,
+  ) {
+    for (final p in params) {
+      if (p.parameterName == name && p.parameterGruppe == gruppe) return p;
+    }
+    return null;
+  }
+
+  static ProductStepParameter? _findName(
     List<ProductStepParameter> params,
     String name,
   ) {
@@ -1549,57 +1574,54 @@ class _PlattenSchemaBereich extends ConsumerWidget {
   static String _zahlText(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
 
-  BratschemaTyp? _typVon(String? wert) {
-    switch (wert) {
-      case 'bratstrasse':
-        return BratschemaTyp.bratstrasse;
-      case 'kombiofen':
-        return BratschemaTyp.kombiofen;
-      default:
-        return null;
-    }
-  }
-
   String _gruppeVon(BratschemaTyp typ) =>
       typ == BratschemaTyp.kombiofen ? kPlattenGruppeKombi : kPlattenGruppeBrat;
 
-  /// Ermittelt den aktiven Schema-Typ: expliziter Marker hat Vorrang
-  /// ('keine' = bewusst aus); sonst aus vorhandenen Zonen-Parametern
-  /// abgeleitet — wichtig nach einem Excel-Re-Import, der den Marker entfernt.
-  BratschemaTyp? _ermittleTyp(List<ProductStepParameter> params) {
-    final markerWert = _find(params, kPlattenSchemaParam)?.wert;
-    if (markerWert == 'keine') return null;
-    final marker = _typVon(markerWert);
-    if (marker != null) return marker;
-    bool hat(RegExp re) => params.any(
+  /// Welche Raster sind aktiv? Der Marker kann 'keine', 'bratstrasse',
+  /// 'kombiofen' oder 'beide' sein. Fehlt er (z.B. direkt nach einem
+  /// Excel-Import), wird aus den vorhandenen Zonen-Werten abgeleitet.
+  ({bool brat, bool kombi}) _aktiv(List<ProductStepParameter> params) {
+    final marker = _findName(params, kPlattenSchemaParam)?.wert;
+    switch (marker) {
+      case 'keine':
+        return (brat: false, kombi: false);
+      case 'bratstrasse':
+        return (brat: true, kombi: false);
+      case 'kombiofen':
+        return (brat: false, kombi: true);
+      case 'beide':
+        return (brat: true, kombi: true);
+    }
+    bool hatWerte(String gruppe) => params.any(
           (p) =>
-              re.hasMatch(p.parameterName) &&
+              p.parameterGruppe == gruppe &&
+              RegExp(r'^Platte (Oben|Unten) \d+$').hasMatch(p.parameterName) &&
               (p.wert?.trim().isNotEmpty ?? false),
         );
-    if (hat(RegExp(r'^Platte Oben \d+$'))) return BratschemaTyp.bratstrasse;
-    if (hat(RegExp(r'^Platte Unten \d+$'))) return BratschemaTyp.kombiofen;
-    return null;
+    return (brat: hatWerte(kPlattenGruppeBrat), kombi: hatWerte(kPlattenGruppeKombi));
   }
 
   PlattenTemperaturen _leseWerte(
     List<ProductStepParameter> params,
     BratschemaTyp typ,
   ) {
+    final gruppe = _gruppeVon(typ);
     final leer = PlattenTemperaturen.leer(typ);
     double? wertVon(String name) {
-      final w = _find(params, name)?.wert;
+      final w = _find(params, name, gruppe)?.wert;
       if (w == null || w.trim().isEmpty) return null;
       return double.tryParse(w.replaceAll(',', '.'));
     }
 
-    final oben = [
-      for (var i = 0; i < leer.oben.length; i++) wertVon('Platte Oben ${i + 1}'),
-    ];
-    final unten = [
-      for (var i = 0; i < leer.unten.length; i++)
-        wertVon('Platte Unten ${i + 1}'),
-    ];
-    return PlattenTemperaturen(oben: oben, unten: unten);
+    return PlattenTemperaturen(
+      oben: [
+        for (var i = 0; i < leer.oben.length; i++) wertVon('Platte Oben ${i + 1}'),
+      ],
+      unten: [
+        for (var i = 0; i < leer.unten.length; i++)
+          wertVon('Platte Unten ${i + 1}'),
+      ],
+    );
   }
 
   Future<void> _upsert(
@@ -1610,7 +1632,7 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     String? wert,
   ) async {
     final db = ref.read(databaseProvider);
-    final vorhanden = _find(params, name);
+    final vorhanden = _find(params, name, gruppe);
     if (vorhanden != null) {
       await (db.update(db.productStepParameters)
             ..where((p) => p.id.equals(vorhanden.id)))
@@ -1635,17 +1657,27 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     }
   }
 
-  Future<void> _setzeTyp(
+  /// Schaltet ein Raster an/aus und schreibt den Marker neu.
+  Future<void> _schalte(
     WidgetRef ref,
-    List<ProductStepParameter> params,
-    String? v,
-  ) async {
-    final wert = v ?? 'keine';
+    List<ProductStepParameter> params, {
+    required bool brat,
+    required bool kombi,
+  }) async {
+    final wert = brat && kombi
+        ? 'beide'
+        : brat
+            ? 'bratstrasse'
+            : kombi
+                ? 'kombiofen'
+                : 'keine';
+    // Marker liegt bewusst in der Bratstraßen-Gruppe (ein Marker je Schritt).
+    final vorhanden = _findName(params, kPlattenSchemaParam);
     await _upsert(
       ref,
       params,
       kPlattenSchemaParam,
-      kPlattenGruppeBrat,
+      vorhanden?.parameterGruppe ?? kPlattenGruppeBrat,
       wert,
     );
     ref.read(autoBackupTriggerProvider).fireDebounced(
@@ -1665,24 +1697,14 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     final alt = _leseWerte(params, typ);
     for (var i = 0; i < neu.oben.length; i++) {
       if (neu.oben[i] != alt.oben[i]) {
-        await _upsert(
-          ref,
-          params,
-          'Platte Oben ${i + 1}',
-          gruppe,
-          neu.oben[i] == null ? null : _zahlText(neu.oben[i]!),
-        );
+        await _upsert(ref, params, 'Platte Oben ${i + 1}', gruppe,
+            neu.oben[i] == null ? null : _zahlText(neu.oben[i]!));
       }
     }
     for (var i = 0; i < neu.unten.length; i++) {
       if (neu.unten[i] != alt.unten[i]) {
-        await _upsert(
-          ref,
-          params,
-          'Platte Unten ${i + 1}',
-          gruppe,
-          neu.unten[i] == null ? null : _zahlText(neu.unten[i]!),
-        );
+        await _upsert(ref, params, 'Platte Unten ${i + 1}', gruppe,
+            neu.unten[i] == null ? null : _zahlText(neu.unten[i]!));
       }
     }
     ref.read(autoBackupTriggerProvider).fireDebounced(
@@ -1699,58 +1721,72 @@ class _PlattenSchemaBereich extends ConsumerWidget {
 
     return paramsAsync.when(
       data: (params) {
-        final typ = _ermittleTyp(params);
-        final auswahl = typ == null
-            ? 'keine'
-            : (typ == BratschemaTyp.kombiofen ? 'kombiofen' : 'bratstrasse');
+        final aktiv = _aktiv(params);
+
+        Widget kopf(String titel, bool an, VoidCallback umschalten) => Row(
+              children: [
+                Text(
+                  titel,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+                const Spacer(),
+                Switch(
+                  value: an,
+                  onChanged: (_) => umschalten(),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ],
+            );
 
         return Container(
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHighest
-                .withValues(alpha: 0.5),
+            color:
+                theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Plattentemperaturen',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.4,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  const Spacer(),
-                  DropdownButton<String>(
-                    value: auswahl,
-                    isDense: true,
-                    underline: const SizedBox.shrink(),
-                    items: const [
-                      DropdownMenuItem(value: 'keine', child: Text('Keine')),
-                      DropdownMenuItem(
-                        value: 'bratstrasse',
-                        child: Text('Bratstraße (10+10)'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'kombiofen',
-                        child: Text('Kombiofen (12 unten)'),
-                      ),
-                    ],
-                    onChanged: (v) => _setzeTyp(ref, params, v),
-                  ),
-                ],
+              // ── Bratstraße: 10 oben + 10 unten ──
+              kopf(
+                'PLATTEN BRATSTRASSE (10+10)',
+                aktiv.brat,
+                () => _schalte(ref, params,
+                    brat: !aktiv.brat, kombi: aktiv.kombi),
               ),
-              if (typ != null) ...[
-                const SizedBox(height: 8),
+              if (aktiv.brat) ...[
+                const SizedBox(height: 6),
                 BratstrasseSchema(
-                  typ: typ,
-                  werte: _leseWerte(params, typ),
-                  onChanged: (neu) =>
-                      _speichereWerte(ref, params, typ, neu),
+                  typ: BratschemaTyp.bratstrasse,
+                  werte: _leseWerte(params, BratschemaTyp.bratstrasse),
+                  onChanged: (neu) => _speichereWerte(
+                      ref, params, BratschemaTyp.bratstrasse, neu),
+                ),
+              ],
+
+              const SizedBox(height: 10),
+              Divider(height: 1, color: theme.dividerColor),
+              const SizedBox(height: 10),
+
+              // ── Dampftunnel / Kombiofen: 12 Platten ──
+              kopf(
+                'PLATTEN DAMPFTUNNEL (12)',
+                aktiv.kombi,
+                () => _schalte(ref, params,
+                    brat: aktiv.brat, kombi: !aktiv.kombi),
+              ),
+              if (aktiv.kombi) ...[
+                const SizedBox(height: 6),
+                BratstrasseSchema(
+                  typ: BratschemaTyp.kombiofen,
+                  werte: _leseWerte(params, BratschemaTyp.kombiofen),
+                  onChanged: (neu) => _speichereWerte(
+                      ref, params, BratschemaTyp.kombiofen, neu),
                 ),
               ],
             ],
@@ -3194,6 +3230,96 @@ class _SchrittDetailSheet extends ConsumerWidget {
           step: aktuell,
           stepNumber: nummer,
           onUpdated: onUpdated,
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Besonderheiten-Karte (Infos-Tab)
+//
+// Zeigt den Freitext aus dem Excel-Block „Sonstige Informationen".
+// Wird beim Import gelesen und beim Export zurückgeschrieben.
+// ---------------------------------------------------------------------------
+
+class _BesonderheitenKarte extends StatelessWidget {
+  const _BesonderheitenKarte({required this.text, required this.onEdit});
+
+  final String text;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
+    final leer = text.isEmpty;
+    final akzent =
+        dark ? const Color(0xFFFFB74D) : const Color(0xFFEF6C00);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: leer
+              ? theme.dividerColor
+              : akzent.withValues(alpha: 0.5),
+        ),
+      ),
+      child: InkWell(
+        onTap: onEdit,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(
+                leer ? Icons.info_outline : Icons.priority_high_rounded,
+                size: 20,
+                color: leer
+                    ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
+                    : akzent,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Besonderheiten',
+                      style: theme.textTheme.labelLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: leer
+                            ? theme.colorScheme.onSurface
+                                .withValues(alpha: 0.6)
+                            : akzent,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      leer
+                          ? 'Keine Besonderheiten hinterlegt — tippen zum '
+                              'Eintragen.'
+                          : text,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontStyle: leer ? FontStyle.italic : null,
+                        color: leer
+                            ? theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5)
+                            : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.edit,
+                size: 16,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
+            ],
+          ),
         ),
       ),
     );
