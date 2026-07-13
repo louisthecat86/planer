@@ -1697,14 +1697,24 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     final alt = _leseWerte(params, typ);
     for (var i = 0; i < neu.oben.length; i++) {
       if (neu.oben[i] != alt.oben[i]) {
-        await _upsert(ref, params, 'Platte Oben ${i + 1}', gruppe,
-            neu.oben[i] == null ? null : _zahlText(neu.oben[i]!));
+        await _upsert(
+          ref,
+          params,
+          'Platte Oben ${i + 1}',
+          gruppe,
+          neu.oben[i] == null ? null : _zahlText(neu.oben[i]!),
+        );
       }
     }
     for (var i = 0; i < neu.unten.length; i++) {
       if (neu.unten[i] != alt.unten[i]) {
-        await _upsert(ref, params, 'Platte Unten ${i + 1}', gruppe,
-            neu.unten[i] == null ? null : _zahlText(neu.unten[i]!));
+        await _upsert(
+          ref,
+          params,
+          'Platte Unten ${i + 1}',
+          gruppe,
+          neu.unten[i] == null ? null : _zahlText(neu.unten[i]!),
+        );
       }
     }
     ref.read(autoBackupTriggerProvider).fireDebounced(
@@ -1756,8 +1766,12 @@ class _PlattenSchemaBereich extends ConsumerWidget {
               kopf(
                 'PLATTEN BRATSTRASSE (10+10)',
                 aktiv.brat,
-                () => _schalte(ref, params,
-                    brat: !aktiv.brat, kombi: aktiv.kombi),
+                () => _schalte(
+                  ref,
+                  params,
+                  brat: !aktiv.brat,
+                  kombi: aktiv.kombi,
+                ),
               ),
               if (aktiv.brat) ...[
                 const SizedBox(height: 6),
@@ -1765,7 +1779,11 @@ class _PlattenSchemaBereich extends ConsumerWidget {
                   typ: BratschemaTyp.bratstrasse,
                   werte: _leseWerte(params, BratschemaTyp.bratstrasse),
                   onChanged: (neu) => _speichereWerte(
-                      ref, params, BratschemaTyp.bratstrasse, neu),
+                    ref,
+                    params,
+                    BratschemaTyp.bratstrasse,
+                    neu,
+                  ),
                 ),
               ],
 
@@ -1777,8 +1795,12 @@ class _PlattenSchemaBereich extends ConsumerWidget {
               kopf(
                 'PLATTEN DAMPFTUNNEL (12)',
                 aktiv.kombi,
-                () => _schalte(ref, params,
-                    brat: aktiv.brat, kombi: !aktiv.kombi),
+                () => _schalte(
+                  ref,
+                  params,
+                  brat: aktiv.brat,
+                  kombi: !aktiv.kombi,
+                ),
               ),
               if (aktiv.kombi) ...[
                 const SizedBox(height: 6),
@@ -1786,7 +1808,11 @@ class _PlattenSchemaBereich extends ConsumerWidget {
                   typ: BratschemaTyp.kombiofen,
                   werte: _leseWerte(params, BratschemaTyp.kombiofen),
                   onChanged: (neu) => _speichereWerte(
-                      ref, params, BratschemaTyp.kombiofen, neu),
+                    ref,
+                    params,
+                    BratschemaTyp.kombiofen,
+                    neu,
+                  ),
                 ),
               ],
             ],
