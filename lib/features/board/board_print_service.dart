@@ -147,7 +147,7 @@ class BoardPrintService {
     lines.add(pw.SizedBox(height: 3));
     lines.add(
       pw.Text(
-        '∑ ${_fmtH(cell.belegtMinuten)} / ${_fmtH(cell.kapazitaetMinuten)} h',
+        '? ${_fmtH(cell.belegtMinuten)} / ${_fmtH(cell.kapazitaetMinuten)} h',
         style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
       ),
     );
@@ -185,7 +185,7 @@ class BoardPrintService {
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
-                lane.abteilung.anzeigeName,
+                lane.spur.anzeigeName,
                 style:
                     pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
               ),

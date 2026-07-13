@@ -111,9 +111,25 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
 
   // ---- Aktionen ----
 
-  Future<void> _verschiebe(BoardTask task, DateTime zielTag) async {
+  /// Verschiebt einen Auftrag auf einen anderen Tag UND/ODER eine andere
+  /// Spur (= Anlage).
+  ///
+  /// Das Umbelegen ist der Kern der betrieblichen Flexibilität: Ist die
+  /// Multivac voll, wandert der Auftrag auf die Tef1; die Tef2 kann bei
+  /// Bedarf ebenfalls auf die Tef1 ausweichen. Weil die Ausweichanlage in
+  /// einer ANDEREN Abteilung stehen kann, wird die Abteilung des Auftrags
+  /// dabei mitgeführt.
+  Future<void> _verschiebe(
+    BoardTask task,
+    DateTime zielTag, {
+    BoardSpur? zielSpur,
+  }) async {
     final ziel = DateTime(zielTag.year, zielTag.month, zielTag.day);
-    if (task.datum == ziel) return;
+    final anlageWechselt =
+        zielSpur != null && zielSpur.maschineId != task.maschineId;
+    final abteilungWechselt =
+        zielSpur != null && zielSpur.abteilung != task.abteilung;
+    if (task.datum == ziel && !anlageWechselt && !abteilungWechselt) return;
 
     final db = ref.read(databaseProvider);
     await (db.update(db.productionTasks)
@@ -121,6 +137,12 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
         .write(
       ProductionTasksCompanion(
         datum: Value(ziel),
+        maschineId: anlageWechselt
+            ? Value(zielSpur.maschineId)
+            : const Value.absent(),
+        abteilung: abteilungWechselt
+            ? Value(zielSpur.abteilung.dbValue)
+            : const Value.absent(),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -325,7 +347,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                     data: (board) => _BoardGrid(
                       board: board,
                       onTapTask: _bearbeite,
-                      onMoveTask: _verschiebe,
+                      onMoveTask: (task, tag, spur) =>
+                          _verschiebe(task, tag, zielSpur: spur),
                     ),
                   )
                 : dayAsync.when(
@@ -358,7 +381,7 @@ class _BoardGrid extends StatelessWidget {
 
   final WeekBoard board;
   final void Function(BoardTask) onTapTask;
-  final void Function(BoardTask, DateTime) onMoveTask;
+  final void Function(BoardTask, DateTime, BoardSpur) onMoveTask;
 
   @override
   Widget build(BuildContext context) {
@@ -372,10 +395,16 @@ class _BoardGrid extends StatelessWidget {
           child: SingleChildScrollView(
             child: Column(
               children: [
-                for (final abt in board.abteilungen)
-                  _AbteilungsZeile(
+                for (var i = 0; i < board.spuren.length; i++)
+                  _SpurZeile(
                     board: board,
-                    abteilung: abt,
+                    spur: board.spuren[i],
+                    // Abteilungs-Kopf nur bei der ERSTEN Spur einer
+                    // Abteilung — die folgenden Anlagen-Spuren werden
+                    // darunter eingerückt gruppiert.
+                    ersteDerAbteilung: i == 0 ||
+                        board.spuren[i - 1].abteilung !=
+                            board.spuren[i].abteilung,
                     onTapTask: onTapTask,
                     onMoveTask: onMoveTask,
                   ),
@@ -472,18 +501,20 @@ class _HeaderRow extends StatelessWidget {
   }
 }
 
-class _AbteilungsZeile extends StatelessWidget {
-  const _AbteilungsZeile({
+class _SpurZeile extends StatelessWidget {
+  const _SpurZeile({
     required this.board,
-    required this.abteilung,
+    required this.spur,
+    required this.ersteDerAbteilung,
     required this.onTapTask,
     required this.onMoveTask,
   });
 
   final WeekBoard board;
-  final Abteilung abteilung;
+  final BoardSpur spur;
+  final bool ersteDerAbteilung;
   final void Function(BoardTask) onTapTask;
-  final void Function(BoardTask, DateTime) onMoveTask;
+  final void Function(BoardTask, DateTime, BoardSpur) onMoveTask;
 
   @override
   Widget build(BuildContext context) {
@@ -491,13 +522,13 @@ class _AbteilungsZeile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _AbteilungsLabel(abteilung: abteilung),
+          _SpurLabel(spur: spur, ersteDerAbteilung: ersteDerAbteilung),
           for (final tag in board.tage)
             Expanded(
               child: _TagesZelle(
-                cell: board.cellFor(abteilung, tag),
+                cell: board.cellFor(spur, tag),
                 onTapTask: onTapTask,
-                onMoveHere: (bt) => onMoveTask(bt, tag),
+                onMoveHere: (bt) => onMoveTask(bt, tag, spur),
               ),
             ),
         ],
@@ -506,44 +537,94 @@ class _AbteilungsZeile extends StatelessWidget {
   }
 }
 
-class _AbteilungsLabel extends StatelessWidget {
-  const _AbteilungsLabel({required this.abteilung});
+class _SpurLabel extends StatelessWidget {
+  const _SpurLabel({required this.spur, required this.ersteDerAbteilung});
 
-  final Abteilung abteilung;
+  final BoardSpur spur;
+  final bool ersteDerAbteilung;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final farbe = spur.abteilung.farbe;
+
     return Container(
       width: _kLabelWidth,
       decoration: BoxDecoration(
-        color: abteilung.farbe.withValues(alpha: 0.07),
+        color: farbe.withValues(alpha: spur.istAnlage ? 0.04 : 0.09),
         border: Border(
           right: BorderSide(color: theme.dividerColor),
+          // Kräftige Linie am Beginn einer neuen Abteilung — trennt die
+          // Anlagen-Gruppen optisch klar voneinander.
+          top: ersteDerAbteilung
+              ? BorderSide(color: farbe.withValues(alpha: 0.55), width: 2)
+              : BorderSide.none,
           bottom: BorderSide(color: theme.dividerColor),
         ),
       ),
       child: Row(
         children: [
-          // Kräftiges Farbband — Abteilung auf einen Blick
-          Container(width: 4, color: abteilung.farbe),
+          Container(width: 4, color: farbe),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              padding: EdgeInsets.fromLTRB(
+                spur.istAnlage ? 14 : 10,
+                8,
+                8,
+                8,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    abteilung.anzeigeName,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
+                  // Abteilungsname nur bei der ersten Spur der Abteilung
+                  if (ersteDerAbteilung)
+                    Text(
+                      spur.abteilung.anzeigeName,
+                      style: TextStyle(
+                        fontSize: spur.istAnlage ? 10.5 : 13,
+                        fontWeight:
+                            spur.istAnlage ? FontWeight.w700 : FontWeight.w700,
+                        letterSpacing: spur.istAnlage ? 0.4 : 0,
+                        height: 1.2,
+                        color: spur.istAnlage
+                            ? theme.colorScheme.onSurface
+                                .withValues(alpha: 0.55)
+                            : null,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
+                  // Anlagen-Name (eingerückt unter der Abteilung)
+                  if (spur.istAnlage) ...[
+                    if (ersteDerAbteilung) const SizedBox(height: 2),
+                    Text(
+                      spur.anzeigeName,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                    if (spur.eignungHinweis != null &&
+                        spur.eignungHinweis!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        spur.eignungHinweis!,
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          height: 1.2,
+                          fontStyle: FontStyle.italic,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.5),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -576,7 +657,17 @@ class _TagesZelle extends StatelessWidget {
     return DragTarget<BoardTask>(
       onWillAcceptWithDetails: (details) {
         final t = details.data;
-        return t.abteilung == cell.abteilung && t.datum != cell.tag;
+        // Normalfall: nur innerhalb derselben Abteilung verschieben.
+        // Ausnahme Verpackung: dort darf ABTEILUNGSÜBERGREIFEND umbelegt
+        // werden (Multivac -> Tef1 als Ausweichanlage, Tef2 -> Tef1),
+        // weil genau das der betriebliche Alltag ist.
+        final gleicheGruppe = t.abteilung == cell.abteilung ||
+            (t.abteilung.istVerpackung && cell.abteilung.istVerpackung);
+        if (!gleicheGruppe) return false;
+        // Nichts tun, wenn Tag UND Spur identisch sind.
+        final gleicheSpur = t.maschineId == cell.spur.maschineId &&
+            t.abteilung == cell.abteilung;
+        return !(gleicheSpur && t.datum == cell.tag);
       },
       onAcceptWithDetails: (details) => onMoveHere(details.data),
       builder: (context, candidate, rejected) {
@@ -596,7 +687,7 @@ class _TagesZelle extends StatelessWidget {
             ),
           ),
           child: !belegt
-              // ── LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
+              // -- LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
               //    freie Kapazität ist der Normalfall und muss nicht
               //    35-mal wiederholt werden. Nur beim Ziehen erscheint
               //    ein Hinweis.
@@ -612,7 +703,7 @@ class _TagesZelle extends StatelessWidget {
                         )
                       : const SizedBox.shrink(),
                 )
-              // ── BELEGTE ZELLE: Auslastung kompakt + Aufträge
+              // -- BELEGTE ZELLE: Auslastung kompakt + Aufträge
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -844,7 +935,7 @@ class _KartenInhalt extends StatelessWidget {
 
 /// Stabile Akzentfarbe je Auftragskette.
 ///
-/// Alle Karten einer Produktion (Kutterabteilung → Bratstraße → Verpackung)
+/// Alle Karten einer Produktion (Kutterabteilung ? Bratstraße ? Verpackung)
 /// teilen sich dieselbe `kettenId` und damit dieselbe Farbe. Die Farbe wird
 /// deterministisch aus der ID abgeleitet — sie bleibt über App-Neustarts
 /// hinweg gleich und ist bewusst von den Abteilungsfarben unterscheidbar.
@@ -956,7 +1047,7 @@ class _DayDeptCard extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    lane.abteilung.anzeigeName,
+                    lane.spur.anzeigeName,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
@@ -1129,7 +1220,7 @@ class _DayTaskRow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Produkt-planen-Sheet (zwei Stufen: Auswahl → Tageszuweisung)
+// Produkt-planen-Sheet (zwei Stufen: Auswahl ? Tageszuweisung)
 // ---------------------------------------------------------------------------
 
 enum _PlanStufe { auswahl, tage }
@@ -1180,7 +1271,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     super.dispose();
   }
 
-  // ── Stufe 1 → 2: Plan berechnen ───────────────────────────────────────
+  // -- Stufe 1 ? 2: Plan berechnen ---------------------------------------
   Future<void> _weiter() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
@@ -1223,7 +1314,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     });
   }
 
-  // ── Stufe 2: Tasks anlegen ────────────────────────────────────────────
+  // -- Stufe 2: Tasks anlegen --------------------------------------------
   Future<void> _anlegen() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
@@ -1311,7 +1402,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     );
   }
 
-  // ── Stufe 1: Produkt + Starttag + Menge ───────────────────────────────
+  // -- Stufe 1: Produkt + Starttag + Menge -------------------------------
   Widget _buildAuswahl(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
     final q = _suche.text.toLowerCase();
@@ -1447,7 +1538,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     );
   }
 
-  // ── Stufe 2: Tag je Schritt zuweisen ──────────────────────────────────
+  // -- Stufe 2: Tag je Schritt zuweisen ----------------------------------
   Widget _buildTage(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
     return ListView(

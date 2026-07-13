@@ -13,9 +13,9 @@ const double kStandardKapazitaetMinuten = 480;
 /// Auslastungs-Status einer Abteilung an einem Tag — steuert die Ampelfarbe
 /// auf dem Board.
 ///
-/// - [frei]: unter 75 % belegt → es passt noch was rein (grau).
-/// - [gut]: 75–100 % belegt → gut gefüllt (grün).
-/// - [ueberbucht]: über 100 % → mehr geplant als Kapazität (rot).
+/// - [frei]: unter 75 % belegt ? es passt noch was rein (grau).
+/// - [gut]: 75–100 % belegt ? gut gefüllt (grün).
+/// - [ueberbucht]: über 100 % ? mehr geplant als Kapazität (rot).
 enum CapacityStatus { frei, gut, ueberbucht }
 
 /// Gemeinsame Auslastungs-Rechnung für Wochenzelle und Tages-Spur.
@@ -58,6 +58,7 @@ class BoardTask {
     required this.status,
     required this.mitgliederIds,
     this.parentTaskId,
+    this.maschineId,
   });
 
   final String id;
@@ -73,6 +74,9 @@ class BoardTask {
 
   final double dauerMinuten;
   final double mengeKg;
+
+  /// Anlage, auf der der Auftrag läuft (null = keine/unbekannt).
+  final String? maschineId;
 
   /// Verkettung: Aufträge derselben Produktion (die durch mehrere
   /// Abteilungen läuft) teilen sich eine Wurzel. `null` = dieser Auftrag
@@ -94,17 +98,61 @@ class BoardTask {
   final List<String> mitgliederIds;
 }
 
-/// Eine Zelle im Wochenboard: eine Abteilung an einem Tag.
+/// Eine Kapazitäts-SPUR im Board.
+///
+/// Bisher war jede Abteilung genau eine Zeile mit 8 h Kapazität. Das ist
+/// falsch, sobald in einer Abteilung mehrere Anlagen ECHT PARALLEL laufen:
+/// In der Verpackung arbeiten Multivac, Tiefzieher und Kleinbeutel-Anlage
+/// gleichzeitig — mit einer gemeinsamen 8-h-Spur wäre der Tag rechnerisch
+/// dreifach überbucht, obwohl real alles passt.
+///
+/// Deshalb ist die planbare Ressource jetzt die ANLAGE (sofern sie als
+/// [Machine.istPlanungsressource] markiert ist). Abteilungen ohne solche
+/// Anlagen behalten ihre gemeinsame Spur (maschineId == null).
+class BoardSpur {
+  const BoardSpur({
+    required this.abteilung,
+    required this.kapazitaetMinuten,
+    this.maschineId,
+    this.maschineName,
+    this.eignungHinweis,
+  });
+
+  final Abteilung abteilung;
+
+  /// null = Sammelspur der Abteilung (keine Anlagen-Auftrennung).
+  final String? maschineId;
+  final String? maschineName;
+
+  /// Informativer Hinweis („nur Aufschnitt / Weberslicer") — kein Verbot.
+  final String? eignungHinweis;
+
+  final double kapazitaetMinuten;
+
+  /// Eindeutige Kennung der Spur.
+  String get id => '${abteilung.dbValue}|${maschineId ?? ''}';
+
+  /// Beschriftung der Zeile.
+  String get anzeigeName => maschineName ?? abteilung.anzeigeName;
+
+  /// Ist dies eine Anlagen-Spur (statt einer Abteilungs-Sammelspur)?
+  bool get istAnlage => maschineId != null;
+}
+
+/// Eine Zelle im Wochenboard: eine Spur an einem Tag.
 class BoardCell with _Auslastung {
   BoardCell({
-    required this.abteilung,
+    required this.spur,
     required this.tag,
     required this.tasks,
     required this.kapazitaetMinuten,
   });
 
-  final Abteilung abteilung;
+  final BoardSpur spur;
   final DateTime tag;
+
+  Abteilung get abteilung => spur.abteilung;
+
   @override
   final List<BoardTask> tasks;
   @override
@@ -116,7 +164,7 @@ class WeekBoard {
   WeekBoard({
     required this.wochenStart,
     required this.tage,
-    required this.abteilungen,
+    required this.spuren,
     required this.cells,
   });
 
@@ -126,22 +174,21 @@ class WeekBoard {
   /// Die angezeigten Tage (Mo–Fr).
   final List<DateTime> tage;
 
-  /// Alle Abteilungen als Zeilen.
-  final List<Abteilung> abteilungen;
+  /// Alle Spuren als Zeilen (Anlagen-Spuren bzw. Abteilungs-Sammelspuren).
+  final List<BoardSpur> spuren;
 
   /// Zellen, indiziert über [_cellKey].
   final Map<String, BoardCell> cells;
 
-  /// Zelle für eine Abteilung an einem Tag. Liefert eine leere Zelle, falls
-  /// die Kombination nicht existiert (sollte bei Mo–Fr nicht vorkommen).
-  BoardCell cellFor(Abteilung abteilung, DateTime tag) {
+  /// Zelle für eine Spur an einem Tag.
+  BoardCell cellFor(BoardSpur spur, DateTime tag) {
     final tagNorm = DateTime(tag.year, tag.month, tag.day);
-    return cells[_cellKey(abteilung, tagNorm)] ??
+    return cells[_cellKey(spur, tagNorm)] ??
         BoardCell(
-          abteilung: abteilung,
+          spur: spur,
           tag: tagNorm,
           tasks: const [],
-          kapazitaetMinuten: kStandardKapazitaetMinuten,
+          kapazitaetMinuten: spur.kapazitaetMinuten,
         );
   }
 }
@@ -149,12 +196,15 @@ class WeekBoard {
 /// Eine Abteilungs-Spur in der Tagesübersicht.
 class DayLane with _Auslastung {
   DayLane({
-    required this.abteilung,
+    required this.spur,
     required this.tasks,
     required this.kapazitaetMinuten,
   });
 
-  final Abteilung abteilung;
+  final BoardSpur spur;
+
+  Abteilung get abteilung => spur.abteilung;
+
   @override
   final List<BoardTask> tasks;
   @override
@@ -197,11 +247,26 @@ final weekBoardProvider =
   final wochenEndeExkl = wochenStart.add(const Duration(days: 7));
 
   final alleTasks = await _ladeBoardTasks(db, wochenStart, wochenEndeExkl);
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
-  // Tasks in Zell-Eimer einsortieren.
+  // Abteilungen, in denen Aufträge OHNE gültige Anlagen-Spur liegen —
+  // nur für die wird zusätzlich eine Sammelspur gezeigt.
+  final ohneAnlage = <String>{};
+  for (final t in alleTasks) {
+    final mid = t.maschineId;
+    if (mid == null || !anlagenIds.contains(mid)) {
+      ohneAnlage.add(t.abteilung.dbValue);
+    }
+  }
+
+  final spuren = _baueSpuren(planungsAnlagen, caps, ohneAnlage);
+
+  // Tasks den Spuren zuordnen.
   final tasksProZelle = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
-    final key = _cellKey(task.abteilung, task.datum);
+    final spurKey = _spurKeyFuerTask(task, anlagenIds);
+    final key = '$spurKey|${task.datum.toIso8601String()}';
     (tasksProZelle[key] ??= []).add(task);
   }
   for (final liste in tasksProZelle.values) {
@@ -209,15 +274,14 @@ final weekBoardProvider =
   }
 
   final cells = <String, BoardCell>{};
-  for (final abteilung in Abteilung.values) {
+  for (final spur in spuren) {
     for (final tag in tage) {
-      final key = _cellKey(abteilung, tag);
+      final key = _cellKey(spur, tag);
       cells[key] = BoardCell(
-        abteilung: abteilung,
+        spur: spur,
         tag: tag,
         tasks: tasksProZelle[key] ?? const [],
-        kapazitaetMinuten:
-            caps[abteilung.dbValue] ?? kStandardKapazitaetMinuten,
+        kapazitaetMinuten: spur.kapazitaetMinuten,
       );
     }
   }
@@ -225,7 +289,7 @@ final weekBoardProvider =
   return WeekBoard(
     wochenStart: wochenStart,
     tage: tage,
-    abteilungen: Abteilung.values,
+    spuren: spuren,
     cells: cells,
   );
 });
@@ -243,22 +307,33 @@ final dayBoardProvider =
   final naechsterTag = tag.add(const Duration(days: 1));
 
   final alleTasks = await _ladeBoardTasks(db, tag, naechsterTag);
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
-  final tasksProAbteilung = <String, List<BoardTask>>{};
+  final ohneAnlage = <String>{};
+  for (final t in alleTasks) {
+    final mid = t.maschineId;
+    if (mid == null || !anlagenIds.contains(mid)) {
+      ohneAnlage.add(t.abteilung.dbValue);
+    }
+  }
+
+  final spuren = _baueSpuren(planungsAnlagen, caps, ohneAnlage);
+
+  final tasksProSpur = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
-    (tasksProAbteilung[task.abteilung.dbValue] ??= []).add(task);
+    (tasksProSpur[_spurKeyFuerTask(task, anlagenIds)] ??= []).add(task);
   }
 
   final lanes = <DayLane>[];
-  for (final abteilung in Abteilung.values) {
-    final liste = tasksProAbteilung[abteilung.dbValue] ?? <BoardTask>[];
+  for (final spur in spuren) {
+    final liste = tasksProSpur[spur.id] ?? <BoardTask>[];
     _sortiereTasks(liste);
     lanes.add(
       DayLane(
-        abteilung: abteilung,
+        spur: spur,
         tasks: liste,
-        kapazitaetMinuten:
-            caps[abteilung.dbValue] ?? kStandardKapazitaetMinuten,
+        kapazitaetMinuten: spur.kapazitaetMinuten,
       ),
     );
   }
@@ -302,6 +377,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
       BoardTask(
         id: t.id,
         parentTaskId: t.parentTaskId,
+        maschineId: t.maschineId,
         productId: t.productId,
         productName: nameById[t.productId] ?? 'Unbekannt',
         abteilung: abteilung,
@@ -349,6 +425,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
       BoardTask(
         id: g.first.id,
         parentTaskId: g.first.parentTaskId,
+        maschineId: g.first.maschineId,
         productId: g.first.productId,
         productName: g.first.productName,
         abteilung: g.first.abteilung,
@@ -403,7 +480,84 @@ DateTime _montag(DateTime d) {
 }
 
 /// Eindeutiger Schlüssel einer Wochenboard-Zelle.
-String _cellKey(Abteilung abteilung, DateTime tag) {
+String _cellKey(BoardSpur spur, DateTime tag) {
   final tagNorm = DateTime(tag.year, tag.month, tag.day);
-  return '${abteilung.dbValue}|${tagNorm.toIso8601String()}';
+  return '${spur.id}|${tagNorm.toIso8601String()}';
+}
+
+/// Ordnet einen Auftrag seiner Spur zu.
+///
+/// Läuft der Auftrag auf einer Anlage, die eine eigene Kapazitätsspur hat,
+/// zählt er dort. Sonst fällt er in die Sammelspur seiner Abteilung — so
+/// geht kein Auftrag verloren, auch wenn die Anlage fehlt oder gelöscht wurde.
+String _spurKeyFuerTask(BoardTask task, Set<String> anlagenSpuren) {
+  final mid = task.maschineId;
+  if (mid != null && anlagenSpuren.contains(mid)) {
+    return '${task.abteilung.dbValue}|$mid';
+  }
+  return '${task.abteilung.dbValue}|';
+}
+
+/// Baut die Spuren-Liste: je Abteilung entweder Anlagen-Spuren (wenn dort
+/// Anlagen als Planungsressource markiert sind) oder eine Sammelspur.
+List<BoardSpur> _baueSpuren(
+  List<Machine> planungsAnlagen,
+  Map<String, double> abteilungsKapazitaeten,
+  Set<String> abteilungenMitTasksOhneAnlage,
+) {
+  final anlagenJeAbteilung = <String, List<Machine>>{};
+  for (final m in planungsAnlagen) {
+    (anlagenJeAbteilung[m.abteilung] ??= []).add(m);
+  }
+
+  final spuren = <BoardSpur>[];
+  for (final abteilung in Abteilung.values) {
+    final anlagen = anlagenJeAbteilung[abteilung.dbValue] ?? const <Machine>[];
+
+    if (anlagen.isEmpty) {
+      // Klassisch: eine Spur für die ganze Abteilung.
+      spuren.add(
+        BoardSpur(
+          abteilung: abteilung,
+          kapazitaetMinuten: abteilungsKapazitaeten[abteilung.dbValue] ??
+              kStandardKapazitaetMinuten,
+        ),
+      );
+      continue;
+    }
+
+    // Eine Spur je Anlage — mit EIGENER Tageskapazität.
+    for (final m in anlagen..sort((a, b) => a.name.compareTo(b.name))) {
+      spuren.add(
+        BoardSpur(
+          abteilung: abteilung,
+          maschineId: m.id,
+          maschineName: m.name,
+          eignungHinweis: m.eignungHinweis,
+          kapazitaetMinuten: m.kapazitaetMinutenProTag,
+        ),
+      );
+    }
+
+    // Zusätzlich eine Sammelspur — aber nur, wenn dort wirklich Aufträge
+    // ohne (gültige) Anlage liegen. Sonst bliebe eine leere Zeile stehen.
+    if (abteilungenMitTasksOhneAnlage.contains(abteilung.dbValue)) {
+      spuren.add(
+        BoardSpur(
+          abteilung: abteilung,
+          kapazitaetMinuten: abteilungsKapazitaeten[abteilung.dbValue] ??
+              kStandardKapazitaetMinuten,
+        ),
+      );
+    }
+  }
+  return spuren;
+}
+
+/// Lädt alle Anlagen, die eine eigene Kapazitätsspur bekommen.
+Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
+  return (db.select(db.machines)
+        ..where((m) => m.deletedAt.isNull())
+        ..where((m) => m.istPlanungsressource.equals(true)))
+      .get();
 }

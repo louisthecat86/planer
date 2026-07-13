@@ -94,11 +94,23 @@ class _ParsedMachine {
     required this.name,
     required this.abteilungDb,
     this.typischeParameter,
+    this.istPlanungsressource = false,
+    this.kapazitaetMinutenProTag = 480,
+    this.eignungHinweis,
   });
 
   final String name;
   final String abteilungDb;
   final String? typischeParameter;
+
+  /// Spalte D: eigene Kapazitätsspur im Board (X / Ja / 1).
+  final bool istPlanungsressource;
+
+  /// Spalte E: Tageskapazität in Stunden -> hier bereits in Minuten.
+  final double kapazitaetMinutenProTag;
+
+  /// Spalte F: Eignungs-Hinweis (rein informativ).
+  final String? eignungHinweis;
 }
 
 class _ParsedStep {
@@ -275,6 +287,8 @@ class ExcelImportServiceV3 {
     'Verpackung': 'verpackung',
     'Verpackung Tef1': 'verpackung_tef1',
     'Verpackung TEF1': 'verpackung_tef1',
+    'Verpackung Tef2': 'verpackung_tef2',
+    'Verpackung TEF2': 'verpackung_tef2',
   };
 
   static Set<String> _collectSheetNames(Excel excel) {
@@ -440,6 +454,10 @@ class ExcelImportServiceV3 {
                   name: Value(m.name),
                   abteilung: Value(m.abteilungDb),
                   typischeParameter: Value(m.typischeParameter),
+                  istPlanungsressource: Value(m.istPlanungsressource),
+                  kapazitaetMinutenProTag:
+                      Value(m.kapazitaetMinutenProTag),
+                  eignungHinweis: Value(m.eignungHinweis),
                 ),
               );
           maschinenIdByName[m.name] = id;
@@ -451,6 +469,9 @@ class ExcelImportServiceV3 {
             MachinesCompanion(
               abteilung: Value(m.abteilungDb),
               typischeParameter: Value(m.typischeParameter),
+              istPlanungsressource: Value(m.istPlanungsressource),
+              kapazitaetMinutenProTag: Value(m.kapazitaetMinutenProTag),
+              eignungHinweis: Value(m.eignungHinweis),
               updatedAt: Value(DateTime.now()),
             ),
           );
@@ -680,6 +701,16 @@ class ExcelImportServiceV3 {
       final name = _cellStr(sheet.rows[r], 0);
       final abtText = _cellStr(sheet.rows[r], 1);
       final params = _cellStr(sheet.rows[r], 2);
+      // Spalte D: eigene Kapazitätsspur? (X / x / Ja / 1)
+      final spurText = (_cellStr(sheet.rows[r], 3) ?? '').trim().toLowerCase();
+      final istRessource =
+          spurText == 'x' || spurText == 'ja' || spurText == '1';
+      // Spalte E: Kapazität in Stunden (leer -> 8 h)
+      final kapText = _cellStr(sheet.rows[r], 4);
+      final kapStunden =
+          double.tryParse((kapText ?? '').replaceAll(',', '.')) ?? 8.0;
+      // Spalte F: Eignungs-Hinweis
+      final hinweis = _cellStr(sheet.rows[r], 5);
 
       if (name == null || name.isEmpty) continue;
       if (abtText == null || abtText.isEmpty) {
@@ -702,6 +733,9 @@ class ExcelImportServiceV3 {
           name: name,
           abteilungDb: abtDb,
           typischeParameter: params,
+          istPlanungsressource: istRessource,
+          kapazitaetMinutenProTag: kapStunden * 60,
+          eignungHinweis: hinweis,
         ),
       );
     }

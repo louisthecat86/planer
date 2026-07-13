@@ -51,8 +51,14 @@ enum Abteilung {
   verpackungTef1(
     dbValue: 'verpackung_tef1',
     anzeigeName: 'Verpackung Tef1',
-    kurzcode: 'VT',
+    kurzcode: 'VT1',
     farbwert: 0xFF006064,
+  ),
+  verpackungTef2(
+    dbValue: 'verpackung_tef2',
+    anzeigeName: 'Verpackung Tef2',
+    kurzcode: 'VT2',
+    farbwert: 0xFF00838F,
   );
 
   const Abteilung({
@@ -77,6 +83,20 @@ enum Abteilung {
 
   /// Liefert die Farbe als [Color]-Objekt für die UI.
   Color get farbe => Color(farbwert);
+
+  /// Alle Abteilungen, in denen verpackt wird.
+  ///
+  /// Innerhalb dieser Gruppe darf ein Auftrag ABTEILUNGSÜBERGREIFEND auf eine
+  /// andere Anlage umbelegt werden — genau die Flexibilität des Betriebs:
+  /// die Tef1 ist Ausweichanlage für die Multivac und für die Tef2.
+  static const Set<Abteilung> verpackungsAbteilungen = {
+    Abteilung.verpackung,
+    Abteilung.verpackungTef1,
+    Abteilung.verpackungTef2,
+  };
+
+  /// Ob in dieser Abteilung verpackt wird (siehe [verpackungsAbteilungen]).
+  bool get istVerpackung => verpackungsAbteilungen.contains(this);
 
   /// Parst einen in der Datenbank gespeicherten String zurück zu einem Enum-Wert.
   ///

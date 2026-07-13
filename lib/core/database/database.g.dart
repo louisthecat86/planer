@@ -2467,6 +2467,30 @@ class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
   late final GeneratedColumn<String> typischeParameter =
       GeneratedColumn<String>('typische_parameter', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _istPlanungsressourceMeta =
+      const VerificationMeta('istPlanungsressource');
+  @override
+  late final GeneratedColumn<bool> istPlanungsressource = GeneratedColumn<bool>(
+      'ist_planungsressource', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("ist_planungsressource" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _kapazitaetMinutenProTagMeta =
+      const VerificationMeta('kapazitaetMinutenProTag');
+  @override
+  late final GeneratedColumn<double> kapazitaetMinutenProTag =
+      GeneratedColumn<double>('kapazitaet_minuten_pro_tag', aliasedName, false,
+          type: DriftSqlType.double,
+          requiredDuringInsert: false,
+          defaultValue: const Constant(480));
+  static const VerificationMeta _eignungHinweisMeta =
+      const VerificationMeta('eignungHinweis');
+  @override
+  late final GeneratedColumn<String> eignungHinweis = GeneratedColumn<String>(
+      'eignung_hinweis', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -2490,8 +2514,18 @@ class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
       'deleted_at', aliasedName, true,
       type: DriftSqlType.dateTime, requiredDuringInsert: false);
   @override
-  List<GeneratedColumn> get $columns =>
-      [id, name, abteilung, typischeParameter, createdAt, updatedAt, deletedAt];
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        abteilung,
+        typischeParameter,
+        istPlanungsressource,
+        kapazitaetMinutenProTag,
+        eignungHinweis,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2525,6 +2559,25 @@ class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
           typischeParameter.isAcceptableOrUnknown(
               data['typische_parameter']!, _typischeParameterMeta));
     }
+    if (data.containsKey('ist_planungsressource')) {
+      context.handle(
+          _istPlanungsressourceMeta,
+          istPlanungsressource.isAcceptableOrUnknown(
+              data['ist_planungsressource']!, _istPlanungsressourceMeta));
+    }
+    if (data.containsKey('kapazitaet_minuten_pro_tag')) {
+      context.handle(
+          _kapazitaetMinutenProTagMeta,
+          kapazitaetMinutenProTag.isAcceptableOrUnknown(
+              data['kapazitaet_minuten_pro_tag']!,
+              _kapazitaetMinutenProTagMeta));
+    }
+    if (data.containsKey('eignung_hinweis')) {
+      context.handle(
+          _eignungHinweisMeta,
+          eignungHinweis.isAcceptableOrUnknown(
+              data['eignung_hinweis']!, _eignungHinweisMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -2554,6 +2607,13 @@ class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
           .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
       typischeParameter: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}typische_parameter']),
+      istPlanungsressource: attachedDatabase.typeMapping.read(
+          DriftSqlType.bool, data['${effectivePrefix}ist_planungsressource'])!,
+      kapazitaetMinutenProTag: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}kapazitaet_minuten_pro_tag'])!,
+      eignungHinweis: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}eignung_hinweis']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -2585,6 +2645,29 @@ class Machine extends DataClass implements Insertable<Machine> {
   /// Typische Einstellungs-Parameter als Freitext (Spalte C im Katalog).
   /// Pure Dokumentation, keine Funktion.
   final String? typischeParameter;
+
+  /// Ob diese Anlage im Planungsboard eine EIGENE Kapazitätsspur bekommt.
+  ///
+  /// Hintergrund: In der Verpackung laufen mehrere Anlagen echt parallel
+  /// (Multivac, Tiefzieher/Hartschale, Kleinbeutel). Ohne eigene Spuren
+  /// würde die Abteilung mit einer 8-h-Kapazität rechnen, obwohl real
+  /// das Mehrfache zur Verfügung steht.
+  ///
+  /// `false` = die Anlage teilt sich die Kapazität ihrer Abteilung
+  /// (Normalfall, z.B. eine Bratstraßen-Linie).
+  final bool istPlanungsressource;
+
+  /// Tageskapazität dieser Anlage in Minuten (Standard: 8 h).
+  /// Nur relevant, wenn [istPlanungsressource] gesetzt ist.
+  final double kapazitaetMinutenProTag;
+
+  /// Kurzer Eignungs-Hinweis für die Planung, z.B.
+  /// „nur Aufschnitt / Weberslicer" oder „Ausweichanlage für Multivac".
+  ///
+  /// Rein informativ — die App verbietet nichts. Die Flexibilität im
+  /// Betrieb ist ein Wert und soll nicht durch harte Regeln blockiert
+  /// werden; der Hinweis macht nur sichtbar, was üblich ist.
+  final String? eignungHinweis;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -2593,6 +2676,9 @@ class Machine extends DataClass implements Insertable<Machine> {
       required this.name,
       required this.abteilung,
       this.typischeParameter,
+      required this.istPlanungsressource,
+      required this.kapazitaetMinutenProTag,
+      this.eignungHinweis,
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt});
@@ -2604,6 +2690,12 @@ class Machine extends DataClass implements Insertable<Machine> {
     map['abteilung'] = Variable<String>(abteilung);
     if (!nullToAbsent || typischeParameter != null) {
       map['typische_parameter'] = Variable<String>(typischeParameter);
+    }
+    map['ist_planungsressource'] = Variable<bool>(istPlanungsressource);
+    map['kapazitaet_minuten_pro_tag'] =
+        Variable<double>(kapazitaetMinutenProTag);
+    if (!nullToAbsent || eignungHinweis != null) {
+      map['eignung_hinweis'] = Variable<String>(eignungHinweis);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -2621,6 +2713,11 @@ class Machine extends DataClass implements Insertable<Machine> {
       typischeParameter: typischeParameter == null && nullToAbsent
           ? const Value.absent()
           : Value(typischeParameter),
+      istPlanungsressource: Value(istPlanungsressource),
+      kapazitaetMinutenProTag: Value(kapazitaetMinutenProTag),
+      eignungHinweis: eignungHinweis == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eignungHinweis),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -2638,6 +2735,11 @@ class Machine extends DataClass implements Insertable<Machine> {
       abteilung: serializer.fromJson<String>(json['abteilung']),
       typischeParameter:
           serializer.fromJson<String?>(json['typischeParameter']),
+      istPlanungsressource:
+          serializer.fromJson<bool>(json['istPlanungsressource']),
+      kapazitaetMinutenProTag:
+          serializer.fromJson<double>(json['kapazitaetMinutenProTag']),
+      eignungHinweis: serializer.fromJson<String?>(json['eignungHinweis']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -2651,6 +2753,10 @@ class Machine extends DataClass implements Insertable<Machine> {
       'name': serializer.toJson<String>(name),
       'abteilung': serializer.toJson<String>(abteilung),
       'typischeParameter': serializer.toJson<String?>(typischeParameter),
+      'istPlanungsressource': serializer.toJson<bool>(istPlanungsressource),
+      'kapazitaetMinutenProTag':
+          serializer.toJson<double>(kapazitaetMinutenProTag),
+      'eignungHinweis': serializer.toJson<String?>(eignungHinweis),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -2662,6 +2768,9 @@ class Machine extends DataClass implements Insertable<Machine> {
           String? name,
           String? abteilung,
           Value<String?> typischeParameter = const Value.absent(),
+          bool? istPlanungsressource,
+          double? kapazitaetMinutenProTag,
+          Value<String?> eignungHinweis = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent()}) =>
@@ -2672,6 +2781,11 @@ class Machine extends DataClass implements Insertable<Machine> {
         typischeParameter: typischeParameter.present
             ? typischeParameter.value
             : this.typischeParameter,
+        istPlanungsressource: istPlanungsressource ?? this.istPlanungsressource,
+        kapazitaetMinutenProTag:
+            kapazitaetMinutenProTag ?? this.kapazitaetMinutenProTag,
+        eignungHinweis:
+            eignungHinweis.present ? eignungHinweis.value : this.eignungHinweis,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -2684,6 +2798,15 @@ class Machine extends DataClass implements Insertable<Machine> {
       typischeParameter: data.typischeParameter.present
           ? data.typischeParameter.value
           : this.typischeParameter,
+      istPlanungsressource: data.istPlanungsressource.present
+          ? data.istPlanungsressource.value
+          : this.istPlanungsressource,
+      kapazitaetMinutenProTag: data.kapazitaetMinutenProTag.present
+          ? data.kapazitaetMinutenProTag.value
+          : this.kapazitaetMinutenProTag,
+      eignungHinweis: data.eignungHinweis.present
+          ? data.eignungHinweis.value
+          : this.eignungHinweis,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -2697,6 +2820,9 @@ class Machine extends DataClass implements Insertable<Machine> {
           ..write('name: $name, ')
           ..write('abteilung: $abteilung, ')
           ..write('typischeParameter: $typischeParameter, ')
+          ..write('istPlanungsressource: $istPlanungsressource, ')
+          ..write('kapazitaetMinutenProTag: $kapazitaetMinutenProTag, ')
+          ..write('eignungHinweis: $eignungHinweis, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -2706,7 +2832,16 @@ class Machine extends DataClass implements Insertable<Machine> {
 
   @override
   int get hashCode => Object.hash(
-      id, name, abteilung, typischeParameter, createdAt, updatedAt, deletedAt);
+      id,
+      name,
+      abteilung,
+      typischeParameter,
+      istPlanungsressource,
+      kapazitaetMinutenProTag,
+      eignungHinweis,
+      createdAt,
+      updatedAt,
+      deletedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2715,6 +2850,9 @@ class Machine extends DataClass implements Insertable<Machine> {
           other.name == this.name &&
           other.abteilung == this.abteilung &&
           other.typischeParameter == this.typischeParameter &&
+          other.istPlanungsressource == this.istPlanungsressource &&
+          other.kapazitaetMinutenProTag == this.kapazitaetMinutenProTag &&
+          other.eignungHinweis == this.eignungHinweis &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -2725,6 +2863,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
   final Value<String> name;
   final Value<String> abteilung;
   final Value<String?> typischeParameter;
+  final Value<bool> istPlanungsressource;
+  final Value<double> kapazitaetMinutenProTag;
+  final Value<String?> eignungHinweis;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -2734,6 +2875,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
     this.name = const Value.absent(),
     this.abteilung = const Value.absent(),
     this.typischeParameter = const Value.absent(),
+    this.istPlanungsressource = const Value.absent(),
+    this.kapazitaetMinutenProTag = const Value.absent(),
+    this.eignungHinweis = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2744,6 +2888,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
     required String name,
     required String abteilung,
     this.typischeParameter = const Value.absent(),
+    this.istPlanungsressource = const Value.absent(),
+    this.kapazitaetMinutenProTag = const Value.absent(),
+    this.eignungHinweis = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2756,6 +2903,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
     Expression<String>? name,
     Expression<String>? abteilung,
     Expression<String>? typischeParameter,
+    Expression<bool>? istPlanungsressource,
+    Expression<double>? kapazitaetMinutenProTag,
+    Expression<String>? eignungHinweis,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2766,6 +2916,11 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
       if (name != null) 'name': name,
       if (abteilung != null) 'abteilung': abteilung,
       if (typischeParameter != null) 'typische_parameter': typischeParameter,
+      if (istPlanungsressource != null)
+        'ist_planungsressource': istPlanungsressource,
+      if (kapazitaetMinutenProTag != null)
+        'kapazitaet_minuten_pro_tag': kapazitaetMinutenProTag,
+      if (eignungHinweis != null) 'eignung_hinweis': eignungHinweis,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2778,6 +2933,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
       Value<String>? name,
       Value<String>? abteilung,
       Value<String?>? typischeParameter,
+      Value<bool>? istPlanungsressource,
+      Value<double>? kapazitaetMinutenProTag,
+      Value<String?>? eignungHinweis,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
@@ -2787,6 +2945,10 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
       name: name ?? this.name,
       abteilung: abteilung ?? this.abteilung,
       typischeParameter: typischeParameter ?? this.typischeParameter,
+      istPlanungsressource: istPlanungsressource ?? this.istPlanungsressource,
+      kapazitaetMinutenProTag:
+          kapazitaetMinutenProTag ?? this.kapazitaetMinutenProTag,
+      eignungHinweis: eignungHinweis ?? this.eignungHinweis,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2808,6 +2970,16 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
     }
     if (typischeParameter.present) {
       map['typische_parameter'] = Variable<String>(typischeParameter.value);
+    }
+    if (istPlanungsressource.present) {
+      map['ist_planungsressource'] = Variable<bool>(istPlanungsressource.value);
+    }
+    if (kapazitaetMinutenProTag.present) {
+      map['kapazitaet_minuten_pro_tag'] =
+          Variable<double>(kapazitaetMinutenProTag.value);
+    }
+    if (eignungHinweis.present) {
+      map['eignung_hinweis'] = Variable<String>(eignungHinweis.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -2831,6 +3003,9 @@ class MachinesCompanion extends UpdateCompanion<Machine> {
           ..write('name: $name, ')
           ..write('abteilung: $abteilung, ')
           ..write('typischeParameter: $typischeParameter, ')
+          ..write('istPlanungsressource: $istPlanungsressource, ')
+          ..write('kapazitaetMinutenProTag: $kapazitaetMinutenProTag, ')
+          ..write('eignungHinweis: $eignungHinweis, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -6543,6 +6718,12 @@ class $ProductionTasksTable extends ProductionTasks
   late final GeneratedColumn<String> abteilung = GeneratedColumn<String>(
       'abteilung', aliasedName, false,
       type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _maschineIdMeta =
+      const VerificationMeta('maschineId');
+  @override
+  late final GeneratedColumn<String> maschineId = GeneratedColumn<String>(
+      'maschine_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _startZeitMeta =
       const VerificationMeta('startZeit');
   @override
@@ -6617,6 +6798,7 @@ class $ProductionTasksTable extends ProductionTasks
         mengeKg,
         datum,
         abteilung,
+        maschineId,
         startZeit,
         geplanteDauerMinuten,
         geplanteMitarbeiter,
@@ -6666,6 +6848,12 @@ class $ProductionTasksTable extends ProductionTasks
           abteilung.isAcceptableOrUnknown(data['abteilung']!, _abteilungMeta));
     } else if (isInserting) {
       context.missing(_abteilungMeta);
+    }
+    if (data.containsKey('maschine_id')) {
+      context.handle(
+          _maschineIdMeta,
+          maschineId.isAcceptableOrUnknown(
+              data['maschine_id']!, _maschineIdMeta));
     }
     if (data.containsKey('start_zeit')) {
       context.handle(_startZeitMeta,
@@ -6738,6 +6926,8 @@ class $ProductionTasksTable extends ProductionTasks
           .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
       abteilung: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
+      maschineId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}maschine_id']),
       startZeit: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}start_zeit']),
       geplanteDauerMinuten: attachedDatabase.typeMapping.read(
@@ -6780,6 +6970,14 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
   /// Gespeichert als [Abteilung.dbValue].
   final String abteilung;
 
+  /// Anlage, auf der dieser Auftrag läuft (optional).
+  ///
+  /// Wird beim Planen aus dem Prozessschritt übernommen. In Abteilungen mit
+  /// mehreren parallelen Anlagen (Verpackung) bestimmt sie die Kapazitäts-
+  /// spur; ein Umbelegen auf eine andere Anlage ändert nur dieses Feld
+  /// (und ggf. die Abteilung, wenn die Ausweichanlage woanders steht).
+  final String? maschineId;
+
   /// Geplante Startzeit als "HH:MM"-String (z.B. "08:30"). Null, wenn der
   /// Task für den Tag geplant ist, aber keine feste Uhrzeit hat.
   final String? startZeit;
@@ -6813,6 +7011,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       required this.mengeKg,
       required this.datum,
       required this.abteilung,
+      this.maschineId,
       this.startZeit,
       required this.geplanteDauerMinuten,
       required this.geplanteMitarbeiter,
@@ -6831,6 +7030,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
     map['menge_kg'] = Variable<double>(mengeKg);
     map['datum'] = Variable<DateTime>(datum);
     map['abteilung'] = Variable<String>(abteilung);
+    if (!nullToAbsent || maschineId != null) {
+      map['maschine_id'] = Variable<String>(maschineId);
+    }
     if (!nullToAbsent || startZeit != null) {
       map['start_zeit'] = Variable<String>(startZeit);
     }
@@ -6859,6 +7061,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       mengeKg: Value(mengeKg),
       datum: Value(datum),
       abteilung: Value(abteilung),
+      maschineId: maschineId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(maschineId),
       startZeit: startZeit == null && nullToAbsent
           ? const Value.absent()
           : Value(startZeit),
@@ -6889,6 +7094,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       mengeKg: serializer.fromJson<double>(json['mengeKg']),
       datum: serializer.fromJson<DateTime>(json['datum']),
       abteilung: serializer.fromJson<String>(json['abteilung']),
+      maschineId: serializer.fromJson<String?>(json['maschineId']),
       startZeit: serializer.fromJson<String?>(json['startZeit']),
       geplanteDauerMinuten:
           serializer.fromJson<double>(json['geplanteDauerMinuten']),
@@ -6912,6 +7118,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       'mengeKg': serializer.toJson<double>(mengeKg),
       'datum': serializer.toJson<DateTime>(datum),
       'abteilung': serializer.toJson<String>(abteilung),
+      'maschineId': serializer.toJson<String?>(maschineId),
       'startZeit': serializer.toJson<String?>(startZeit),
       'geplanteDauerMinuten': serializer.toJson<double>(geplanteDauerMinuten),
       'geplanteMitarbeiter': serializer.toJson<int>(geplanteMitarbeiter),
@@ -6931,6 +7138,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           double? mengeKg,
           DateTime? datum,
           String? abteilung,
+          Value<String?> maschineId = const Value.absent(),
           Value<String?> startZeit = const Value.absent(),
           double? geplanteDauerMinuten,
           int? geplanteMitarbeiter,
@@ -6947,6 +7155,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
         mengeKg: mengeKg ?? this.mengeKg,
         datum: datum ?? this.datum,
         abteilung: abteilung ?? this.abteilung,
+        maschineId: maschineId.present ? maschineId.value : this.maschineId,
         startZeit: startZeit.present ? startZeit.value : this.startZeit,
         geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
         geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -6966,6 +7175,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       mengeKg: data.mengeKg.present ? data.mengeKg.value : this.mengeKg,
       datum: data.datum.present ? data.datum.value : this.datum,
       abteilung: data.abteilung.present ? data.abteilung.value : this.abteilung,
+      maschineId:
+          data.maschineId.present ? data.maschineId.value : this.maschineId,
       startZeit: data.startZeit.present ? data.startZeit.value : this.startZeit,
       geplanteDauerMinuten: data.geplanteDauerMinuten.present
           ? data.geplanteDauerMinuten.value
@@ -6994,6 +7205,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           ..write('mengeKg: $mengeKg, ')
           ..write('datum: $datum, ')
           ..write('abteilung: $abteilung, ')
+          ..write('maschineId: $maschineId, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -7015,6 +7227,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       mengeKg,
       datum,
       abteilung,
+      maschineId,
       startZeit,
       geplanteDauerMinuten,
       geplanteMitarbeiter,
@@ -7034,6 +7247,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           other.mengeKg == this.mengeKg &&
           other.datum == this.datum &&
           other.abteilung == this.abteilung &&
+          other.maschineId == this.maschineId &&
           other.startZeit == this.startZeit &&
           other.geplanteDauerMinuten == this.geplanteDauerMinuten &&
           other.geplanteMitarbeiter == this.geplanteMitarbeiter &&
@@ -7052,6 +7266,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
   final Value<double> mengeKg;
   final Value<DateTime> datum;
   final Value<String> abteilung;
+  final Value<String?> maschineId;
   final Value<String?> startZeit;
   final Value<double> geplanteDauerMinuten;
   final Value<int> geplanteMitarbeiter;
@@ -7069,6 +7284,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.mengeKg = const Value.absent(),
     this.datum = const Value.absent(),
     this.abteilung = const Value.absent(),
+    this.maschineId = const Value.absent(),
     this.startZeit = const Value.absent(),
     this.geplanteDauerMinuten = const Value.absent(),
     this.geplanteMitarbeiter = const Value.absent(),
@@ -7087,6 +7303,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     required double mengeKg,
     required DateTime datum,
     required String abteilung,
+    this.maschineId = const Value.absent(),
     this.startZeit = const Value.absent(),
     required double geplanteDauerMinuten,
     required int geplanteMitarbeiter,
@@ -7111,6 +7328,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     Expression<double>? mengeKg,
     Expression<DateTime>? datum,
     Expression<String>? abteilung,
+    Expression<String>? maschineId,
     Expression<String>? startZeit,
     Expression<double>? geplanteDauerMinuten,
     Expression<int>? geplanteMitarbeiter,
@@ -7129,6 +7347,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       if (mengeKg != null) 'menge_kg': mengeKg,
       if (datum != null) 'datum': datum,
       if (abteilung != null) 'abteilung': abteilung,
+      if (maschineId != null) 'maschine_id': maschineId,
       if (startZeit != null) 'start_zeit': startZeit,
       if (geplanteDauerMinuten != null)
         'geplante_dauer_minuten': geplanteDauerMinuten,
@@ -7151,6 +7370,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       Value<double>? mengeKg,
       Value<DateTime>? datum,
       Value<String>? abteilung,
+      Value<String?>? maschineId,
       Value<String?>? startZeit,
       Value<double>? geplanteDauerMinuten,
       Value<int>? geplanteMitarbeiter,
@@ -7168,6 +7388,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       mengeKg: mengeKg ?? this.mengeKg,
       datum: datum ?? this.datum,
       abteilung: abteilung ?? this.abteilung,
+      maschineId: maschineId ?? this.maschineId,
       startZeit: startZeit ?? this.startZeit,
       geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
       geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -7199,6 +7420,9 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     }
     if (abteilung.present) {
       map['abteilung'] = Variable<String>(abteilung.value);
+    }
+    if (maschineId.present) {
+      map['maschine_id'] = Variable<String>(maschineId.value);
     }
     if (startZeit.present) {
       map['start_zeit'] = Variable<String>(startZeit.value);
@@ -7245,6 +7469,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
           ..write('mengeKg: $mengeKg, ')
           ..write('datum: $datum, ')
           ..write('abteilung: $abteilung, ')
+          ..write('maschineId: $maschineId, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -11806,6 +12031,9 @@ typedef $$MachinesTableCreateCompanionBuilder = MachinesCompanion Function({
   required String name,
   required String abteilung,
   Value<String?> typischeParameter,
+  Value<bool> istPlanungsressource,
+  Value<double> kapazitaetMinutenProTag,
+  Value<String?> eignungHinweis,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -11816,6 +12044,9 @@ typedef $$MachinesTableUpdateCompanionBuilder = MachinesCompanion Function({
   Value<String> name,
   Value<String> abteilung,
   Value<String?> typischeParameter,
+  Value<bool> istPlanungsressource,
+  Value<double> kapazitaetMinutenProTag,
+  Value<String?> eignungHinweis,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -11862,6 +12093,18 @@ class $$MachinesTableFilterComposer
 
   ColumnFilters<String> get typischeParameter => $composableBuilder(
       column: $table.typischeParameter,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istPlanungsressource => $composableBuilder(
+      column: $table.istPlanungsressource,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kapazitaetMinutenProTag => $composableBuilder(
+      column: $table.kapazitaetMinutenProTag,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get eignungHinweis => $composableBuilder(
+      column: $table.eignungHinweis,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
@@ -11917,6 +12160,18 @@ class $$MachinesTableOrderingComposer
       column: $table.typischeParameter,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get istPlanungsressource => $composableBuilder(
+      column: $table.istPlanungsressource,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kapazitaetMinutenProTag => $composableBuilder(
+      column: $table.kapazitaetMinutenProTag,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get eignungHinweis => $composableBuilder(
+      column: $table.eignungHinweis,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -11947,6 +12202,15 @@ class $$MachinesTableAnnotationComposer
 
   GeneratedColumn<String> get typischeParameter => $composableBuilder(
       column: $table.typischeParameter, builder: (column) => column);
+
+  GeneratedColumn<bool> get istPlanungsressource => $composableBuilder(
+      column: $table.istPlanungsressource, builder: (column) => column);
+
+  GeneratedColumn<double> get kapazitaetMinutenProTag => $composableBuilder(
+      column: $table.kapazitaetMinutenProTag, builder: (column) => column);
+
+  GeneratedColumn<String> get eignungHinweis => $composableBuilder(
+      column: $table.eignungHinweis, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -12006,6 +12270,9 @@ class $$MachinesTableTableManager extends RootTableManager<
             Value<String> name = const Value.absent(),
             Value<String> abteilung = const Value.absent(),
             Value<String?> typischeParameter = const Value.absent(),
+            Value<bool> istPlanungsressource = const Value.absent(),
+            Value<double> kapazitaetMinutenProTag = const Value.absent(),
+            Value<String?> eignungHinweis = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -12016,6 +12283,9 @@ class $$MachinesTableTableManager extends RootTableManager<
             name: name,
             abteilung: abteilung,
             typischeParameter: typischeParameter,
+            istPlanungsressource: istPlanungsressource,
+            kapazitaetMinutenProTag: kapazitaetMinutenProTag,
+            eignungHinweis: eignungHinweis,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -12026,6 +12296,9 @@ class $$MachinesTableTableManager extends RootTableManager<
             required String name,
             required String abteilung,
             Value<String?> typischeParameter = const Value.absent(),
+            Value<bool> istPlanungsressource = const Value.absent(),
+            Value<double> kapazitaetMinutenProTag = const Value.absent(),
+            Value<String?> eignungHinweis = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -12036,6 +12309,9 @@ class $$MachinesTableTableManager extends RootTableManager<
             name: name,
             abteilung: abteilung,
             typischeParameter: typischeParameter,
+            istPlanungsressource: istPlanungsressource,
+            kapazitaetMinutenProTag: kapazitaetMinutenProTag,
+            eignungHinweis: eignungHinweis,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -14599,6 +14875,7 @@ typedef $$ProductionTasksTableCreateCompanionBuilder = ProductionTasksCompanion
   required double mengeKg,
   required DateTime datum,
   required String abteilung,
+  Value<String?> maschineId,
   Value<String?> startZeit,
   required double geplanteDauerMinuten,
   required int geplanteMitarbeiter,
@@ -14618,6 +14895,7 @@ typedef $$ProductionTasksTableUpdateCompanionBuilder = ProductionTasksCompanion
   Value<double> mengeKg,
   Value<DateTime> datum,
   Value<String> abteilung,
+  Value<String?> maschineId,
   Value<String?> startZeit,
   Value<double> geplanteDauerMinuten,
   Value<int> geplanteMitarbeiter,
@@ -14687,6 +14965,9 @@ class $$ProductionTasksTableFilterComposer
 
   ColumnFilters<String> get abteilung => $composableBuilder(
       column: $table.abteilung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnFilters(column));
@@ -14783,6 +15064,9 @@ class $$ProductionTasksTableOrderingComposer
   ColumnOrderings<String> get abteilung => $composableBuilder(
       column: $table.abteilung, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnOrderings(column));
 
@@ -14857,6 +15141,9 @@ class $$ProductionTasksTableAnnotationComposer
 
   GeneratedColumn<String> get abteilung =>
       $composableBuilder(column: $table.abteilung, builder: (column) => column);
+
+  GeneratedColumn<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => column);
 
   GeneratedColumn<String> get startZeit =>
       $composableBuilder(column: $table.startZeit, builder: (column) => column);
@@ -14959,6 +15246,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<double> mengeKg = const Value.absent(),
             Value<DateTime> datum = const Value.absent(),
             Value<String> abteilung = const Value.absent(),
+            Value<String?> maschineId = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             Value<double> geplanteDauerMinuten = const Value.absent(),
             Value<int> geplanteMitarbeiter = const Value.absent(),
@@ -14977,6 +15265,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             mengeKg: mengeKg,
             datum: datum,
             abteilung: abteilung,
+            maschineId: maschineId,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
@@ -14995,6 +15284,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             required double mengeKg,
             required DateTime datum,
             required String abteilung,
+            Value<String?> maschineId = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             required double geplanteDauerMinuten,
             required int geplanteMitarbeiter,
@@ -15013,6 +15303,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             mengeKg: mengeKg,
             datum: datum,
             abteilung: abteilung,
+            maschineId: maschineId,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,

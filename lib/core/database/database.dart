@@ -51,7 +51,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -60,7 +60,7 @@ class AppDatabase extends _$AppDatabase {
           await _createIndexes();
         },
         onUpgrade: (m, from, to) async {
-          // ─── v1 → v2: Basis-Erweiterung products/product_steps ───────
+          // --- v1 ? v2: Basis-Erweiterung products/product_steps -------
           if (from < 2) {
             await _addColumnIfNotExists('products', 'verpackungsart', 'TEXT');
             await _addColumnIfNotExists('products', 'gebinde_groesse_kg', 'REAL');
@@ -79,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists('product_steps', 'maschinen_einstellungen_json', 'TEXT');
           }
 
-          // ─── v2 → v3: Produktgruppen + gruppenspezifische Felder ─────
+          // --- v2 ? v3: Produktgruppen + gruppenspezifische Felder -----
           if (from < 3) {
             // Produktgruppe
             await _addColumnIfNotExists('products', 'produktgruppe', 'TEXT');
@@ -151,7 +151,7 @@ class AppDatabase extends _$AppDatabase {
             );
           }
 
-          // ─── v3 → v4: Anlagen-Katalog + flexible Schritt-Parameter ───
+          // --- v3 ? v4: Anlagen-Katalog + flexible Schritt-Parameter ---
           if (from < 4) {
             await m.createTable(machines);
             await m.createTable(productStepParameters);
@@ -178,12 +178,12 @@ class AppDatabase extends _$AppDatabase {
             );
           }
 
-          // ─── v4 → v5: App-Settings für Excel-Export-Workflow ─────────
+          // --- v4 ? v5: App-Settings für Excel-Export-Workflow ---------
           if (from < 5) {
             await m.createTable(appSettings);
           }
 
-          // ─── v5 → v6: Historische Produktionsdaten je Artikel ────────
+          // --- v5 ? v6: Historische Produktionsdaten je Artikel --------
           if (from < 6) {
             await m.createTable(productionHistory);
             await customStatement(
@@ -192,7 +192,7 @@ class AppDatabase extends _$AppDatabase {
             );
           }
 
-          // ─── v6 → v7: Manuelle Reihenfolge der Tasks je Abteilung/Tag ─
+          // --- v6 ? v7: Manuelle Reihenfolge der Tasks je Abteilung/Tag -
           if (from < 7) {
             await _addColumnIfNotExists(
               'production_tasks',
@@ -201,13 +201,66 @@ class AppDatabase extends _$AppDatabase {
             );
           }
 
-          // ─── v7 → v8: Eingefrorene Wochen-Snapshots ──────────────────
+          // --- v7 -> v8: Eingefrorene Wochen-Snapshots ------------------
           if (from < 8) {
             await m.createTable(weekSnapshots);
             await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_week_snapshots_start '
               'ON week_snapshots(wochen_start)',
             );
+          }
+
+          // --- v8 -> v9: Kapazität je ANLAGE statt je Abteilung ---------
+          //
+          // In der Verpackung laufen mehrere Anlagen echt parallel. Bisher
+          // rechnete das Board mit EINER 8-h-Kapazität pro Abteilung, was
+          // dort zwangsläufig zu Scheinüberbuchung führte.
+          //
+          // Neu: Aufträge kennen ihre Anlage; Anlagen können eine eigene
+          // Kapazitätsspur haben.
+          if (from < 9) {
+            await _addColumnIfNotExists(
+              'production_tasks',
+              'maschine_id',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'machines',
+              'ist_planungsressource',
+              'INTEGER NOT NULL DEFAULT 0',
+            );
+            await _addColumnIfNotExists(
+              'machines',
+              'kapazitaet_minuten_pro_tag',
+              'REAL NOT NULL DEFAULT 480',
+            );
+            await _addColumnIfNotExists(
+              'machines',
+              'eignung_hinweis',
+              'TEXT',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_production_tasks_maschine '
+              'ON production_tasks(maschine_id)',
+            );
+
+            // Bestehende Aufträge bekommen die Anlage ihres Prozessschritts
+            // (gleiche Abteilung) — sonst landeten sie in der Spur „ohne
+            // Anlage" und die Auslastung wäre falsch verteilt.
+            await customStatement('''
+              UPDATE production_tasks
+                 SET maschine_id = (
+                       SELECT ps.maschine_id
+                         FROM product_steps ps
+                        WHERE ps.product_id = production_tasks.product_id
+                          AND ps.abteilung  = production_tasks.abteilung
+                          AND ps.deleted_at IS NULL
+                          AND ps.maschine_id IS NOT NULL
+                        ORDER BY ps.reihenfolge
+                        LIMIT 1
+                     )
+               WHERE maschine_id IS NULL
+            ''');
           }
         },
         beforeOpen: (details) async {

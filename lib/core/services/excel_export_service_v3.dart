@@ -1601,6 +1601,8 @@ class ExcelExportServiceV3 {
         return 'Verpackung';
       case 'verpackung_tef1':
         return 'Verpackung Tef1';
+      case 'verpackung_tef2':
+        return 'Verpackung Tef2';
       default:
         return dbValue;
     }
