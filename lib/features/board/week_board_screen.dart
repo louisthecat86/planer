@@ -11,7 +11,7 @@ import '../whiteboard/whiteboard_provider.dart';
 import 'board_print_service.dart';
 import 'board_providers.dart';
 
-const double _kLabelWidth = 116;
+const double _kLabelWidth = 148;
 const _kDayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
 const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -291,25 +291,29 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SegmentedButton<_Modus>(
-                segments: const [
-                  ButtonSegment(
-                    value: _Modus.woche,
-                    label: Text('Woche'),
-                    icon: Icon(Icons.calendar_view_week),
-                  ),
-                  ButtonSegment(
-                    value: _Modus.tag,
-                    label: Text('Tag'),
-                    icon: Icon(Icons.calendar_view_day),
-                  ),
-                ],
-                selected: {_modus},
-                onSelectionChanged: (s) =>
-                    setState(() => _modus = s.first),
-              ),
+            child: Row(
+              children: [
+                SegmentedButton<_Modus>(
+                  segments: const [
+                    ButtonSegment(
+                      value: _Modus.woche,
+                      label: Text('Woche'),
+                      icon: Icon(Icons.calendar_view_week),
+                    ),
+                    ButtonSegment(
+                      value: _Modus.tag,
+                      label: Text('Tag'),
+                      icon: Icon(Icons.calendar_view_day),
+                    ),
+                  ],
+                  selected: {_modus},
+                  onSelectionChanged: (s) =>
+                      setState(() => _modus = s.first),
+                ),
+                const Spacer(),
+                // Legende: erklärt die Balkenfarben ohne Vorwissen
+                const _Legende(),
+              ],
             ),
           ),
           Expanded(
@@ -512,9 +516,8 @@ class _AbteilungsLabel extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       width: _kLabelWidth,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
       decoration: BoxDecoration(
-        color: abteilung.farbe.withValues(alpha: 0.06),
+        color: abteilung.farbe.withValues(alpha: 0.07),
         border: Border(
           right: BorderSide(color: theme.dividerColor),
           bottom: BorderSide(color: theme.dividerColor),
@@ -522,24 +525,27 @@ class _AbteilungsLabel extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: abteilung.farbe,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 6),
+          // Kräftiges Farbband — Abteilung auf einen Blick
+          Container(width: 4, color: abteilung.farbe),
           Expanded(
-            child: Text(
-              abteilung.anzeigeName,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    abteilung.anzeigeName,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      height: 1.2,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 2,
+                  ),
+                ],
               ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
             ),
           ),
         ],
@@ -565,6 +571,7 @@ class _TagesZelle extends StatelessWidget {
     final farbe = _ampelFarbe(cell.status);
     final now = DateTime.now();
     final istHeute = cell.tag == DateTime(now.year, now.month, now.day);
+    final belegt = cell.tasks.isNotEmpty;
 
     return DragTarget<BoardTask>(
       onWillAcceptWithDetails: (details) {
@@ -575,66 +582,133 @@ class _TagesZelle extends StatelessWidget {
       builder: (context, candidate, rejected) {
         final highlight = candidate.isNotEmpty;
         return Container(
-          constraints: const BoxConstraints(minHeight: 96),
+          constraints: BoxConstraints(minHeight: belegt ? 92 : 56),
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
             color: highlight
-                ? cell.abteilung.farbe.withValues(alpha: 0.10)
+                ? cell.abteilung.farbe.withValues(alpha: 0.12)
                 : istHeute
-                    ? theme.colorScheme.primary.withValues(alpha: 0.05)
+                    ? theme.colorScheme.primary.withValues(alpha: 0.04)
                     : null,
             border: Border(
               right: BorderSide(color: theme.dividerColor),
               bottom: BorderSide(color: theme.dividerColor),
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    '${_fmtStunden(cell.belegtMinuten)} / '
-                    '${_fmtStunden(cell.kapazitaetMinuten)} h',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: farbe,
+          child: !belegt
+              // ── LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
+              //    freie Kapazität ist der Normalfall und muss nicht
+              //    35-mal wiederholt werden. Nur beim Ziehen erscheint
+              //    ein Hinweis.
+              ? Center(
+                  child: highlight
+                      ? Text(
+                          'Hier ablegen',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: cell.abteilung.farbe,
+                          ),
+                        )
+                      : const SizedBox.shrink(),
+                )
+              // ── BELEGTE ZELLE: Auslastung kompakt + Aufträge
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _AuslastungsPille(
+                      belegt: cell.belegtMinuten,
+                      kapazitaet: cell.kapazitaetMinuten,
+                      auslastung: cell.auslastung,
+                      farbe: farbe,
+                      status: cell.status,
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _ampelWort(cell.status),
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: LinearProgressIndicator(
-                  value: cell.auslastung.clamp(0.0, 1.0).toDouble(),
-                  minHeight: 5,
-                  backgroundColor: theme.colorScheme.surfaceContainerHighest,
-                  color: farbe,
+                    const SizedBox(height: 6),
+                    for (final task in cell.tasks)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: _AuftragsKarte(
+                          task: task,
+                          onTap: () => onTapTask(task),
+                        ),
+                      ),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 6),
-              for (final task in cell.tasks)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: _AuftragsKarte(
-                    task: task,
-                    onTap: () => onTapTask(task),
-                  ),
-                ),
-            ],
-          ),
         );
       },
+    );
+  }
+}
+
+/// Kompakte Auslastungsanzeige — erscheint nur in belegten Zellen.
+/// Stunden, Mini-Balken und (nur bei Engpass) ein Warnwort.
+class _AuslastungsPille extends StatelessWidget {
+  const _AuslastungsPille({
+    required this.belegt,
+    required this.kapazitaet,
+    required this.auslastung,
+    required this.farbe,
+    required this.status,
+  });
+
+  final double belegt;
+  final double kapazitaet;
+  final double auslastung;
+  final Color farbe;
+  final CapacityStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // „Platz frei" ist der Normalfall und braucht kein Wort — nur
+    // Engpässe werden benannt.
+    final warnung = status == CapacityStatus.frei ? null : _ampelWort(status);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text(
+              '${_fmtStunden(belegt)} / ${_fmtStunden(kapazitaet)} h',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+              ),
+            ),
+            const Spacer(),
+            if (warnung != null)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: farbe.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Text(
+                  warnung,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: farbe,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: LinearProgressIndicator(
+            value: auslastung.clamp(0.0, 1.0).toDouble(),
+            minHeight: 4,
+            backgroundColor:
+                theme.colorScheme.onSurface.withValues(alpha: 0.10),
+            color: farbe,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -723,11 +797,12 @@ class _KartenInhalt extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
+                    height: 1.25,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(
                   '${task.mengeKg.toStringAsFixed(0)} kg · '
                   '${_fmtStunden(task.dauerMinuten)} h',
@@ -1514,6 +1589,58 @@ class _SchrittTagKarte extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Kleine Farb-Legende in der Toolbar — macht die Auslastungsbalken
+/// ohne Vorwissen verständlich („für einen Laien sofort ersichtlich").
+class _Legende extends StatelessWidget {
+  const _Legende();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    Widget punkt(Color c, String text) => Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  color: c,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 5),
+              Text(
+                text,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                ),
+              ),
+            ],
+          ),
+        );
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'Auslastung:',
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+        ),
+        punkt(_ampelFarbe(CapacityStatus.gut), 'gut gefüllt'),
+        punkt(_ampelFarbe(CapacityStatus.ueberbucht), 'überbucht'),
+      ],
     );
   }
 }
