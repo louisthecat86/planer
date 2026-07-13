@@ -571,6 +571,7 @@ class _StepsList extends ConsumerWidget {
                         child: umschalter(),
                       ),
                     ),
+                    _BesonderheitBanner(productId: productId),
                     Expanded(child: inhalt(false)),
                   ],
                 ),
@@ -593,6 +594,7 @@ class _StepsList extends ConsumerWidget {
                 ],
               ),
             ),
+            _BesonderheitBanner(productId: productId),
             Expanded(child: inhalt(zweiSpaltig)),
           ],
         );
@@ -3347,6 +3349,64 @@ class _BesonderheitenKarte extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Zeigt die Besonderheiten des Artikels (Freitext aus "Sonstige
+/// Informationen") direkt im Prozess-Tab - dort, wo damit gearbeitet wird.
+/// Ist nichts hinterlegt, erscheint nichts.
+class _BesonderheitBanner extends ConsumerWidget {
+  const _BesonderheitBanner({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final text =
+        ref.watch(productProvider(productId)).valueOrNull?.beschreibung;
+    if (text == null || text.trim().isEmpty) return const SizedBox.shrink();
+
+    final akzent = theme.brightness == Brightness.dark
+        ? const Color(0xFFFFB74D)
+        : const Color(0xFFE65100);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: akzent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: akzent.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.push_pin_outlined, size: 18, color: akzent),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Besonderheit',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: akzent,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                SelectableText(
+                  text.trim(),
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
