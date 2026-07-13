@@ -29,12 +29,20 @@ const String kPlattenSchemaParam = 'Plattenschema';
 const String kPlattenGruppeBrat = 'BRATSTRASSE';
 const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 
+/// Name der Parameterzeile für das freie Notizfeld je Maschine.
+/// Ersetzt starre Einzelparameter (Takte, Volumen …) — die Einstellungen
+/// sind so individuell, dass ein Freitextfeld praktischer ist.
+const String kMaschinenNotizParam = 'Maschineneinstellungen';
+const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
+
 final RegExp _kZonenRegExp = RegExp(r'^Platte (Oben|Unten) \d+$');
 
 /// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
 /// normalen Parameter-Liste auftauchen sollen.
 bool istVerstecktesPlattenParam(String name) =>
-    name == kPlattenSchemaParam || _kZonenRegExp.hasMatch(name);
+    name == kPlattenSchemaParam ||
+    name == kMaschinenNotizParam ||
+    _kZonenRegExp.hasMatch(name);
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -1526,6 +1534,15 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           // Plattentemperatur-Schema (nur in der Abteilung Bratstraße)
           if (s.abteilung == kAbteilungBratstrasseDb) ...[
             _PlattenSchemaBereich(step: s, onUpdated: widget.onUpdated),
+            const SizedBox(height: 12),
+          ],
+
+          // Freies Notizfeld „Maschineneinstellungen" für alle Schritte
+          // AUSSER Bratstraße/Dampftunnel (die haben ihr Plattenschema).
+          // Die Einstellungen sind so individuell, dass ein Freitextfeld
+          // sinnvoller ist als starre Einzelparameter.
+          if (s.abteilung != kAbteilungBratstrasseDb) ...[
+            _MaschinenNotizFeld(step: s, onUpdated: widget.onUpdated),
             const SizedBox(height: 12),
           ],
 
@@ -3408,6 +3425,170 @@ class _BesonderheitBanner extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Freies Notizfeld „Maschineneinstellungen" für einen Schritt.
+///
+/// Speichert den Text als Parameterzeile [kMaschinenNotizParam] in der
+/// Gruppe [kMaschinenNotizGruppe] — dadurch fließt er ohne Sonderbehandlung
+/// durch Import und Export (eigener Block in der Excel).
+class _MaschinenNotizFeld extends ConsumerWidget {
+  const _MaschinenNotizFeld({required this.step, required this.onUpdated});
+
+  final ProductStep step;
+  final VoidCallback onUpdated;
+
+  Future<void> _bearbeiten(
+    BuildContext context,
+    WidgetRef ref,
+    String? aktuell,
+  ) async {
+    final ctrl = TextEditingController(text: aktuell ?? '');
+    final neu = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Maschineneinstellungen'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          minLines: 4,
+          maxLines: 12,
+          decoration: const InputDecoration(
+            hintText: 'Individuelle Einstellungen dieser Maschine …\n'
+                'z.B. Programm, Geschwindigkeit, Temperatur, Sonderhinweise',
+            border: OutlineInputBorder(),
+            alignLabelWithHint: true,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text),
+            child: const Text('Speichern'),
+          ),
+        ],
+      ),
+    );
+    if (neu == null) return;
+
+    final db = ref.read(databaseProvider);
+    final paramsAsync = ref.read(stepParametersProvider(step.id));
+    final vorhanden = paramsAsync.valueOrNull
+        ?.where((p) => p.parameterName == kMaschinenNotizParam)
+        .firstOrNull;
+    final wert = neu.trim().isEmpty ? null : neu.trim();
+
+    if (vorhanden != null) {
+      await (db.update(db.productStepParameters)
+            ..where((p) => p.id.equals(vorhanden.id)))
+          .write(
+        ProductStepParametersCompanion(
+          wert: Value(wert),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    } else {
+      await db.into(db.productStepParameters).insert(
+            ProductStepParametersCompanion(
+              id: Value(const Uuid().v4()),
+              stepId: Value(step.id),
+              parameterGruppe: const Value(kMaschinenNotizGruppe),
+              parameterName: const Value(kMaschinenNotizParam),
+              wert: Value(wert),
+              reihenfolge: const Value(50),
+              istCustom: const Value(false),
+            ),
+          );
+    }
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Maschineneinstellungen geändert',
+        );
+    ref.invalidate(stepParametersProvider(step.id));
+    onUpdated();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final paramsAsync = ref.watch(stepParametersProvider(step.id));
+
+    return paramsAsync.when(
+      data: (params) {
+        final notiz = params
+            .where((p) => p.parameterName == kMaschinenNotizParam)
+            .firstOrNull
+            ?.wert;
+        final hatText = notiz != null && notiz.trim().isNotEmpty;
+
+        return InkWell(
+          onTap: () => _bearbeiten(context, ref, notiz),
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: theme.dividerColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.settings_outlined,
+                      size: 16,
+                      color: theme.colorScheme.primary,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Maschineneinstellungen',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    Icon(
+                      hatText ? Icons.edit_outlined : Icons.add,
+                      size: 15,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  hatText ? notiz.trim() : 'Tippen, um Einstellungen zu erfassen …',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    height: 1.35,
+                    color: hatText
+                        ? theme.colorScheme.onSurface
+                        : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    fontStyle: hatText ? FontStyle.normal : FontStyle.italic,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+      loading: () => const SizedBox(
+        height: 24,
+        child: Center(
+          child: SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      ),
+      error: (e, _) => const SizedBox.shrink(),
     );
   }
 }
