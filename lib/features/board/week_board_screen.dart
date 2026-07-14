@@ -594,6 +594,24 @@ class _SpurLabel extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       maxLines: 2,
                     ),
+                  // Sammelspur INNERHALB einer Abteilung, die Anlagen-Spuren
+                  // hat: sie ist nicht die erste Zeile und keine Anlage —
+                  // ohne eigenen Text bliebe die Zeile sonst unbeschriftet.
+                  if (!spur.istAnlage && !ersteDerAbteilung) ...[
+                    Text(
+                      'Ohne Anlage',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        fontStyle: FontStyle.italic,
+                        height: 1.2,
+                        color:
+                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 2,
+                    ),
+                  ],
                   // Anlagen-Name (eingerückt unter der Abteilung)
                   if (spur.istAnlage) ...[
                     if (ersteDerAbteilung) const SizedBox(height: 2),
@@ -1468,7 +1486,11 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           ),
           const SizedBox(height: 8),
           ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 240),
+            // Vorher hart auf 240px begrenzt — dadurch war die Liste
+            // abgeschnitten und der Rest des Sheets blieb leer.
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.45,
+            ),
             child: gefiltert.isEmpty
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),

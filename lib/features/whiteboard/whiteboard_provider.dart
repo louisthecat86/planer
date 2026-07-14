@@ -110,11 +110,16 @@ class GeplanterSchritt {
     required this.platzhalter,
     required this.notizen,
     required this.tag,
+    this.maschineId,
   });
 
   final String stepId;
   final int reihenfolge;
   final String abteilungDbValue;
+
+  /// Anlage des Schritts — bestimmt im Board die Kapazitätsspur.
+  /// Ohne sie landet der Auftrag in der Sammelspur der Abteilung.
+  final String? maschineId;
   final String? prozessschritt;
 
   /// Eingangsmenge dieses Schritts in kg (rückwärts über die Ausbeute).
@@ -254,7 +259,23 @@ Future<GeplanterPlan> berechneSchrittPlan({
         notizen.write('Dauer aus Historie (Ø kg/h, Auflagezeit). ');
       }
     } else {
-      dauer = block.fold<double>(0, (summe, b) => summe + b.dauer);
+      // Wichtig: In der Bratstraße bilden Bratstraße, Dampftunnel,
+      // Schockfroster & Co. EINE durchlaufende Linie — das Produkt
+      // passiert sie nacheinander, aber die Linie läuft als Ganzes.
+      // Die Dauern dürfen deshalb NICHT addiert werden; maßgeblich ist
+      // die längste Station.
+      //
+      // Läuft ein Produkt erst ab dem Dampftunnel (ohne Bratstraße),
+      // greift genau dieselbe Rechnung — dann ist der Dampftunnel die
+      // längste (und einzige) Station und bestimmt die Dauer.
+      if (istBratstrasse) {
+        dauer = block.fold<double>(0, (m, b) => b.dauer > m ? b.dauer : m);
+        if (block.length > 1) {
+          notizen.write('Durchlaufende Linie (längste Station zählt). ');
+        }
+      } else {
+        dauer = block.fold<double>(0, (summe, b) => summe + b.dauer);
+      }
       platzhalter = block.any((b) => b.platzhalter);
       if (platzhalter) {
         notizen.write('Zeit teils Platzhalter (Stammdaten pflegen). ');
@@ -274,6 +295,10 @@ Future<GeplanterPlan> berechneSchrittPlan({
         stepId: block.first.step.id,
         reihenfolge: block.first.step.reihenfolge,
         abteilungDbValue: abt,
+        // Anlage aus dem ersten Schritt des Blocks, der eine hat.
+        maschineId: block
+            .map((b) => b.step.maschineId)
+            .firstWhere((m) => m != null, orElse: () => null),
         prozessschritt: labels.isEmpty ? null : labels.join(' · '),
         mengeKg: blockMenge,
         dauerMinuten: dauer.roundToDouble(),
@@ -376,6 +401,7 @@ Future<void> erstelleTasksAusPlan({
             mengeKg: s.mengeKg,
             datum: tag,
             abteilung: s.abteilungDbValue,
+            maschineId: Value(s.maschineId),
             geplanteDauerMinuten: s.dauerMinuten,
             geplanteMitarbeiter: s.mitarbeiter,
             parentTaskId: Value(previousTaskId),

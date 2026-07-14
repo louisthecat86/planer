@@ -43,6 +43,12 @@ bool _istPlattenMaschine(String maschineName) {
   return n.contains('bratstra') || n.contains('dampftunnel');
 }
 
+bool _istDampftunnelMaschine(String maschineName) =>
+    maschineName.toLowerCase().contains('dampftunnel');
+
+bool _istBratstrasseMaschine(String maschineName) =>
+    maschineName.toLowerCase().contains('bratstra');
+
 final RegExp _kZonenRegExp = RegExp(r'^Platte (Oben|Unten) \d+$');
 
 /// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
@@ -1549,7 +1555,13 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           // der Schockfroster steht in der Abteilung Bratstraße, braucht
           // aber ein Notizfeld statt eines Plattenrasters.
           if (_istPlattenMaschine(maschineName)) ...[
-            _PlattenSchemaBereich(step: s, onUpdated: widget.onUpdated),
+            if (_istDampftunnelMaschine(maschineName))
+              _InlineHinweis(productId: s.productId),
+            _PlattenSchemaBereich(
+              step: s,
+              maschineName: maschineName,
+              onUpdated: widget.onUpdated,
+            ),
             const SizedBox(height: 12),
           ] else ...[
             _MaschinenNotizFeld(step: s, onUpdated: widget.onUpdated),
@@ -1570,10 +1582,21 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
 // ---------------------------------------------------------------------------
 
 class _PlattenSchemaBereich extends ConsumerWidget {
-  const _PlattenSchemaBereich({required this.step, required this.onUpdated});
+  const _PlattenSchemaBereich({
+    required this.step,
+    required this.maschineName,
+    required this.onUpdated,
+  });
 
   final ProductStep step;
+  final String maschineName;
   final VoidCallback onUpdated;
+
+  /// Jede Maschine zeigt NUR ihr eigenes Raster: die Bratstraße die
+  /// 10+10 Platten, der Dampftunnel seine 12. Vorher erschienen beide
+  /// Schieber bei beiden Maschinen — verwirrend und fehleranfällig.
+  bool get _istDampftunnel =>
+      maschineName.toLowerCase().contains('dampftunnel');
 
   /// Sucht einen Parameter NAME + GRUPPE — beide Gruppen enthalten Zeilen
   /// namens "Platte Unten N" (Bratstraße 1–10, Dampftunnel 1–12). Ohne die
@@ -1590,45 +1613,11 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     return null;
   }
 
-  static ProductStepParameter? _findName(
-    List<ProductStepParameter> params,
-    String name,
-  ) {
-    for (final p in params) {
-      if (p.parameterName == name) return p;
-    }
-    return null;
-  }
-
   static String _zahlText(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   String _gruppeVon(BratschemaTyp typ) =>
       typ == BratschemaTyp.kombiofen ? kPlattenGruppeKombi : kPlattenGruppeBrat;
-
-  /// Welche Raster sind aktiv? Der Marker kann 'keine', 'bratstrasse',
-  /// 'kombiofen' oder 'beide' sein. Fehlt er (z.B. direkt nach einem
-  /// Excel-Import), wird aus den vorhandenen Zonen-Werten abgeleitet.
-  ({bool brat, bool kombi}) _aktiv(List<ProductStepParameter> params) {
-    final marker = _findName(params, kPlattenSchemaParam)?.wert;
-    switch (marker) {
-      case 'keine':
-        return (brat: false, kombi: false);
-      case 'bratstrasse':
-        return (brat: true, kombi: false);
-      case 'kombiofen':
-        return (brat: false, kombi: true);
-      case 'beide':
-        return (brat: true, kombi: true);
-    }
-    bool hatWerte(String gruppe) => params.any(
-          (p) =>
-              p.parameterGruppe == gruppe &&
-              RegExp(r'^Platte (Oben|Unten) \d+$').hasMatch(p.parameterName) &&
-              (p.wert?.trim().isNotEmpty ?? false),
-        );
-    return (brat: hatWerte(kPlattenGruppeBrat), kombi: hatWerte(kPlattenGruppeKombi));
-  }
 
   PlattenTemperaturen _leseWerte(
     List<ProductStepParameter> params,
@@ -1686,36 +1675,6 @@ class _PlattenSchemaBereich extends ConsumerWidget {
     }
   }
 
-  /// Schaltet ein Raster an/aus und schreibt den Marker neu.
-  Future<void> _schalte(
-    WidgetRef ref,
-    List<ProductStepParameter> params, {
-    required bool brat,
-    required bool kombi,
-  }) async {
-    final wert = brat && kombi
-        ? 'beide'
-        : brat
-            ? 'bratstrasse'
-            : kombi
-                ? 'kombiofen'
-                : 'keine';
-    // Marker liegt bewusst in der Bratstraßen-Gruppe (ein Marker je Schritt).
-    final vorhanden = _findName(params, kPlattenSchemaParam);
-    await _upsert(
-      ref,
-      params,
-      kPlattenSchemaParam,
-      vorhanden?.parameterGruppe ?? kPlattenGruppeBrat,
-      wert,
-    );
-    ref.read(autoBackupTriggerProvider).fireDebounced(
-          reason: 'Plattenschema geändert',
-        );
-    ref.invalidate(stepParametersProvider(step.id));
-    onUpdated();
-  }
-
   Future<void> _speichereWerte(
     WidgetRef ref,
     List<ProductStepParameter> params,
@@ -1760,26 +1719,13 @@ class _PlattenSchemaBereich extends ConsumerWidget {
 
     return paramsAsync.when(
       data: (params) {
-        final aktiv = _aktiv(params);
-
-        Widget kopf(String titel, bool an, VoidCallback umschalten) => Row(
-              children: [
-                Text(
-                  titel,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                  ),
-                ),
-                const Spacer(),
-                Switch(
-                  value: an,
-                  onChanged: (_) => umschalten(),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ],
-            );
+        // Nur das Raster der EIGENEN Maschine anzeigen.
+        final typ = _istDampftunnel
+            ? BratschemaTyp.kombiofen
+            : BratschemaTyp.bratstrasse;
+        final titel = _istDampftunnel
+            ? 'PLATTEN DAMPFTUNNEL (12)'
+            : 'PLATTEN BRATSTRASSE (10+10)';
 
         return Container(
           padding: const EdgeInsets.all(10),
@@ -1791,59 +1737,20 @@ class _PlattenSchemaBereich extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Bratstraße: 10 oben + 10 unten ──
-              kopf(
-                'PLATTEN BRATSTRASSE (10+10)',
-                aktiv.brat,
-                () => _schalte(
-                  ref,
-                  params,
-                  brat: !aktiv.brat,
-                  kombi: aktiv.kombi,
+              Text(
+                titel,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                 ),
               ),
-              if (aktiv.brat) ...[
-                const SizedBox(height: 6),
-                BratstrasseSchema(
-                  typ: BratschemaTyp.bratstrasse,
-                  werte: _leseWerte(params, BratschemaTyp.bratstrasse),
-                  onChanged: (neu) => _speichereWerte(
-                    ref,
-                    params,
-                    BratschemaTyp.bratstrasse,
-                    neu,
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 10),
-              Divider(height: 1, color: theme.dividerColor),
-              const SizedBox(height: 10),
-
-              // ── Dampftunnel / Kombiofen: 12 Platten ──
-              kopf(
-                'PLATTEN DAMPFTUNNEL (12)',
-                aktiv.kombi,
-                () => _schalte(
-                  ref,
-                  params,
-                  brat: aktiv.brat,
-                  kombi: !aktiv.kombi,
-                ),
+              const SizedBox(height: 6),
+              BratstrasseSchema(
+                typ: typ,
+                werte: _leseWerte(params, typ),
+                onChanged: (neu) => _speichereWerte(ref, params, typ, neu),
               ),
-              if (aktiv.kombi) ...[
-                const SizedBox(height: 6),
-                BratstrasseSchema(
-                  typ: BratschemaTyp.kombiofen,
-                  werte: _leseWerte(params, BratschemaTyp.kombiofen),
-                  onChanged: (neu) => _speichereWerte(
-                    ref,
-                    params,
-                    BratschemaTyp.kombiofen,
-                    neu,
-                  ),
-                ),
-              ],
             ],
           ),
         );
@@ -3599,6 +3506,77 @@ class _MaschinenNotizFeld extends ConsumerWidget {
         ),
       ),
       error: (e, _) => const SizedBox.shrink(),
+    );
+  }
+}
+
+
+/// Hinweis am Dampftunnel-Schritt.
+///
+/// Läuft der Artikel über die Bratstraße, passiert er den Dampftunnel
+/// automatisch inline: Menge und Produktionszeit sind dieselben, und es
+/// wird dort kein eigenes Personal gebunden. Fehlt die Bratstraße
+/// (das Produkt startet erst am Dampftunnel), gilt das Gegenteil — dann
+/// sind Menge, Zeit und Personal hier eigenständig zu pflegen.
+class _InlineHinweis extends ConsumerWidget {
+  const _InlineHinweis({required this.productId});
+
+  final String productId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final steps = ref.watch(productStepsProvider(productId)).valueOrNull;
+    if (steps == null) return const SizedBox.shrink();
+
+    // Hat der Artikel einen Bratstraßen-Schritt?
+    var hatBratstrasse = false;
+    for (final st in steps) {
+      final m = st.maschine ?? '';
+      if (_istBratstrasseMaschine(m)) {
+        hatBratstrasse = true;
+        break;
+      }
+    }
+
+    final farbe = hatBratstrasse
+        ? theme.colorScheme.primary
+        : (theme.brightness == Brightness.dark
+            ? const Color(0xFFFFB74D)
+            : const Color(0xFFE65100));
+    final text = hatBratstrasse
+        ? 'Läuft inline hinter der Bratstraße: Menge und Produktionszeit '
+            'entsprechen der Bratstraße, eigenes Personal ist hier nicht '
+            'nötig.'
+        : 'Produktion startet am Dampftunnel (keine Bratstraße im Prozess) — '
+            'Menge, Zeit und Personal hier eigenständig pflegen.';
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: farbe.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: farbe.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            hatBratstrasse ? Icons.link : Icons.play_circle_outline,
+            size: 16,
+            color: farbe,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
