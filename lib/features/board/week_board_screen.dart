@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -17,6 +18,12 @@ const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 /// Kompakte Wochenansicht: Karten schrumpfen auf eine Zeile, sodass ein
 /// ganzer Tag ohne Scrollen sichtbar bleibt (bewährtes „Density"-Muster
 /// aus Planungstools). Bleibt über die Sitzung erhalten.
+/// Zugeklappte Abteilungen (dbValues). Zugeklappt erscheint statt der
+/// einzelnen Anlagen-Spuren EINE Summenzeile — so bleibt die Übersicht
+/// auch bei vielen Anlagen erhalten.
+final boardZugeklapptProvider =
+    StateProvider<Set<String>>((ref) => <String>{});
+
 /// „Passend"-Modus: skaliert das Board so weit herunter, dass ALLE Spuren
 /// ohne Scrollen sichtbar sind — die Methode, die auch Gantt- und
 /// Projektplanungstools für die Gesamtübersicht nutzen („fit to page").
@@ -437,23 +444,64 @@ class _BoardGrid extends ConsumerWidget {
     final passend = ref.watch(boardPassendProvider);
     final hatTasks = board.cells.values.any((c) => c.tasks.isNotEmpty);
 
-    final zeilen = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < board.spuren.length; i++)
+    final zugeklappt = ref.watch(boardZugeklapptProvider);
+
+    void umschalten(Abteilung abt) {
+      final neu = {...zugeklappt};
+      if (!neu.remove(abt.dbValue)) neu.add(abt.dbValue);
+      ref.read(boardZugeklapptProvider.notifier).state = neu;
+    }
+
+    // Spuren nach Abteilung gruppieren (sie liegen bereits sortiert vor).
+    final gruppen = <List<BoardSpur>>[];
+    for (final spur in board.spuren) {
+      if (gruppen.isEmpty ||
+          gruppen.last.first.abteilung != spur.abteilung) {
+        gruppen.add([spur]);
+      } else {
+        gruppen.last.add(spur);
+      }
+    }
+
+    final reihen = <Widget>[];
+    for (final gruppe in gruppen) {
+      final abt = gruppe.first.abteilung;
+      final zu = zugeklappt.contains(abt.dbValue);
+
+      if (zu) {
+        // Zugeklappt: EINE Summenzeile für die ganze Abteilung.
+        reihen.add(
+          _ZugeklappteZeile(
+            board: board,
+            abteilung: abt,
+            spuren: gruppe,
+            kompakt: kompakt,
+            onAufklappen: () => umschalten(abt),
+          ),
+        );
+        continue;
+      }
+
+      for (var i = 0; i < gruppe.length; i++) {
+        reihen.add(
           _SpurZeile(
             board: board,
-            spur: board.spuren[i],
-            // Abteilungs-Kopf nur bei der ERSTEN Spur einer
-            // Abteilung — die folgenden Anlagen-Spuren werden
-            // darunter eingerückt gruppiert.
-            ersteDerAbteilung: i == 0 ||
-                board.spuren[i - 1].abteilung != board.spuren[i].abteilung,
+            spur: gruppe[i],
+            // Abteilungs-Kopf nur bei der ERSTEN Spur einer Abteilung —
+            // die folgenden Anlagen-Spuren werden darunter eingerückt.
+            ersteDerAbteilung: i == 0,
             kompakt: kompakt,
+            onZuklappen: i == 0 ? () => umschalten(abt) : null,
             onTapTask: onTapTask,
             onMoveTask: onMoveTask,
           ),
-      ],
+        );
+      }
+    }
+
+    final zeilen = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: reihen,
     );
 
     if (!passend) {
@@ -582,12 +630,16 @@ class _SpurZeile extends StatelessWidget {
     required this.kompakt,
     required this.onTapTask,
     required this.onMoveTask,
+    this.onZuklappen,
   });
 
   final WeekBoard board;
   final BoardSpur spur;
   final bool ersteDerAbteilung;
   final bool kompakt;
+
+  /// Nur bei der ersten Spur einer Abteilung gesetzt: klappt die Gruppe zu.
+  final VoidCallback? onZuklappen;
   final void Function(BoardTask) onTapTask;
   final void Function(BoardTask, DateTime, BoardSpur) onMoveTask;
 
@@ -597,7 +649,11 @@ class _SpurZeile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SpurLabel(spur: spur, ersteDerAbteilung: ersteDerAbteilung),
+          _SpurLabel(
+            spur: spur,
+            ersteDerAbteilung: ersteDerAbteilung,
+            onZuklappen: onZuklappen,
+          ),
           for (final tag in board.tage)
             Expanded(
               child: _TagesZelle(
@@ -614,10 +670,15 @@ class _SpurZeile extends StatelessWidget {
 }
 
 class _SpurLabel extends StatelessWidget {
-  const _SpurLabel({required this.spur, required this.ersteDerAbteilung});
+  const _SpurLabel({
+    required this.spur,
+    required this.ersteDerAbteilung,
+    this.onZuklappen,
+  });
 
   final BoardSpur spur;
   final bool ersteDerAbteilung;
+  final VoidCallback? onZuklappen;
 
   @override
   Widget build(BuildContext context) {
@@ -653,23 +714,41 @@ class _SpurLabel extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Abteilungsname nur bei der ersten Spur der Abteilung
+                  // Abteilungsname nur bei der ersten Spur der Abteilung —
+                  // zugleich der Griff zum Zuklappen der ganzen Gruppe.
                   if (ersteDerAbteilung)
-                    Text(
-                      spur.abteilung.anzeigeName,
-                      style: TextStyle(
-                        fontSize: spur.istAnlage ? 10.5 : 13,
-                        fontWeight:
-                            spur.istAnlage ? FontWeight.w700 : FontWeight.w700,
-                        letterSpacing: spur.istAnlage ? 0.4 : 0,
-                        height: 1.2,
-                        color: spur.istAnlage
-                            ? theme.colorScheme.onSurface
-                                .withValues(alpha: 0.55)
-                            : null,
+                    InkWell(
+                      onTap: onZuklappen,
+                      child: Row(
+                        children: [
+                          if (onZuklappen != null) ...[
+                            Icon(
+                              Icons.expand_more,
+                              size: 15,
+                              color: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.5),
+                            ),
+                            const SizedBox(width: 2),
+                          ],
+                          Flexible(
+                            child: Text(
+                              spur.abteilung.anzeigeName,
+                              style: TextStyle(
+                                fontSize: spur.istAnlage ? 10.5 : 13,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: spur.istAnlage ? 0.4 : 0,
+                                height: 1.2,
+                                color: spur.istAnlage
+                                    ? theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.55)
+                                    : null,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                            ),
+                          ),
+                        ],
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 2,
                     ),
                   // Sammelspur INNERHALB einer Abteilung, die Anlagen-Spuren
                   // hat: sie ist nicht die erste Zeile und keine Anlage —
@@ -1960,6 +2039,235 @@ class _Legende extends StatelessWidget {
         punkt(_ampelFarbe(CapacityStatus.gut), 'gut gefüllt'),
         punkt(_ampelFarbe(CapacityStatus.ueberbucht), 'überbucht'),
       ],
+    );
+  }
+}
+
+/// Summenzeile einer ZUGEKLAPPTEN Abteilung.
+///
+/// Statt jeder Anlage eine eigene Spur zu zeigen, wird hier je Tag die
+/// Gesamtauslastung aller Anlagen der Abteilung dargestellt (belegte
+/// Stunden gegen die Summe der Kapazitäten) plus die Anzahl der Aufträge.
+/// So bleibt die Woche auf einen Blick lesbar, auch wenn eine Abteilung
+/// viele Anlagen hat.
+///
+/// Bewusst KEIN Drop-Ziel: In welche Anlage ein Auftrag soll, muss die
+/// Planung entscheiden — dafür klappt man die Gruppe auf.
+class _ZugeklappteZeile extends StatelessWidget {
+  const _ZugeklappteZeile({
+    required this.board,
+    required this.abteilung,
+    required this.spuren,
+    required this.kompakt,
+    required this.onAufklappen,
+  });
+
+  final WeekBoard board;
+  final Abteilung abteilung;
+  final List<BoardSpur> spuren;
+  final bool kompakt;
+  final VoidCallback onAufklappen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = abteilung.farbe;
+    final anlagen = spuren.where((s) => s.istAnlage).length;
+
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Label mit Aufklapp-Pfeil
+          Container(
+            width: _kLabelWidth,
+            decoration: BoxDecoration(
+              color: farbe.withValues(alpha: 0.09),
+              border: Border(
+                right: BorderSide(color: theme.dividerColor),
+                top: BorderSide(
+                  color: farbe.withValues(alpha: 0.55),
+                  width: 2,
+                ),
+                bottom: BorderSide(color: theme.dividerColor),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(width: 4, color: farbe),
+                Expanded(
+                  child: InkWell(
+                    onTap: onAufklappen,
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: kompakt ? 6 : 10,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.chevron_right,
+                            size: 15,
+                            color: theme.colorScheme.onSurface
+                                .withValues(alpha: 0.5),
+                          ),
+                          const SizedBox(width: 2),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  abteilung.anzeigeName,
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 2,
+                                ),
+                                if (anlagen > 0)
+                                  Text(
+                                    '$anlagen Anlagen',
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontStyle: FontStyle.italic,
+                                      color: theme.colorScheme.onSurface
+                                          .withValues(alpha: 0.5),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Je Tag: Summe über alle Spuren der Abteilung
+          for (final tag in board.tage)
+            Expanded(
+              child: _SummenZelle(
+                tag: tag,
+                belegt: spuren.fold<double>(
+                  0,
+                  (s, spur) => s + board.cellFor(spur, tag).belegtMinuten,
+                ),
+                kapazitaet: spuren.fold<double>(
+                  0,
+                  (s, spur) => s + board.cellFor(spur, tag).kapazitaetMinuten,
+                ),
+                auftraege: spuren.fold<int>(
+                  0,
+                  (s, spur) => s + board.cellFor(spur, tag).tasks.length,
+                ),
+                farbe: farbe,
+                kompakt: kompakt,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Tageszelle in der Summenzeile einer zugeklappten Abteilung.
+class _SummenZelle extends StatelessWidget {
+  const _SummenZelle({
+    required this.tag,
+    required this.belegt,
+    required this.kapazitaet,
+    required this.auftraege,
+    required this.farbe,
+    required this.kompakt,
+  });
+
+  final DateTime tag;
+  final double belegt;
+  final double kapazitaet;
+  final int auftraege;
+  final Color farbe;
+  final bool kompakt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final now = DateTime.now();
+    final istHeute = tag == DateTime(now.year, now.month, now.day);
+    final quote = kapazitaet > 0 ? (belegt / kapazitaet) : 0.0;
+    final ampel = quote > 1.0
+        ? _ampelFarbe(CapacityStatus.ueberbucht)
+        : (auftraege > 0
+            ? _ampelFarbe(CapacityStatus.gut)
+            : _ampelFarbe(CapacityStatus.frei));
+
+    return Container(
+      constraints: BoxConstraints(minHeight: kompakt ? 34 : 44),
+      padding: EdgeInsets.all(kompakt ? 4 : 6),
+      decoration: BoxDecoration(
+        color: istHeute
+            ? theme.colorScheme.primary.withValues(alpha: 0.04)
+            : null,
+        border: Border(
+          right: BorderSide(color: theme.dividerColor),
+          bottom: BorderSide(color: theme.dividerColor),
+        ),
+      ),
+      child: auftraege == 0
+          ? const SizedBox.shrink()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '${_fmtStunden(belegt)} / ${_fmtStunden(kapazitaet)} h',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface
+                            .withValues(alpha: 0.75),
+                      ),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 5,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: farbe.withValues(alpha: 0.22),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        '$auftraege',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: quote.clamp(0.0, 1.0).toDouble(),
+                    minHeight: 4,
+                    backgroundColor:
+                        theme.colorScheme.onSurface.withValues(alpha: 0.10),
+                    color: ampel,
+                  ),
+                ),
+              ],
+            ),
     );
   }
 }
