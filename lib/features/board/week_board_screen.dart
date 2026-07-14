@@ -14,6 +14,17 @@ const double _kLabelWidth = 148;
 const _kDayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
 const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
+/// Kompakte Wochenansicht: Karten schrumpfen auf eine Zeile, sodass ein
+/// ganzer Tag ohne Scrollen sichtbar bleibt (bewährtes „Density"-Muster
+/// aus Planungstools). Bleibt über die Sitzung erhalten.
+/// „Passend"-Modus: skaliert das Board so weit herunter, dass ALLE Spuren
+/// ohne Scrollen sichtbar sind — die Methode, die auch Gantt- und
+/// Projektplanungstools für die Gesamtübersicht nutzen („fit to page").
+/// Aus = Originalgröße mit Scrollbalken.
+final boardPassendProvider = StateProvider<bool>((ref) => true);
+
+final boardKompaktProvider = StateProvider<bool>((ref) => true);
+
 enum _Modus { woche, tag }
 
 /// ISO-8601-Kalenderwoche.
@@ -332,6 +343,44 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                       setState(() => _modus = s.first),
                 ),
                 const Spacer(),
+                // Dichte- und Skalierungs-Umschalter: nur in der Wochenansicht.
+                if (_modus == _Modus.woche) ...[
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final passend = ref.watch(boardPassendProvider);
+                      return IconButton(
+                        icon: Icon(
+                          passend ? Icons.zoom_out_map : Icons.fit_screen,
+                        ),
+                        tooltip: passend
+                            ? 'Originalgröße (scrollen)'
+                            : 'Passend skalieren (alles auf eine Seite)',
+                        onPressed: () => ref
+                            .read(boardPassendProvider.notifier)
+                            .state = !passend,
+                      );
+                    },
+                  ),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final kompakt = ref.watch(boardKompaktProvider);
+                      return IconButton(
+                        icon: Icon(
+                          kompakt
+                              ? Icons.unfold_more
+                              : Icons.unfold_less,
+                        ),
+                        tooltip: kompakt
+                            ? 'Komfort-Ansicht (mehr Details)'
+                            : 'Kompakt-Ansicht (ganzer Tag ohne Scrollen)',
+                        onPressed: () => ref
+                            .read(boardKompaktProvider.notifier)
+                            .state = !kompakt,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                ],
                 // Legende: erklärt die Balkenfarben ohne Vorwissen
                 const _Legende(),
               ],
@@ -371,7 +420,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
 // Wochen-Grid
 // ---------------------------------------------------------------------------
 
-class _BoardGrid extends StatelessWidget {
+class _BoardGrid extends ConsumerWidget {
   const _BoardGrid({
     required this.board,
     required this.onTapTask,
@@ -383,35 +432,60 @@ class _BoardGrid extends StatelessWidget {
   final void Function(BoardTask, DateTime, BoardSpur) onMoveTask;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final kompakt = ref.watch(boardKompaktProvider);
+    final passend = ref.watch(boardPassendProvider);
     final hatTasks = board.cells.values.any((c) => c.tasks.isNotEmpty);
 
-    return Column(
+    final zeilen = Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        _HeaderRow(tage: board.tage),
-        if (!hatTasks) const _LeerHinweis(),
-        Expanded(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                for (var i = 0; i < board.spuren.length; i++)
-                  _SpurZeile(
-                    board: board,
-                    spur: board.spuren[i],
-                    // Abteilungs-Kopf nur bei der ERSTEN Spur einer
-                    // Abteilung — die folgenden Anlagen-Spuren werden
-                    // darunter eingerückt gruppiert.
-                    ersteDerAbteilung: i == 0 ||
-                        board.spuren[i - 1].abteilung !=
-                            board.spuren[i].abteilung,
-                    onTapTask: onTapTask,
-                    onMoveTask: onMoveTask,
-                  ),
-              ],
-            ),
+        for (var i = 0; i < board.spuren.length; i++)
+          _SpurZeile(
+            board: board,
+            spur: board.spuren[i],
+            // Abteilungs-Kopf nur bei der ERSTEN Spur einer
+            // Abteilung — die folgenden Anlagen-Spuren werden
+            // darunter eingerückt gruppiert.
+            ersteDerAbteilung: i == 0 ||
+                board.spuren[i - 1].abteilung != board.spuren[i].abteilung,
+            kompakt: kompakt,
+            onTapTask: onTapTask,
+            onMoveTask: onMoveTask,
+          ),
+      ],
+    );
+
+    if (!passend) {
+      return Column(
+        children: [
+          _HeaderRow(tage: board.tage),
+          if (!hatTasks) const _LeerHinweis(),
+          Expanded(child: SingleChildScrollView(child: zeilen)),
+        ],
+      );
+    }
+
+    // „Fit to page": Kopfzeile UND Spuren werden GEMEINSAM skaliert —
+    // sonst würden die Tagesspalten nicht mehr unter ihren Überschriften
+    // liegen. scaleDown vergrößert nie: passt alles ohnehin, bleibt die
+    // Ansicht in Originalgröße.
+    return LayoutBuilder(
+      builder: (context, c) => FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.topCenter,
+        child: SizedBox(
+          width: c.maxWidth,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _HeaderRow(tage: board.tage),
+              if (!hatTasks) const _LeerHinweis(),
+              zeilen,
+            ],
           ),
         ),
-      ],
+      ),
     );
   }
 }
@@ -505,6 +579,7 @@ class _SpurZeile extends StatelessWidget {
     required this.board,
     required this.spur,
     required this.ersteDerAbteilung,
+    required this.kompakt,
     required this.onTapTask,
     required this.onMoveTask,
   });
@@ -512,6 +587,7 @@ class _SpurZeile extends StatelessWidget {
   final WeekBoard board;
   final BoardSpur spur;
   final bool ersteDerAbteilung;
+  final bool kompakt;
   final void Function(BoardTask) onTapTask;
   final void Function(BoardTask, DateTime, BoardSpur) onMoveTask;
 
@@ -526,6 +602,7 @@ class _SpurZeile extends StatelessWidget {
             Expanded(
               child: _TagesZelle(
                 cell: board.cellFor(spur, tag),
+                kompakt: kompakt,
                 onTapTask: onTapTask,
                 onMoveHere: (bt) => onMoveTask(bt, tag, spur),
               ),
@@ -655,11 +732,13 @@ class _SpurLabel extends StatelessWidget {
 class _TagesZelle extends StatelessWidget {
   const _TagesZelle({
     required this.cell,
+    required this.kompakt,
     required this.onTapTask,
     required this.onMoveHere,
   });
 
   final BoardCell cell;
+  final bool kompakt;
   final void Function(BoardTask) onTapTask;
   final void Function(BoardTask) onMoveHere;
 
@@ -690,8 +769,10 @@ class _TagesZelle extends StatelessWidget {
       builder: (context, candidate, rejected) {
         final highlight = candidate.isNotEmpty;
         return Container(
-          constraints: BoxConstraints(minHeight: belegt ? 92 : 56),
-          padding: const EdgeInsets.all(6),
+          constraints: BoxConstraints(
+            minHeight: belegt ? (kompakt ? 48 : 92) : (kompakt ? 30 : 56),
+          ),
+          padding: EdgeInsets.all(kompakt ? 4 : 6),
           decoration: BoxDecoration(
             color: highlight
                 ? cell.abteilung.farbe.withValues(alpha: 0.12)
@@ -730,13 +811,15 @@ class _TagesZelle extends StatelessWidget {
                       auslastung: cell.auslastung,
                       farbe: farbe,
                       status: cell.status,
+                      kompakt: kompakt,
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: kompakt ? 3 : 6),
                     for (final task in cell.tasks)
                       Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
+                        padding: EdgeInsets.only(bottom: kompakt ? 3 : 4),
                         child: _AuftragsKarte(
                           task: task,
+                          kompakt: kompakt,
                           onTap: () => onTapTask(task),
                         ),
                       ),
@@ -757,6 +840,7 @@ class _AuslastungsPille extends StatelessWidget {
     required this.auslastung,
     required this.farbe,
     required this.status,
+    this.kompakt = false,
   });
 
   final double belegt;
@@ -764,6 +848,7 @@ class _AuslastungsPille extends StatelessWidget {
   final double auslastung;
   final Color farbe;
   final CapacityStatus status;
+  final bool kompakt;
 
   @override
   Widget build(BuildContext context) {
@@ -780,7 +865,7 @@ class _AuslastungsPille extends StatelessWidget {
             Text(
               '${_fmtStunden(belegt)} / ${_fmtStunden(kapazitaet)} h',
               style: TextStyle(
-                fontSize: 11.5,
+                fontSize: kompakt ? 10 : 11.5,
                 fontWeight: FontWeight.w700,
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
               ),
@@ -805,12 +890,12 @@ class _AuslastungsPille extends StatelessWidget {
               ),
           ],
         ),
-        const SizedBox(height: 3),
+        SizedBox(height: kompakt ? 2 : 3),
         ClipRRect(
           borderRadius: BorderRadius.circular(3),
           child: LinearProgressIndicator(
             value: auslastung.clamp(0.0, 1.0).toDouble(),
-            minHeight: 4,
+            minHeight: kompakt ? 3 : 4,
             backgroundColor:
                 theme.colorScheme.onSurface.withValues(alpha: 0.10),
             color: farbe,
@@ -822,10 +907,15 @@ class _AuslastungsPille extends StatelessWidget {
 }
 
 class _AuftragsKarte extends StatelessWidget {
-  const _AuftragsKarte({required this.task, required this.onTap});
+  const _AuftragsKarte({
+    required this.task,
+    required this.onTap,
+    this.kompakt = false,
+  });
 
   final BoardTask task;
   final VoidCallback onTap;
+  final bool kompakt;
 
   @override
   Widget build(BuildContext context) {
@@ -834,33 +924,101 @@ class _AuftragsKarte extends StatelessWidget {
       feedback: Material(
         color: Colors.transparent,
         child: SizedBox(
-          width: 160,
+          width: 180,
           child: _KartenInhalt(task: task, dragging: true),
         ),
       ),
       childWhenDragging: Opacity(
         opacity: 0.3,
-        child: _KartenInhalt(task: task),
+        child: _KartenInhalt(task: task, kompakt: kompakt),
       ),
       child: GestureDetector(
         onTap: onTap,
-        child: _KartenInhalt(task: task),
+        child: _KartenInhalt(task: task, kompakt: kompakt),
       ),
     );
   }
 }
 
 class _KartenInhalt extends StatelessWidget {
-  const _KartenInhalt({required this.task, this.dragging = false});
+  const _KartenInhalt({
+    required this.task,
+    this.dragging = false,
+    this.kompakt = false,
+  });
 
   final BoardTask task;
   final bool dragging;
+  final bool kompakt;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final abtColor = task.abteilung.farbe;
     final kette = _kettenFarbe(task.kettenId, theme.brightness);
+
+    // Kompaktvariante: alles in EINER Zeile — Ketten-Kante, Kurzcode-Chip,
+    // Produktname (einzeilig), rechts die Kennzahl. So passt ein ganzer
+    // Tag ohne Scrollen ins Bild.
+    if (kompakt) {
+      return Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: theme.dividerColor),
+        ),
+        child: IntrinsicHeight(
+          child: Row(
+            children: [
+              Container(width: 4, color: kette),
+              Container(
+                color: abtColor,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                alignment: Alignment.center,
+                child: Text(
+                  task.abteilung.kurzcode,
+                  style: const TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  task.productName,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    height: 1.1,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Padding(
+                padding: const EdgeInsets.only(right: 7),
+                child: Text(
+                  '${task.mengeKg.toStringAsFixed(0)}kg·'
+                  '${_fmtStunden(task.dauerMinuten)}h',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
