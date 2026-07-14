@@ -35,6 +35,14 @@ const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 const String kMaschinenNotizParam = 'Maschineneinstellungen';
 const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
 
+/// Nur diese beiden Maschinen haben ein festes Plattenraster
+/// (Bratstraße 10+10, Dampftunnel 12). Alle anderen bekommen das
+/// freie Notizfeld „Maschineneinstellungen".
+bool _istPlattenMaschine(String maschineName) {
+  final n = maschineName.toLowerCase();
+  return n.contains('bratstra') || n.contains('dampftunnel');
+}
+
 final RegExp _kZonenRegExp = RegExp(r'^Platte (Oben|Unten) \d+$');
 
 /// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
@@ -1531,17 +1539,19 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
           const SizedBox(height: 12),
 
-          // Plattentemperatur-Schema (nur in der Abteilung Bratstraße)
-          if (s.abteilung == kAbteilungBratstrasseDb) ...[
+          // Plattenschema NUR bei den Maschinen Bratstraße/Dampftunnel —
+          // sie haben ein festes Zonenraster. Alle anderen Maschinen
+          // (Schockfroster, Heißluftofen, Füllmaschine, Verpackung …)
+          // bekommen stattdessen das freie Notizfeld, weil ihre
+          // Einstellungen zu individuell für starre Felder sind.
+          //
+          // Bewusst an der MASCHINE festgemacht, nicht an der Abteilung:
+          // der Schockfroster steht in der Abteilung Bratstraße, braucht
+          // aber ein Notizfeld statt eines Plattenrasters.
+          if (_istPlattenMaschine(maschineName)) ...[
             _PlattenSchemaBereich(step: s, onUpdated: widget.onUpdated),
             const SizedBox(height: 12),
-          ],
-
-          // Freies Notizfeld „Maschineneinstellungen" für alle Schritte
-          // AUSSER Bratstraße/Dampftunnel (die haben ihr Plattenschema).
-          // Die Einstellungen sind so individuell, dass ein Freitextfeld
-          // sinnvoller ist als starre Einzelparameter.
-          if (s.abteilung != kAbteilungBratstrasseDb) ...[
+          ] else ...[
             _MaschinenNotizFeld(step: s, onUpdated: widget.onUpdated),
             const SizedBox(height: 12),
           ],
