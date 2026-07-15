@@ -88,7 +88,7 @@ class UiScaleNotifier extends StateNotifier<double> {
     if (vorhanden == null) {
       await _db.into(_db.appSettings).insert(
             AppSettingsCompanion(
-              key: Value(kUiScaleSettingKey),
+              key: const Value(kUiScaleSettingKey),
               value: Value(txt),
             ),
           );
