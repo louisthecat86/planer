@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/providers/ui_scale_provider.dart';
 import 'core/providers/database_provider.dart';
 import 'core/services/backup_service.dart';
 import 'core/theme/app_theme.dart';
@@ -185,11 +186,13 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      // App-weit etwas größere Schrift (bessere Lesbarkeit am Desktop).
+      // App-weite Skalierung: in den Einstellungen frei wählbar
+      // (25 %…200 %). Wirkt über textScaler auf die gesamte Schrift.
       builder: (context, child) {
         final mq = MediaQuery.of(context);
+        final scale = ref.watch(uiScaleProvider);
         return MediaQuery(
-          data: mq.copyWith(textScaler: const TextScaler.linear(1.15)),
+          data: mq.copyWith(textScaler: TextScaler.linear(scale)),
           child: child ?? const SizedBox.shrink(),
         );
       },
