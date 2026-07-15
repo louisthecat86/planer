@@ -2,7 +2,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
-import '../../core/constants/abteilungen.dart';
 import 'board_providers.dart';
 
 /// Wandelt eine App-Farbe (0xAARRGGBB) in eine PDF-Farbe. So übernimmt der
