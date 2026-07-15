@@ -296,20 +296,31 @@ class _ZonenZelle extends StatelessWidget {
   final double? wert;
   final VoidCallback onTap;
 
-  static Color _tempFarbe(double? t) {
-    if (t == null) return const Color(0x1F9E9E9E); // neutral, dezent
+  /// Akzentfarbe der Werte — IDENTISCH zu den übrigen Parameterwerten
+  /// (Bratzeit, Höhe …), damit das Schema optisch dazugehört und nicht
+  /// wie ein Fremdkörper wirkt. Vorher waren hier feste Hell-Töne
+  /// (orange/creme) verdrahtet, die im dunklen Theme herausstachen.
+  static Color _akzent(bool dark) =>
+      dark ? const Color(0xFF9CCC65) : const Color(0xFF2E7D32);
+
+  /// Die Hintergrund-Deckkraft steigt mit der Temperatur: heißere Platten
+  /// wirken kräftiger. So bleibt die Information auf einen Blick lesbar,
+  /// ohne die Farbfamilie zu verlassen.
+  static double _deckkraft(double? t, bool dark) {
+    if (t == null) return 0.0;
     final anteil = (t.clamp(0, 300) / 300).toDouble();
-    return Color.lerp(
-      const Color(0xFFFAEEDA),
-      const Color(0xFFEF9F27),
-      anteil,
-    )!;
+    final basis = dark ? 0.14 : 0.08;
+    final spanne = dark ? 0.20 : 0.14;
+    return basis + spanne * anteil;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dark = theme.brightness == Brightness.dark;
     final gesetzt = wert != null;
+    final akzent = _akzent(dark);
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(6),
@@ -317,10 +328,14 @@ class _ZonenZelle extends StatelessWidget {
         width: 44,
         padding: const EdgeInsets.symmetric(vertical: 5),
         decoration: BoxDecoration(
-          color: _tempFarbe(wert),
+          color: gesetzt
+              ? akzent.withValues(alpha: _deckkraft(wert, dark))
+              : theme.colorScheme.onSurface.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: theme.colorScheme.outline.withValues(alpha: 0.25),
+            color: gesetzt
+                ? akzent.withValues(alpha: 0.35)
+                : theme.colorScheme.outline.withValues(alpha: 0.20),
           ),
         ),
         child: Column(
@@ -331,18 +346,19 @@ class _ZonenZelle extends StatelessWidget {
               style: TextStyle(
                 fontSize: 9,
                 color: gesetzt
-                    ? const Color(0xFF854F0B)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                    ? akzent.withValues(alpha: 0.75)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
             Text(
               gesetzt ? '${wert!.round()}°' : '–',
               style: TextStyle(
                 fontSize: 12,
-                fontWeight: FontWeight.w600,
+                // Gleiches Gewicht wie die übrigen Werte-Pillen.
+                fontWeight: FontWeight.w700,
                 color: gesetzt
-                    ? const Color(0xFF6B3E08)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.45),
+                    ? akzent
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
               ),
             ),
           ],
