@@ -275,9 +275,23 @@ class BackupService {
   /// Räumt alte Auto-Backups auf — behält die [maxKeep] neuesten,
   /// löscht den Rest. Wird beim Schreiben neuer Auto-Backups
   /// aufgerufen damit der Ordner nicht wuchert.
-  static Future<void> cleanupOldAutoBackups({int maxKeep = 20}) async {
+  /// Standard-Anzahl automatischer Backups, die aufbewahrt werden.
+  ///
+  /// Bewusst klein: Automatische Backups entstehen bei jeder Änderung, und
+  /// ein einzelner Stand ist wertlos — ein versehentlich gespeicherter
+  /// Fehler läge dann sofort im einzigen Backup. Fünf Stände geben ein bis
+  /// zwei Arbeitstage Rückweg, um einen Fehler zu bemerken, bevor der letzte
+  /// gute Stand herausrotiert. Manuelle Exporte sind davon NICHT betroffen
+  /// (Filter auf `isAuto`).
+  static const int standardMaxBackups = 5;
+
+  static Future<void> cleanupOldAutoBackups({
+    int maxKeep = standardMaxBackups,
+  }) async {
     try {
       final all = await listBackups();
+      // Nur automatische Backups rotieren — manuell exportierte Sicherungen
+      // sind bewusste Momentaufnahmen und bleiben erhalten.
       final autos = all.where((b) => b.isAuto).toList();
       if (autos.length <= maxKeep) return;
       final zuLoeschen = autos.skip(maxKeep);
