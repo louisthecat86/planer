@@ -80,18 +80,21 @@ class UiScaleNotifier extends StateNotifier<double> {
   Future<void> zuruecksetzen() => setzen(kUiScaleDefault);
 
   Future<void> _speichern(double wert) async {
-    final key = kUiScaleSettingKey;
     final txt = wert.toString();
     final vorhanden = await (_db.select(_db.appSettings)
-          ..where((t) => t.key.equals(key))
+          ..where((t) => t.key.equals(kUiScaleSettingKey))
           ..limit(1))
         .getSingleOrNull();
     if (vorhanden == null) {
       await _db.into(_db.appSettings).insert(
-            AppSettingsCompanion(key: Value(key), value: Value(txt)),
+            AppSettingsCompanion(
+              key: Value(kUiScaleSettingKey),
+              value: Value(txt),
+            ),
           );
     } else {
-      await (_db.update(_db.appSettings)..where((t) => t.key.equals(key)))
+      await (_db.update(_db.appSettings)
+            ..where((t) => t.key.equals(kUiScaleSettingKey)))
           .write(
         AppSettingsCompanion(
           value: Value(txt),
