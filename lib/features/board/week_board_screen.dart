@@ -6,6 +6,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
 import 'board_print_service.dart';
@@ -1495,6 +1496,12 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   final _menge = TextEditingController(text: '100');
   List<Product> _produkte = [];
   Product? _gewaehlt;
+
+  /// Bedarf, aus dem geplant wird (optional). Ist einer gewählt, wird die
+  /// geplante Menge gegen ihn gerechnet — die Bedarfsliste zeigt dann
+  /// automatisch, was noch offen ist.
+  BedarfInfo? _bedarf;
+
   late DateTime _startTag;
 
   _PlanStufe _stufe = _PlanStufe.auswahl;
@@ -1575,14 +1582,19 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
+    final fertigMenge =
+        double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
     await erstelleTasksAusPlan(
       db: db,
       productId: produkt.id,
       schritte: _plan,
+      bedarfId: _bedarf?.bedarf.id,
+      fertigMengeKg: fertigMenge,
     );
     ref
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Produkt geplant');
+    ref.invalidate(bedarfProvider);
 
     if (!mounted) return;
     final menge = double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
@@ -1686,6 +1698,30 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 16),
+
+        // Offene Bedarfe: der eigentliche Auslöser der Produktion.
+        // Ein Tipp übernimmt Artikel UND offene Menge — genau der Weg,
+        // den ihr sonst im Kopf geht.
+        _BedarfVorschlaege(
+          gewaehlt: _bedarf,
+          onWaehlen: (info) {
+            setState(() {
+              if (_bedarf?.bedarf.id == info?.bedarf.id) {
+                _bedarf = null;
+                return;
+              }
+              _bedarf = info;
+              if (info != null) {
+                final p = _produkte
+                    .where((x) => x.id == info.bedarf.productId)
+                    .firstOrNull;
+                if (p != null) _gewaehlt = p;
+                _menge.text = info.offenKg.round().toString();
+              }
+            });
+          },
+        ),
+
         Text(
           'Starttag',
           style: TextStyle(
@@ -2268,6 +2304,146 @@ class _SummenZelle extends StatelessWidget {
                 ),
               ],
             ),
+    );
+  }
+}
+
+/// Zeigt die offenen Bedarfe im Planen-Dialog.
+///
+/// Damit beginnt die Planung dort, wo sie im Betrieb wirklich beginnt:
+/// bei dem, was gebraucht wird. Ein Tipp übernimmt Artikel und offene
+/// Menge in den Dialog; die Verknüpfung sorgt dafür, dass die
+/// Bedarfsliste anschließend automatisch weiß, was noch fehlt.
+///
+/// Ist kein Bedarf erfasst, erscheint hier nichts — freies Planen bleibt
+/// jederzeit möglich.
+class _BedarfVorschlaege extends ConsumerWidget {
+  const _BedarfVorschlaege({required this.gewaehlt, required this.onWaehlen});
+
+  final BedarfInfo? gewaehlt;
+  final void Function(BedarfInfo?) onWaehlen;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final offen = ref.watch(offeneBedarfeProvider).valueOrNull;
+    if (offen == null || offen.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.playlist_add_check,
+              size: 15,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              'Offener Bedarf',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 62,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: offen.length,
+            separatorBuilder: (_, __) => const SizedBox(width: 8),
+            itemBuilder: (context, i) {
+              final info = offen[i];
+              final aktiv = gewaehlt?.bedarf.id == info.bedarf.id;
+              final farbe = info.ueberfaellig
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary;
+
+              return InkWell(
+                onTap: () => onWaehlen(aktiv ? null : info),
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 210,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: aktiv
+                        ? farbe.withValues(alpha: 0.14)
+                        : theme.colorScheme.surfaceContainerHighest
+                            .withValues(alpha: 0.5),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: aktiv
+                          ? farbe
+                          : theme.dividerColor,
+                      width: aktiv ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        info.artikelName,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Text(
+                            '${info.offenKg.round()} kg offen',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: farbe,
+                            ),
+                          ),
+                          if (info.bedarf.termin != null) ...[
+                            Text(
+                              '  ·  ',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              '${info.bedarf.termin!.day.toString().padLeft(2, '0')}.'
+                              '${info.bedarf.termin!.month.toString().padLeft(2, '0')}.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: info.ueberfaellig
+                                    ? FontWeight.w700
+                                    : FontWeight.normal,
+                                color: info.ueberfaellig
+                                    ? theme.colorScheme.error
+                                    : theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 14),
+      ],
     );
   }
 }

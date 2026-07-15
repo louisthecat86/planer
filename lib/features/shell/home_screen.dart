@@ -77,6 +77,13 @@ class HomeScreen extends ConsumerWidget {
             onTap: () => context.pushNamed('articles'),
           ),
           _NavigationTile(
+            icon: Icons.playlist_add_check_rounded,
+            label: 'Bedarf',
+            subtitle: 'Was produziert werden muss — Basis der Planung',
+            color: const Color(0xFF6A1B9A),
+            onTap: () => context.pushNamed('bedarf'),
+          ),
+          _NavigationTile(
             icon: Icons.calendar_view_week_rounded,
             label: 'Planung',
             subtitle: 'Produktion einplanen & Woche/Tag im Board',

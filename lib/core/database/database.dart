@@ -9,6 +9,7 @@ import 'tables/product_step_parameters.dart';
 import 'tables/product_steps.dart';
 import 'tables/production_history.dart';
 import 'tables/production_runs.dart';
+import 'tables/demands.dart';
 import 'tables/production_tasks.dart';
 import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
@@ -42,6 +43,7 @@ part 'database.g.dart';
     OrderListItems,
     AppSettings,
     WeekSnapshots,
+    Demands,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -51,7 +53,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -261,6 +263,29 @@ class AppDatabase extends _$AppDatabase {
                      )
                WHERE maschine_id IS NULL
             ''');
+          }
+
+          // --- v9 -> v10: Bedarfsliste ---------------------------------
+          //
+          // Der Auslöser der Produktion (Bestellungen abzüglich Bestand)
+          // lag bisher nur im Kopf des Planers. Die Bedarfsliste macht ihn
+          // sichtbar; die Aufträge verweisen darauf zurück.
+          if (from < 10) {
+            await m.createTable(demands);
+            await _addColumnIfNotExists(
+              'production_tasks',
+              'bedarf_id',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'production_tasks',
+              'fertig_menge_kg',
+              'REAL',
+            );
+            await customStatement(
+              'CREATE INDEX IF NOT EXISTS idx_production_tasks_bedarf '
+              'ON production_tasks(bedarf_id)',
+            );
           }
         },
         beforeOpen: (details) async {

@@ -384,6 +384,8 @@ Future<void> erstelleTasksAusPlan({
   required AppDatabase db,
   required String productId,
   required List<GeplanterSchritt> schritte,
+  String? bedarfId,
+  double? fertigMengeKg,
 }) async {
   const uuid = Uuid();
   final sortiert = [...schritte]
@@ -393,6 +395,10 @@ Future<void> erstelleTasksAusPlan({
   for (final s in sortiert) {
     final taskId = uuid.v4();
     final tag = DateTime(s.tag.year, s.tag.month, s.tag.day);
+    // Der Bedarf hängt an der WURZEL der Kette. Nur dort steht die
+    // Fertigmenge — sonst würde sie bei jedem Abteilungsschritt erneut
+    // gegen den Bedarf gerechnet und die Liste wäre sofort „gedeckt".
+    final istWurzel = previousTaskId == null;
 
     await db.into(db.productionTasks).insert(
           ProductionTasksCompanion.insert(
@@ -402,6 +408,8 @@ Future<void> erstelleTasksAusPlan({
             datum: tag,
             abteilung: s.abteilungDbValue,
             maschineId: Value(s.maschineId),
+            bedarfId: Value(istWurzel ? bedarfId : null),
+            fertigMengeKg: Value(istWurzel ? fertigMengeKg : null),
             geplanteDauerMinuten: s.dauerMinuten,
             geplanteMitarbeiter: s.mitarbeiter,
             parentTaskId: Value(previousTaskId),
@@ -419,6 +427,7 @@ Future<double> createTasksFromProduct({
   required String productId,
   required double mengeKg,
   required DateTime datum,
+  String? bedarfId,
 }) async {
   final plan = await berechneSchrittPlan(
     db: db,
@@ -431,6 +440,10 @@ Future<double> createTasksFromProduct({
     db: db,
     productId: productId,
     schritte: plan.schritte,
+    bedarfId: bedarfId,
+    // mengeKg ist die geplante FERTIGWARE — genau das, was gegen den
+    // Bedarf zählt. Die Rohware rechnet der Plan daraus zurück.
+    fertigMengeKg: mengeKg,
   );
   return plan.rohwareKg;
 }

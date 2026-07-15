@@ -34,6 +34,21 @@ class ProductionTasks extends Table {
   /// (und ggf. die Abteilung, wenn die Ausweichanlage woanders steht).
   TextColumn get maschineId => text().nullable()();
 
+  /// Bedarf, aus dem dieser Auftrag entstanden ist (optional).
+  ///
+  /// Über diese Verknüpfung weiß die Bedarfsliste, wie viel von der
+  /// benötigten Menge schon eingeplant ist — ohne dass irgendwo ein
+  /// Zähler mitgeführt werden muss, der aus dem Tritt geraten kann.
+  /// Wird ein Auftrag gelöscht, ist der Bedarf automatisch wieder offen.
+  TextColumn get bedarfId => text().nullable()();
+
+  /// Geplante FERTIGWARE-Menge dieser Produktion in kg.
+  ///
+  /// Nur beim ERSTEN Auftrag einer Kette gesetzt (`parentTaskId == null`);
+  /// die Folgeschritte tragen ihre jeweilige Eingangsmenge in `mengeKg`.
+  /// Genau dieser Wert wird gegen den Bedarf gerechnet.
+  RealColumn get fertigMengeKg => real().nullable()();
+
   /// Geplante Startzeit als "HH:MM"-String (z.B. "08:30"). Null, wenn der
   /// Task für den Tag geplant ist, aber keine feste Uhrzeit hat.
   TextColumn get startZeit => text().nullable()();

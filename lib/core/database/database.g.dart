@@ -6724,6 +6724,18 @@ class $ProductionTasksTable extends ProductionTasks
   late final GeneratedColumn<String> maschineId = GeneratedColumn<String>(
       'maschine_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bedarfIdMeta =
+      const VerificationMeta('bedarfId');
+  @override
+  late final GeneratedColumn<String> bedarfId = GeneratedColumn<String>(
+      'bedarf_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _fertigMengeKgMeta =
+      const VerificationMeta('fertigMengeKg');
+  @override
+  late final GeneratedColumn<double> fertigMengeKg = GeneratedColumn<double>(
+      'fertig_menge_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _startZeitMeta =
       const VerificationMeta('startZeit');
   @override
@@ -6799,6 +6811,8 @@ class $ProductionTasksTable extends ProductionTasks
         datum,
         abteilung,
         maschineId,
+        bedarfId,
+        fertigMengeKg,
         startZeit,
         geplanteDauerMinuten,
         geplanteMitarbeiter,
@@ -6854,6 +6868,16 @@ class $ProductionTasksTable extends ProductionTasks
           _maschineIdMeta,
           maschineId.isAcceptableOrUnknown(
               data['maschine_id']!, _maschineIdMeta));
+    }
+    if (data.containsKey('bedarf_id')) {
+      context.handle(_bedarfIdMeta,
+          bedarfId.isAcceptableOrUnknown(data['bedarf_id']!, _bedarfIdMeta));
+    }
+    if (data.containsKey('fertig_menge_kg')) {
+      context.handle(
+          _fertigMengeKgMeta,
+          fertigMengeKg.isAcceptableOrUnknown(
+              data['fertig_menge_kg']!, _fertigMengeKgMeta));
     }
     if (data.containsKey('start_zeit')) {
       context.handle(_startZeitMeta,
@@ -6928,6 +6952,10 @@ class $ProductionTasksTable extends ProductionTasks
           .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
       maschineId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}maschine_id']),
+      bedarfId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bedarf_id']),
+      fertigMengeKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}fertig_menge_kg']),
       startZeit: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}start_zeit']),
       geplanteDauerMinuten: attachedDatabase.typeMapping.read(
@@ -6978,6 +7006,21 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
   /// (und ggf. die Abteilung, wenn die Ausweichanlage woanders steht).
   final String? maschineId;
 
+  /// Bedarf, aus dem dieser Auftrag entstanden ist (optional).
+  ///
+  /// Über diese Verknüpfung weiß die Bedarfsliste, wie viel von der
+  /// benötigten Menge schon eingeplant ist — ohne dass irgendwo ein
+  /// Zähler mitgeführt werden muss, der aus dem Tritt geraten kann.
+  /// Wird ein Auftrag gelöscht, ist der Bedarf automatisch wieder offen.
+  final String? bedarfId;
+
+  /// Geplante FERTIGWARE-Menge dieser Produktion in kg.
+  ///
+  /// Nur beim ERSTEN Auftrag einer Kette gesetzt (`parentTaskId == null`);
+  /// die Folgeschritte tragen ihre jeweilige Eingangsmenge in `mengeKg`.
+  /// Genau dieser Wert wird gegen den Bedarf gerechnet.
+  final double? fertigMengeKg;
+
   /// Geplante Startzeit als "HH:MM"-String (z.B. "08:30"). Null, wenn der
   /// Task für den Tag geplant ist, aber keine feste Uhrzeit hat.
   final String? startZeit;
@@ -7012,6 +7055,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       required this.datum,
       required this.abteilung,
       this.maschineId,
+      this.bedarfId,
+      this.fertigMengeKg,
       this.startZeit,
       required this.geplanteDauerMinuten,
       required this.geplanteMitarbeiter,
@@ -7032,6 +7077,12 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
     map['abteilung'] = Variable<String>(abteilung);
     if (!nullToAbsent || maschineId != null) {
       map['maschine_id'] = Variable<String>(maschineId);
+    }
+    if (!nullToAbsent || bedarfId != null) {
+      map['bedarf_id'] = Variable<String>(bedarfId);
+    }
+    if (!nullToAbsent || fertigMengeKg != null) {
+      map['fertig_menge_kg'] = Variable<double>(fertigMengeKg);
     }
     if (!nullToAbsent || startZeit != null) {
       map['start_zeit'] = Variable<String>(startZeit);
@@ -7064,6 +7115,12 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       maschineId: maschineId == null && nullToAbsent
           ? const Value.absent()
           : Value(maschineId),
+      bedarfId: bedarfId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bedarfId),
+      fertigMengeKg: fertigMengeKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fertigMengeKg),
       startZeit: startZeit == null && nullToAbsent
           ? const Value.absent()
           : Value(startZeit),
@@ -7095,6 +7152,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       datum: serializer.fromJson<DateTime>(json['datum']),
       abteilung: serializer.fromJson<String>(json['abteilung']),
       maschineId: serializer.fromJson<String?>(json['maschineId']),
+      bedarfId: serializer.fromJson<String?>(json['bedarfId']),
+      fertigMengeKg: serializer.fromJson<double?>(json['fertigMengeKg']),
       startZeit: serializer.fromJson<String?>(json['startZeit']),
       geplanteDauerMinuten:
           serializer.fromJson<double>(json['geplanteDauerMinuten']),
@@ -7119,6 +7178,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       'datum': serializer.toJson<DateTime>(datum),
       'abteilung': serializer.toJson<String>(abteilung),
       'maschineId': serializer.toJson<String?>(maschineId),
+      'bedarfId': serializer.toJson<String?>(bedarfId),
+      'fertigMengeKg': serializer.toJson<double?>(fertigMengeKg),
       'startZeit': serializer.toJson<String?>(startZeit),
       'geplanteDauerMinuten': serializer.toJson<double>(geplanteDauerMinuten),
       'geplanteMitarbeiter': serializer.toJson<int>(geplanteMitarbeiter),
@@ -7139,6 +7200,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           DateTime? datum,
           String? abteilung,
           Value<String?> maschineId = const Value.absent(),
+          Value<String?> bedarfId = const Value.absent(),
+          Value<double?> fertigMengeKg = const Value.absent(),
           Value<String?> startZeit = const Value.absent(),
           double? geplanteDauerMinuten,
           int? geplanteMitarbeiter,
@@ -7156,6 +7219,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
         datum: datum ?? this.datum,
         abteilung: abteilung ?? this.abteilung,
         maschineId: maschineId.present ? maschineId.value : this.maschineId,
+        bedarfId: bedarfId.present ? bedarfId.value : this.bedarfId,
+        fertigMengeKg:
+            fertigMengeKg.present ? fertigMengeKg.value : this.fertigMengeKg,
         startZeit: startZeit.present ? startZeit.value : this.startZeit,
         geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
         geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -7177,6 +7243,10 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       abteilung: data.abteilung.present ? data.abteilung.value : this.abteilung,
       maschineId:
           data.maschineId.present ? data.maschineId.value : this.maschineId,
+      bedarfId: data.bedarfId.present ? data.bedarfId.value : this.bedarfId,
+      fertigMengeKg: data.fertigMengeKg.present
+          ? data.fertigMengeKg.value
+          : this.fertigMengeKg,
       startZeit: data.startZeit.present ? data.startZeit.value : this.startZeit,
       geplanteDauerMinuten: data.geplanteDauerMinuten.present
           ? data.geplanteDauerMinuten.value
@@ -7206,6 +7276,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           ..write('datum: $datum, ')
           ..write('abteilung: $abteilung, ')
           ..write('maschineId: $maschineId, ')
+          ..write('bedarfId: $bedarfId, ')
+          ..write('fertigMengeKg: $fertigMengeKg, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -7228,6 +7300,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       datum,
       abteilung,
       maschineId,
+      bedarfId,
+      fertigMengeKg,
       startZeit,
       geplanteDauerMinuten,
       geplanteMitarbeiter,
@@ -7248,6 +7322,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           other.datum == this.datum &&
           other.abteilung == this.abteilung &&
           other.maschineId == this.maschineId &&
+          other.bedarfId == this.bedarfId &&
+          other.fertigMengeKg == this.fertigMengeKg &&
           other.startZeit == this.startZeit &&
           other.geplanteDauerMinuten == this.geplanteDauerMinuten &&
           other.geplanteMitarbeiter == this.geplanteMitarbeiter &&
@@ -7267,6 +7343,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
   final Value<DateTime> datum;
   final Value<String> abteilung;
   final Value<String?> maschineId;
+  final Value<String?> bedarfId;
+  final Value<double?> fertigMengeKg;
   final Value<String?> startZeit;
   final Value<double> geplanteDauerMinuten;
   final Value<int> geplanteMitarbeiter;
@@ -7285,6 +7363,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.datum = const Value.absent(),
     this.abteilung = const Value.absent(),
     this.maschineId = const Value.absent(),
+    this.bedarfId = const Value.absent(),
+    this.fertigMengeKg = const Value.absent(),
     this.startZeit = const Value.absent(),
     this.geplanteDauerMinuten = const Value.absent(),
     this.geplanteMitarbeiter = const Value.absent(),
@@ -7304,6 +7384,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     required DateTime datum,
     required String abteilung,
     this.maschineId = const Value.absent(),
+    this.bedarfId = const Value.absent(),
+    this.fertigMengeKg = const Value.absent(),
     this.startZeit = const Value.absent(),
     required double geplanteDauerMinuten,
     required int geplanteMitarbeiter,
@@ -7329,6 +7411,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     Expression<DateTime>? datum,
     Expression<String>? abteilung,
     Expression<String>? maschineId,
+    Expression<String>? bedarfId,
+    Expression<double>? fertigMengeKg,
     Expression<String>? startZeit,
     Expression<double>? geplanteDauerMinuten,
     Expression<int>? geplanteMitarbeiter,
@@ -7348,6 +7432,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       if (datum != null) 'datum': datum,
       if (abteilung != null) 'abteilung': abteilung,
       if (maschineId != null) 'maschine_id': maschineId,
+      if (bedarfId != null) 'bedarf_id': bedarfId,
+      if (fertigMengeKg != null) 'fertig_menge_kg': fertigMengeKg,
       if (startZeit != null) 'start_zeit': startZeit,
       if (geplanteDauerMinuten != null)
         'geplante_dauer_minuten': geplanteDauerMinuten,
@@ -7371,6 +7457,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       Value<DateTime>? datum,
       Value<String>? abteilung,
       Value<String?>? maschineId,
+      Value<String?>? bedarfId,
+      Value<double?>? fertigMengeKg,
       Value<String?>? startZeit,
       Value<double>? geplanteDauerMinuten,
       Value<int>? geplanteMitarbeiter,
@@ -7389,6 +7477,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       datum: datum ?? this.datum,
       abteilung: abteilung ?? this.abteilung,
       maschineId: maschineId ?? this.maschineId,
+      bedarfId: bedarfId ?? this.bedarfId,
+      fertigMengeKg: fertigMengeKg ?? this.fertigMengeKg,
       startZeit: startZeit ?? this.startZeit,
       geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
       geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -7423,6 +7513,12 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     }
     if (maschineId.present) {
       map['maschine_id'] = Variable<String>(maschineId.value);
+    }
+    if (bedarfId.present) {
+      map['bedarf_id'] = Variable<String>(bedarfId.value);
+    }
+    if (fertigMengeKg.present) {
+      map['fertig_menge_kg'] = Variable<double>(fertigMengeKg.value);
     }
     if (startZeit.present) {
       map['start_zeit'] = Variable<String>(startZeit.value);
@@ -7470,6 +7566,8 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
           ..write('datum: $datum, ')
           ..write('abteilung: $abteilung, ')
           ..write('maschineId: $maschineId, ')
+          ..write('bedarfId: $bedarfId, ')
+          ..write('fertigMengeKg: $fertigMengeKg, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -10763,6 +10861,575 @@ class WeekSnapshotsCompanion extends UpdateCompanion<WeekSnapshot> {
   }
 }
 
+class $DemandsTable extends Demands with TableInfo<$DemandsTable, Demand> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DemandsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _mengeKgFertigMeta =
+      const VerificationMeta('mengeKgFertig');
+  @override
+  late final GeneratedColumn<double> mengeKgFertig = GeneratedColumn<double>(
+      'menge_kg_fertig', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _terminMeta = const VerificationMeta('termin');
+  @override
+  late final GeneratedColumn<DateTime> termin = GeneratedColumn<DateTime>(
+      'termin', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _quelleMeta = const VerificationMeta('quelle');
+  @override
+  late final GeneratedColumn<String> quelle = GeneratedColumn<String>(
+      'quelle', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('bestellung'));
+  static const VerificationMeta _prioritaetMeta =
+      const VerificationMeta('prioritaet');
+  @override
+  late final GeneratedColumn<int> prioritaet = GeneratedColumn<int>(
+      'prioritaet', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _notizenMeta =
+      const VerificationMeta('notizen');
+  @override
+  late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
+      'notizen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _manuellErledigtMeta =
+      const VerificationMeta('manuellErledigt');
+  @override
+  late final GeneratedColumn<bool> manuellErledigt = GeneratedColumn<bool>(
+      'manuell_erledigt', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("manuell_erledigt" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        mengeKgFertig,
+        termin,
+        quelle,
+        prioritaet,
+        notizen,
+        manuellErledigt,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'demands';
+  @override
+  VerificationContext validateIntegrity(Insertable<Demand> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('menge_kg_fertig')) {
+      context.handle(
+          _mengeKgFertigMeta,
+          mengeKgFertig.isAcceptableOrUnknown(
+              data['menge_kg_fertig']!, _mengeKgFertigMeta));
+    } else if (isInserting) {
+      context.missing(_mengeKgFertigMeta);
+    }
+    if (data.containsKey('termin')) {
+      context.handle(_terminMeta,
+          termin.isAcceptableOrUnknown(data['termin']!, _terminMeta));
+    }
+    if (data.containsKey('quelle')) {
+      context.handle(_quelleMeta,
+          quelle.isAcceptableOrUnknown(data['quelle']!, _quelleMeta));
+    }
+    if (data.containsKey('prioritaet')) {
+      context.handle(
+          _prioritaetMeta,
+          prioritaet.isAcceptableOrUnknown(
+              data['prioritaet']!, _prioritaetMeta));
+    }
+    if (data.containsKey('notizen')) {
+      context.handle(_notizenMeta,
+          notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('manuell_erledigt')) {
+      context.handle(
+          _manuellErledigtMeta,
+          manuellErledigt.isAcceptableOrUnknown(
+              data['manuell_erledigt']!, _manuellErledigtMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Demand map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Demand(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      mengeKgFertig: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}menge_kg_fertig'])!,
+      termin: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}termin']),
+      quelle: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}quelle'])!,
+      prioritaet: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}prioritaet'])!,
+      notizen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      manuellErledigt: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}manuell_erledigt'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $DemandsTable createAlias(String alias) {
+    return $DemandsTable(attachedDatabase, alias);
+  }
+}
+
+class Demand extends DataClass implements Insertable<Demand> {
+  final String id;
+
+  /// Artikel, für den der Bedarf besteht.
+  final String productId;
+
+  /// Benötigte Menge in kg FERTIGWARE (das, was rausgehen muss).
+  /// Die Rohwarenmenge rechnet die Planung daraus über die Ausbeute
+  /// zurück — so, wie ihr auch denkt.
+  final double mengeKgFertig;
+
+  /// Wunschtermin: bis wann soll es fertig sein.
+  final DateTime? termin;
+
+  /// Woher kommt der Bedarf: 'bestellung', 'bestand' oder 'sonstiges'.
+  /// Rein informativ — hilft beim Priorisieren.
+  final String quelle;
+
+  /// Priorität: 0 = normal, 1 = hoch (wird oben einsortiert).
+  final int prioritaet;
+
+  /// Freitext: Kunde, Auftragsnummer, Besonderheiten.
+  final String? notizen;
+
+  /// Manuell auf „erledigt" gesetzt (unabhängig von der geplanten Menge) —
+  /// z.B. wenn ein Auftrag storniert wurde oder aus Lagerbestand gedeckt
+  /// werden konnte.
+  final bool manuellErledigt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Demand(
+      {required this.id,
+      required this.productId,
+      required this.mengeKgFertig,
+      this.termin,
+      required this.quelle,
+      required this.prioritaet,
+      this.notizen,
+      required this.manuellErledigt,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['product_id'] = Variable<String>(productId);
+    map['menge_kg_fertig'] = Variable<double>(mengeKgFertig);
+    if (!nullToAbsent || termin != null) {
+      map['termin'] = Variable<DateTime>(termin);
+    }
+    map['quelle'] = Variable<String>(quelle);
+    map['prioritaet'] = Variable<int>(prioritaet);
+    if (!nullToAbsent || notizen != null) {
+      map['notizen'] = Variable<String>(notizen);
+    }
+    map['manuell_erledigt'] = Variable<bool>(manuellErledigt);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  DemandsCompanion toCompanion(bool nullToAbsent) {
+    return DemandsCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      mengeKgFertig: Value(mengeKgFertig),
+      termin:
+          termin == null && nullToAbsent ? const Value.absent() : Value(termin),
+      quelle: Value(quelle),
+      prioritaet: Value(prioritaet),
+      notizen: notizen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notizen),
+      manuellErledigt: Value(manuellErledigt),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Demand.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Demand(
+      id: serializer.fromJson<String>(json['id']),
+      productId: serializer.fromJson<String>(json['productId']),
+      mengeKgFertig: serializer.fromJson<double>(json['mengeKgFertig']),
+      termin: serializer.fromJson<DateTime?>(json['termin']),
+      quelle: serializer.fromJson<String>(json['quelle']),
+      prioritaet: serializer.fromJson<int>(json['prioritaet']),
+      notizen: serializer.fromJson<String?>(json['notizen']),
+      manuellErledigt: serializer.fromJson<bool>(json['manuellErledigt']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'productId': serializer.toJson<String>(productId),
+      'mengeKgFertig': serializer.toJson<double>(mengeKgFertig),
+      'termin': serializer.toJson<DateTime?>(termin),
+      'quelle': serializer.toJson<String>(quelle),
+      'prioritaet': serializer.toJson<int>(prioritaet),
+      'notizen': serializer.toJson<String?>(notizen),
+      'manuellErledigt': serializer.toJson<bool>(manuellErledigt),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Demand copyWith(
+          {String? id,
+          String? productId,
+          double? mengeKgFertig,
+          Value<DateTime?> termin = const Value.absent(),
+          String? quelle,
+          int? prioritaet,
+          Value<String?> notizen = const Value.absent(),
+          bool? manuellErledigt,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Demand(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        mengeKgFertig: mengeKgFertig ?? this.mengeKgFertig,
+        termin: termin.present ? termin.value : this.termin,
+        quelle: quelle ?? this.quelle,
+        prioritaet: prioritaet ?? this.prioritaet,
+        notizen: notizen.present ? notizen.value : this.notizen,
+        manuellErledigt: manuellErledigt ?? this.manuellErledigt,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Demand copyWithCompanion(DemandsCompanion data) {
+    return Demand(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      mengeKgFertig: data.mengeKgFertig.present
+          ? data.mengeKgFertig.value
+          : this.mengeKgFertig,
+      termin: data.termin.present ? data.termin.value : this.termin,
+      quelle: data.quelle.present ? data.quelle.value : this.quelle,
+      prioritaet:
+          data.prioritaet.present ? data.prioritaet.value : this.prioritaet,
+      notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      manuellErledigt: data.manuellErledigt.present
+          ? data.manuellErledigt.value
+          : this.manuellErledigt,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Demand(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('mengeKgFertig: $mengeKgFertig, ')
+          ..write('termin: $termin, ')
+          ..write('quelle: $quelle, ')
+          ..write('prioritaet: $prioritaet, ')
+          ..write('notizen: $notizen, ')
+          ..write('manuellErledigt: $manuellErledigt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, productId, mengeKgFertig, termin, quelle,
+      prioritaet, notizen, manuellErledigt, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Demand &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.mengeKgFertig == this.mengeKgFertig &&
+          other.termin == this.termin &&
+          other.quelle == this.quelle &&
+          other.prioritaet == this.prioritaet &&
+          other.notizen == this.notizen &&
+          other.manuellErledigt == this.manuellErledigt &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class DemandsCompanion extends UpdateCompanion<Demand> {
+  final Value<String> id;
+  final Value<String> productId;
+  final Value<double> mengeKgFertig;
+  final Value<DateTime?> termin;
+  final Value<String> quelle;
+  final Value<int> prioritaet;
+  final Value<String?> notizen;
+  final Value<bool> manuellErledigt;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const DemandsCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.mengeKgFertig = const Value.absent(),
+    this.termin = const Value.absent(),
+    this.quelle = const Value.absent(),
+    this.prioritaet = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.manuellErledigt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DemandsCompanion.insert({
+    required String id,
+    required String productId,
+    required double mengeKgFertig,
+    this.termin = const Value.absent(),
+    this.quelle = const Value.absent(),
+    this.prioritaet = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.manuellErledigt = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        productId = Value(productId),
+        mengeKgFertig = Value(mengeKgFertig);
+  static Insertable<Demand> custom({
+    Expression<String>? id,
+    Expression<String>? productId,
+    Expression<double>? mengeKgFertig,
+    Expression<DateTime>? termin,
+    Expression<String>? quelle,
+    Expression<int>? prioritaet,
+    Expression<String>? notizen,
+    Expression<bool>? manuellErledigt,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (mengeKgFertig != null) 'menge_kg_fertig': mengeKgFertig,
+      if (termin != null) 'termin': termin,
+      if (quelle != null) 'quelle': quelle,
+      if (prioritaet != null) 'prioritaet': prioritaet,
+      if (notizen != null) 'notizen': notizen,
+      if (manuellErledigt != null) 'manuell_erledigt': manuellErledigt,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DemandsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? productId,
+      Value<double>? mengeKgFertig,
+      Value<DateTime?>? termin,
+      Value<String>? quelle,
+      Value<int>? prioritaet,
+      Value<String?>? notizen,
+      Value<bool>? manuellErledigt,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return DemandsCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      mengeKgFertig: mengeKgFertig ?? this.mengeKgFertig,
+      termin: termin ?? this.termin,
+      quelle: quelle ?? this.quelle,
+      prioritaet: prioritaet ?? this.prioritaet,
+      notizen: notizen ?? this.notizen,
+      manuellErledigt: manuellErledigt ?? this.manuellErledigt,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (mengeKgFertig.present) {
+      map['menge_kg_fertig'] = Variable<double>(mengeKgFertig.value);
+    }
+    if (termin.present) {
+      map['termin'] = Variable<DateTime>(termin.value);
+    }
+    if (quelle.present) {
+      map['quelle'] = Variable<String>(quelle.value);
+    }
+    if (prioritaet.present) {
+      map['prioritaet'] = Variable<int>(prioritaet.value);
+    }
+    if (notizen.present) {
+      map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (manuellErledigt.present) {
+      map['manuell_erledigt'] = Variable<bool>(manuellErledigt.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DemandsCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('mengeKgFertig: $mengeKgFertig, ')
+          ..write('termin: $termin, ')
+          ..write('quelle: $quelle, ')
+          ..write('prioritaet: $prioritaet, ')
+          ..write('notizen: $notizen, ')
+          ..write('manuellErledigt: $manuellErledigt, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -10786,6 +11453,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $OrderListItemsTable orderListItems = $OrderListItemsTable(this);
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $WeekSnapshotsTable weekSnapshots = $WeekSnapshotsTable(this);
+  late final $DemandsTable demands = $DemandsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -10804,7 +11472,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         taskDependencies,
         orderListItems,
         appSettings,
-        weekSnapshots
+        weekSnapshots,
+        demands
       ];
 }
 
@@ -14876,6 +15545,8 @@ typedef $$ProductionTasksTableCreateCompanionBuilder = ProductionTasksCompanion
   required DateTime datum,
   required String abteilung,
   Value<String?> maschineId,
+  Value<String?> bedarfId,
+  Value<double?> fertigMengeKg,
   Value<String?> startZeit,
   required double geplanteDauerMinuten,
   required int geplanteMitarbeiter,
@@ -14896,6 +15567,8 @@ typedef $$ProductionTasksTableUpdateCompanionBuilder = ProductionTasksCompanion
   Value<DateTime> datum,
   Value<String> abteilung,
   Value<String?> maschineId,
+  Value<String?> bedarfId,
+  Value<double?> fertigMengeKg,
   Value<String?> startZeit,
   Value<double> geplanteDauerMinuten,
   Value<int> geplanteMitarbeiter,
@@ -14968,6 +15641,12 @@ class $$ProductionTasksTableFilterComposer
 
   ColumnFilters<String> get maschineId => $composableBuilder(
       column: $table.maschineId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bedarfId => $composableBuilder(
+      column: $table.bedarfId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fertigMengeKg => $composableBuilder(
+      column: $table.fertigMengeKg, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnFilters(column));
@@ -15067,6 +15746,13 @@ class $$ProductionTasksTableOrderingComposer
   ColumnOrderings<String> get maschineId => $composableBuilder(
       column: $table.maschineId, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get bedarfId => $composableBuilder(
+      column: $table.bedarfId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get fertigMengeKg => $composableBuilder(
+      column: $table.fertigMengeKg,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnOrderings(column));
 
@@ -15144,6 +15830,12 @@ class $$ProductionTasksTableAnnotationComposer
 
   GeneratedColumn<String> get maschineId => $composableBuilder(
       column: $table.maschineId, builder: (column) => column);
+
+  GeneratedColumn<String> get bedarfId =>
+      $composableBuilder(column: $table.bedarfId, builder: (column) => column);
+
+  GeneratedColumn<double> get fertigMengeKg => $composableBuilder(
+      column: $table.fertigMengeKg, builder: (column) => column);
 
   GeneratedColumn<String> get startZeit =>
       $composableBuilder(column: $table.startZeit, builder: (column) => column);
@@ -15247,6 +15939,8 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<DateTime> datum = const Value.absent(),
             Value<String> abteilung = const Value.absent(),
             Value<String?> maschineId = const Value.absent(),
+            Value<String?> bedarfId = const Value.absent(),
+            Value<double?> fertigMengeKg = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             Value<double> geplanteDauerMinuten = const Value.absent(),
             Value<int> geplanteMitarbeiter = const Value.absent(),
@@ -15266,6 +15960,8 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             datum: datum,
             abteilung: abteilung,
             maschineId: maschineId,
+            bedarfId: bedarfId,
+            fertigMengeKg: fertigMengeKg,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
@@ -15285,6 +15981,8 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             required DateTime datum,
             required String abteilung,
             Value<String?> maschineId = const Value.absent(),
+            Value<String?> bedarfId = const Value.absent(),
+            Value<double?> fertigMengeKg = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             required double geplanteDauerMinuten,
             required int geplanteMitarbeiter,
@@ -15304,6 +16002,8 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             datum: datum,
             abteilung: abteilung,
             maschineId: maschineId,
+            bedarfId: bedarfId,
+            fertigMengeKg: fertigMengeKg,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
@@ -17405,6 +18105,264 @@ typedef $$WeekSnapshotsTableProcessedTableManager = ProcessedTableManager<
     ),
     WeekSnapshot,
     PrefetchHooks Function()>;
+typedef $$DemandsTableCreateCompanionBuilder = DemandsCompanion Function({
+  required String id,
+  required String productId,
+  required double mengeKgFertig,
+  Value<DateTime?> termin,
+  Value<String> quelle,
+  Value<int> prioritaet,
+  Value<String?> notizen,
+  Value<bool> manuellErledigt,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$DemandsTableUpdateCompanionBuilder = DemandsCompanion Function({
+  Value<String> id,
+  Value<String> productId,
+  Value<double> mengeKgFertig,
+  Value<DateTime?> termin,
+  Value<String> quelle,
+  Value<int> prioritaet,
+  Value<String?> notizen,
+  Value<bool> manuellErledigt,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$DemandsTableFilterComposer
+    extends Composer<_$AppDatabase, $DemandsTable> {
+  $$DemandsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get mengeKgFertig => $composableBuilder(
+      column: $table.mengeKgFertig, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get termin => $composableBuilder(
+      column: $table.termin, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get quelle => $composableBuilder(
+      column: $table.quelle, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get prioritaet => $composableBuilder(
+      column: $table.prioritaet, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get manuellErledigt => $composableBuilder(
+      column: $table.manuellErledigt,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$DemandsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DemandsTable> {
+  $$DemandsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get mengeKgFertig => $composableBuilder(
+      column: $table.mengeKgFertig,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get termin => $composableBuilder(
+      column: $table.termin, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get quelle => $composableBuilder(
+      column: $table.quelle, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get prioritaet => $composableBuilder(
+      column: $table.prioritaet, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get manuellErledigt => $composableBuilder(
+      column: $table.manuellErledigt,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$DemandsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DemandsTable> {
+  $$DemandsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<double> get mengeKgFertig => $composableBuilder(
+      column: $table.mengeKgFertig, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get termin =>
+      $composableBuilder(column: $table.termin, builder: (column) => column);
+
+  GeneratedColumn<String> get quelle =>
+      $composableBuilder(column: $table.quelle, builder: (column) => column);
+
+  GeneratedColumn<int> get prioritaet => $composableBuilder(
+      column: $table.prioritaet, builder: (column) => column);
+
+  GeneratedColumn<String> get notizen =>
+      $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<bool> get manuellErledigt => $composableBuilder(
+      column: $table.manuellErledigt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$DemandsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $DemandsTable,
+    Demand,
+    $$DemandsTableFilterComposer,
+    $$DemandsTableOrderingComposer,
+    $$DemandsTableAnnotationComposer,
+    $$DemandsTableCreateCompanionBuilder,
+    $$DemandsTableUpdateCompanionBuilder,
+    (Demand, BaseReferences<_$AppDatabase, $DemandsTable, Demand>),
+    Demand,
+    PrefetchHooks Function()> {
+  $$DemandsTableTableManager(_$AppDatabase db, $DemandsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DemandsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DemandsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DemandsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> productId = const Value.absent(),
+            Value<double> mengeKgFertig = const Value.absent(),
+            Value<DateTime?> termin = const Value.absent(),
+            Value<String> quelle = const Value.absent(),
+            Value<int> prioritaet = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<bool> manuellErledigt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DemandsCompanion(
+            id: id,
+            productId: productId,
+            mengeKgFertig: mengeKgFertig,
+            termin: termin,
+            quelle: quelle,
+            prioritaet: prioritaet,
+            notizen: notizen,
+            manuellErledigt: manuellErledigt,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String productId,
+            required double mengeKgFertig,
+            Value<DateTime?> termin = const Value.absent(),
+            Value<String> quelle = const Value.absent(),
+            Value<int> prioritaet = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<bool> manuellErledigt = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              DemandsCompanion.insert(
+            id: id,
+            productId: productId,
+            mengeKgFertig: mengeKgFertig,
+            termin: termin,
+            quelle: quelle,
+            prioritaet: prioritaet,
+            notizen: notizen,
+            manuellErledigt: manuellErledigt,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$DemandsTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $DemandsTable,
+    Demand,
+    $$DemandsTableFilterComposer,
+    $$DemandsTableOrderingComposer,
+    $$DemandsTableAnnotationComposer,
+    $$DemandsTableCreateCompanionBuilder,
+    $$DemandsTableUpdateCompanionBuilder,
+    (Demand, BaseReferences<_$AppDatabase, $DemandsTable, Demand>),
+    Demand,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -17437,4 +18395,6 @@ class $AppDatabaseManager {
       $$AppSettingsTableTableManager(_db, _db.appSettings);
   $$WeekSnapshotsTableTableManager get weekSnapshots =>
       $$WeekSnapshotsTableTableManager(_db, _db.weekSnapshots);
+  $$DemandsTableTableManager get demands =>
+      $$DemandsTableTableManager(_db, _db.demands);
 }
