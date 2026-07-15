@@ -2,7 +2,25 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/constants/abteilungen.dart';
 import 'board_providers.dart';
+
+/// Wandelt eine App-Farbe (0xAARRGGBB) in eine PDF-Farbe. So übernimmt der
+/// Ausdruck exakt die Abteilungsfarben aus dem Board.
+PdfColor _pdf(int argb) => PdfColor(
+      ((argb >> 16) & 0xFF) / 255,
+      ((argb >> 8) & 0xFF) / 255,
+      (argb & 0xFF) / 255,
+    );
+
+/// Aufgehellte Variante einer Farbe für Zellenhintergründe (mischt mit Weiß).
+PdfColor _pdfHell(int argb, double weissAnteil) {
+  final r = ((argb >> 16) & 0xFF) / 255;
+  final g = ((argb >> 8) & 0xFF) / 255;
+  final b = (argb & 0xFF) / 255;
+  double misch(double c) => c + (1 - c) * weissAnteil;
+  return PdfColor(misch(r), misch(g), misch(b));
+}
 
 /// Erzeugt druckbare A4-PDFs aus den Board-Daten.
 ///
@@ -67,11 +85,11 @@ class BoardPrintService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Text(
-          'Produktionsplan — KW $kw',
+          'Produktionsplan - KW $kw',
           style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
         ),
         pw.Text(
-          '${mo.day}.${mo.month}. – ${fr.day}.${fr.month}.${fr.year}',
+          '${mo.day}.${mo.month}. - ${fr.day}.${fr.month}.${fr.year}',
           style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
         ),
         pw.SizedBox(height: 10),
@@ -97,16 +115,18 @@ class BoardPrintService {
             for (final spur in board.spuren)
               pw.TableRow(
                 children: [
-                  // Anlagen-Spuren werden unter ihrer Abteilung eingerückt,
-                  // damit die Gruppierung auch im Ausdruck erkennbar ist.
+                  // Zeilenkopf in der Abteilungsfarbe — der Ausdruck spiegelt
+                  // die Farbgebung des Boards.
                   _deptCell(
-                    spur.istAnlage
-                        ? '   ${spur.anzeigeName}'
-                        : spur.anzeigeName,
+                    spur.anzeigeName,
+                    farbwert: spur.abteilung.farbwert,
                     einger: spur.istAnlage,
                   ),
                   for (final tag in board.tage)
-                    _wocheTagZelle(board.cellFor(spur, tag)),
+                    _wocheTagZelle(
+                      board.cellFor(spur, tag),
+                      spur.abteilung.farbwert,
+                    ),
                 ],
               ),
           ],
@@ -124,44 +144,69 @@ class BoardPrintService {
         ),
       );
 
-  static pw.Widget _deptCell(String name, {bool einger = false}) =>
+  static pw.Widget _deptCell(
+    String name, {
+    required int farbwert,
+    bool einger = false,
+  }) =>
       pw.Container(
-        padding: const pw.EdgeInsets.all(4),
+        padding: const pw.EdgeInsets.fromLTRB(4, 4, 4, 4),
+        decoration: pw.BoxDecoration(
+          // Zeilenkopf in der Abteilungsfarbe: kräftig für die Abteilung,
+          // aufgehellt für die eingerückten Anlagen-Spuren.
+          color: einger ? _pdfHell(farbwert, 0.82) : _pdf(farbwert),
+          border: pw.Border(
+            left: pw.BorderSide(color: _pdf(farbwert), width: 3),
+          ),
+        ),
         child: pw.Text(
           name,
           style: pw.TextStyle(
             fontWeight: einger ? pw.FontWeight.normal : pw.FontWeight.bold,
             fontSize: einger ? 8 : 9,
+            // Auf der kräftigen Abteilungsfarbe steht weißer Text.
+            color: einger ? PdfColors.black : PdfColors.white,
           ),
         ),
       );
 
-  static pw.Widget _wocheTagZelle(BoardCell cell) {
+  static pw.Widget _wocheTagZelle(BoardCell cell, int farbwert) {
     final lines = <pw.Widget>[];
     for (final t in cell.tasks) {
       lines.add(
-        pw.Text(
-          '${t.productName} · ${t.mengeKg.toStringAsFixed(0)} kg · '
-          '${_fmtH(t.dauerMinuten)} h',
-          style: const pw.TextStyle(fontSize: 8),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Farbpunkt in der Abteilungsfarbe statt eines Sonderzeichens.
+            pw.Container(
+              width: 5,
+              height: 5,
+              margin: const pw.EdgeInsets.only(top: 2, right: 3),
+              decoration: pw.BoxDecoration(
+                color: _pdf(farbwert),
+                shape: pw.BoxShape.circle,
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Text(
+                // Nur Artikel und Menge — KEINE Zeitangaben (Wunsch: die
+                // Uhrzeiten sollen nicht mitgedruckt werden).
+                '${t.productName}  ${t.mengeKg.toStringAsFixed(0)} kg',
+                style: const pw.TextStyle(fontSize: 8),
+              ),
+            ),
+          ],
         ),
       );
     }
     if (lines.isEmpty) {
       lines.add(
         pw.Text(
-          '—',
+          '-',
           style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey),
         ),
       );
     }
-    lines.add(pw.SizedBox(height: 3));
-    lines.add(
-      pw.Text(
-        '? ${_fmtH(cell.belegtMinuten)} / ${_fmtH(cell.kapazitaetMinuten)} h',
-        style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-      ),
-    );
     return pw.Container(
       padding: const pw.EdgeInsets.all(4),
       child: pw.Column(
@@ -179,7 +224,7 @@ class BoardPrintService {
     final t = board.tag;
     final widgets = <pw.Widget>[
       pw.Text(
-        'Tagesplan — ${_wochentage[t.weekday - 1]} '
+        'Tagesplan - ${_wochentage[t.weekday - 1]} '
         '${t.day}.${t.month}.${t.year}',
         style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold),
       ),
@@ -190,20 +235,24 @@ class BoardPrintService {
       widgets.add(
         pw.Container(
           width: double.infinity,
-          color: PdfColors.grey200,
+          // Abschnittskopf in der Abteilungsfarbe — konsistent zur App.
+          color: _pdf(lane.spur.abteilung.farbwert),
           padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 3),
           child: pw.Row(
             mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
             children: [
               pw.Text(
                 lane.spur.anzeigeName,
-                style:
-                    pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11),
+                style: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 11,
+                  color: PdfColors.white,
+                ),
               ),
               pw.Text(
                 '${_fmtH(lane.belegtMinuten)} / '
                 '${_fmtH(lane.kapazitaetMinuten)} h',
-                style: const pw.TextStyle(fontSize: 10),
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.white),
               ),
             ],
           ),
@@ -215,7 +264,7 @@ class BoardPrintService {
           pw.Padding(
             padding: const pw.EdgeInsets.fromLTRB(6, 3, 6, 3),
             child: pw.Text(
-              '—',
+              '-',
               style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey),
             ),
           ),
@@ -246,7 +295,7 @@ class BoardPrintService {
                     _cell(task.productName),
                     _cell('${task.mengeKg.toStringAsFixed(0)} kg'),
                     _cell('${_fmtH(task.dauerMinuten)} h'),
-                    _cell(task.startZeit ?? '—'),
+                    _cell(task.startZeit ?? '-'),
                   ],
                 ),
             ],

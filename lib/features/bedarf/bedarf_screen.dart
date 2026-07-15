@@ -23,22 +23,44 @@ class BedarfInfo {
     required this.artikelName,
     required this.artikelNummer,
     required this.geplantKg,
+    required this.produziertKg,
   });
 
   final Demand bedarf;
   final String artikelName;
   final String artikelNummer;
 
-  /// Bereits eingeplante Fertigware-Menge (aus den Aufträgen summiert).
+  /// Insgesamt eingeplante Fertigware-Menge (alle verknüpften Aufträge).
   final double geplantKg;
 
+  /// Davon bereits PRODUZIERT: Aufträge, deren Tag in der Vergangenheit
+  /// liegt. Eine Produktion, die auf einen vergangenen Tag geplant war und
+  /// nicht mehr verschoben wurde, gilt als gelaufen — der Bedarf ist dann
+  /// automatisch gedeckt, ohne dass man ihn von Hand abhaken muss.
+  final double produziertKg;
+
+  /// Noch nicht eingeplante Menge (für die Planung relevant).
   double get offenKg =>
       (bedarf.mengeKgFertig - geplantKg).clamp(0, double.infinity);
 
-  bool get erledigt => bedarf.manuellErledigt || offenKg <= 0.5;
+  /// Eingeplant, aber der Produktionstag steht noch aus.
+  double get inPlanungKg =>
+      (geplantKg - produziertKg).clamp(0, double.infinity);
 
+  /// Erledigt, wenn manuell abgehakt ODER die produzierte Menge den Bedarf
+  /// deckt (Produktionstag liegt in der Vergangenheit).
+  bool get erledigt =>
+      bedarf.manuellErledigt ||
+      produziertKg >= bedarf.mengeKgFertig - 0.5;
+
+  /// Fortschritt am eingeplanten Anteil (zeigt auch die noch offene Planung).
   double get fortschritt => bedarf.mengeKgFertig > 0
       ? (geplantKg / bedarf.mengeKgFertig).clamp(0.0, 1.0)
+      : 0.0;
+
+  /// Anteil, der bereits produziert ist (für die zweifarbige Leiste).
+  double get produziertAnteil => bedarf.mengeKgFertig > 0
+      ? (produziertKg / bedarf.mengeKgFertig).clamp(0.0, 1.0)
       : 0.0;
 
   /// Termin überschritten und noch nicht gedeckt?
@@ -66,16 +88,25 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
   final nameById = {for (final p in produkte) p.id: p};
 
   // Geplante Fertigmengen je Bedarf (nur Ketten-Wurzeln tragen den Wert).
+  // Zusätzlich getrennt: was davon schon PRODUZIERT ist (Tag vorbei).
   final tasks = await (db.select(db.productionTasks)
         ..where((t) => t.deletedAt.isNull())
         ..where((t) => t.bedarfId.isNotNull()))
       .get();
+  final heute = DateTime.now();
+  final heuteNorm = DateTime(heute.year, heute.month, heute.day);
   final geplantJeBedarf = <String, double>{};
+  final produziertJeBedarf = <String, double>{};
   for (final t in tasks) {
     final bid = t.bedarfId;
     final menge = t.fertigMengeKg;
     if (bid == null || menge == null) continue;
     geplantJeBedarf[bid] = (geplantJeBedarf[bid] ?? 0) + menge;
+    // Produktionstag liegt echt VOR heute → gilt als gelaufen.
+    final tag = DateTime(t.datum.year, t.datum.month, t.datum.day);
+    if (tag.isBefore(heuteNorm)) {
+      produziertJeBedarf[bid] = (produziertJeBedarf[bid] ?? 0) + menge;
+    }
   }
 
   final result = [
@@ -85,6 +116,7 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
         artikelName: nameById[b.productId]?.artikelbezeichnung ?? 'Unbekannt',
         artikelNummer: nameById[b.productId]?.artikelnummer ?? '—',
         geplantKg: geplantJeBedarf[b.id] ?? 0,
+        produziertKg: produziertJeBedarf[b.id] ?? 0,
       ),
   ];
 
@@ -346,6 +378,16 @@ class _BedarfKarte extends StatelessWidget {
     'sonstiges': 'Sonstiges',
   };
 
+  String _fortschrittText(BedarfInfo info) {
+    final b = info.bedarf;
+    if (info.produziertKg >= 0.5 && info.produziertKg < b.mengeKgFertig - 0.5) {
+      return '${info.produziertKg.round()} kg produziert · '
+          '${info.geplantKg.round()} von ${b.mengeKgFertig.round()} kg geplant';
+    }
+    return '${info.geplantKg.round()} von '
+        '${b.mengeKgFertig.round()} kg eingeplant';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -446,14 +488,26 @@ class _BedarfKarte extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
+                      // Zweistufige Leiste: kräftig = bereits produziert
+                      // (Tag vorbei), blasser = eingeplant aber noch offen.
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(3),
-                        child: LinearProgressIndicator(
-                          value: info.fortschritt,
-                          minHeight: 6,
-                          backgroundColor: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.10),
-                          color: akzent,
+                        child: Stack(
+                          children: [
+                            LinearProgressIndicator(
+                              value: info.fortschritt,
+                              minHeight: 6,
+                              backgroundColor: theme.colorScheme.onSurface
+                                  .withValues(alpha: 0.10),
+                              color: akzent.withValues(alpha: 0.35),
+                            ),
+                            LinearProgressIndicator(
+                              value: info.produziertAnteil,
+                              minHeight: 6,
+                              backgroundColor: Colors.transparent,
+                              color: akzent,
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -461,7 +515,9 @@ class _BedarfKarte extends StatelessWidget {
                     Text(
                       info.erledigt
                           ? 'gedeckt'
-                          : '${info.offenKg.round()} kg offen',
+                          : info.inPlanungKg > 0.5
+                              ? '${info.inPlanungKg.round()} kg geplant'
+                              : '${info.offenKg.round()} kg offen',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -472,8 +528,7 @@ class _BedarfKarte extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${info.geplantKg.round()} von '
-                  '${b.mengeKgFertig.round()} kg eingeplant',
+                  _fortschrittText(info),
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
