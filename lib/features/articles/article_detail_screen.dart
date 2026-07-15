@@ -38,12 +38,12 @@ const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
 /// Nur diese beiden Maschinen haben ein festes Plattenraster
 /// (Bratstraße 10+10, Dampftunnel 12). Alle anderen bekommen das
 /// freie Notizfeld „Maschineneinstellungen".
-bool _istPlattenMaschine(String maschineName) {
+bool istPlattenMaschine(String maschineName) {
   final n = maschineName.toLowerCase();
   return n.contains('bratstra') || n.contains('dampftunnel');
 }
 
-bool _istDampftunnelMaschine(String maschineName) =>
+bool istDampftunnelMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('dampftunnel');
 
 bool _istBratstrasseMaschine(String maschineName) =>
@@ -1554,8 +1554,8 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           // Bewusst an der MASCHINE festgemacht, nicht an der Abteilung:
           // der Schockfroster steht in der Abteilung Bratstraße, braucht
           // aber ein Notizfeld statt eines Plattenrasters.
-          if (_istPlattenMaschine(maschineName)) ...[
-            if (_istDampftunnelMaschine(maschineName))
+          if (istPlattenMaschine(maschineName)) ...[
+            if (istDampftunnelMaschine(maschineName))
               _InlineHinweis(productId: s.productId),
             _PlattenSchemaBereich(
               step: s,

@@ -186,14 +186,30 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
       themeMode: themeMode,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
-      // App-weite Skalierung: in den Einstellungen frei wählbar
-      // (25 %…200 %). Wirkt über textScaler auf die gesamte Schrift.
+      // App-weite Skalierung: in den Einstellungen frei wählbar (25 %…200 %).
+      //
+      // Damit die GESAMTE Oberfläche wächst (Schrift, Icons, feste Höhen,
+      // Abstände) und nicht nur der Text, skalieren wir den kompletten
+      // Widget-Baum mit Transform.scale. Damit das Layout weiß, dass ihm
+      // nun mehr/weniger logischer Platz zur Verfügung steht, passen wir
+      // gleichzeitig die MediaQuery-Größe an — sonst würde der Inhalt am
+      // Rand abgeschnitten. So bleiben Text und Kästchen im Verhältnis.
       builder: (context, child) {
-        final mq = MediaQuery.of(context);
+        final safe = child ?? const SizedBox.shrink();
         final scale = ref.watch(uiScaleProvider);
+        if (scale == 1.0) return safe;
+        final mq = MediaQuery.of(context);
         return MediaQuery(
-          data: mq.copyWith(textScaler: TextScaler.linear(scale)),
-          child: child ?? const SizedBox.shrink(),
+          data: mq.copyWith(size: mq.size / scale),
+          child: Transform.scale(
+            scale: scale,
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: mq.size.width / scale,
+              height: mq.size.height / scale,
+              child: safe,
+            ),
+          ),
         );
       },
     );

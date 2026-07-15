@@ -8,6 +8,11 @@ import 'package:xml/xml.dart';
 import '../database/database.dart';
 import 'excel_import_service_v3.dart';
 
+/// Name der Notiz-Parameterzeile (identisch zur App-Konstante in
+/// article_detail_screen.dart) — hier lokal, um keine Flutter-Abhängigkeit
+/// in den Export zu ziehen.
+const String kMaschinenNotizParam = 'Maschineneinstellungen';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis-Klasse
 // ═══════════════════════════════════════════════════════════════════════════
@@ -851,12 +856,18 @@ class ExcelExportServiceV3 {
         );
       }
       if (labelRows.zeitRow != null && step.basisDauerMinuten > 0) {
-        final bruchteilTag = step.basisDauerMinuten / (24 * 60);
-        _setzeZelleZahl(
+        // Als lesbaren „h:mm"-Text schreiben (z.B. 2:05) — nicht als
+        // Tagesbruchteil-Zahl (0.086…), die ohne Zeitformat als nackte
+        // Dezimalzahl erschiene. Die App liest diesen Text beim Import
+        // korrekt zurück.
+        final gesamt = step.basisDauerMinuten.round();
+        final std = gesamt ~/ 60;
+        final min = gesamt % 60;
+        _setzeZelleInlineStr(
           sheetData,
           row: labelRows.zeitRow!,
           colLetter: colLetter,
-          wert: bruchteilTag,
+          wert: '$std:${min.toString().padLeft(2, '0')}',
         );
       }
       // Fixe Zeit / Durchlauf — als Minuten-Zahl (nur wenn Zeile vorhanden).
@@ -902,6 +913,13 @@ class ExcelExportServiceV3 {
             colLetter: colLetter,
             wert: wert,
           );
+          // Lange Freitexte (v.a. „Maschineneinstellungen") brauchen eine
+          // höhere Zeile, sonst schneidet Excel den umbrochenen Text ab.
+          if (param.parameterName == kMaschinenNotizParam ||
+              wert.length > 40 ||
+              wert.contains('\n')) {
+            _setzeZeilenHoehe(sheetData, row: paramRow, mindestHoehe: 60);
+          }
         }
         parameterAktualisiert++;
       }
@@ -1508,6 +1526,21 @@ class ExcelExportServiceV3 {
         : wert.toString();
     v.children.add(XmlText(zahlStr));
     cell.children.add(v);
+  }
+
+  /// Setzt die Höhe einer Zeile auf mindestens [mindestHoehe] Punkte, damit
+  /// umbrochener Text (z.B. lange Maschineneinstellungen) vollständig sichtbar
+  /// ist. Bestehende größere Höhen bleiben erhalten.
+  void _setzeZeilenHoehe(
+    XmlElement sheetData, {
+    required int row,
+    required double mindestHoehe,
+  }) {
+    final rowEl = _findeOderLegeRowAn(sheetData, row);
+    final alt = double.tryParse(rowEl.getAttribute('ht') ?? '');
+    if (alt != null && alt >= mindestHoehe) return;
+    rowEl.setAttribute('ht', mindestHoehe.toString());
+    rowEl.setAttribute('customHeight', '1');
   }
 
   XmlElement _findeOderLegeRowAn(XmlElement sheetData, int rowNum) {

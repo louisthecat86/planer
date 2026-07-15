@@ -390,12 +390,26 @@ class ArticlePrintService {
       kennwerte.add((label: 'Wartezeit (min)', wert: _fmt(wz)));
     }
 
-    // Plattenschema ermitteln (nur Bratstraße)
-    final typ = step.abteilung == kAbteilungBratstrasseDb
+    // Plattenschema nur bei den Maschinen Bratstraße/Dampftunnel — NICHT
+    // an der Abteilung festmachen: Verbufa/Füllmaschine stehen in der
+    // Abteilung Bratstraße, haben aber kein Plattenraster.
+    final typ = istPlattenMaschine(maschinenName)
         ? _ermittlePlattenTyp(parameter)
         : null;
 
-    // Sichtbare Parameter (versteckte Platten-Parameter + Marker raus,
+    // Freies Notizfeld „Maschineneinstellungen" — für alle Maschinen außer
+    // Bratstraße/Dampftunnel. Es ist als verstecktes Parameter markiert
+    // (damit es nicht doppelt in der Liste steht), muss aber im Druck
+    // sichtbar sein.
+    final notiz = istPlattenMaschine(maschinenName)
+        ? null
+        : parameter
+            .where((p) => p.parameterName == kMaschinenNotizParam)
+            .where((p) => p.wert != null && p.wert!.trim().isNotEmpty)
+            .map((p) => p.wert!.trim())
+            .firstOrNull;
+
+    // Sichtbare Parameter (versteckte Platten-/Notiz-Parameter + Marker raus,
     // leere Werte raus), nach Gruppe geordnet
     final sichtbare = parameter
         .where((p) => !istVerstecktesPlattenParam(p.parameterName))
@@ -458,6 +472,32 @@ class ArticlePrintService {
           if (typ != null) ...[
             pw.SizedBox(height: 6),
             _plattenRaster(typ, parameter),
+          ],
+
+          // Freitext „Maschineneinstellungen"
+          if (notiz != null) ...[
+            pw.SizedBox(height: 6),
+            pw.Text(
+              'MASCHINENEINSTELLUNGEN',
+              style: pw.TextStyle(
+                fontSize: 7,
+                fontWeight: pw.FontWeight.bold,
+                color: PdfColors.grey700,
+              ),
+            ),
+            pw.SizedBox(height: 2),
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.all(5),
+              decoration: pw.BoxDecoration(
+                color: PdfColors.grey100,
+                borderRadius: pw.BorderRadius.circular(3),
+              ),
+              child: pw.Text(
+                notiz,
+                style: const pw.TextStyle(fontSize: 8.5),
+              ),
+            ),
           ],
 
           // Parameter nach Gruppen
