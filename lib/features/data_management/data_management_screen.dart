@@ -505,17 +505,37 @@ class _DataManagementScreenState
                   ),
                 )
               else ...[
-                Text(
-                  'Backups in deinem App-Ordner (${_backups.length}):',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 8),
-                ..._backups.map(
-                  (b) => _BackupListenEintrag(
-                    info: b,
-                    onRestore:
-                        _busy ? null : () => _backupWiederherstellen(b),
-                    onDelete: _busy ? null : () => _backupLoeschen(b),
+                // Einklappbar: die Backup-Liste ist im Alltag Beiwerk und
+                // soll die Übersicht nicht füllen. Standardmäßig zugeklappt;
+                // die Kopfzeile zeigt weiterhin die Anzahl.
+                Theme(
+                  data: Theme.of(context)
+                      .copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: const EdgeInsets.only(top: 4),
+                    initiallyExpanded: false,
+                    leading: const Icon(Icons.inventory_2_outlined, size: 20),
+                    title: Text(
+                      'Vorhandene Backups (${_backups.length})',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    subtitle: Text(
+                      'Zum Wiederherstellen oder Löschen ausklappen',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    children: [
+                      ..._backups.map(
+                        (b) => _BackupListenEintrag(
+                          info: b,
+                          onRestore:
+                              _busy ? null : () => _backupWiederherstellen(b),
+                          onDelete: _busy ? null : () => _backupLoeschen(b),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
