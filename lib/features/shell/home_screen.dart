@@ -91,6 +91,13 @@ class HomeScreen extends ConsumerWidget {
             onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
+            icon: Icons.fact_check_rounded,
+            label: 'Produktionserfassung',
+            subtitle: 'Ist-Daten der Woche erfassen → Historie',
+            color: const Color(0xFFEF6C00),
+            onTap: () => context.pushNamed('erfassung'),
+          ),
+          _NavigationTile(
             icon: Icons.history_rounded,
             label: 'Wochen-Historie',
             subtitle: 'Archivierte Wochenpläne & Kennzahlen',
