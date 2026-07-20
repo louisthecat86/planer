@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/sheet_utils.dart';
 import '../../core/services/auto_backup_trigger.dart';
 
 // ---------------------------------------------------------------------------
@@ -315,7 +316,7 @@ class BedarfScreen extends ConsumerWidget {
     WidgetRef ref,
     Demand? vorhanden,
   ) async {
-    final geaendert = await showModalBottomSheet<bool>(
+    final geaendert = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

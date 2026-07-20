@@ -10,6 +10,7 @@ import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
 import 'board_print_service.dart';
+import '../../core/utils/sheet_utils.dart';
 import 'board_providers.dart';
 
 const double _kLabelWidth = 148;
@@ -201,7 +202,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     final selTag = DateTime(sel.year, sel.month, sel.day);
     final initial = board.tage.contains(selTag) ? selTag : board.tage.first;
 
-    final geaendert = await showModalBottomSheet<bool>(
+    final geaendert = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

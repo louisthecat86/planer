@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../board/board_providers.dart';
+import '../../core/utils/sheet_utils.dart';
 import 'produktion_erfassen_sheet.dart';
 import 'whiteboard_provider.dart';
 
@@ -18,7 +19,7 @@ Future<bool> showTaskDetailSheet(
   WidgetRef ref,
   WhiteboardTask wbTask,
 ) async {
-  final result = await showModalBottomSheet<bool>(
+  final result = await showSheetOhneAnimation<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -300,7 +301,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   /// Ist-Werte in die Excel-Historie (einzige Datenquelle).
   Future<void> _produktionErfassen() async {
     final task = widget.wbTask.task;
-    final erfasst = await showModalBottomSheet<bool>(
+    final erfasst = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

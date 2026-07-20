@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/sheet_utils.dart';
 import '../whiteboard/produktion_erfassen_sheet.dart';
 
 // ---------------------------------------------------------------------------
@@ -16,17 +17,11 @@ class GeplanteProduktion {
     required this.task,
     required this.artikelName,
     required this.artikelNummer,
-    required this.bereitsErfasst,
   });
 
   final ProductionTask task;
   final String artikelName;
   final String artikelNummer;
-
-  /// Für diesen Artikel wurde an diesem Tag bereits eine Historienzeile
-  /// erfasst — dient nur als Hinweis, blockiert aber nichts (man kann
-  /// mehrere Chargen erfassen).
-  final bool bereitsErfasst;
 
   double get mengeKg => task.fertigMengeKg ?? task.mengeKg;
 }
@@ -80,14 +75,15 @@ final erfassungWocheDatenProvider = FutureProvider<
   final gruppen = <DateTime, List<GeplanteProduktion>>{};
   for (final t in tasks) {
     final tag = DateTime(t.datum.year, t.datum.month, t.datum.day);
+    // Sobald für diesen Artikel an diesem Tag eine Historie erfasst wurde,
+    // gilt die Produktion als erledigt und verschwindet aus der Liste.
+    if (erfassteKeys.contains(schluessel(t.productId, tag))) continue;
     final p = byId[t.productId];
     gruppen.putIfAbsent(tag, () => []).add(
           GeplanteProduktion(
             task: t,
             artikelName: p?.artikelbezeichnung ?? 'Unbekannt',
             artikelNummer: p?.artikelnummer ?? '—',
-            bereitsErfasst:
-                erfassteKeys.contains(schluessel(t.productId, tag)),
           ),
         );
   }
@@ -237,7 +233,7 @@ class ProduktionErfassungScreen extends ConsumerWidget {
     WidgetRef ref,
     GeplanteProduktion prod,
   ) async {
-    final erfasst = await showModalBottomSheet<bool>(
+    final erfasst = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -306,40 +302,11 @@ class _ProduktionKarte extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              if (prod.bereitsErfasst)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.check_circle,
-                        size: 14,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'erfasst',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                FilledButton.tonalIcon(
-                  onPressed: onErfassen,
-                  icon: const Icon(Icons.edit_note, size: 18),
-                  label: const Text('Erfassen'),
-                ),
+              FilledButton.tonalIcon(
+                onPressed: onErfassen,
+                icon: const Icon(Icons.edit_note, size: 18),
+                label: const Text('Erfassen'),
+              ),
             ],
           ),
         ),
