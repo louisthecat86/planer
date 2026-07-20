@@ -42,23 +42,23 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/intro',
         name: 'intro',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const IntroScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: IntroScreen(),
         ),
       ),
       GoRoute(
         path: '/home',
         name: 'home',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const HomeScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: HomeScreen(),
         ),
       ),
       // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
       GoRoute(
         path: '/articles',
         name: 'articles',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const ArticleListScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ArticleListScreen(),
         ),
       ),
       GoRoute(
@@ -75,24 +75,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/bedarf',
         name: 'bedarf',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const BedarfScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: BedarfScreen(),
         ),
       ),
       // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
       GoRoute(
         path: '/erfassung',
         name: 'erfassung',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const ProduktionErfassungScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ProduktionErfassungScreen(),
         ),
       ),
       // Planung ansehen: das Board (Woche/Tag).
       GoRoute(
         path: '/board',
         name: 'board',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const WeekBoardScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: WeekBoardScreen(),
         ),
       ),
       // Planen: dasselbe Board, öffnet direkt den Produkt-planen-Dialog.
@@ -106,8 +106,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/history',
         name: 'wochenHistorie',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const WeekSnapshotArchiveScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: WeekSnapshotArchiveScreen(),
         ),
       ),
       GoRoute(
@@ -123,8 +123,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         name: 'settings',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const SettingsScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: SettingsScreen(),
         ),
       ),
       // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den
@@ -132,15 +132,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/data',
         name: 'data',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const DataManagementScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: DataManagementScreen(),
         ),
       ),
       GoRoute(
         path: '/capacity',
         name: 'capacity',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const CapacityDetailScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: CapacityDetailScreen(),
         ),
       ),
       // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
@@ -154,8 +154,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/import',
         name: 'import',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: const ExcelImportScreen(),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ExcelImportScreen(),
         ),
       ),
     ],
