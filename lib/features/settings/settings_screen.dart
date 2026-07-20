@@ -34,7 +34,7 @@ class SettingsScreen extends ConsumerWidget {
             icon: Icons.bar_chart_rounded,
             color: const Color(0xFF1565C0),
             title: 'Kapazität',
-            subtitle: 'Verfügbare Stunden je Abteilung (Standard 8 h/Tag)',
+            subtitle: 'Verfügbare Stunden je Abteilung (Standard 9 h/Tag)',
             onTap: () => context.pushNamed('capacity'),
           ),
           const SizedBox(height: 24),

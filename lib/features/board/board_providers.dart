@@ -6,9 +6,11 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/department_capacity_provider.dart';
 
-/// Standard-Kapazität pro Abteilung und Tag in Minuten (8 h), wenn für die
-/// Abteilung kein abweichender Wert gepflegt ist.
-const double kStandardKapazitaetMinuten = 480;
+/// Standard-Kapazität pro Abteilung und Tag in Minuten (9 h), wenn für die
+/// Abteilung kein abweichender Wert gepflegt ist. Die Abteilungen arbeiten
+/// regulär 9 Stunden; abweichende Zeiten lassen sich je Abteilung unter
+/// „Einstellungen → Kapazität" pflegen.
+const double kStandardKapazitaetMinuten = 540;
 
 /// Auslastungs-Status einer Abteilung an einem Tag — steuert die Ampelfarbe
 /// auf dem Board.

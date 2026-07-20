@@ -95,7 +95,7 @@ class _ParsedMachine {
     required this.abteilungDb,
     this.typischeParameter,
     this.istPlanungsressource = false,
-    this.kapazitaetMinutenProTag = 480,
+    this.kapazitaetMinutenProTag = 540,
     this.eignungHinweis,
   });
 
@@ -705,7 +705,7 @@ class ExcelImportServiceV3 {
       final spurText = (_cellStr(sheet.rows[r], 3) ?? '').trim().toLowerCase();
       final istRessource =
           spurText == 'x' || spurText == 'ja' || spurText == '1';
-      // Spalte E: Kapazität in Stunden (leer -> 8 h)
+      // Spalte E: Kapazität in Stunden (leer -> 9 h)
       final kapText = _cellStr(sheet.rows[r], 4);
       final kapStunden =
           double.tryParse((kapText ?? '').replaceAll(',', '.')) ?? 8.0;

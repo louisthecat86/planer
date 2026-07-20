@@ -2484,7 +2484,7 @@ class $MachinesTable extends Machines with TableInfo<$MachinesTable, Machine> {
       GeneratedColumn<double>('kapazitaet_minuten_pro_tag', aliasedName, false,
           type: DriftSqlType.double,
           requiredDuringInsert: false,
-          defaultValue: const Constant(480));
+          defaultValue: const Constant(540));
   static const VerificationMeta _eignungHinweisMeta =
       const VerificationMeta('eignungHinweis');
   @override
@@ -2657,7 +2657,7 @@ class Machine extends DataClass implements Insertable<Machine> {
   /// (Normalfall, z.B. eine Bratstraßen-Linie).
   final bool istPlanungsressource;
 
-  /// Tageskapazität dieser Anlage in Minuten (Standard: 8 h).
+  /// Tageskapazität dieser Anlage in Minuten (Standard: 9 h).
   /// Nur relevant, wenn [istPlanungsressource] gesetzt ist.
   final double kapazitaetMinutenProTag;
 

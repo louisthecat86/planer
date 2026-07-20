@@ -53,7 +53,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -234,7 +234,7 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists(
               'machines',
               'kapazitaet_minuten_pro_tag',
-              'REAL NOT NULL DEFAULT 480',
+              'REAL NOT NULL DEFAULT 540',
             );
             await _addColumnIfNotExists(
               'machines',
@@ -285,6 +285,19 @@ class AppDatabase extends _$AppDatabase {
             await customStatement(
               'CREATE INDEX IF NOT EXISTS idx_production_tasks_bedarf '
               'ON production_tasks(bedarf_id)',
+            );
+          }
+
+          // --- v10 -> v11: Regelarbeitszeit 8 h -> 9 h ------------------
+          //
+          // Die Abteilungen arbeiten regulär 9 Stunden. Wir heben nur die
+          // Anlagen, die noch exakt auf dem alten Default (480 min = 8 h)
+          // stehen — also nie manuell angepasst wurden. Wer bereits einen
+          // abweichenden Wert gepflegt hat, behält ihn.
+          if (from < 11) {
+            await customStatement(
+              'UPDATE machines SET kapazitaet_minuten_pro_tag = 540 '
+              'WHERE kapazitaet_minuten_pro_tag = 480',
             );
           }
         },
