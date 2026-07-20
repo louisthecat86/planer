@@ -15,6 +15,7 @@ Future<T?> showSheetOhneAnimation<T>({
   bool useSafeArea = false,
   bool showDragHandle = false,
   BoxConstraints? constraints,
+  ShapeBorder? shape,
 }) {
   // Ein AnimationController mit Duration.zero unterdrückt das Ein- und
   // Ausfahren. Der Controller wird von showModalBottomSheet verwaltet und
@@ -31,6 +32,7 @@ Future<T?> showSheetOhneAnimation<T>({
     useSafeArea: useSafeArea,
     showDragHandle: showDragHandle,
     constraints: constraints,
+    shape: shape,
     transitionAnimationController: controller,
     builder: builder,
   ).whenComplete(controller.dispose);
