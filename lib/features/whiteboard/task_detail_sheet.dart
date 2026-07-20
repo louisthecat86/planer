@@ -6,9 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
-import '../board/board_providers.dart';
 import '../../core/utils/sheet_utils.dart';
-import 'produktion_erfassen_sheet.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
@@ -295,35 +293,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       return 'Schätzwert aus Stammdaten — noch keine Messungen erfasst';
     }
     return 'Platzhalter — Stammdaten noch nicht gepflegt';
-  }
-
-  /// Öffnet den Dialog zum Abschließen einer Produktion und schreibt die
-  /// Ist-Werte in die Excel-Historie (einzige Datenquelle).
-  Future<void> _produktionErfassen() async {
-    final task = widget.wbTask.task;
-    final erfasst = await showSheetOhneAnimation<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      constraints: const BoxConstraints(maxWidth: 560),
-      builder: (_) => ProduktionErfassenSheet(
-        productId: task.productId,
-        vorschlagMengeKg: double.tryParse(
-              _mengeController.text.replaceAll(',', '.'),
-            ) ??
-            task.mengeKg,
-        vorschlagDatum: task.datum,
-        vorschlagStart: _startZeitController.text.trim().isEmpty
-            ? null
-            : _startZeitController.text.trim(),
-      ),
-    );
-    if (erfasst == true && mounted) {
-      // Erfassung floss in die Historie — Board/Schätzungen neu laden.
-      ref.invalidate(weekBoardProvider);
-      Navigator.of(context).pop();
-    }
   }
 
   Future<void> _save() async {
@@ -619,48 +588,12 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
               const SizedBox(height: 14),
 
-              // Dauer — vom System aus der Menge und der Historie berechnet.
-              // Mitarbeiter spielen bei der Planung keine Rolle mehr und
-              // werden hier nicht mehr abgefragt.
-              TextField(
-                controller: _dauerController,
-                decoration: InputDecoration(
-                  labelText: 'Geschätzte Dauer (min)',
-                  helperText: _dauerHinweis(),
-                  suffixText: _step != null &&
-                          (_step!.dauerStdAbweichung ?? 0) > 0
-                      ? '± ${(_step!.dauerStdAbweichung ?? 0).toStringAsFixed(0)}'
-                      : null,
-                ),
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                ],
-                onChanged: (_) => setState(() => _isDirty = true),
-              ),
-
-              const SizedBox(height: 14),
-
-              // Startzeit
-              TextField(
-                controller: _startZeitController,
-                decoration: const InputDecoration(
-                  labelText: 'Startzeit (HH:MM)',
-                  hintText: '08:30',
-                ),
-                onChanged: (_) => setState(() => _isDirty = true),
-              ),
-
-              const SizedBox(height: 14),
-
-              // Notizen
-              TextField(
-                controller: _notizenController,
-                decoration: const InputDecoration(
-                  labelText: 'Notizen',
-                ),
-                maxLines: 3,
-                onChanged: (_) => setState(() => _isDirty = true),
+              // Dauer — reine Anzeige, vom System aus Menge und Historie
+              // berechnet. Hier NICHT editierbar: Im Wochenplan-Sheet soll
+              // nur die Menge angepasst werden, sonst nichts.
+              _DauerAnzeige(
+                dauerController: _dauerController,
+                hinweis: _dauerHinweis(),
               ),
 
               // Historische Basisdaten (Info-Box)
@@ -705,18 +638,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
               ),
 
               const SizedBox(height: 8),
-
-              // Produktion abschließen: erfasst die Ist-Werte in die
-              // Excel-Historie und verbessert damit künftige Schätzungen.
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: OutlinedButton.icon(
-                  onPressed: _isSaving ? null : _produktionErfassen,
-                  icon: const Icon(Icons.fact_check_outlined, size: 20),
-                  label: const Text('Produktion abschließen & erfassen'),
-                ),
-              ),
 
               const SizedBox(height: 8),
               Center(
@@ -827,3 +748,78 @@ class _HistoryInfoBox extends StatelessWidget {
 /// und Zeiten und schreibt daraus eine Zeile in die Excel-Historie. Die
 /// abgeleiteten Kennzahlen (Verlust, kg/h, Produktionszeit) werden live
 /// vorgerechnet, damit man vor dem Speichern sieht, was gespeichert wird.
+
+/// Reine Anzeige der geschätzten Dauer (nicht editierbar). Im Wochenplan-
+/// Sheet soll nur die Menge angepasst werden; die Dauer errechnet das
+/// System aus Menge und Historie und wird hier nur informativ gezeigt.
+class _DauerAnzeige extends StatelessWidget {
+  const _DauerAnzeige({required this.dauerController, this.hinweis});
+
+  final TextEditingController dauerController;
+  final String? hinweis;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.outline.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.schedule,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Geschätzte Dauer',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                if (hinweis != null)
+                  Text(
+                    hinweis!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant
+                          .withValues(alpha: 0.7),
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Der Wert kommt aus demselben Controller, den die Mengen-Logik
+          // fortschreibt — er aktualisiert sich also live beim Ändern der
+          // Menge. AnimatedBuilder hält die Anzeige synchron.
+          AnimatedBuilder(
+            animation: dauerController,
+            builder: (context, _) {
+              final txt = dauerController.text.trim();
+              return Text(
+                txt.isEmpty ? '–' : '$txt min',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}

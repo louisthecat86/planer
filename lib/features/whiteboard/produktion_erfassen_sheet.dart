@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/produktion_erfassen_service.dart';
+import '../articles/article_detail_screen.dart';
 
 class ProduktionErfassenSheet extends ConsumerStatefulWidget {
   const ProduktionErfassenSheet({
@@ -87,6 +88,9 @@ class ProduktionErfassenSheetState
     ref
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Produktion erfasst');
+    // Artikel-Historie neu laden — sonst zeigt die Artikelansicht den
+    // gecachten (alten) Stand ohne die eben erfasste Zeile.
+    ref.invalidate(productionHistoryProvider(widget.productId));
     if (mounted) Navigator.of(context).pop(true);
   }
 
