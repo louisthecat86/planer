@@ -22,20 +22,6 @@ final _artikelAnzahlProvider = FutureProvider<int>((ref) async {
   return rows.length;
 });
 
-/// Anzahl der für heute geplanten Aufgaben (für die Kennzahl im Kopf).
-final _heutigeAufgabenProvider = FutureProvider<int>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final jetzt = DateTime.now();
-  final start = DateTime(jetzt.year, jetzt.month, jetzt.day);
-  final ende = start.add(const Duration(days: 1));
-  final rows = await (db.select(db.productionTasks)
-        ..where((t) => t.deletedAt.isNull())
-        ..where((t) => t.datum.isBiggerOrEqualValue(start))
-        ..where((t) => t.datum.isSmallerThanValue(ende)))
-      .get();
-  return rows.length;
-});
-
 /// Startbildschirm:
 /// Kopf mit Datum + Kennzahlen, darunter zwei Ebenen — oben der tägliche
 /// Arbeitsablauf (Bedarf → Planung → Erfassung → Historie) als große
@@ -209,7 +195,6 @@ class _KopfBereich extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final artikel = ref.watch(_artikelAnzahlProvider);
-    final aufgaben = ref.watch(_heutigeAufgabenProvider);
 
     final heute = DateTime.now();
     final datum = '${_kWochentage[heute.weekday - 1]}, '
@@ -239,7 +224,6 @@ class _KopfBereich extends ConsumerWidget {
     }
 
     final artikelAnzahl = artikel.valueOrNull;
-    final aufgabenAnzahl = aufgaben.valueOrNull;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -249,22 +233,6 @@ class _KopfBereich extends ConsumerWidget {
           style: theme.textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.w700,
           ),
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            _StatChip(
-              icon: Icons.inventory_2_outlined,
-              label: 'Artikel',
-              wert: artikelAnzahl?.toString() ?? '…',
-            ),
-            const SizedBox(width: 8),
-            _StatChip(
-              icon: Icons.task_alt,
-              label: 'Aufgaben heute',
-              wert: aufgabenAnzahl?.toString() ?? '…',
-            ),
-          ],
         ),
         // Erste-Schritte-Hinweis nur, wenn noch keine Artikel da sind
         if (artikelAnzahl == 0) ...[
@@ -293,53 +261,6 @@ class _KopfBereich extends ConsumerWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// Kleine Kennzahl-Pille im Kopfbereich.
-class _StatChip extends StatelessWidget {
-  const _StatChip({
-    required this.icon,
-    required this.label,
-    required this.wert,
-  });
-
-  final IconData icon;
-  final String label;
-  final String wert;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
-          Text(
-            wert,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -101,11 +101,29 @@ final erfassungWocheDatenProvider = FutureProvider<
 
 const _wochentage = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
 
-class ProduktionErfassungScreen extends ConsumerWidget {
+class ProduktionErfassungScreen extends ConsumerStatefulWidget {
   const ProduktionErfassungScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProduktionErfassungScreen> createState() =>
+      _ProduktionErfassungScreenState();
+}
+
+class _ProduktionErfassungScreenState
+    extends ConsumerState<ProduktionErfassungScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Beim Öffnen frische Daten ziehen — so erscheinen Produktionen, die
+    // gerade erst in der Planung angelegt wurden, sofort, ohne dass man
+    // erst die Woche wechseln muss.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.invalidate(erfassungWocheDatenProvider);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final montag = ref.watch(erfassungWocheProvider);
     final async = ref.watch(erfassungWocheDatenProvider);
@@ -114,6 +132,13 @@ class ProduktionErfassungScreen extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Produktionserfassung'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Aktualisieren',
+            onPressed: () => ref.invalidate(erfassungWocheDatenProvider),
+          ),
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Padding(
