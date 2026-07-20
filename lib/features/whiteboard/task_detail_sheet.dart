@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
-import '../../core/services/produktion_erfassen_service.dart';
 import '../board/board_providers.dart';
 import 'produktion_erfassen_sheet.dart';
 import 'whiteboard_provider.dart';

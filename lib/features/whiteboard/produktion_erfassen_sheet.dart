@@ -7,6 +7,7 @@ import '../../core/services/produktion_erfassen_service.dart';
 
 class ProduktionErfassenSheet extends ConsumerStatefulWidget {
   const ProduktionErfassenSheet({
+    super.key,
     required this.productId,
     required this.vorschlagMengeKg,
     required this.vorschlagDatum,
