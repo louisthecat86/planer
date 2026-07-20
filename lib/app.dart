@@ -42,92 +42,121 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/intro',
         name: 'intro',
-        builder: (context, state) => const IntroScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const IntroScreen(),
+        ),
       ),
       GoRoute(
         path: '/home',
         name: 'home',
-        builder: (context, state) => const HomeScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const HomeScreen(),
+        ),
       ),
       // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
       GoRoute(
         path: '/articles',
         name: 'articles',
-        builder: (context, state) => const ArticleListScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const ArticleListScreen(),
+        ),
       ),
       GoRoute(
         path: '/article/:productId',
         name: 'articleDetail',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final productId = state.pathParameters['productId']!;
-          return ArticleDetailScreen(productId: productId);
+          return NoTransitionPage(
+            child: ArticleDetailScreen(productId: productId),
+          );
         },
       ),
       // Bedarfsliste: WAS muss produziert werden (Auslöser der Planung).
       GoRoute(
         path: '/bedarf',
         name: 'bedarf',
-        builder: (context, state) => const BedarfScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const BedarfScreen(),
+        ),
       ),
       // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
       GoRoute(
         path: '/erfassung',
         name: 'erfassung',
-        builder: (context, state) => const ProduktionErfassungScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const ProduktionErfassungScreen(),
+        ),
       ),
       // Planung ansehen: das Board (Woche/Tag).
       GoRoute(
         path: '/board',
         name: 'board',
-        builder: (context, state) => const WeekBoardScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const WeekBoardScreen(),
+        ),
       ),
       // Planen: dasselbe Board, öffnet direkt den Produkt-planen-Dialog.
       GoRoute(
         path: '/board/planen',
         name: 'boardPlanen',
-        builder: (context, state) =>
-            const WeekBoardScreen(oeffnePlanenDirekt: true),
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: WeekBoardScreen(oeffnePlanenDirekt: true),
+        ),
       ),
       GoRoute(
         path: '/history',
         name: 'wochenHistorie',
-        builder: (context, state) => const WeekSnapshotArchiveScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const WeekSnapshotArchiveScreen(),
+        ),
       ),
       GoRoute(
         path: '/history/:snapshotId',
         name: 'wochenHistorieDetail',
-        builder: (context, state) => WeekSnapshotDetailScreen(
-          snapshotId: state.pathParameters['snapshotId']!,
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: WeekSnapshotDetailScreen(
+            snapshotId: state.pathParameters['snapshotId']!,
+          ),
         ),
       ),
       // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
       GoRoute(
         path: '/settings',
         name: 'settings',
-        builder: (context, state) => const SettingsScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const SettingsScreen(),
+        ),
       ),
       // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den
       // Einstellungen aus verlinkt.
       GoRoute(
         path: '/data',
         name: 'data',
-        builder: (context, state) => const DataManagementScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const DataManagementScreen(),
+        ),
       ),
       GoRoute(
         path: '/capacity',
         name: 'capacity',
-        builder: (context, state) => const CapacityDetailScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const CapacityDetailScreen(),
+        ),
       ),
       // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
       GoRoute(
         path: '/backup',
         name: 'backup',
-        builder: (context, state) => BackupManagementScreen(database: db),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: BackupManagementScreen(database: db),
+        ),
       ),
       GoRoute(
         path: '/import',
         name: 'import',
-        builder: (context, state) => const ExcelImportScreen(),
+        pageBuilder: (context, state) => NoTransitionPage(
+          child: const ExcelImportScreen(),
+        ),
       ),
     ],
   );
