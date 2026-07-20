@@ -37,10 +37,10 @@ final _heutigeAufgabenProvider = FutureProvider<int>((ref) async {
 });
 
 /// Startbildschirm:
-/// Kopf mit Datum + Kennzahlen, darunter die vier Bereichs-Kacheln.
-///
-/// Stammdaten (Excel-Import/-Export, Backup) und die Kapazität liegen
-/// unter „Einstellungen".
+/// Kopf mit Datum + Kennzahlen, darunter zwei Ebenen — oben der tägliche
+/// Arbeitsablauf (Bedarf → Planung → Erfassung → Historie) als große
+/// farbige Kacheln, darunter „Stammdaten und Verwaltung" (Artikel,
+/// Einstellungen) als kleinere, ruhigere Kacheln.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
@@ -62,69 +62,108 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildTileGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final crossAxisCount = constraints.maxWidth > 600 ? 4 : 2;
+        final breit = constraints.maxWidth > 600;
+        final ablaufSpalten = breit ? 4 : 2;
         const spacing = 12.0;
-        final tileWidth =
-            (constraints.maxWidth - spacing * (crossAxisCount - 1)) /
-                crossAxisCount;
+        final ablaufBreite =
+            (constraints.maxWidth - spacing * (ablaufSpalten - 1)) /
+                ablaufSpalten;
 
-        final tiles = [
-          _NavigationTile(
-            icon: Icons.inventory_2_rounded,
-            label: 'Artikel',
-            subtitle: 'Abläufe, Maschinen, Zeiten & Historie pflegen',
-            color: const Color(0xFF1565C0),
-            onTap: () => context.pushNamed('articles'),
-          ),
+        // ── Arbeitsablauf: die täglich benutzten Bereiche, in der
+        //    Reihenfolge des Arbeitstages. Groß und farbig. ──
+        final ablauf = [
           _NavigationTile(
             icon: Icons.playlist_add_check_rounded,
             label: 'Bedarf',
-            subtitle: 'Was produziert werden muss — Basis der Planung',
+            subtitle: 'Was produziert werden muss',
             color: const Color(0xFF6A1B9A),
             onTap: () => context.pushNamed('bedarf'),
           ),
           _NavigationTile(
             icon: Icons.calendar_view_week_rounded,
             label: 'Planung',
-            subtitle: 'Produktion einplanen & Woche/Tag im Board',
+            subtitle: 'Woche im Board einplanen',
             color: const Color(0xFF2E7D32),
             onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
             icon: Icons.fact_check_rounded,
             label: 'Produktionserfassung',
-            subtitle: 'Ist-Daten der Woche erfassen → Historie',
+            subtitle: 'Ist-Daten der Woche',
             color: const Color(0xFFEF6C00),
             onTap: () => context.pushNamed('erfassung'),
           ),
           _NavigationTile(
             icon: Icons.history_rounded,
             label: 'Wochen-Historie',
-            subtitle: 'Archivierte Wochenpläne & Kennzahlen',
+            subtitle: 'Rückblick und Kennzahlen',
             color: const Color(0xFF00897B),
             onTap: () => context.pushNamed('wochenHistorie'),
           ),
-          _NavigationTile(
+        ];
+
+        // ── Verwaltung: seltener gebraucht, bewusst kleiner und ruhiger. ──
+        final verwaltung = [
+          _KompakteKachel(
+            icon: Icons.inventory_2_rounded,
+            label: 'Artikel',
+            subtitle: 'Abläufe, Maschinen, Zeiten',
+            farbe: const Color(0xFF5C9CE6),
+            onTap: () => context.pushNamed('articles'),
+          ),
+          _KompakteKachel(
             icon: Icons.settings_rounded,
             label: 'Einstellungen',
-            subtitle: 'Stammdaten, Excel, Backup & Kapazität',
-            color: const Color(0xFF455A64),
+            subtitle: 'Excel, Backup, Kapazität',
+            farbe: const Color(0xFF9E9E9E),
             onTap: () => context.pushNamed('settings'),
           ),
         ];
 
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: tiles
-              .map(
-                (tile) => SizedBox(
-                  width: tileWidth,
-                  height: 158,
-                  child: tile,
-                ),
-              )
-              .toList(),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _AbschnittTitel('Arbeitsablauf'),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: spacing,
+              runSpacing: spacing,
+              children: ablauf
+                  .map(
+                    (tile) => SizedBox(
+                      width: ablaufBreite,
+                      height: 158,
+                      child: tile,
+                    ),
+                  )
+                  .toList(),
+            ),
+            const SizedBox(height: 24),
+            _AbschnittTitel('Stammdaten und Verwaltung'),
+            const SizedBox(height: 10),
+            // Verwaltung schmaler halten, damit der Unterschied zum Ablauf
+            // sichtbar ist: auf breiten Schirmen nur halbe Breite.
+            SizedBox(
+              width: breit ? constraints.maxWidth * 0.6 : constraints.maxWidth,
+              child: Wrap(
+                spacing: spacing,
+                runSpacing: spacing,
+                children: verwaltung
+                    .map(
+                      (tile) => SizedBox(
+                        width: (((breit
+                                        ? constraints.maxWidth * 0.6
+                                        : constraints.maxWidth) -
+                                    spacing) /
+                                2)
+                            .clamp(140.0, double.infinity),
+                        child: tile,
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -384,6 +423,104 @@ class _NavigationTile extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kleine Abschnitts-Überschrift, die die Kachel-Ebenen sichtbar trennt.
+class _AbschnittTitel extends StatelessWidget {
+  const _AbschnittTitel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Text(
+      text.toUpperCase(),
+      style: theme.textTheme.labelMedium?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+      ),
+    );
+  }
+}
+
+/// Kompakte, ruhige Kachel für die Verwaltung — bewusst kleiner und
+/// dezenter als die farbigen Ablauf-Kacheln: dunkle Fläche, Icon links,
+/// eine Zeile Text daneben. So entsteht die Hierarchie zwischen „hier wird
+/// gearbeitet" und „hier wird eingerichtet".
+class _KompakteKachel extends StatelessWidget {
+  const _KompakteKachel({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.farbe,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color farbe;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: theme.colorScheme.outline.withValues(alpha: 0.25),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
+            children: [
+              Icon(icon, color: farbe, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.arrow_forward_rounded,
+                size: 16,
+                color: theme.colorScheme.onSurfaceVariant
+                    .withValues(alpha: 0.6),
+              ),
+            ],
           ),
         ),
       ),
