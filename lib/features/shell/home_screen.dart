@@ -62,12 +62,19 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildTileGrid(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final breit = constraints.maxWidth > 600;
-        final ablaufSpalten = breit ? 4 : 2;
+        final gesamt = constraints.maxWidth;
         const spacing = 12.0;
+
+        // Umbruch NICHT an einer festen Pixelgrenze festmachen (das bricht
+        // beim Skalieren), sondern über eine Mindestbreite je Kachel: passen
+        // vier nebeneinander, gibt es vier Spalten — sonst zwei, sonst eine.
+        // So klappt der Umbruch bei jeder Zoomstufe sauber.
+        const minAblauf = 200.0;
+        int ablaufSpalten = (gesamt / (minAblauf + spacing)).floor();
+        ablaufSpalten = ablaufSpalten.clamp(1, 4);
         final ablaufBreite =
-            (constraints.maxWidth - spacing * (ablaufSpalten - 1)) /
-                ablaufSpalten;
+            (gesamt - spacing * (ablaufSpalten - 1)) / ablaufSpalten;
+        final breit = ablaufSpalten >= 3;
 
         // ── Arbeitsablauf: die täglich benutzten Bereiche, in der
         //    Reihenfolge des Arbeitstages. Groß und farbig. ──
@@ -123,7 +130,7 @@ class HomeScreen extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _AbschnittTitel('Arbeitsablauf'),
+            _AbschnittTitel('Arbeitsablauf'),
             const SizedBox(height: 10),
             Wrap(
               spacing: spacing,
@@ -139,24 +146,20 @@ class HomeScreen extends ConsumerWidget {
                   .toList(),
             ),
             const SizedBox(height: 24),
-            const _AbschnittTitel('Stammdaten und Verwaltung'),
+            _AbschnittTitel('Stammdaten und Verwaltung'),
             const SizedBox(height: 10),
             // Verwaltung schmaler halten, damit der Unterschied zum Ablauf
-            // sichtbar ist: auf breiten Schirmen nur halbe Breite.
+            // sichtbar ist: auf breiten Schirmen nur gut halbe Breite.
             SizedBox(
-              width: breit ? constraints.maxWidth * 0.6 : constraints.maxWidth,
+              width: breit ? gesamt * 0.6 : gesamt,
               child: Wrap(
                 spacing: spacing,
                 runSpacing: spacing,
                 children: verwaltung
                     .map(
                       (tile) => SizedBox(
-                        width: (((breit
-                                        ? constraints.maxWidth * 0.6
-                                        : constraints.maxWidth) -
-                                    spacing) /
-                                2)
-                            .clamp(140.0, double.infinity),
+                        width: (((breit ? gesamt * 0.6 : gesamt) - spacing) / 2)
+                            .clamp(150.0, double.infinity),
                         child: tile,
                       ),
                     )
