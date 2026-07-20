@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/produktion_erfassen_service.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
@@ -278,6 +279,48 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           SnackBar(content: Text('Fehler beim Verteilen: $e')),
         );
       }
+    }
+  }
+
+  /// Hinweistext unter dem Dauerfeld: woher der Wert stammt.
+  String? _dauerHinweis() {
+    final step = _step;
+    if (step == null) return null;
+    if (step.basisAnzahlMessungen > 0) {
+      return 'Aus ${step.basisAnzahlMessungen} Messungen berechnet';
+    }
+    if (step.basisMengeKg > 0 && step.basisDauerMinuten > 0) {
+      return 'Schätzwert aus Stammdaten — noch keine Messungen erfasst';
+    }
+    return 'Platzhalter — Stammdaten noch nicht gepflegt';
+  }
+
+  /// Öffnet den Dialog zum Abschließen einer Produktion und schreibt die
+  /// Ist-Werte in die Excel-Historie (einzige Datenquelle).
+  Future<void> _produktionErfassen() async {
+    final task = widget.wbTask.task;
+    final erfasst = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      constraints: const BoxConstraints(maxWidth: 560),
+      builder: (_) => _ProduktionErfassenSheet(
+        productId: task.productId,
+        vorschlagMengeKg: double.tryParse(
+              _mengeController.text.replaceAll(',', '.'),
+            ) ??
+            task.mengeKg,
+        vorschlagDatum: task.datum,
+        vorschlagStart: _startZeitController.text.trim().isEmpty
+            ? null
+            : _startZeitController.text.trim(),
+      ),
+    );
+    if (erfasst == true && mounted) {
+      // Erfassung floss in die Historie — Board/Schätzungen neu laden.
+      ref.invalidate(weekBoardProvider);
+      Navigator.of(context).pop();
     }
   }
 
@@ -574,40 +617,24 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
               const SizedBox(height: 14),
 
-              // Dauer + Mitarbeiter
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _dauerController,
-                      decoration: InputDecoration(
-                        labelText: 'Dauer (min)',
-                        suffixText: _step != null
-                            ? '± ${(_step!.dauerStdAbweichung ?? 0).toStringAsFixed(0)}'
-                            : null,
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
-                      onChanged: (_) => setState(() => _isDirty = true),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _mitarbeiterController,
-                      decoration: const InputDecoration(
-                        labelText: 'Mitarbeiter',
-                      ),
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                      ],
-                      onChanged: (_) => setState(() => _isDirty = true),
-                    ),
-                  ),
+              // Dauer — vom System aus der Menge und der Historie berechnet.
+              // Mitarbeiter spielen bei der Planung keine Rolle mehr und
+              // werden hier nicht mehr abgefragt.
+              TextField(
+                controller: _dauerController,
+                decoration: InputDecoration(
+                  labelText: 'Geschätzte Dauer (min)',
+                  helperText: _dauerHinweis(),
+                  suffixText: _step != null &&
+                          (_step!.dauerStdAbweichung ?? 0) > 0
+                      ? '± ${(_step!.dauerStdAbweichung ?? 0).toStringAsFixed(0)}'
+                      : null,
+                ),
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
                 ],
+                onChanged: (_) => setState(() => _isDirty = true),
               ),
 
               const SizedBox(height: 14),
@@ -672,6 +699,20 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                         )
                       : const Icon(Icons.save),
                   label: Text(_isSaving ? 'Speichern …' : 'Speichern'),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Produktion abschließen: erfasst die Ist-Werte in die
+              // Excel-Historie und verbessert damit künftige Schätzungen.
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: OutlinedButton.icon(
+                  onPressed: _isSaving ? null : _produktionErfassen,
+                  icon: const Icon(Icons.fact_check_outlined, size: 20),
+                  label: const Text('Produktion abschließen & erfassen'),
                 ),
               ),
 
@@ -773,6 +814,320 @@ class _HistoryInfoBox extends StatelessWidget {
           Text(
             value,
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Dialog zum Abschließen einer Produktion. Erfasst Datum, Roh-/Fertigmenge
+/// und Zeiten und schreibt daraus eine Zeile in die Excel-Historie. Die
+/// abgeleiteten Kennzahlen (Verlust, kg/h, Produktionszeit) werden live
+/// vorgerechnet, damit man vor dem Speichern sieht, was gespeichert wird.
+class _ProduktionErfassenSheet extends ConsumerStatefulWidget {
+  const _ProduktionErfassenSheet({
+    required this.productId,
+    required this.vorschlagMengeKg,
+    required this.vorschlagDatum,
+    this.vorschlagStart,
+  });
+
+  final String productId;
+  final double vorschlagMengeKg;
+  final DateTime vorschlagDatum;
+  final String? vorschlagStart;
+
+  @override
+  ConsumerState<_ProduktionErfassenSheet> createState() =>
+      _ProduktionErfassenSheetState();
+}
+
+class _ProduktionErfassenSheetState
+    extends ConsumerState<_ProduktionErfassenSheet> {
+  late final TextEditingController _roh;
+  late final TextEditingController _fertig;
+  late final TextEditingController _start;
+  late final TextEditingController _ende;
+  late final TextEditingController _notizen;
+  late DateTime _datum;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Rohmenge als Vorschlag; Fertigmenge trägt der Nutzer nach dem Wiegen ein.
+    _roh = TextEditingController(
+      text: widget.vorschlagMengeKg.toStringAsFixed(0),
+    );
+    _fertig = TextEditingController();
+    _start = TextEditingController(text: widget.vorschlagStart ?? '');
+    _ende = TextEditingController();
+    _notizen = TextEditingController();
+    _datum = widget.vorschlagDatum;
+  }
+
+  @override
+  void dispose() {
+    _roh.dispose();
+    _fertig.dispose();
+    _start.dispose();
+    _ende.dispose();
+    _notizen.dispose();
+    super.dispose();
+  }
+
+  double? get _rohKg => double.tryParse(_roh.text.replaceAll(',', '.'));
+  double? get _fertigKg => double.tryParse(_fertig.text.replaceAll(',', '.'));
+
+  Future<void> _speichern() async {
+    final roh = _rohKg;
+    final fertig = _fertigKg;
+    if (roh == null || roh <= 0 || fertig == null || fertig <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte Roh- und Fertigmenge (kg) eingeben.'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    final db = ref.read(databaseProvider);
+    await ProduktionErfassenService.erfasse(
+      db: db,
+      productId: widget.productId,
+      datum: _datum,
+      kgRohware: roh,
+      kgFertigware: fertig,
+      startzeit: _start.text.trim().isEmpty ? null : _start.text.trim(),
+      endzeit: _ende.text.trim().isEmpty ? null : _ende.text.trim(),
+      notizen: _notizen.text.trim().isEmpty ? null : _notizen.text.trim(),
+    );
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Produktion erfasst');
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Live-Kennzahlen
+    final roh = _rohKg;
+    final fertig = _fertigKg;
+    final dauerMin = ProduktionErfassenService.produktionszeitMinuten(
+      _start.text.trim(),
+      _ende.text.trim(),
+    );
+    final verlust = (roh != null && roh > 0 && fertig != null)
+        ? (1 - fertig / roh)
+        : null;
+    final std = (dauerMin != null && dauerMin > 0) ? dauerMin / 60 : null;
+    final kghRoh = (roh != null && std != null) ? roh / std : null;
+    final kghGegart = (fertig != null && std != null) ? fertig / std : null;
+
+    String fmt(double? v, {int dez = 0, String einheit = ''}) =>
+        v == null ? '—' : '${v.toStringAsFixed(dez)}$einheit';
+    String fmtDauer(double? m) {
+      if (m == null) return '—';
+      final h = m ~/ 60;
+      final r = (m % 60).round();
+      return h > 0 ? '$h:${r.toString().padLeft(2, '0')} h' : '$r min';
+    }
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        16 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: ListView(
+        shrinkWrap: true,
+        children: [
+          Text(
+            'Produktion abschließen',
+            style: theme.textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Die Werte werden in die Historie geschrieben und verbessern '
+            'künftige Zeitschätzungen.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Datum
+          OutlinedButton.icon(
+            onPressed: () async {
+              final d = await showDatePicker(
+                context: context,
+                initialDate: _datum,
+                firstDate: DateTime(2020),
+                lastDate: DateTime.now().add(const Duration(days: 1)),
+              );
+              if (d != null) setState(() => _datum = d);
+            },
+            icon: const Icon(Icons.event, size: 18),
+            label: Text(
+              '${_datum.day.toString().padLeft(2, '0')}.'
+              '${_datum.month.toString().padLeft(2, '0')}.${_datum.year}',
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _roh,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Rohware',
+                    suffixText: 'kg',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _fertig,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Fertigware',
+                    suffixText: 'kg',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _start,
+                  decoration: const InputDecoration(
+                    labelText: 'Startzeit (HH:MM)',
+                    hintText: '08:30',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _ende,
+                  decoration: const InputDecoration(
+                    labelText: 'Endzeit (HH:MM)',
+                    hintText: '12:15',
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Live berechnete Kennzahlen
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surfaceContainerHighest
+                  .withValues(alpha: 0.4),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              children: [
+                _KennzahlZeile(
+                  label: 'Produktionszeit',
+                  wert: fmtDauer(dauerMin),
+                ),
+                _KennzahlZeile(
+                  label: 'Verlust',
+                  wert: verlust == null
+                      ? '—'
+                      : '${(verlust * 100).toStringAsFixed(1)} %',
+                ),
+                _KennzahlZeile(
+                  label: 'kg/h roh',
+                  wert: fmt(kghRoh, einheit: ' kg/h'),
+                ),
+                _KennzahlZeile(
+                  label: 'kg/h gegart',
+                  wert: fmt(kghGegart, einheit: ' kg/h'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          TextField(
+            controller: _notizen,
+            minLines: 2,
+            maxLines: 4,
+            decoration: const InputDecoration(
+              labelText: 'Notizen (optional)',
+              alignLabelWithHint: true,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: FilledButton.icon(
+              onPressed: _busy ? null : _speichern,
+              icon: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.check),
+              label: Text(_busy ? 'Speichern …' : 'In Historie speichern'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KennzahlZeile extends StatelessWidget {
+  const _KennzahlZeile({required this.label, required this.wert});
+
+  final String label;
+  final String wert;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+          Text(
+            wert,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
