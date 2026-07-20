@@ -123,7 +123,7 @@ class HomeScreen extends ConsumerWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _AbschnittTitel('Arbeitsablauf'),
+            const _AbschnittTitel('Arbeitsablauf'),
             const SizedBox(height: 10),
             Wrap(
               spacing: spacing,
@@ -139,7 +139,7 @@ class HomeScreen extends ConsumerWidget {
                   .toList(),
             ),
             const SizedBox(height: 24),
-            _AbschnittTitel('Stammdaten und Verwaltung'),
+            const _AbschnittTitel('Stammdaten und Verwaltung'),
             const SizedBox(height: 10),
             // Verwaltung schmaler halten, damit der Unterschied zum Ablauf
             // sichtbar ist: auf breiten Schirmen nur halbe Breite.
