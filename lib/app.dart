@@ -224,25 +224,30 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
       debugShowCheckedModeBanner: false,
       // App-weite Skalierung: in den Einstellungen frei wählbar (25 %…200 %).
       //
-      // Damit die GESAMTE Oberfläche wächst (Schrift, Icons, feste Höhen,
-      // Abstände) und nicht nur der Text, skalieren wir den kompletten
-      // Widget-Baum mit Transform.scale. Damit das Layout weiß, dass ihm
-      // nun mehr/weniger logischer Platz zur Verfügung steht, passen wir
-      // gleichzeitig die MediaQuery-Größe an — sonst würde der Inhalt am
-      // Rand abgeschnitten. So bleiben Text und Kästchen im Verhältnis.
+      // Ziel: größer darstellen, aber der Inhalt bricht UM statt rechts aus
+      // dem Bild zu laufen. Zwei Schritte, die zusammengehören:
+      //  1. Wir zwingen den Inhalt in eine um den Faktor SCHMALERE Fläche
+      //     (SizedBox width = Bildschirm / scale). Dadurch bekommt jeder
+      //     LayoutBuilder darin weniger Breite gemeldet und bricht seine
+      //     Kacheln/Reihen korrekt um — das ist der entscheidende Punkt.
+      //  2. Diese schmalere Fläche skalieren wir per Transform wieder auf
+      //     die volle Bildschirmbreite hoch. Ergebnis: alles größer, aber
+      //     nichts ragt über den Rand.
+      // Die MediaQuery-Größe wird passend mitgesetzt, damit auch Widgets,
+      // die sich auf MediaQuery.size stützen, dieselbe kleinere Fläche sehen.
       builder: (context, child) {
         final safe = child ?? const SizedBox.shrink();
         final scale = ref.watch(uiScaleProvider);
         if (scale == 1.0) return safe;
         final mq = MediaQuery.of(context);
+        final logischeGroesse = mq.size / scale;
         return MediaQuery(
-          data: mq.copyWith(size: mq.size / scale),
-          child: Transform.scale(
-            scale: scale,
-            alignment: Alignment.topLeft,
+          data: mq.copyWith(size: logischeGroesse),
+          child: FittedBox(
+            fit: BoxFit.fill,
             child: SizedBox(
-              width: mq.size.width / scale,
-              height: mq.size.height / scale,
+              width: logischeGroesse.width,
+              height: logischeGroesse.height,
               child: safe,
             ),
           ),
