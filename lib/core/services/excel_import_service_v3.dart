@@ -1047,19 +1047,33 @@ class ExcelImportServiceV3 {
   ) {
     String? aktuelleGruppe;
     bool inCustomBlock = false;
+    // Nach dem Historie-Block kann ein Überlauf-Block
+    // „ZUSÄTZLICHE PARAMETER (Fortsetzung)" folgen — der Export legt ihn
+    // an, wenn der primäre Block zu wenige freie Zeilen hat. Die
+    // Historie-Datenzeilen selbst werden hier übersprungen.
+    bool nachHistorie = false;
 
     for (var r = startRow; r < rows.length; r++) {
       final label = _cellStr(rows[r], 0);
       if (label == null || label.isEmpty) continue;
 
-      if (label.contains(_historieBlockMarker)) break;
+      if (label.contains(_historieBlockMarker)) {
+        nachHistorie = true;
+        aktuelleGruppe = null;
+        inCustomBlock = false;
+        continue;
+      }
       if (label == _sonstigeBlockMarker) continue;
 
       if (label.startsWith(_customBlockMarker)) {
         aktuelleGruppe = 'CUSTOM';
         inCustomBlock = true;
+        nachHistorie = false;
         continue;
       }
+
+      // Innerhalb der Historie (Datum-Zeilen usw.) nichts einsammeln.
+      if (nachHistorie) continue;
 
       if (_istGruppenHeader(label, rows[r], maxSchritt)) {
         aktuelleGruppe = label.trim();

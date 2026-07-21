@@ -1103,8 +1103,7 @@ class ExcelExportServiceV3 {
     int customGeschrieben = 0;
     int customUebersprungen = 0;
 
-    // ── Custom-Parameter pro Schritt: Pool aus dem ZUSÄTZLICHE-Block
-    //    in der Vorlage-Excel ermitteln ────────────────────────────────
+    // ── Custom-Parameter-Slots aus dem ZUSÄTZLICHE-Block der Vorlage ──
     final customSlots = _findeCustomParameterSlots(doc, sharedStrings);
 
     // ── Schritt-Bereich komplett leeren (Spalten B..K) ────────────────
@@ -1118,6 +1117,114 @@ class ExcelExportServiceV3 {
     // Muss NACH dem Leeren passieren (der Bereich liegt in den Spalten
     // B..K und würde sonst gleich wieder geleert).
     _schreibeSonstigeInfos(doc, sheetData, sharedStrings, artikel.beschreibung);
+
+    // ── Historische Produktionsdaten ZUERST schreiben ────────────────
+    // _schreibeHistorie entfernt alles unterhalb der Datum-Kopfzeile —
+    // auch einen evtl. Überlauf-Parameter-Block aus einem früheren
+    // Export. Deshalb: erst Historie, dann die Slot-Zeilen (der Überlauf
+    // wird unterhalb der frisch geschriebenen Historie neu aufgebaut).
+    final historieGeschrieben = _schreibeHistorie(
+      sheetData: sheetData,
+      doc: doc,
+      sharedStrings: sharedStrings,
+      historie: historie,
+    );
+
+    // ── Namens-Pool für die Slot-Zeilen ───────────────────────────────
+    // Ein Parametername = genau EINE Zeile; die Werte der Schritte stehen
+    // nebeneinander in den Schritt-Spalten (wie bei Standard-Parametern).
+    // Vorher wurden die Slots je Schritt ab Position 0 vergeben — die
+    // Labels verschiedener Schritte überschrieben sich gegenseitig.
+    //
+    // In den Pool kommen: alle Custom-Parameter sowie Steckbrief-Werte
+    // (Maschinen-Gruppe) ohne eigene Labelzeile in der Vorlage.
+    String? labelVon(int rowNum) {
+      for (final row in sheetData.findElements('row')) {
+        if (int.tryParse(row.getAttribute('r') ?? '') == rowNum) {
+          return _leseZelleA(row, sharedStrings)?.trim();
+        }
+      }
+      return null;
+    }
+
+    final hatLabelzeile = <String, bool>{};
+    bool gehoertInSlot(ProductStepParameter p) {
+      if (p.istCustom) return true;
+      if (p.parameterGruppe != kMaschinenSteckbriefGruppe) return false;
+      if ((p.wert ?? '').trim().isEmpty) return false;
+      final key = '${p.parameterGruppe}|${p.parameterName.toLowerCase()}';
+      hatLabelzeile[key] ??= _findeZeileMitLabelInA(
+            doc,
+            sharedStrings,
+            p.parameterName,
+            gruppe: p.parameterGruppe,
+          ) !=
+          null;
+      return !hatLabelzeile[key]!;
+    }
+
+    final poolNamen = <String>[]; // stabile Reihenfolge
+    final poolGesehen = <String>{};
+    for (final step in schritte) {
+      for (final p
+          in paramsByStep[step.id] ?? const <ProductStepParameter>[]) {
+        if (!gehoertInSlot(p)) continue;
+        if (poolGesehen.add(p.parameterName.toLowerCase())) {
+          poolNamen.add(p.parameterName);
+        }
+      }
+    }
+
+    // Zuordnung Name → Zeile: erst bereits beschriftete Slot-Zeilen
+    // wiederverwenden (Re-Export), dann leere Slots, dann Überlauf.
+    final slotFuerName = <String, int>{};
+    final freieSlots = <int>[];
+    for (final slot in customSlots) {
+      final lbl = labelVon(slot);
+      if (lbl == null || lbl.isEmpty) {
+        freieSlots.add(slot);
+        continue;
+      }
+      if (poolGesehen.contains(lbl.toLowerCase())) {
+        slotFuerName[lbl.toLowerCase()] = slot;
+      } else {
+        // Alter, nicht mehr benötigter Name → Zeile ist überschreibbar.
+        freieSlots.add(slot);
+      }
+    }
+    var freiIdx = 0;
+    // Überlauf beginnt zwei Zeilen unter der letzten belegten Zeile
+    // (Historie ist zu diesem Zeitpunkt bereits geschrieben).
+    var maxZeile = 0;
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '') ?? 0;
+      if (r > maxZeile) maxZeile = r;
+    }
+    var naechsteUeberlaufZeile = maxZeile + 2;
+    var ueberlaufMarkerGesetzt = false;
+    for (final name in poolNamen) {
+      final key = name.toLowerCase();
+      if (slotFuerName.containsKey(key)) continue;
+      if (freiIdx < freieSlots.length) {
+        slotFuerName[key] = freieSlots[freiIdx++];
+        continue;
+      }
+      // Überlauf: zweiter Parameter-Block unterhalb der Historie — dort
+      // ist Platz ohne Zeilen zu verschieben (die Historie-Formeln
+      // bleiben unangetastet). Der Import liest ihn mit.
+      if (!ueberlaufMarkerGesetzt) {
+        _setzeZelleInlineStr(
+          sheetData,
+          row: naechsteUeberlaufZeile,
+          colLetter: 'A',
+          wert: '$_zusaetzlicheParameterMarker (Fortsetzung)',
+        );
+        naechsteUeberlaufZeile++;
+        ueberlaufMarkerGesetzt = true;
+      }
+      slotFuerName[key] = naechsteUeberlaufZeile;
+      naechsteUeberlaufZeile++;
+    }
 
     for (final step in schritte) {
       final col = step.reihenfolge; // 1..10 → Spalte B..K
@@ -1203,12 +1310,8 @@ class ExcelExportServiceV3 {
       //    der Vorlage existiert — sonst überspringen) ────────────────
       final stepParams = paramsByStep[step.id] ?? [];
       final standardParams = stepParams.where((p) => !p.istCustom);
-      // Steckbrief-Parameter (Maschinen-Gruppe), für die die Vorlage keine
-      // eigene Labelzeile hat: unten in die freien Slots des
-      // ZUSÄTZLICHE-PARAMETER-Blocks schreiben. So sind z.B. die
-      // Verbufa-Einstellungen je Schritt-Spalte im Sheet sichtbar und
-      // kommen beim Re-Import wieder als Steckbrief-Werte zurück.
-      final steckbriefOhneZeile = <ProductStepParameter>[];
+      // Steckbrief-Parameter ohne eigene Labelzeile werden weiter unten
+      // über den Namens-Pool in die Slot-Zeilen geschrieben.
       for (final param in standardParams) {
         final paramRow = _findeZeileMitLabelInA(
           doc,
@@ -1216,13 +1319,7 @@ class ExcelExportServiceV3 {
           param.parameterName,
           gruppe: param.parameterGruppe,
         );
-        if (paramRow == null) {
-          if (param.parameterGruppe == kMaschinenSteckbriefGruppe &&
-              (param.wert ?? '').trim().isNotEmpty) {
-            steckbriefOhneZeile.add(param);
-          }
-          continue;
-        }
+        if (paramRow == null) continue;
         final wert = param.wert ?? '';
         if (wert.isEmpty) continue;
 
@@ -1252,28 +1349,23 @@ class ExcelExportServiceV3 {
         parameterAktualisiert++;
       }
 
-      // ── Custom- und Steckbrief-Parameter in die freien Slots ──────
-      final customParams = [
-        ...steckbriefOhneZeile,
-        ...stepParams.where((p) => p.istCustom),
-      ];
-      for (var i = 0; i < customParams.length; i++) {
-        if (i >= customSlots.length) {
+      // ── Custom- und Steckbrief-Parameter über den Namens-Pool ─────
+      // Jeder Name hat genau eine Zeile; hier landen Label (idempotent)
+      // und der Wert dieses Schritts in seiner Spalte.
+      for (final p in stepParams) {
+        if (!gehoertInSlot(p)) continue;
+        final slot = slotFuerName[p.parameterName.toLowerCase()];
+        if (slot == null) {
+          // Sollte durch den Überlauf-Block nie eintreten — defensiv.
           customUebersprungen++;
           continue;
         }
-        final slot = customSlots[i];
-        final p = customParams[i];
-
-        // Label in Spalte A schreiben (Name des Custom-Parameters)
         _setzeZelleInlineStr(
           sheetData,
           row: slot,
           colLetter: 'A',
           wert: p.parameterName,
         );
-
-        // Wert in der Schritt-Spalte
         final wert = p.wert ?? '';
         if (wert.isNotEmpty) {
           final zahl = double.tryParse(wert.replaceAll(',', '.'));
@@ -1295,24 +1387,7 @@ class ExcelExportServiceV3 {
         }
         customGeschrieben++;
       }
-
-      if (customParams.length > customSlots.length) {
-        warnungen.add(
-          'Artikel $artikelLabel, Schritt ${step.reihenfolge}: '
-          'Mehr Custom-Parameter (${customParams.length}) als '
-          'freie Slots in der Vorlage (${customSlots.length}). '
-          'Überschüssige Parameter wurden nicht exportiert.',
-        );
-      }
     }
-
-    // ── Historische Produktionsdaten in den HISTORISCHE-DATEN-Block ───
-    final historieGeschrieben = _schreibeHistorie(
-      sheetData: sheetData,
-      doc: doc,
-      sharedStrings: sharedStrings,
-      historie: historie,
-    );
 
     return _AktualisierungsStats(
       schritteAktualisiert,
@@ -1343,11 +1418,16 @@ class ExcelExportServiceV3 {
       final rNum = int.tryParse(row.getAttribute('r') ?? '');
       if (rNum == null) continue;
       final label = _leseZelleA(row, sharedStrings)?.trim() ?? '';
-      if (label.contains(_zusaetzlicheParameterMarker)) {
-        markerZeile = rNum;
-      } else if (markerZeile != null && label.contains(_historieMarker)) {
+      if (label.contains(_historieMarker)) {
+        // Ab der Historie ist Schluss — ein Überlauf-Block unterhalb der
+        // Historie (aus einem früheren Export) zählt NICHT als primärer
+        // Block: er wird beim Historie-Schreiben entfernt und danach
+        // frisch aufgebaut.
         endZeile = rNum;
         break;
+      }
+      if (label.contains(_zusaetzlicheParameterMarker)) {
+        markerZeile = rNum;
       }
     }
 
