@@ -2,11 +2,14 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/machines.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
+import 'article_info_editor_dialog.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -107,11 +110,66 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     });
   }
 
+  /// Legt einen neuen Artikel an (Artikelnummer, Bezeichnung, Gruppe)
+  /// und öffnet direkt die Detailansicht zum Pflegen der Prozessdaten.
+  Future<void> _neuerArtikel(BuildContext context) async {
+    final res = await showDialog<({String nummer, String bez, String? gruppe})>(
+      context: context,
+      builder: (_) => const _NeuerArtikelDialog(),
+    );
+    if (res == null) return;
+
+    final db = ref.read(databaseProvider);
+
+    // Artikelnummer muss eindeutig sein — sie ist der Schlüssel zur Excel.
+    final vorhanden = await (db.select(db.products)
+          ..where((p) => p.artikelnummer.equals(res.nummer)))
+        .get();
+    if (vorhanden.isNotEmpty) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Artikelnummer ${res.nummer} existiert bereits '
+            '(${vorhanden.first.artikelbezeichnung}).',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final id = const Uuid().v4();
+    await db.into(db.products).insert(
+          ProductsCompanion.insert(
+            id: id,
+            artikelnummer: res.nummer,
+            artikelbezeichnung: res.bez,
+            produktgruppe: Value(res.gruppe),
+          ),
+        );
+
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Artikel angelegt');
+    ref.invalidate(articlesProvider);
+
+    if (!context.mounted) return;
+    context.pushNamed(
+      'articleDetail',
+      pathParameters: {'productId': id},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final articlesAsync = ref.watch(articlesProvider);
 
     return Scaffold(
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _neuerArtikel(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Neuer Artikel'),
+      ),
       appBar: AppBar(
         title: const Text('Artikel-Stammdaten'),
         actions: [
@@ -429,6 +487,98 @@ class _ArticleTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Dialog: neuen Artikel anlegen
+// ---------------------------------------------------------------------------
+
+class _NeuerArtikelDialog extends StatefulWidget {
+  const _NeuerArtikelDialog();
+
+  @override
+  State<_NeuerArtikelDialog> createState() => _NeuerArtikelDialogState();
+}
+
+class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
+  final _nummer = TextEditingController();
+  final _bez = TextEditingController();
+  String? _gruppe;
+
+  @override
+  void dispose() {
+    _nummer.dispose();
+    _bez.dispose();
+    super.dispose();
+  }
+
+  void _ok() {
+    final nummer = _nummer.text.trim();
+    final bez = _bez.text.trim();
+    if (nummer.isEmpty || bez.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bitte Artikelnummer und Bezeichnung angeben.'),
+        ),
+      );
+      return;
+    }
+    Navigator.of(context).pop((nummer: nummer, bez: bez, gruppe: _gruppe));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Neuen Artikel anlegen'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nummer,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Artikelnummer',
+                hintText: 'z.B. 12345',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _bez,
+              decoration: const InputDecoration(
+                labelText: 'Bezeichnung',
+                hintText: 'z.B. Schweinefrikadelle 60g, gebraten',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _ok(),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: _gruppe,
+              decoration: const InputDecoration(
+                labelText: 'Produktgruppe (optional)',
+                border: OutlineInputBorder(),
+              ),
+              items: [
+                for (final g in kProduktgruppen)
+                  DropdownMenuItem(value: g.dbValue, child: Text(g.label)),
+              ],
+              onChanged: (v) => setState(() => _gruppe = v),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(onPressed: _ok, child: const Text('Anlegen')),
+      ],
     );
   }
 }

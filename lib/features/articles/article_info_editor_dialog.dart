@@ -6,7 +6,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 
-const _produktgruppen = <({String dbValue, String label})>[
+const kProduktgruppen = <({String dbValue, String label})>[
   (dbValue: 'bruehwurst', label: 'Brühwurst'),
   (dbValue: 'rohwurst', label: 'Rohwurst'),
   (dbValue: 'kochpoekelware', label: 'Kochpökelware'),
@@ -67,7 +67,7 @@ class _ArticleInfoEditorDialogState
     _notizen = TextEditingController(text: p.notizen ?? '');
     // Nur gültige Gruppen vorbelegen (sonst zeigt der Dropdown nichts an).
     final gruppe = p.produktgruppe;
-    if (gruppe != null && _produktgruppen.any((g) => g.dbValue == gruppe)) {
+    if (gruppe != null && kProduktgruppen.any((g) => g.dbValue == gruppe)) {
       _produktgruppe = gruppe;
     }
   }
@@ -194,7 +194,7 @@ class _ArticleInfoEditorDialogState
                   const DropdownMenuItem<String?>(
                     child: Text('— keine —'),
                   ),
-                  for (final g in _produktgruppen)
+                  for (final g in kProduktgruppen)
                     DropdownMenuItem<String?>(
                       value: g.dbValue,
                       child: Text(g.label),
