@@ -12003,6 +12003,461 @@ class ParameterGrenzenCompanion extends UpdateCompanion<ParameterGrenzenData> {
   }
 }
 
+class $MachineParameterDefsTable extends MachineParameterDefs
+    with TableInfo<$MachineParameterDefsTable, MachineParameterDef> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MachineParameterDefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _maschineIdMeta =
+      const VerificationMeta('maschineId');
+  @override
+  late final GeneratedColumn<String> maschineId = GeneratedColumn<String>(
+      'maschine_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _parameterNameMeta =
+      const VerificationMeta('parameterName');
+  @override
+  late final GeneratedColumn<String> parameterName = GeneratedColumn<String>(
+      'parameter_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _einheitMeta =
+      const VerificationMeta('einheit');
+  @override
+  late final GeneratedColumn<String> einheit = GeneratedColumn<String>(
+      'einheit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _sortierungMeta =
+      const VerificationMeta('sortierung');
+  @override
+  late final GeneratedColumn<int> sortierung = GeneratedColumn<int>(
+      'sortierung', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        maschineId,
+        parameterName,
+        einheit,
+        sortierung,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'machine_parameter_defs';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<MachineParameterDef> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('maschine_id')) {
+      context.handle(
+          _maschineIdMeta,
+          maschineId.isAcceptableOrUnknown(
+              data['maschine_id']!, _maschineIdMeta));
+    } else if (isInserting) {
+      context.missing(_maschineIdMeta);
+    }
+    if (data.containsKey('parameter_name')) {
+      context.handle(
+          _parameterNameMeta,
+          parameterName.isAcceptableOrUnknown(
+              data['parameter_name']!, _parameterNameMeta));
+    } else if (isInserting) {
+      context.missing(_parameterNameMeta);
+    }
+    if (data.containsKey('einheit')) {
+      context.handle(_einheitMeta,
+          einheit.isAcceptableOrUnknown(data['einheit']!, _einheitMeta));
+    }
+    if (data.containsKey('sortierung')) {
+      context.handle(
+          _sortierungMeta,
+          sortierung.isAcceptableOrUnknown(
+              data['sortierung']!, _sortierungMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {maschineId, parameterName},
+      ];
+  @override
+  MachineParameterDef map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MachineParameterDef(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      maschineId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}maschine_id'])!,
+      parameterName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}parameter_name'])!,
+      einheit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}einheit']),
+      sortierung: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sortierung'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $MachineParameterDefsTable createAlias(String alias) {
+    return $MachineParameterDefsTable(attachedDatabase, alias);
+  }
+}
+
+class MachineParameterDef extends DataClass
+    implements Insertable<MachineParameterDef> {
+  /// UUID.
+  final String id;
+
+  /// Verweis auf machines.id.
+  final String maschineId;
+
+  /// Name des Parameters — exakt so erscheint er in der Artikelmaske
+  /// und in `product_step_parameters.parameterName`.
+  final String parameterName;
+
+  /// Optionale Einheit, rein zur Anzeige (z.B. "°C", "Takte/min", "mm").
+  final String? einheit;
+
+  /// Reihenfolge in der Maske (kleiner = weiter oben).
+  final int sortierung;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const MachineParameterDef(
+      {required this.id,
+      required this.maschineId,
+      required this.parameterName,
+      this.einheit,
+      required this.sortierung,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['maschine_id'] = Variable<String>(maschineId);
+    map['parameter_name'] = Variable<String>(parameterName);
+    if (!nullToAbsent || einheit != null) {
+      map['einheit'] = Variable<String>(einheit);
+    }
+    map['sortierung'] = Variable<int>(sortierung);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  MachineParameterDefsCompanion toCompanion(bool nullToAbsent) {
+    return MachineParameterDefsCompanion(
+      id: Value(id),
+      maschineId: Value(maschineId),
+      parameterName: Value(parameterName),
+      einheit: einheit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(einheit),
+      sortierung: Value(sortierung),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory MachineParameterDef.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MachineParameterDef(
+      id: serializer.fromJson<String>(json['id']),
+      maschineId: serializer.fromJson<String>(json['maschineId']),
+      parameterName: serializer.fromJson<String>(json['parameterName']),
+      einheit: serializer.fromJson<String?>(json['einheit']),
+      sortierung: serializer.fromJson<int>(json['sortierung']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'maschineId': serializer.toJson<String>(maschineId),
+      'parameterName': serializer.toJson<String>(parameterName),
+      'einheit': serializer.toJson<String?>(einheit),
+      'sortierung': serializer.toJson<int>(sortierung),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  MachineParameterDef copyWith(
+          {String? id,
+          String? maschineId,
+          String? parameterName,
+          Value<String?> einheit = const Value.absent(),
+          int? sortierung,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      MachineParameterDef(
+        id: id ?? this.id,
+        maschineId: maschineId ?? this.maschineId,
+        parameterName: parameterName ?? this.parameterName,
+        einheit: einheit.present ? einheit.value : this.einheit,
+        sortierung: sortierung ?? this.sortierung,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  MachineParameterDef copyWithCompanion(MachineParameterDefsCompanion data) {
+    return MachineParameterDef(
+      id: data.id.present ? data.id.value : this.id,
+      maschineId:
+          data.maschineId.present ? data.maschineId.value : this.maschineId,
+      parameterName: data.parameterName.present
+          ? data.parameterName.value
+          : this.parameterName,
+      einheit: data.einheit.present ? data.einheit.value : this.einheit,
+      sortierung:
+          data.sortierung.present ? data.sortierung.value : this.sortierung,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MachineParameterDef(')
+          ..write('id: $id, ')
+          ..write('maschineId: $maschineId, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('einheit: $einheit, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, maschineId, parameterName, einheit,
+      sortierung, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MachineParameterDef &&
+          other.id == this.id &&
+          other.maschineId == this.maschineId &&
+          other.parameterName == this.parameterName &&
+          other.einheit == this.einheit &&
+          other.sortierung == this.sortierung &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class MachineParameterDefsCompanion
+    extends UpdateCompanion<MachineParameterDef> {
+  final Value<String> id;
+  final Value<String> maschineId;
+  final Value<String> parameterName;
+  final Value<String?> einheit;
+  final Value<int> sortierung;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const MachineParameterDefsCompanion({
+    this.id = const Value.absent(),
+    this.maschineId = const Value.absent(),
+    this.parameterName = const Value.absent(),
+    this.einheit = const Value.absent(),
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MachineParameterDefsCompanion.insert({
+    required String id,
+    required String maschineId,
+    required String parameterName,
+    this.einheit = const Value.absent(),
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        maschineId = Value(maschineId),
+        parameterName = Value(parameterName);
+  static Insertable<MachineParameterDef> custom({
+    Expression<String>? id,
+    Expression<String>? maschineId,
+    Expression<String>? parameterName,
+    Expression<String>? einheit,
+    Expression<int>? sortierung,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (maschineId != null) 'maschine_id': maschineId,
+      if (parameterName != null) 'parameter_name': parameterName,
+      if (einheit != null) 'einheit': einheit,
+      if (sortierung != null) 'sortierung': sortierung,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MachineParameterDefsCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? maschineId,
+      Value<String>? parameterName,
+      Value<String?>? einheit,
+      Value<int>? sortierung,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return MachineParameterDefsCompanion(
+      id: id ?? this.id,
+      maschineId: maschineId ?? this.maschineId,
+      parameterName: parameterName ?? this.parameterName,
+      einheit: einheit ?? this.einheit,
+      sortierung: sortierung ?? this.sortierung,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (maschineId.present) {
+      map['maschine_id'] = Variable<String>(maschineId.value);
+    }
+    if (parameterName.present) {
+      map['parameter_name'] = Variable<String>(parameterName.value);
+    }
+    if (einheit.present) {
+      map['einheit'] = Variable<String>(einheit.value);
+    }
+    if (sortierung.present) {
+      map['sortierung'] = Variable<int>(sortierung.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MachineParameterDefsCompanion(')
+          ..write('id: $id, ')
+          ..write('maschineId: $maschineId, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('einheit: $einheit, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -12029,6 +12484,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DemandsTable demands = $DemandsTable(this);
   late final $ParameterGrenzenTable parameterGrenzen =
       $ParameterGrenzenTable(this);
+  late final $MachineParameterDefsTable machineParameterDefs =
+      $MachineParameterDefsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12049,7 +12506,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         appSettings,
         weekSnapshots,
         demands,
-        parameterGrenzen
+        parameterGrenzen,
+        machineParameterDefs
       ];
 }
 
@@ -19206,6 +19664,231 @@ typedef $$ParameterGrenzenTableProcessedTableManager = ProcessedTableManager<
     ),
     ParameterGrenzenData,
     PrefetchHooks Function()>;
+typedef $$MachineParameterDefsTableCreateCompanionBuilder
+    = MachineParameterDefsCompanion Function({
+  required String id,
+  required String maschineId,
+  required String parameterName,
+  Value<String?> einheit,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$MachineParameterDefsTableUpdateCompanionBuilder
+    = MachineParameterDefsCompanion Function({
+  Value<String> id,
+  Value<String> maschineId,
+  Value<String> parameterName,
+  Value<String?> einheit,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$MachineParameterDefsTableFilterComposer
+    extends Composer<_$AppDatabase, $MachineParameterDefsTable> {
+  $$MachineParameterDefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get einheit => $composableBuilder(
+      column: $table.einheit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$MachineParameterDefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $MachineParameterDefsTable> {
+  $$MachineParameterDefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get parameterName => $composableBuilder(
+      column: $table.parameterName,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get einheit => $composableBuilder(
+      column: $table.einheit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$MachineParameterDefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $MachineParameterDefsTable> {
+  $$MachineParameterDefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get maschineId => $composableBuilder(
+      column: $table.maschineId, builder: (column) => column);
+
+  GeneratedColumn<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => column);
+
+  GeneratedColumn<String> get einheit =>
+      $composableBuilder(column: $table.einheit, builder: (column) => column);
+
+  GeneratedColumn<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$MachineParameterDefsTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $MachineParameterDefsTable,
+    MachineParameterDef,
+    $$MachineParameterDefsTableFilterComposer,
+    $$MachineParameterDefsTableOrderingComposer,
+    $$MachineParameterDefsTableAnnotationComposer,
+    $$MachineParameterDefsTableCreateCompanionBuilder,
+    $$MachineParameterDefsTableUpdateCompanionBuilder,
+    (
+      MachineParameterDef,
+      BaseReferences<_$AppDatabase, $MachineParameterDefsTable,
+          MachineParameterDef>
+    ),
+    MachineParameterDef,
+    PrefetchHooks Function()> {
+  $$MachineParameterDefsTableTableManager(
+      _$AppDatabase db, $MachineParameterDefsTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MachineParameterDefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MachineParameterDefsTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MachineParameterDefsTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> maschineId = const Value.absent(),
+            Value<String> parameterName = const Value.absent(),
+            Value<String?> einheit = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MachineParameterDefsCompanion(
+            id: id,
+            maschineId: maschineId,
+            parameterName: parameterName,
+            einheit: einheit,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String maschineId,
+            required String parameterName,
+            Value<String?> einheit = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              MachineParameterDefsCompanion.insert(
+            id: id,
+            maschineId: maschineId,
+            parameterName: parameterName,
+            einheit: einheit,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$MachineParameterDefsTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $MachineParameterDefsTable,
+        MachineParameterDef,
+        $$MachineParameterDefsTableFilterComposer,
+        $$MachineParameterDefsTableOrderingComposer,
+        $$MachineParameterDefsTableAnnotationComposer,
+        $$MachineParameterDefsTableCreateCompanionBuilder,
+        $$MachineParameterDefsTableUpdateCompanionBuilder,
+        (
+          MachineParameterDef,
+          BaseReferences<_$AppDatabase, $MachineParameterDefsTable,
+              MachineParameterDef>
+        ),
+        MachineParameterDef,
+        PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -19242,4 +19925,6 @@ class $AppDatabaseManager {
       $$DemandsTableTableManager(_db, _db.demands);
   $$ParameterGrenzenTableTableManager get parameterGrenzen =>
       $$ParameterGrenzenTableTableManager(_db, _db.parameterGrenzen);
+  $$MachineParameterDefsTableTableManager get machineParameterDefs =>
+      $$MachineParameterDefsTableTableManager(_db, _db.machineParameterDefs);
 }

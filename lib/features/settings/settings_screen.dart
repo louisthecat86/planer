@@ -32,6 +32,14 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 8),
           _SettingsTile(
+            icon: Icons.precision_manufacturing_rounded,
+            color: const Color(0xFF00695C),
+            title: 'Maschinen-Katalog',
+            subtitle: 'Anlagen anlegen & Parameter-Steckbriefe pflegen',
+            onTap: () => context.pushNamed('maschinen'),
+          ),
+          const SizedBox(height: 8),
+          _SettingsTile(
             icon: Icons.rule_rounded,
             color: const Color(0xFF6D4C41),
             title: 'Maschinen-Grenzen',
