@@ -376,6 +376,30 @@ Future<double?> _avgKghRohAusHistorie(
   return werte.reduce((a, b) => a + b) / werte.length;
 }
 
+/// Durchschnittlicher Verlustanteil eines Artikels aus der Historie
+/// (0…1, z.B. 0.18 = 18 % Verlust). null, wenn keine brauchbaren Werte da
+/// sind. Wird genutzt, um aus einer Fertigmenge die nötige Rohmenge
+/// zurückzurechnen: Rohware = Fertigware / (1 − Verlust).
+Future<double?> durchschnittsVerlust(
+  AppDatabase db,
+  String productId,
+) async {
+  final rows = await (db.select(db.productionHistory)
+        ..where((h) => h.productId.equals(productId))
+        ..where((h) => h.deletedAt.isNull()))
+      .get();
+
+  final werte = rows
+      .map((h) => h.verlustAnteil)
+      .whereType<double>()
+      // Plausibilitätsgrenzen: negativer oder ≥100 % Verlust ist ein
+      // Erfassungsfehler und würde den Schnitt verzerren.
+      .where((v) => v > 0 && v < 1)
+      .toList();
+  if (werte.isEmpty) return null;
+  return werte.reduce((a, b) => a + b) / werte.length;
+}
+
 /// Legt aus einem [GeplanterPlan] je Schritt einen [ProductionTask] am
 /// zugewiesenen [GeplanterSchritt.tag] an und verkettet sie über
 /// [parentTaskId] (in Reihenfolge). Es werden **keine** festen Uhrzeiten

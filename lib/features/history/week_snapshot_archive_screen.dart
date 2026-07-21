@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
-import '../../core/providers/department_capacity_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
 import '../board/board_providers.dart';
@@ -43,12 +42,10 @@ class _WeekSnapshotArchiveScreenState
     setState(() => _busy = true);
     try {
       final db = ref.read(databaseProvider);
-      final capsMap =
-          ref.read(departmentCapacityNotifierProvider).valueOrNull ??
-              const <String, double>{};
+      // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h.
       final kapazitaeten = {
         for (final a in Abteilung.values)
-          a.dbValue: capsMap[a.dbValue] ?? kStandardKapazitaetMinuten,
+          a.dbValue: kStandardKapazitaetMinuten,
       };
 
       await erstelleWochenSnapshot(

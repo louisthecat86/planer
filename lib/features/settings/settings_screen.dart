@@ -5,8 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/ui_scale_provider.dart';
 
 /// Einstellungen — Sammelpunkt für alles, was nicht zum täglichen Planen
-/// gehört: Stammdaten (Excel-Import/-Export, Backup, Wiederherstellung)
-/// und die Kapazität je Abteilung.
+/// gehört: Anzeigegröße und Stammdaten (Excel-Import/-Export, Backup,
+/// Wiederherstellung). Die Arbeitszeit ist fix 9 h je Abteilung und wird
+/// nicht mehr einzeln gepflegt.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -28,14 +29,6 @@ class SettingsScreen extends ConsumerWidget {
             subtitle: 'Excel importieren & exportieren, Backup und '
                 'Wiederherstellung',
             onTap: () => context.pushNamed('data'),
-          ),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.bar_chart_rounded,
-            color: const Color(0xFF1565C0),
-            title: 'Kapazität',
-            subtitle: 'Verfügbare Stunden je Abteilung (Standard 9 h/Tag)',
-            onTap: () => context.pushNamed('capacity'),
           ),
           const SizedBox(height: 24),
           Center(

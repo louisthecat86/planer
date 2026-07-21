@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
-import '../../core/providers/department_capacity_provider.dart';
 
 /// Standard-Kapazität pro Abteilung und Tag in Minuten (9 h), wenn für die
 /// Abteilung kein abweichender Wert gepflegt ist. Die Abteilungen arbeiten
@@ -237,9 +236,6 @@ class DayBoard {
 final weekBoardProvider =
     FutureProvider.family<WeekBoard, DateTime>((ref, anyDayInWeek) async {
   final db = ref.watch(databaseProvider);
-  final caps =
-      ref.watch(departmentCapacityNotifierProvider).valueOrNull ??
-          const <String, double>{};
 
   final wochenStart = _montag(anyDayInWeek);
   final tage = List.generate(
@@ -262,7 +258,7 @@ final weekBoardProvider =
     }
   }
 
-  final spuren = _baueSpuren(planungsAnlagen, caps, ohneAnlage);
+  final spuren = _baueSpuren(planungsAnlagen, ohneAnlage);
 
   // Tasks den Spuren zuordnen.
   final tasksProZelle = <String, List<BoardTask>>{};
@@ -301,9 +297,6 @@ final weekBoardProvider =
 final dayBoardProvider =
     FutureProvider.family<DayBoard, DateTime>((ref, datum) async {
   final db = ref.watch(databaseProvider);
-  final caps =
-      ref.watch(departmentCapacityNotifierProvider).valueOrNull ??
-          const <String, double>{};
 
   final tag = DateTime(datum.year, datum.month, datum.day);
   final naechsterTag = tag.add(const Duration(days: 1));
@@ -320,7 +313,7 @@ final dayBoardProvider =
     }
   }
 
-  final spuren = _baueSpuren(planungsAnlagen, caps, ohneAnlage);
+  final spuren = _baueSpuren(planungsAnlagen, ohneAnlage);
 
   final tasksProSpur = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
@@ -504,7 +497,6 @@ String _spurKeyFuerTask(BoardTask task, Set<String> anlagenSpuren) {
 /// Anlagen als Planungsressource markiert sind) oder eine Sammelspur.
 List<BoardSpur> _baueSpuren(
   List<Machine> planungsAnlagen,
-  Map<String, double> abteilungsKapazitaeten,
   Set<String> abteilungenMitTasksOhneAnlage,
 ) {
   final anlagenJeAbteilung = <String, List<Machine>>{};
@@ -521,8 +513,10 @@ List<BoardSpur> _baueSpuren(
       spuren.add(
         BoardSpur(
           abteilung: abteilung,
-          kapazitaetMinuten: abteilungsKapazitaeten[abteilung.dbValue] ??
-              kStandardKapazitaetMinuten,
+          // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h. Eine
+          // Pflege je Abteilung gibt es bewusst nicht mehr — bei euch ist
+          // die Arbeitszeit überall gleich, nur das Personal variiert.
+          kapazitaetMinuten: kStandardKapazitaetMinuten,
         ),
       );
       continue;
@@ -547,8 +541,10 @@ List<BoardSpur> _baueSpuren(
       spuren.add(
         BoardSpur(
           abteilung: abteilung,
-          kapazitaetMinuten: abteilungsKapazitaeten[abteilung.dbValue] ??
-              kStandardKapazitaetMinuten,
+          // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h. Eine
+          // Pflege je Abteilung gibt es bewusst nicht mehr — bei euch ist
+          // die Arbeitszeit überall gleich, nur das Personal variiert.
+          kapazitaetMinuten: kStandardKapazitaetMinuten,
         ),
       );
     }

@@ -21,7 +21,6 @@ import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/settings/settings_screen.dart';
-import 'features/shell/capacity_detail_screen.dart';
 import 'features/shell/home_screen.dart';
 
 /// GoRouter-Provider.
@@ -134,13 +133,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'data',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: DataManagementScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/capacity',
-        name: 'capacity',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: CapacityDetailScreen(),
         ),
       ),
       // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.

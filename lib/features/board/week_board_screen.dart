@@ -1481,6 +1481,9 @@ class _DayTaskRow extends StatelessWidget {
 
 enum _PlanStufe { auswahl, tage }
 
+/// Einheit der Mengeneingabe im Planen-Dialog.
+enum _MengenEinheit { rohware, fertigware }
+
 class _ProduktPlanenSheet extends ConsumerStatefulWidget {
   const _ProduktPlanenSheet({required this.tage, required this.initialTag});
 
@@ -1495,8 +1498,22 @@ class _ProduktPlanenSheet extends ConsumerStatefulWidget {
 class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   final _suche = TextEditingController();
   final _menge = TextEditingController(text: '100');
+
+  /// Manuell eingegebener Verlust in % (nur relevant, wenn Einheit =
+  /// Fertigware und keine Historie vorliegt).
+  final _verlustProzent = TextEditingController();
+
   List<Product> _produkte = [];
   Product? _gewaehlt;
+
+  /// Einheit der eingegebenen Menge: rohware (Standard) oder fertigware.
+  /// Bei fertigware rechnet die App über den Verlust auf Rohware hoch, mit
+  /// der dann geplant wird — im Board steht immer Rohgewicht.
+  _MengenEinheit _einheit = _MengenEinheit.rohware;
+
+  /// Durchschnittlicher Verlust des gewählten Artikels aus der Historie
+  /// (0…1), oder null wenn keine Daten. Wird beim Artikelwechsel geladen.
+  double? _histVerlust;
 
   /// Bedarf, aus dem geplant wird (optional). Ist einer gewählt, wird die
   /// geplante Menge gegen ihn gerechnet — die Bedarfsliste zeigt dann
@@ -1526,10 +1543,39 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     if (mounted) setState(() => _produkte = list);
   }
 
+  /// Lädt den historischen Durchschnittsverlust für den gewählten Artikel.
+  Future<void> _ladeVerlust(String productId) async {
+    final db = ref.read(databaseProvider);
+    final v = await durchschnittsVerlust(db, productId);
+    if (mounted) setState(() => _histVerlust = v);
+  }
+
+  /// Effektiver Verlust (0…1): Historie bevorzugt, sonst der manuell
+  /// eingegebene Prozentwert. null, wenn beides fehlt.
+  double? get _effektiverVerlust {
+    if (_histVerlust != null) return _histVerlust;
+    final p = double.tryParse(_verlustProzent.text.replaceAll(',', '.'));
+    if (p != null && p > 0 && p < 100) return p / 100;
+    return null;
+  }
+
+  /// Informative Rohwaren-Vorschau bei Fertigware-Eingabe:
+  /// Rohware ≈ Fertig / (1 − Verlust). null, wenn kein Verlust bekannt ist.
+  /// Beeinflusst die eigentliche Planung NICHT — die läuft über die
+  /// Ausbeute-Faktoren.
+  double? get _rohwareVorschau {
+    if (_einheit != _MengenEinheit.fertigware) return null;
+    final eingabe = double.tryParse(_menge.text.replaceAll(',', '.'));
+    final v = _effektiverVerlust;
+    if (eingabe == null || eingabe <= 0 || v == null || v >= 1) return null;
+    return eingabe / (1 - v);
+  }
+
   @override
   void dispose() {
     _suche.dispose();
     _menge.dispose();
+    _verlustProzent.dispose();
     super.dispose();
   }
 
@@ -1537,8 +1583,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   Future<void> _weiter() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
-    final menge = double.tryParse(_menge.text.replaceAll(',', '.'));
-    if (menge == null || menge <= 0) {
+    final eingabe = double.tryParse(_menge.text.replaceAll(',', '.'));
+    if (eingabe == null || eingabe <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Bitte eine gültige Menge (kg) eingeben.'),
@@ -1546,6 +1592,14 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       );
       return;
     }
+
+    // Die Schritt-Planung rechnet immer von der FERTIGMENGE rückwärts über
+    // die Ausbeute-Faktoren auf die Rohware. Gibst du Fertigware ein, ist
+    // die Eingabe direkt diese Fertigmenge. Gibst du Rohware ein, ist sie
+    // die Planbasis (die Planung interpretiert sie als Ausgangsmenge). Der
+    // Historienverlust wird hier NICHT eingerechnet — er dient nur der
+    // informativen Rohwaren-Vorschau unter dem Feld.
+    final menge = eingabe;
 
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
@@ -1583,8 +1637,14 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
-    final fertigMenge =
+    final eingabe =
         double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
+    // Der Bedarf ist in Fertigware definiert. Nur wenn auch in Fertigware
+    // eingegeben wurde, ist die Eingabe die Fertigmenge und darf gegen den
+    // Bedarf gezählt werden. Bei Rohware-Eingabe bleibt die Fertigmenge
+    // unbekannt (0) — dann wird nichts vom Bedarf abgezogen.
+    final fertigMenge =
+        _einheit == _MengenEinheit.fertigware ? eingabe : 0.0;
     await erstelleTasksAusPlan(
       db: db,
       productId: produkt.id,
@@ -1598,18 +1658,16 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     ref.invalidate(bedarfProvider);
 
     if (!mounted) return;
-    final menge = double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
-    if (_rohware > menge) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Rohwaren-Bedarf: ${_rohware.toStringAsFixed(1)} kg '
-            'für ${menge.toStringAsFixed(1)} kg Fertigware',
-          ),
-          duration: const Duration(seconds: 4),
+    // Hinweis auf die berechnete Rohwaren-Menge des Plans.
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Eingeplant · Rohwaren-Bedarf: '
+          '${_rohware.toStringAsFixed(0)} kg',
         ),
-      );
-    }
+        duration: const Duration(seconds: 3),
+      ),
+    );
     Navigator.of(context).pop(true);
   }
 
@@ -1716,7 +1774,10 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 final p = _produkte
                     .where((x) => x.id == info.bedarf.productId)
                     .firstOrNull;
-                if (p != null) _gewaehlt = p;
+                if (p != null) {
+                  _gewaehlt = p;
+                  _ladeVerlust(p.id);
+                }
                 _menge.text = info.offenKg.round().toString();
               }
             });
@@ -1782,7 +1843,10 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                         dense: true,
                         title: Text(p.artikelbezeichnung),
                         subtitle: Text(p.artikelnummer),
-                        onTap: () => setState(() => _gewaehlt = p),
+                        onTap: () {
+                          setState(() => _gewaehlt = p);
+                          _ladeVerlust(p.id);
+                        },
                       );
                     },
                   ),
@@ -1801,14 +1865,65 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             ),
           ),
           const SizedBox(height: 12),
+          // Einheit der Eingabe: Rohware (Standard) oder Fertigware.
+          SegmentedButton<_MengenEinheit>(
+            segments: const [
+              ButtonSegment(
+                value: _MengenEinheit.rohware,
+                label: Text('Rohware'),
+              ),
+              ButtonSegment(
+                value: _MengenEinheit.fertigware,
+                label: Text('Fertigware'),
+              ),
+            ],
+            selected: {_einheit},
+            onSelectionChanged: (s) => setState(() => _einheit = s.first),
+            showSelectedIcon: false,
+          ),
+          const SizedBox(height: 12),
           TextField(
             controller: _menge,
-            decoration: const InputDecoration(
-              labelText: 'Menge Fertigware (kg)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: _einheit == _MengenEinheit.rohware
+                  ? 'Menge Rohware (kg)'
+                  : 'Menge Fertigware (kg)',
+              border: const OutlineInputBorder(),
             ),
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
           ),
+
+          // Bei Fertigware: Verlust-Anzeige bzw. -Eingabe + Rohwaren-Vorschau.
+          if (_einheit == _MengenEinheit.fertigware) ...[
+            const SizedBox(height: 10),
+            if (_histVerlust != null)
+              _RohwareHinweis(
+                text: 'Ø Verlust aus Historie: '
+                    '${(_histVerlust! * 100).toStringAsFixed(1)} %'
+                    '${_rohwareVorschau != null ? '  →  benötigt ≈ '
+                        '${_rohwareVorschau!.round()} kg Rohware' : ''}',
+              )
+            else ...[
+              TextField(
+                controller: _verlustProzent,
+                decoration: const InputDecoration(
+                  labelText: 'Verlust (%) — keine Historie vorhanden',
+                  suffixText: '%',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+              ),
+              if (_rohwareVorschau != null) ...[
+                const SizedBox(height: 8),
+                _RohwareHinweis(
+                  text: 'Benötigt ≈ ${_rohwareVorschau!.round()} kg Rohware',
+                ),
+              ],
+            ],
+          ],
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -2445,6 +2560,49 @@ class _BedarfVorschlaege extends ConsumerWidget {
         ),
         const SizedBox(height: 14),
       ],
+    );
+  }
+}
+
+/// Kleiner Hinweis-Streifen unter dem Mengenfeld — zeigt bei Fertigware-
+/// Eingabe informativ die umgerechnete Rohwaren-Menge.
+class _RohwareHinweis extends StatelessWidget {
+  const _RohwareHinweis({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.sync_alt,
+            size: 16,
+            color: theme.colorScheme.primary,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
