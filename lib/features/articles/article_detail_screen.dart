@@ -116,6 +116,195 @@ final alleMaschinenProvider = FutureProvider<List<Machine>>((ref) async {
 });
 
 /// Lädt die historischen Produktionen eines Artikels (neueste zuerst).
+/// Steckbrief-Parameter der Maschine eines Schritts (aus dem
+/// Maschinen-Katalog). Bestimmt, welche Eingabefelder am Schritt erscheinen.
+final _steckbriefDefsProvider =
+    FutureProvider.family<List<MachineParameterDef>, String>(
+        (ref, maschineId) async {
+  final db = ref.watch(databaseProvider);
+  return (db.select(db.machineParameterDefs)
+        ..where((d) => d.maschineId.equals(maschineId))
+        ..where((d) => d.deletedAt.isNull())
+        ..orderBy([
+          (d) => OrderingTerm.asc(d.sortierung),
+          (d) => OrderingTerm.asc(d.parameterName),
+        ]))
+      .get();
+});
+
+/// Grenz-Definition für einen Parameter suchen: zuerst maschinenspezifisch
+/// (kontext = Anlagen-Name), dann gruppenweit (kontext = Parametergruppe).
+Future<ParameterGrenzenData?> _grenzeFuer(
+  AppDatabase db, {
+  String? maschinenName,
+  required String gruppe,
+  required String parameterName,
+}) async {
+  Future<ParameterGrenzenData?> such(String kontext) async {
+    final rows = await (db.select(db.parameterGrenzen)
+          ..where((g) => g.kontext.equals(kontext))
+          ..where((g) => g.parameterName.equals(parameterName))
+          ..where((g) => g.deletedAt.isNull())
+          ..limit(1))
+        .get();
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  if (maschinenName != null && maschinenName.trim().isNotEmpty) {
+    final m = await such(maschinenName.trim());
+    if (m != null) return m;
+  }
+  return such(gruppe);
+}
+
+/// Prüfergebnis der Grenzen-Prüfung.
+enum _GrenzenStatus { ok, warnung, blockiert }
+
+({_GrenzenStatus status, String? meldung}) _pruefeWert(
+  ParameterGrenzenData? grenze,
+  String wert,
+) {
+  if (grenze == null) return (status: _GrenzenStatus.ok, meldung: null);
+  final zahl = double.tryParse(wert.replaceAll(',', '.'));
+  // Nicht-numerische Werte werden nicht geprüft.
+  if (zahl == null) return (status: _GrenzenStatus.ok, meldung: null);
+
+  String z(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
+
+  if (grenze.hartMin != null && zahl < grenze.hartMin!) {
+    return (
+      status: _GrenzenStatus.blockiert,
+      meldung: 'Unter der technischen Untergrenze (${z(grenze.hartMin!)}).',
+    );
+  }
+  if (grenze.hartMax != null && zahl > grenze.hartMax!) {
+    return (
+      status: _GrenzenStatus.blockiert,
+      meldung: 'Über der technischen Obergrenze (${z(grenze.hartMax!)}).',
+    );
+  }
+  if (grenze.weichMin != null && zahl < grenze.weichMin!) {
+    return (
+      status: _GrenzenStatus.warnung,
+      meldung: 'Ungewöhnlich niedrig — üblich ist ab ${z(grenze.weichMin!)}.',
+    );
+  }
+  if (grenze.weichMax != null && zahl > grenze.weichMax!) {
+    return (
+      status: _GrenzenStatus.warnung,
+      meldung: 'Ungewöhnlich hoch — üblich ist bis ${z(grenze.weichMax!)}.',
+    );
+  }
+  return (status: _GrenzenStatus.ok, meldung: null);
+}
+
+/// Wert-Dialog mit Grenzen-Prüfung: harte Verstöße blockieren das
+/// Speichern, weiche zeigen eine Warnung (Speichern trotzdem möglich).
+Future<String?> _wertDialogMitPruefung(
+  BuildContext context, {
+  required AppDatabase db,
+  required String titel,
+  required String initial,
+  required String gruppe,
+  required String parameterName,
+  String? maschinenName,
+  String? einheit,
+}) async {
+  final grenze = await _grenzeFuer(
+    db,
+    maschinenName: maschinenName,
+    gruppe: gruppe,
+    parameterName: parameterName,
+  );
+  if (!context.mounted) return null;
+
+  final ctrl = TextEditingController(text: initial);
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) {
+      String? fehlerText;
+      String? warnText;
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          void pruefen(String v) {
+            final r = _pruefeWert(grenze, v.trim());
+            setState(() {
+              fehlerText =
+                  r.status == _GrenzenStatus.blockiert ? r.meldung : null;
+              warnText =
+                  r.status == _GrenzenStatus.warnung ? r.meldung : null;
+            });
+          }
+
+          void speichern() {
+            final v = ctrl.text.trim();
+            final r = _pruefeWert(grenze, v);
+            if (r.status == _GrenzenStatus.blockiert) {
+              setState(() => fehlerText = r.meldung);
+              return;
+            }
+            Navigator.of(ctx).pop(v);
+          }
+
+          return AlertDialog(
+            title: Text(titel),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Wert',
+                    suffixText: einheit,
+                    border: const OutlineInputBorder(),
+                    errorText: fehlerText,
+                  ),
+                  onChanged: pruefen,
+                  onSubmitted: (_) => speichern(),
+                ),
+                if (warnText != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        size: 16,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          warnText!,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.orange,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              FilledButton(
+                onPressed: speichern,
+                child: const Text('Speichern'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  ).whenComplete(ctrl.dispose);
+}
+
 final productionHistoryProvider =
     FutureProvider.family<List<ProductionHistoryData>, String>(
         (ref, productId) async {
@@ -1568,8 +1757,13 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
             const SizedBox(height: 12),
           ],
 
-          // Parameter (Standard + Custom, beide editierbar)
-          _ParameterListe(stepId: s.id),
+          // Parameter (Standard + Custom, beide editierbar) — inklusive
+          // Steckbrief-Feldern der zugeordneten Maschine.
+          _ParameterListe(
+            stepId: s.id,
+            maschineId: s.maschineId,
+            maschinenName: maschineName,
+          ),
         ],
       ),
     );
@@ -1863,9 +2057,17 @@ String _fmtZahl(double v) =>
 // ---------------------------------------------------------------------------
 
 class _ParameterListe extends ConsumerWidget {
-  const _ParameterListe({required this.stepId});
+  const _ParameterListe({
+    required this.stepId,
+    this.maschineId,
+    this.maschinenName,
+  });
 
   final String stepId;
+
+  /// Maschine des Schritts — bestimmt die Steckbrief-Felder.
+  final String? maschineId;
+  final String? maschinenName;
 
   Future<void> _customLoeschen(
     BuildContext context,
@@ -1913,35 +2115,18 @@ class _ParameterListe extends ConsumerWidget {
     WidgetRef ref,
     ProductStepParameter param,
   ) async {
-    final ctrl = TextEditingController(text: param.wert ?? '');
-    final neuerWert = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(param.parameterName),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Wert',
-            border: OutlineInputBorder(),
-          ),
-          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-            child: const Text('Speichern'),
-          ),
-        ],
-      ),
+    final db = ref.read(databaseProvider);
+    final neuerWert = await _wertDialogMitPruefung(
+      context,
+      db: db,
+      titel: param.parameterName,
+      initial: param.wert ?? '',
+      gruppe: param.parameterGruppe,
+      parameterName: param.parameterName,
+      maschinenName: maschinenName,
     );
     if (neuerWert == null) return;
 
-    final db = ref.read(databaseProvider);
     await (db.update(db.productStepParameters)
           ..where((p) => p.id.equals(param.id)))
         .write(
@@ -1953,6 +2138,57 @@ class _ParameterListe extends ConsumerWidget {
 
     ref.read(autoBackupTriggerProvider).fireDebounced(
           reason: 'Parameter geändert',
+        );
+    ref.invalidate(stepParametersProvider(stepId));
+  }
+
+  /// Bearbeitet ein Steckbrief-Feld: Wert-Dialog mit Grenzen-Prüfung,
+  /// dann Upsert in die Parametergruppe MASCHINENEINSTELLUNGEN.
+  Future<void> _steckbriefBearbeiten(
+    BuildContext context,
+    WidgetRef ref,
+    MachineParameterDef def,
+    ProductStepParameter? vorhanden,
+  ) async {
+    final db = ref.read(databaseProvider);
+    final neuerWert = await _wertDialogMitPruefung(
+      context,
+      db: db,
+      titel: def.parameterName,
+      initial: vorhanden?.wert ?? '',
+      gruppe: kMaschinenNotizGruppe,
+      parameterName: def.parameterName,
+      maschinenName: maschinenName,
+      einheit: def.einheit,
+    );
+    if (neuerWert == null) return;
+
+    final jetzt = DateTime.now();
+    if (vorhanden != null) {
+      await (db.update(db.productStepParameters)
+            ..where((p) => p.id.equals(vorhanden.id)))
+          .write(
+        ProductStepParametersCompanion(
+          wert: Value(neuerWert.isEmpty ? null : neuerWert),
+          updatedAt: Value(jetzt),
+        ),
+      );
+    } else {
+      await db.into(db.productStepParameters).insert(
+            ProductStepParametersCompanion(
+              id: Value(const Uuid().v4()),
+              stepId: Value(stepId),
+              parameterGruppe: const Value(kMaschinenNotizGruppe),
+              parameterName: Value(def.parameterName),
+              wert: Value(neuerWert.isEmpty ? null : neuerWert),
+              reihenfolge: Value(50 + def.sortierung),
+              istCustom: const Value(false),
+            ),
+          );
+    }
+
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Maschinen-Parameter geändert',
         );
     ref.invalidate(stepParametersProvider(stepId));
   }
@@ -1995,9 +2231,23 @@ class _ParameterListe extends ConsumerWidget {
         final standardParams = params.where((p) => !p.istCustom).toList();
         final customParams = params.where((p) => p.istCustom).toList();
 
-        // Standard-Parameter nach Gruppen aufteilen
+        // Steckbrief-Felder der Maschine (falls eine zugeordnet ist).
+        final defsAsync = maschineId == null
+            ? const AsyncValue<List<MachineParameterDef>>.data([])
+            : ref.watch(_steckbriefDefsProvider(maschineId!));
+        final defs = defsAsync.valueOrNull ?? const <MachineParameterDef>[];
+        final defNamen =
+            defs.map((d) => d.parameterName.toLowerCase()).toSet();
+
+        // Standard-Parameter nach Gruppen aufteilen. Zeilen, die zu einem
+        // Steckbrief-Feld gehören, erscheinen im Steckbrief-Block und
+        // werden hier ausgefiltert (sonst doppelt sichtbar).
         final standardByGruppe = <String, List<ProductStepParameter>>{};
         for (final p in standardParams) {
+          if (p.parameterGruppe == kMaschinenNotizGruppe &&
+              defNamen.contains(p.parameterName.toLowerCase())) {
+            continue;
+          }
           standardByGruppe.putIfAbsent(p.parameterGruppe, () => []).add(p);
         }
 
@@ -2021,6 +2271,19 @@ class _ParameterListe extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 8),
+
+            // Steckbrief-Felder der zugeordneten Maschine
+            if (defs.isNotEmpty) ...[
+              _SteckbriefBlock(
+                stepId: stepId,
+                maschinenName: maschinenName,
+                defs: defs,
+                params: alleParams,
+                onEdit: (def, vorhanden) =>
+                    _steckbriefBearbeiten(context, ref, def, vorhanden),
+              ),
+              const SizedBox(height: 8),
+            ],
 
             // Standard-Parameter (readonly)
             if (standardByGruppe.isNotEmpty) ...[
@@ -2058,6 +2321,114 @@ class _ParameterListe extends ConsumerWidget {
 
 /// Block für Standard-Parameter aus der Excel-Vorlage. Editierbar
 /// (Werte werden beim Export wieder in die Excel zurückgeschrieben).
+/// Block für die Steckbrief-Felder der zugeordneten Maschine: zeigt alle
+/// im Maschinen-Katalog definierten Parameter — mit Wert, wenn am Artikel
+/// gepflegt, sonst als leere Zeile zum Ausfüllen.
+class _SteckbriefBlock extends StatelessWidget {
+  const _SteckbriefBlock({
+    required this.stepId,
+    required this.maschinenName,
+    required this.defs,
+    required this.params,
+    required this.onEdit,
+  });
+
+  final String stepId;
+  final String? maschinenName;
+  final List<MachineParameterDef> defs;
+  final List<ProductStepParameter> params;
+  final void Function(MachineParameterDef, ProductStepParameter?) onEdit;
+
+  ProductStepParameter? _wertZeile(MachineParameterDef def) {
+    for (final p in params) {
+      if (p.parameterGruppe == kMaschinenNotizGruppe &&
+          p.parameterName.toLowerCase() == def.parameterName.toLowerCase()) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.precision_manufacturing,
+                size: 14,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                (maschinenName ?? 'MASCHINE').toUpperCase(),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          for (final def in defs)
+            Builder(
+              builder: (context) {
+                final zeile = _wertZeile(def);
+                final wert = zeile?.wert?.trim();
+                final hatWert = wert != null && wert.isNotEmpty;
+                return InkWell(
+                  onTap: () => onEdit(def, zeile),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 5,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            (def.einheit ?? '').isEmpty
+                                ? def.parameterName
+                                : '${def.parameterName} (${def.einheit})',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        hatWert
+                            ? _ParamWert(wert: wert)
+                            : Text(
+                                'eintragen …',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontStyle: FontStyle.italic,
+                                  color: theme.colorScheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
+                                ),
+                              ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _StandardGruppenBlock extends StatelessWidget {
   const _StandardGruppenBlock({
     required this.gruppenName,
