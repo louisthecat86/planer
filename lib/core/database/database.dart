@@ -4,6 +4,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'tables/app_settings.dart';
 import 'tables/machines.dart';
 import 'tables/order_list_items.dart';
+import 'tables/parameter_grenzen.dart';
 import 'tables/product_raw_materials.dart';
 import 'tables/product_step_parameters.dart';
 import 'tables/product_steps.dart';
@@ -44,6 +45,7 @@ part 'database.g.dart';
     AppSettings,
     WeekSnapshots,
     Demands,
+    ParameterGrenzen,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -53,7 +55,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -299,6 +301,11 @@ class AppDatabase extends _$AppDatabase {
               'UPDATE machines SET kapazitaet_minuten_pro_tag = 540 '
               'WHERE kapazitaet_minuten_pro_tag = 480',
             );
+          }
+
+          // --- v11 -> v12: Plausibilitätsgrenzen für Parameter ----------
+          if (from < 12) {
+            await m.createTable(parameterGrenzen);
           }
         },
         beforeOpen: (details) async {

@@ -30,6 +30,14 @@ class SettingsScreen extends ConsumerWidget {
                 'Wiederherstellung',
             onTap: () => context.pushNamed('data'),
           ),
+          const SizedBox(height: 8),
+          _SettingsTile(
+            icon: Icons.rule_rounded,
+            color: const Color(0xFF6D4C41),
+            title: 'Maschinen-Grenzen',
+            subtitle: 'Plausible Wertebereiche je Anlage — blockt Tippfehler',
+            onTap: () => context.pushNamed('grenzen'),
+          ),
           const SizedBox(height: 24),
           Center(
             child: Text(

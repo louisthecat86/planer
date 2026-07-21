@@ -11430,6 +11430,579 @@ class DemandsCompanion extends UpdateCompanion<Demand> {
   }
 }
 
+class $ParameterGrenzenTable extends ParameterGrenzen
+    with TableInfo<$ParameterGrenzenTable, ParameterGrenzenData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ParameterGrenzenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _kontextMeta =
+      const VerificationMeta('kontext');
+  @override
+  late final GeneratedColumn<String> kontext = GeneratedColumn<String>(
+      'kontext', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _parameterNameMeta =
+      const VerificationMeta('parameterName');
+  @override
+  late final GeneratedColumn<String> parameterName = GeneratedColumn<String>(
+      'parameter_name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _hartMinMeta =
+      const VerificationMeta('hartMin');
+  @override
+  late final GeneratedColumn<double> hartMin = GeneratedColumn<double>(
+      'hart_min', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _hartMaxMeta =
+      const VerificationMeta('hartMax');
+  @override
+  late final GeneratedColumn<double> hartMax = GeneratedColumn<double>(
+      'hart_max', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _weichMinMeta =
+      const VerificationMeta('weichMin');
+  @override
+  late final GeneratedColumn<double> weichMin = GeneratedColumn<double>(
+      'weich_min', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _weichMaxMeta =
+      const VerificationMeta('weichMax');
+  @override
+  late final GeneratedColumn<double> weichMax = GeneratedColumn<double>(
+      'weich_max', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _notizenMeta =
+      const VerificationMeta('notizen');
+  @override
+  late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
+      'notizen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        kontext,
+        parameterName,
+        hartMin,
+        hartMax,
+        weichMin,
+        weichMax,
+        notizen,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'parameter_grenzen';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<ParameterGrenzenData> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('kontext')) {
+      context.handle(_kontextMeta,
+          kontext.isAcceptableOrUnknown(data['kontext']!, _kontextMeta));
+    } else if (isInserting) {
+      context.missing(_kontextMeta);
+    }
+    if (data.containsKey('parameter_name')) {
+      context.handle(
+          _parameterNameMeta,
+          parameterName.isAcceptableOrUnknown(
+              data['parameter_name']!, _parameterNameMeta));
+    } else if (isInserting) {
+      context.missing(_parameterNameMeta);
+    }
+    if (data.containsKey('hart_min')) {
+      context.handle(_hartMinMeta,
+          hartMin.isAcceptableOrUnknown(data['hart_min']!, _hartMinMeta));
+    }
+    if (data.containsKey('hart_max')) {
+      context.handle(_hartMaxMeta,
+          hartMax.isAcceptableOrUnknown(data['hart_max']!, _hartMaxMeta));
+    }
+    if (data.containsKey('weich_min')) {
+      context.handle(_weichMinMeta,
+          weichMin.isAcceptableOrUnknown(data['weich_min']!, _weichMinMeta));
+    }
+    if (data.containsKey('weich_max')) {
+      context.handle(_weichMaxMeta,
+          weichMax.isAcceptableOrUnknown(data['weich_max']!, _weichMaxMeta));
+    }
+    if (data.containsKey('notizen')) {
+      context.handle(_notizenMeta,
+          notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+        {kontext, parameterName},
+      ];
+  @override
+  ParameterGrenzenData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ParameterGrenzenData(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      kontext: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kontext'])!,
+      parameterName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}parameter_name'])!,
+      hartMin: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}hart_min']),
+      hartMax: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}hart_max']),
+      weichMin: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}weich_min']),
+      weichMax: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}weich_max']),
+      notizen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $ParameterGrenzenTable createAlias(String alias) {
+    return $ParameterGrenzenTable(attachedDatabase, alias);
+  }
+}
+
+class ParameterGrenzenData extends DataClass
+    implements Insertable<ParameterGrenzenData> {
+  /// UUID.
+  final String id;
+
+  /// Anlagen-Name (machines.name) ODER Parametergruppe (z.B. "BRATSTRASSE").
+  final String kontext;
+
+  /// Name des Parameters, wie er in product_step_parameters steht
+  /// (z.B. "Bratzeit", "Temperatur", "Platte Oben 1"-Sammelname "Platten").
+  final String parameterName;
+
+  /// Harte Untergrenze — darunter wird das Speichern blockiert.
+  final double? hartMin;
+
+  /// Harte Obergrenze — darüber wird das Speichern blockiert.
+  final double? hartMax;
+
+  /// Weiche Untergrenze — darunter erscheint eine Warnung.
+  final double? weichMin;
+
+  /// Weiche Obergrenze — darüber erscheint eine Warnung.
+  final double? weichMax;
+
+  /// Optionale Notiz (z.B. "Herstellerangabe Typenschild").
+  final String? notizen;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const ParameterGrenzenData(
+      {required this.id,
+      required this.kontext,
+      required this.parameterName,
+      this.hartMin,
+      this.hartMax,
+      this.weichMin,
+      this.weichMax,
+      this.notizen,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['kontext'] = Variable<String>(kontext);
+    map['parameter_name'] = Variable<String>(parameterName);
+    if (!nullToAbsent || hartMin != null) {
+      map['hart_min'] = Variable<double>(hartMin);
+    }
+    if (!nullToAbsent || hartMax != null) {
+      map['hart_max'] = Variable<double>(hartMax);
+    }
+    if (!nullToAbsent || weichMin != null) {
+      map['weich_min'] = Variable<double>(weichMin);
+    }
+    if (!nullToAbsent || weichMax != null) {
+      map['weich_max'] = Variable<double>(weichMax);
+    }
+    if (!nullToAbsent || notizen != null) {
+      map['notizen'] = Variable<String>(notizen);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ParameterGrenzenCompanion toCompanion(bool nullToAbsent) {
+    return ParameterGrenzenCompanion(
+      id: Value(id),
+      kontext: Value(kontext),
+      parameterName: Value(parameterName),
+      hartMin: hartMin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hartMin),
+      hartMax: hartMax == null && nullToAbsent
+          ? const Value.absent()
+          : Value(hartMax),
+      weichMin: weichMin == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weichMin),
+      weichMax: weichMax == null && nullToAbsent
+          ? const Value.absent()
+          : Value(weichMax),
+      notizen: notizen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notizen),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory ParameterGrenzenData.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ParameterGrenzenData(
+      id: serializer.fromJson<String>(json['id']),
+      kontext: serializer.fromJson<String>(json['kontext']),
+      parameterName: serializer.fromJson<String>(json['parameterName']),
+      hartMin: serializer.fromJson<double?>(json['hartMin']),
+      hartMax: serializer.fromJson<double?>(json['hartMax']),
+      weichMin: serializer.fromJson<double?>(json['weichMin']),
+      weichMax: serializer.fromJson<double?>(json['weichMax']),
+      notizen: serializer.fromJson<String?>(json['notizen']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'kontext': serializer.toJson<String>(kontext),
+      'parameterName': serializer.toJson<String>(parameterName),
+      'hartMin': serializer.toJson<double?>(hartMin),
+      'hartMax': serializer.toJson<double?>(hartMax),
+      'weichMin': serializer.toJson<double?>(weichMin),
+      'weichMax': serializer.toJson<double?>(weichMax),
+      'notizen': serializer.toJson<String?>(notizen),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  ParameterGrenzenData copyWith(
+          {String? id,
+          String? kontext,
+          String? parameterName,
+          Value<double?> hartMin = const Value.absent(),
+          Value<double?> hartMax = const Value.absent(),
+          Value<double?> weichMin = const Value.absent(),
+          Value<double?> weichMax = const Value.absent(),
+          Value<String?> notizen = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      ParameterGrenzenData(
+        id: id ?? this.id,
+        kontext: kontext ?? this.kontext,
+        parameterName: parameterName ?? this.parameterName,
+        hartMin: hartMin.present ? hartMin.value : this.hartMin,
+        hartMax: hartMax.present ? hartMax.value : this.hartMax,
+        weichMin: weichMin.present ? weichMin.value : this.weichMin,
+        weichMax: weichMax.present ? weichMax.value : this.weichMax,
+        notizen: notizen.present ? notizen.value : this.notizen,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  ParameterGrenzenData copyWithCompanion(ParameterGrenzenCompanion data) {
+    return ParameterGrenzenData(
+      id: data.id.present ? data.id.value : this.id,
+      kontext: data.kontext.present ? data.kontext.value : this.kontext,
+      parameterName: data.parameterName.present
+          ? data.parameterName.value
+          : this.parameterName,
+      hartMin: data.hartMin.present ? data.hartMin.value : this.hartMin,
+      hartMax: data.hartMax.present ? data.hartMax.value : this.hartMax,
+      weichMin: data.weichMin.present ? data.weichMin.value : this.weichMin,
+      weichMax: data.weichMax.present ? data.weichMax.value : this.weichMax,
+      notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ParameterGrenzenData(')
+          ..write('id: $id, ')
+          ..write('kontext: $kontext, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('hartMin: $hartMin, ')
+          ..write('hartMax: $hartMax, ')
+          ..write('weichMin: $weichMin, ')
+          ..write('weichMax: $weichMax, ')
+          ..write('notizen: $notizen, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, kontext, parameterName, hartMin, hartMax,
+      weichMin, weichMax, notizen, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ParameterGrenzenData &&
+          other.id == this.id &&
+          other.kontext == this.kontext &&
+          other.parameterName == this.parameterName &&
+          other.hartMin == this.hartMin &&
+          other.hartMax == this.hartMax &&
+          other.weichMin == this.weichMin &&
+          other.weichMax == this.weichMax &&
+          other.notizen == this.notizen &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ParameterGrenzenCompanion extends UpdateCompanion<ParameterGrenzenData> {
+  final Value<String> id;
+  final Value<String> kontext;
+  final Value<String> parameterName;
+  final Value<double?> hartMin;
+  final Value<double?> hartMax;
+  final Value<double?> weichMin;
+  final Value<double?> weichMax;
+  final Value<String?> notizen;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ParameterGrenzenCompanion({
+    this.id = const Value.absent(),
+    this.kontext = const Value.absent(),
+    this.parameterName = const Value.absent(),
+    this.hartMin = const Value.absent(),
+    this.hartMax = const Value.absent(),
+    this.weichMin = const Value.absent(),
+    this.weichMax = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ParameterGrenzenCompanion.insert({
+    required String id,
+    required String kontext,
+    required String parameterName,
+    this.hartMin = const Value.absent(),
+    this.hartMax = const Value.absent(),
+    this.weichMin = const Value.absent(),
+    this.weichMax = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        kontext = Value(kontext),
+        parameterName = Value(parameterName);
+  static Insertable<ParameterGrenzenData> custom({
+    Expression<String>? id,
+    Expression<String>? kontext,
+    Expression<String>? parameterName,
+    Expression<double>? hartMin,
+    Expression<double>? hartMax,
+    Expression<double>? weichMin,
+    Expression<double>? weichMax,
+    Expression<String>? notizen,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (kontext != null) 'kontext': kontext,
+      if (parameterName != null) 'parameter_name': parameterName,
+      if (hartMin != null) 'hart_min': hartMin,
+      if (hartMax != null) 'hart_max': hartMax,
+      if (weichMin != null) 'weich_min': weichMin,
+      if (weichMax != null) 'weich_max': weichMax,
+      if (notizen != null) 'notizen': notizen,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ParameterGrenzenCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? kontext,
+      Value<String>? parameterName,
+      Value<double?>? hartMin,
+      Value<double?>? hartMax,
+      Value<double?>? weichMin,
+      Value<double?>? weichMax,
+      Value<String?>? notizen,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return ParameterGrenzenCompanion(
+      id: id ?? this.id,
+      kontext: kontext ?? this.kontext,
+      parameterName: parameterName ?? this.parameterName,
+      hartMin: hartMin ?? this.hartMin,
+      hartMax: hartMax ?? this.hartMax,
+      weichMin: weichMin ?? this.weichMin,
+      weichMax: weichMax ?? this.weichMax,
+      notizen: notizen ?? this.notizen,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (kontext.present) {
+      map['kontext'] = Variable<String>(kontext.value);
+    }
+    if (parameterName.present) {
+      map['parameter_name'] = Variable<String>(parameterName.value);
+    }
+    if (hartMin.present) {
+      map['hart_min'] = Variable<double>(hartMin.value);
+    }
+    if (hartMax.present) {
+      map['hart_max'] = Variable<double>(hartMax.value);
+    }
+    if (weichMin.present) {
+      map['weich_min'] = Variable<double>(weichMin.value);
+    }
+    if (weichMax.present) {
+      map['weich_max'] = Variable<double>(weichMax.value);
+    }
+    if (notizen.present) {
+      map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ParameterGrenzenCompanion(')
+          ..write('id: $id, ')
+          ..write('kontext: $kontext, ')
+          ..write('parameterName: $parameterName, ')
+          ..write('hartMin: $hartMin, ')
+          ..write('hartMax: $hartMax, ')
+          ..write('weichMin: $weichMin, ')
+          ..write('weichMax: $weichMax, ')
+          ..write('notizen: $notizen, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11454,6 +12027,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AppSettingsTable appSettings = $AppSettingsTable(this);
   late final $WeekSnapshotsTable weekSnapshots = $WeekSnapshotsTable(this);
   late final $DemandsTable demands = $DemandsTable(this);
+  late final $ParameterGrenzenTable parameterGrenzen =
+      $ParameterGrenzenTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11473,7 +12048,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         orderListItems,
         appSettings,
         weekSnapshots,
-        demands
+        demands,
+        parameterGrenzen
       ];
 }
 
@@ -18363,6 +18939,273 @@ typedef $$DemandsTableProcessedTableManager = ProcessedTableManager<
     (Demand, BaseReferences<_$AppDatabase, $DemandsTable, Demand>),
     Demand,
     PrefetchHooks Function()>;
+typedef $$ParameterGrenzenTableCreateCompanionBuilder
+    = ParameterGrenzenCompanion Function({
+  required String id,
+  required String kontext,
+  required String parameterName,
+  Value<double?> hartMin,
+  Value<double?> hartMax,
+  Value<double?> weichMin,
+  Value<double?> weichMax,
+  Value<String?> notizen,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$ParameterGrenzenTableUpdateCompanionBuilder
+    = ParameterGrenzenCompanion Function({
+  Value<String> id,
+  Value<String> kontext,
+  Value<String> parameterName,
+  Value<double?> hartMin,
+  Value<double?> hartMax,
+  Value<double?> weichMin,
+  Value<double?> weichMax,
+  Value<String?> notizen,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$ParameterGrenzenTableFilterComposer
+    extends Composer<_$AppDatabase, $ParameterGrenzenTable> {
+  $$ParameterGrenzenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kontext => $composableBuilder(
+      column: $table.kontext, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get hartMin => $composableBuilder(
+      column: $table.hartMin, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get hartMax => $composableBuilder(
+      column: $table.hartMax, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get weichMin => $composableBuilder(
+      column: $table.weichMin, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get weichMax => $composableBuilder(
+      column: $table.weichMax, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ParameterGrenzenTableOrderingComposer
+    extends Composer<_$AppDatabase, $ParameterGrenzenTable> {
+  $$ParameterGrenzenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kontext => $composableBuilder(
+      column: $table.kontext, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get parameterName => $composableBuilder(
+      column: $table.parameterName,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get hartMin => $composableBuilder(
+      column: $table.hartMin, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get hartMax => $composableBuilder(
+      column: $table.hartMax, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get weichMin => $composableBuilder(
+      column: $table.weichMin, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get weichMax => $composableBuilder(
+      column: $table.weichMax, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ParameterGrenzenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ParameterGrenzenTable> {
+  $$ParameterGrenzenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kontext =>
+      $composableBuilder(column: $table.kontext, builder: (column) => column);
+
+  GeneratedColumn<String> get parameterName => $composableBuilder(
+      column: $table.parameterName, builder: (column) => column);
+
+  GeneratedColumn<double> get hartMin =>
+      $composableBuilder(column: $table.hartMin, builder: (column) => column);
+
+  GeneratedColumn<double> get hartMax =>
+      $composableBuilder(column: $table.hartMax, builder: (column) => column);
+
+  GeneratedColumn<double> get weichMin =>
+      $composableBuilder(column: $table.weichMin, builder: (column) => column);
+
+  GeneratedColumn<double> get weichMax =>
+      $composableBuilder(column: $table.weichMax, builder: (column) => column);
+
+  GeneratedColumn<String> get notizen =>
+      $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ParameterGrenzenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ParameterGrenzenTable,
+    ParameterGrenzenData,
+    $$ParameterGrenzenTableFilterComposer,
+    $$ParameterGrenzenTableOrderingComposer,
+    $$ParameterGrenzenTableAnnotationComposer,
+    $$ParameterGrenzenTableCreateCompanionBuilder,
+    $$ParameterGrenzenTableUpdateCompanionBuilder,
+    (
+      ParameterGrenzenData,
+      BaseReferences<_$AppDatabase, $ParameterGrenzenTable,
+          ParameterGrenzenData>
+    ),
+    ParameterGrenzenData,
+    PrefetchHooks Function()> {
+  $$ParameterGrenzenTableTableManager(
+      _$AppDatabase db, $ParameterGrenzenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ParameterGrenzenTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ParameterGrenzenTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ParameterGrenzenTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> kontext = const Value.absent(),
+            Value<String> parameterName = const Value.absent(),
+            Value<double?> hartMin = const Value.absent(),
+            Value<double?> hartMax = const Value.absent(),
+            Value<double?> weichMin = const Value.absent(),
+            Value<double?> weichMax = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ParameterGrenzenCompanion(
+            id: id,
+            kontext: kontext,
+            parameterName: parameterName,
+            hartMin: hartMin,
+            hartMax: hartMax,
+            weichMin: weichMin,
+            weichMax: weichMax,
+            notizen: notizen,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String kontext,
+            required String parameterName,
+            Value<double?> hartMin = const Value.absent(),
+            Value<double?> hartMax = const Value.absent(),
+            Value<double?> weichMin = const Value.absent(),
+            Value<double?> weichMax = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ParameterGrenzenCompanion.insert(
+            id: id,
+            kontext: kontext,
+            parameterName: parameterName,
+            hartMin: hartMin,
+            hartMax: hartMax,
+            weichMin: weichMin,
+            weichMax: weichMax,
+            notizen: notizen,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ParameterGrenzenTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ParameterGrenzenTable,
+    ParameterGrenzenData,
+    $$ParameterGrenzenTableFilterComposer,
+    $$ParameterGrenzenTableOrderingComposer,
+    $$ParameterGrenzenTableAnnotationComposer,
+    $$ParameterGrenzenTableCreateCompanionBuilder,
+    $$ParameterGrenzenTableUpdateCompanionBuilder,
+    (
+      ParameterGrenzenData,
+      BaseReferences<_$AppDatabase, $ParameterGrenzenTable,
+          ParameterGrenzenData>
+    ),
+    ParameterGrenzenData,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -18397,4 +19240,6 @@ class $AppDatabaseManager {
       $$WeekSnapshotsTableTableManager(_db, _db.weekSnapshots);
   $$DemandsTableTableManager get demands =>
       $$DemandsTableTableManager(_db, _db.demands);
+  $$ParameterGrenzenTableTableManager get parameterGrenzen =>
+      $$ParameterGrenzenTableTableManager(_db, _db.parameterGrenzen);
 }

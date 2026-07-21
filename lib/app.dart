@@ -20,6 +20,7 @@ import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
+import 'features/settings/parameter_grenzen_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/home_screen.dart';
 
@@ -119,6 +120,14 @@ final routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
+      // Plausibilitätsgrenzen für Maschinen-/Prozessparameter.
+      GoRoute(
+        path: '/grenzen',
+        name: 'grenzen',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: ParameterGrenzenScreen(),
+        ),
+      ),
       GoRoute(
         path: '/settings',
         name: 'settings',
