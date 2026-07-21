@@ -13,6 +13,10 @@ import 'excel_import_service_v3.dart';
 /// in den Export zu ziehen.
 const String kMaschinenNotizParam = 'Maschineneinstellungen';
 
+/// Parametergruppe der Maschinen-Steckbrief-Werte (identisch zur
+/// App-Konstante kMaschinenNotizGruppe in article_detail_screen.dart).
+const String kMaschinenSteckbriefGruppe = 'MASCHINENEINSTELLUNGEN';
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis-Klasse
 // ═══════════════════════════════════════════════════════════════════════════
@@ -169,6 +173,21 @@ class ExcelExportServiceV3 {
       warnungen: warnungen,
     );
 
+    // Maschinen-Steckbriefe (Parameterdefinitionen je Anlage) als eigenes
+    // Sheet mitschreiben — Teil des vollständigen Excel-Backups.
+    final alleSteckbriefe =
+        await _db.select(_db.machineParameterDefs).get();
+    _schreibeSteckbriefSheet(
+      archive: archive,
+      sheetInfo: sheetInfo,
+      defs: [
+        for (final d in alleSteckbriefe)
+          if (d.deletedAt == null) d,
+      ],
+      maschinenById: maschinenById,
+      warnungen: warnungen,
+    );
+
     // In der App angelegte Maschinen in den Anlagen-Katalog übernehmen.
     final maschinenInKatalog = _ergaenzeAnlagenKatalog(
       archive: archive,
@@ -311,6 +330,176 @@ class ExcelExportServiceV3 {
   ///
   /// `sheetInfo` wird um die neuen Sheets ergänzt. Liefert die Anzahl
   /// angelegter Sheets.
+
+  /// Schreibt den Maschinen-Steckbrief-Katalog als eigenes Sheet
+  /// „Maschinen-Steckbriefe": eine Zeile je (Maschine, Parameter) mit
+  /// Einheit und Reihenfolge. Existiert das Sheet, wird es ersetzt; sonst
+  /// wird es neu angelegt und im Workbook registriert.
+  void _schreibeSteckbriefSheet({
+    required Archive archive,
+    required Map<String, String> sheetInfo,
+    required List<MachineParameterDef> defs,
+    required Map<String, Machine> maschinenById,
+    required List<String> warnungen,
+  }) {
+    const sheetName = 'Maschinen-Steckbriefe';
+
+    String esc(String v) => v
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+
+    // Zeilen: Titel, Kopf, dann je Definition eine Zeile — nach Maschine
+    // und Sortierung geordnet.
+    final sortiert = [...defs]..sort((a, b) {
+        final ma = maschinenById[a.maschineId]?.name ?? '';
+        final mb = maschinenById[b.maschineId]?.name ?? '';
+        final c = ma.compareTo(mb);
+        if (c != 0) return c;
+        return a.sortierung.compareTo(b.sortierung);
+      });
+
+    final buf = StringBuffer()
+      ..write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
+      ..write(
+        '<worksheet xmlns="http://schemas.openxmlformats.org/'
+        'spreadsheetml/2006/main"><sheetData>',
+      );
+
+    void zeile(int r, List<String> werte) {
+      buf.write('<row r="$r">');
+      for (var i = 0; i < werte.length; i++) {
+        final col = String.fromCharCode(65 + i); // A, B, C, D
+        buf.write(
+          '<c r="$col$r" t="inlineStr"><is><t>${esc(werte[i])}</t></is></c>',
+        );
+      }
+      buf.write('</row>');
+    }
+
+    zeile(1, const ['MASCHINEN-STECKBRIEFE']);
+    zeile(2, const ['Maschine', 'Parameter', 'Einheit', 'Reihenfolge']);
+    var r = 3;
+    for (final d in sortiert) {
+      final maschine = maschinenById[d.maschineId];
+      if (maschine == null || maschine.deletedAt != null) continue;
+      zeile(r++, [
+        maschine.name,
+        d.parameterName,
+        d.einheit ?? '',
+        d.sortierung.toString(),
+      ]);
+    }
+    buf.write('</sheetData></worksheet>');
+    final xmlBytes = utf8.encode(buf.toString());
+
+    // Existiert das Sheet schon? Dann nur die Datei ersetzen.
+    final vorhandenerPfad = sheetInfo[sheetName];
+    if (vorhandenerPfad != null) {
+      archive.addFile(
+        ArchiveFile(vorhandenerPfad, xmlBytes.length, xmlBytes),
+      );
+      return;
+    }
+
+    // Neu anlegen + im Workbook registrieren (gleiche Mechanik wie bei
+    // neuen Artikel-Sheets).
+    final workbookFile = archive.findFile('xl/workbook.xml');
+    final relsFile = archive.findFile('xl/_rels/workbook.xml.rels');
+    final ctFile = archive.findFile('[Content_Types].xml');
+    if (workbookFile == null || relsFile == null || ctFile == null) {
+      warnungen.add(
+        'Maschinen-Steckbriefe: Workbook-Struktur unvollständig — '
+        'Sheet nicht angelegt.',
+      );
+      return;
+    }
+    final workbookDoc =
+        XmlDocument.parse(utf8.decode(workbookFile.content as List<int>));
+    final relsDoc =
+        XmlDocument.parse(utf8.decode(relsFile.content as List<int>));
+    final ctDoc =
+        XmlDocument.parse(utf8.decode(ctFile.content as List<int>));
+    final sheetsElement = workbookDoc.findAllElements('sheets').firstOrNull;
+    final relsRoot = relsDoc.findAllElements('Relationships').firstOrNull;
+    final ctRoot = ctDoc.findAllElements('Types').firstOrNull;
+    if (sheetsElement == null || relsRoot == null || ctRoot == null) {
+      warnungen.add(
+        'Maschinen-Steckbriefe: Workbook-XML unerwartet — nicht angelegt.',
+      );
+      return;
+    }
+
+    var maxDateiNr = 0;
+    for (final f in archive.files) {
+      final m =
+          RegExp(r'^xl/worksheets/sheet(\d+)\.xml$').firstMatch(f.name);
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        if (n > maxDateiNr) maxDateiNr = n;
+      }
+    }
+    var maxSheetId = 0;
+    for (final sh in workbookDoc.findAllElements('sheet')) {
+      final n = int.tryParse(sh.getAttribute('sheetId') ?? '') ?? 0;
+      if (n > maxSheetId) maxSheetId = n;
+    }
+    var maxRid = 0;
+    for (final rel in relsDoc.findAllElements('Relationship')) {
+      final m =
+          RegExp(r'^rId(\d+)$').firstMatch(rel.getAttribute('Id') ?? '');
+      if (m != null) {
+        final n = int.parse(m.group(1)!);
+        if (n > maxRid) maxRid = n;
+      }
+    }
+
+    maxDateiNr++;
+    maxSheetId++;
+    maxRid++;
+    final neuerPfad = 'xl/worksheets/sheet$maxDateiNr.xml';
+    archive.addFile(ArchiveFile(neuerPfad, xmlBytes.length, xmlBytes));
+
+    final rel = XmlElement(XmlName('Relationship'));
+    rel.setAttribute('Id', 'rId$maxRid');
+    rel.setAttribute(
+      'Type',
+      'http://schemas.openxmlformats.org/officeDocument/2006/'
+          'relationships/worksheet',
+    );
+    rel.setAttribute('Target', 'worksheets/sheet$maxDateiNr.xml');
+    relsRoot.children.add(rel);
+
+    final sheetEl = XmlElement(XmlName('sheet'));
+    sheetEl.setAttribute(
+      'xmlns:r',
+      'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+    );
+    sheetEl.setAttribute('name', sheetName);
+    sheetEl.setAttribute('sheetId', '$maxSheetId');
+    sheetEl.setAttribute('state', 'visible');
+    sheetEl.setAttribute('r:id', 'rId$maxRid');
+    sheetsElement.children.add(sheetEl);
+
+    final ov = XmlElement(XmlName('Override'));
+    ov.setAttribute('PartName', '/$neuerPfad');
+    ov.setAttribute(
+      'ContentType',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.'
+          'worksheet+xml',
+    );
+    ctRoot.children.add(ov);
+
+    final wb = utf8.encode(workbookDoc.toXmlString(pretty: false));
+    archive.addFile(ArchiveFile('xl/workbook.xml', wb.length, wb));
+    final rl = utf8.encode(relsDoc.toXmlString(pretty: false));
+    archive.addFile(ArchiveFile('xl/_rels/workbook.xml.rels', rl.length, rl));
+    final ct = utf8.encode(ctDoc.toXmlString(pretty: false));
+    archive.addFile(ArchiveFile('[Content_Types].xml', ct.length, ct));
+
+    sheetInfo[sheetName] = neuerPfad;
+  }
+
   int _legeFehlendeArtikelSheetsAn({
     required Archive archive,
     required Map<String, String> sheetInfo,
@@ -887,6 +1076,12 @@ class ExcelExportServiceV3 {
       //    der Vorlage existiert — sonst überspringen) ────────────────
       final stepParams = paramsByStep[step.id] ?? [];
       final standardParams = stepParams.where((p) => !p.istCustom);
+      // Steckbrief-Parameter (Maschinen-Gruppe), für die die Vorlage keine
+      // eigene Labelzeile hat: unten in die freien Slots des
+      // ZUSÄTZLICHE-PARAMETER-Blocks schreiben. So sind z.B. die
+      // Verbufa-Einstellungen je Schritt-Spalte im Sheet sichtbar und
+      // kommen beim Re-Import wieder als Steckbrief-Werte zurück.
+      final steckbriefOhneZeile = <ProductStepParameter>[];
       for (final param in standardParams) {
         final paramRow = _findeZeileMitLabelInA(
           doc,
@@ -894,7 +1089,13 @@ class ExcelExportServiceV3 {
           param.parameterName,
           gruppe: param.parameterGruppe,
         );
-        if (paramRow == null) continue;
+        if (paramRow == null) {
+          if (param.parameterGruppe == kMaschinenSteckbriefGruppe &&
+              (param.wert ?? '').trim().isNotEmpty) {
+            steckbriefOhneZeile.add(param);
+          }
+          continue;
+        }
         final wert = param.wert ?? '';
         if (wert.isEmpty) continue;
 
@@ -924,8 +1125,11 @@ class ExcelExportServiceV3 {
         parameterAktualisiert++;
       }
 
-      // ── Custom-Parameter in die ZUSÄTZLICHE-PARAMETER-Slots ───────
-      final customParams = stepParams.where((p) => p.istCustom).toList();
+      // ── Custom- und Steckbrief-Parameter in die freien Slots ──────
+      final customParams = [
+        ...steckbriefOhneZeile,
+        ...stepParams.where((p) => p.istCustom),
+      ];
       for (var i = 0; i < customParams.length; i++) {
         if (i >= customSlots.length) {
           customUebersprungen++;

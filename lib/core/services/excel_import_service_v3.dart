@@ -226,6 +226,7 @@ class ExcelImportServiceV3 {
     'Übersicht',
     'Anleitung',
     'Anlagen-Katalog',
+    'Maschinen-Steckbriefe',
     'Brühwurst',
     'Rohwurst',
     'Kochpökelwaren',
@@ -479,6 +480,13 @@ class ExcelImportServiceV3 {
         }
       }
 
+      // ── Maschinen-Steckbriefe (Parameterdefinitionen) einlesen ────────
+      // Sheet „Maschinen-Steckbriefe": Maschine | Parameter | Einheit |
+      // Reihenfolge. Fehlt das Sheet (ältere Excel), bleibt der Bestand
+      // in der App unverändert.
+      final steckbriefNamenByMaschine =
+          await _importiereSteckbriefe(excel, maschinenIdByName);
+
       for (final art in parsedArtikel) {
         final existing = await (_db.select(_db.products)
               ..where((t) => t.artikelnummer.equals(art.artikelnummer))
@@ -558,18 +566,31 @@ class ExcelImportServiceV3 {
               );
           schritteImportiert++;
 
+          // Steckbrief-Namen der Maschine dieses Schritts: Parameter mit
+          // diesen Namen gehören in die Maschinen-Gruppe — egal in welchem
+          // Block sie in der Excel standen (der Export legt sie mangels
+          // eigener Labelzeile im ZUSÄTZLICHE-PARAMETER-Block ab).
+          final steckbriefNamen = maschineId == null
+              ? const <String>{}
+              : (steckbriefNamenByMaschine[maschineId] ?? const <String>{});
+
           int paramIdx = 0;
           for (final entry in s.parameterByGruppe.entries) {
             for (final p in entry.value) {
+              final istSteckbrief =
+                  steckbriefNamen.contains(p.name.toLowerCase());
               await _db.into(_db.productStepParameters).insert(
                     ProductStepParametersCompanion(
                       id: Value(_uuid.v4()),
                       stepId: Value(stepId),
-                      parameterGruppe: Value(entry.key),
+                      parameterGruppe: Value(
+                        istSteckbrief ? 'MASCHINENEINSTELLUNGEN' : entry.key,
+                      ),
                       parameterName: Value(p.name),
                       wert: Value(p.wert),
                       reihenfolge: Value(paramIdx++),
-                      istCustom: Value(p.istCustom),
+                      istCustom:
+                          Value(istSteckbrief ? false : p.istCustom),
                     ),
                   );
               parameterImportiert++;
@@ -1153,6 +1174,93 @@ class ExcelImportServiceV3 {
       );
     }
     return result;
+  }
+
+  /// Liest das Sheet „Maschinen-Steckbriefe" (Maschine | Parameter |
+  /// Einheit | Reihenfolge) und gleicht die Parameterdefinitionen in
+  /// `machine_parameter_defs` ab. Gibt je Maschinen-Id die Menge der
+  /// Parameternamen (kleingeschrieben) zurück — für die Reklassifizierung
+  /// der Artikel-Parameter.
+  Future<Map<String, Set<String>>> _importiereSteckbriefe(
+    Excel excel,
+    Map<String, String> maschinenIdByName,
+  ) async {
+    final namenByMaschine = <String, Set<String>>{};
+
+    // Bestehende Defs (auch soft-gelöschte) für den Abgleich laden.
+    final vorhandene =
+        await _db.select(_db.machineParameterDefs).get();
+    final vorhandenByKey = <String, MachineParameterDef>{
+      for (final d in vorhandene)
+        '${d.maschineId}|${d.parameterName.toLowerCase()}': d,
+    };
+    // Namen-Map mit dem App-Bestand vorbelegen — auch ohne Sheet greift
+    // dann die Reklassifizierung für in der App gepflegte Steckbriefe.
+    for (final d in vorhandene) {
+      if (d.deletedAt != null) continue;
+      namenByMaschine
+          .putIfAbsent(d.maschineId, () => <String>{})
+          .add(d.parameterName.toLowerCase());
+    }
+
+    final sheet = excel.tables['Maschinen-Steckbriefe'];
+    if (sheet == null) return namenByMaschine;
+
+    final jetzt = DateTime.now();
+    for (var r = 0; r < sheet.rows.length; r++) {
+      final row = sheet.rows[r];
+      final maschine = _cellStr(row, 0)?.trim();
+      final param = _cellStr(row, 1)?.trim();
+      if (maschine == null ||
+          param == null ||
+          maschine.isEmpty ||
+          param.isEmpty) {
+        continue;
+      }
+      // Titel- und Kopfzeile überspringen.
+      if (maschine == 'MASCHINEN-STECKBRIEFE' || maschine == 'Maschine') {
+        continue;
+      }
+      final maschineId = maschinenIdByName[maschine];
+      if (maschineId == null) continue;
+
+      final einheit = _cellStr(row, 2)?.trim();
+      final sortierung =
+          int.tryParse(_cellStr(row, 3)?.trim() ?? '') ?? 0;
+
+      final key = '$maschineId|${param.toLowerCase()}';
+      final existing = vorhandenByKey[key];
+      if (existing != null) {
+        await (_db.update(_db.machineParameterDefs)
+              ..where((d) => d.id.equals(existing.id)))
+            .write(
+          MachineParameterDefsCompanion(
+            einheit: Value(
+              (einheit == null || einheit.isEmpty) ? null : einheit,
+            ),
+            sortierung: Value(sortierung),
+            deletedAt: const Value(null),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      } else {
+        await _db.into(_db.machineParameterDefs).insert(
+              MachineParameterDefsCompanion(
+                id: Value(_uuid.v4()),
+                maschineId: Value(maschineId),
+                parameterName: Value(param),
+                einheit: Value(
+                  (einheit == null || einheit.isEmpty) ? null : einheit,
+                ),
+                sortierung: Value(sortierung),
+              ),
+            );
+      }
+      namenByMaschine
+          .putIfAbsent(maschineId, () => <String>{})
+          .add(param.toLowerCase());
+    }
+    return namenByMaschine;
   }
 
   static String? _cellStr(List<Data?> row, int col) {
