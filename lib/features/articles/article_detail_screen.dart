@@ -1714,59 +1714,11 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
           const SizedBox(height: 14),
 
-          // Editierbare Werte als ruhige, gleichmäßige Leiste
+          // Nur mengenunabhängige „Fixe Zeit" bleibt am Schritt.
+          // Personen/Menge/Dauer werden zentral über den Leistungsdaten-
+          // Block je Abteilung gepflegt — nicht mehr pro Schritt.
           Row(
             children: [
-              Expanded(
-                child: _WertFeld(
-                  label: 'Personen',
-                  wert: s.basisMitarbeiter > 0 ? '${s.basisMitarbeiter}' : '–',
-                  onTap: () => _editNumber(
-                    titel: 'Personen',
-                    aktuell: s.basisMitarbeiter.toDouble(),
-                    bauen: (v) => ProductStepsCompanion(
-                      basisMitarbeiter: Value(v.round() < 1 ? 1 : v.round()),
-                      updatedAt: Value(DateTime.now()),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _WertFeld(
-                  label: 'Menge',
-                  wert: s.basisMengeKg > 0 ? '${_fmtZahl(s.basisMengeKg)} kg' : '–',
-                  onTap: () => _editNumber(
-                    titel: 'Menge (kg)',
-                    aktuell: s.basisMengeKg,
-                    suffix: 'kg',
-                    bauen: (v) => ProductStepsCompanion(
-                      basisMengeKg: Value(v),
-                      mengeKg: Value(v > 0 ? v : null),
-                      updatedAt: Value(DateTime.now()),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _WertFeld(
-                  label: 'Dauer',
-                  wert: s.basisDauerMinuten > 0
-                      ? _fmtDauer(s.basisDauerMinuten)
-                      : '–',
-                  onTap: () => _editNumber(
-                    titel: 'Dauer (min)',
-                    aktuell: s.basisDauerMinuten,
-                    suffix: 'min',
-                    bauen: (v) => ProductStepsCompanion(
-                      basisDauerMinuten: Value(v),
-                      updatedAt: Value(DateTime.now()),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
               Expanded(
                 child: _WertFeld(
                   label: 'Fixe Zeit',

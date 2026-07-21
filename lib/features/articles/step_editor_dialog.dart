@@ -501,46 +501,39 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 ),
               const SizedBox(height: 16),
 
-              // ── Zahlen: Personen / Menge / Dauer ─────────────────────
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _personenCtrl,
-                      enabled: !_isSaving,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Personen',
+              // ── Hinweis: Leistungsdaten zentral je Abteilung ─────────
+              // Personen, Menge und Dauer werden nicht mehr pro Schritt
+              // gepflegt, sondern zentral über „Leistungsdaten" je
+              // Abteilung — das verhindert widersprüchliche Zeitangaben.
+              // Die geladenen Werte bleiben erhalten (die Controller
+              // behalten sie); hier sind sie nur nicht editierbar.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surfaceContainerHighest
+                      .withValues(alpha: 0.4),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Menge, Zeit und Personen werden zentral über '
+                        '„Leistungsdaten" je Abteilung gepflegt.',
+                        style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _mengeCtrl,
-                      enabled: !_isSaving,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Menge',
-                        suffixText: 'kg',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _dauerMinCtrl,
-                      enabled: !_isSaving,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Dauer',
-                        suffixText: 'min',
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
 
               const SizedBox(height: 12),

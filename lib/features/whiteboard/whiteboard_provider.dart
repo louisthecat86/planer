@@ -268,17 +268,26 @@ Future<GeplanterPlan> berechneSchrittPlan({
       // Läuft ein Produkt erst ab dem Dampftunnel (ohne Bratstraße),
       // greift genau dieselbe Rechnung — dann ist der Dampftunnel die
       // längste (und einzige) Station und bestimmt die Dauer.
+      // Alle anderen Abteilungen: EINE Leistung je Abteilung. Maßgeblich
+      // ist die Basis (Menge/Dauer) des ERSTEN Schritts der Abteilung —
+      // genau die Werte, die der Leistungsdaten-Dialog pflegt. Die App
+      // skaliert diese eine Referenz auf die Blockmenge hoch, statt die
+      // Einzelschritte zu skalieren und zu addieren (das führte bei
+      // mehrschrittigen Abteilungen wie Wolf+Kutter zu falschen Zeiten).
       if (istBratstrasse) {
         dauer = block.fold<double>(0, (m, b) => b.dauer > m ? b.dauer : m);
         if (block.length > 1) {
           notizen.write('Durchlaufende Linie (längste Station zählt). ');
         }
       } else {
-        dauer = block.fold<double>(0, (summe, b) => summe + b.dauer);
-      }
-      platzhalter = block.any((b) => b.platzhalter);
-      if (platzhalter) {
-        notizen.write('Zeit teils Platzhalter (Stammdaten pflegen). ');
+        final ref = block.first.step;
+        final muell = StringBuffer();
+        final (d, ph) = _skaliereDauer(ref, blockMenge, muell);
+        dauer = d;
+        platzhalter = ph;
+        if (ph) {
+          notizen.write('Zeit ist Platzhalter (Leistungsdaten pflegen). ');
+        }
       }
     }
 
