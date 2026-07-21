@@ -173,6 +173,16 @@ class ExcelExportServiceV3 {
       warnungen: warnungen,
     );
 
+    // Neue Artikel auch in der Übersicht führen (Tabelle + Öffnen-Link) —
+    // sonst wären sie zwar als Sheet da, aber im Katalog unsichtbar.
+    _ergaenzeUebersicht(
+      archive: archive,
+      sheetInfo: sheetInfo,
+      sharedStrings: sharedStrings,
+      artikel: alleArtikel,
+      warnungen: warnungen,
+    );
+
     // Maschinen-Steckbriefe (Parameterdefinitionen je Anlage) als eigenes
     // Sheet mitschreiben — Teil des vollständigen Excel-Backups.
     final alleSteckbriefe =
@@ -335,6 +345,123 @@ class ExcelExportServiceV3 {
   /// „Maschinen-Steckbriefe": eine Zeile je (Maschine, Parameter) mit
   /// Einheit und Reihenfolge. Existiert das Sheet, wird es ersetzt; sonst
   /// wird es neu angelegt und im Workbook registriert.
+
+  /// Ergänzt in der „Übersicht" fehlende Artikel: eine Zeile in der
+  /// Katalog-Tabelle (Artikelnr | Bezeichnung | Kategorie | Status |
+  /// Datum | Link) plus interner „Öffnen"-Hyperlink auf das Artikel-Sheet.
+  void _ergaenzeUebersicht({
+    required Archive archive,
+    required Map<String, String> sheetInfo,
+    required _SharedStrings sharedStrings,
+    required List<Product> artikel,
+    required List<String> warnungen,
+  }) {
+    final pfad = sheetInfo['Übersicht'];
+    if (pfad == null) return; // Vorlage ohne Übersicht — nichts zu tun.
+    final file = archive.findFile(pfad);
+    if (file == null) return;
+
+    try {
+      final doc = XmlDocument.parse(
+        utf8.decode(file.content as List<int>),
+      );
+      final sheetData = doc.findAllElements('sheetData').firstOrNull;
+      if (sheetData == null) return;
+
+      // Vorhandene Artikelnummern (Spalte A ab Zeile 15) + letzte Zeile.
+      final vorhandene = <String>{};
+      var letzteZeile = 14;
+      for (final row in sheetData.findElements('row')) {
+        final r = int.tryParse(row.getAttribute('r') ?? '');
+        if (r == null || r < 15) continue;
+        final a = _leseZelleA(row, sharedStrings)?.trim();
+        if (a == null || a.isEmpty) continue;
+        // Zahlwerte können als "10010" oder "10010.0" ankommen.
+        final nr = a.endsWith('.0') ? a.substring(0, a.length - 2) : a;
+        vorhandene.add(nr);
+        if (r > letzteZeile) letzteZeile = r;
+      }
+
+      final fehlende = [
+        for (final a in artikel)
+          if (a.deletedAt == null && !vorhandene.contains(a.artikelnummer)) a,
+      ];
+      if (fehlende.isEmpty) return;
+
+      // Hyperlinks-Element suchen bzw. hinter sheetData anlegen.
+      var hyperlinks = doc.findAllElements('hyperlinks').firstOrNull;
+      if (hyperlinks == null) {
+        hyperlinks = XmlElement(XmlName('hyperlinks'));
+        final ws = doc.findAllElements('worksheet').firstOrNull;
+        if (ws == null) return;
+        final idx = ws.children.indexOf(sheetData);
+        ws.children.insert(idx + 1, hyperlinks);
+      }
+
+      for (final art in fehlende) {
+        letzteZeile++;
+        final nrZahl = double.tryParse(art.artikelnummer);
+        if (nrZahl != null) {
+          _setzeZelleZahl(
+            sheetData,
+            row: letzteZeile,
+            colLetter: 'A',
+            wert: nrZahl,
+          );
+        } else {
+          _setzeZelleInlineStr(
+            sheetData,
+            row: letzteZeile,
+            colLetter: 'A',
+            wert: art.artikelnummer,
+          );
+        }
+        _setzeZelleInlineStr(
+          sheetData,
+          row: letzteZeile,
+          colLetter: 'B',
+          wert: art.artikelbezeichnung,
+        );
+        _setzeZelleInlineStr(
+          sheetData,
+          row: letzteZeile,
+          colLetter: 'C',
+          wert: art.produktgruppe == null
+              ? ''
+              : (_produktgruppeZuKategorie[art.produktgruppe] ?? ''),
+        );
+        _setzeZelleInlineStr(
+          sheetData,
+          row: letzteZeile,
+          colLetter: 'D',
+          wert: 'aktiv',
+        );
+        _setzeZelleInlineStr(
+          sheetData,
+          row: letzteZeile,
+          colLetter: 'E',
+          wert: '(App)',
+        );
+        _setzeZelleInlineStr(
+          sheetData,
+          row: letzteZeile,
+          colLetter: 'F',
+          wert: '→ Öffnen',
+        );
+
+        final hl = XmlElement(XmlName('hyperlink'));
+        hl.setAttribute('ref', 'F$letzteZeile');
+        hl.setAttribute('location', "'${art.artikelnummer}'!A1");
+        hyperlinks.children.add(hl);
+      }
+
+      final bytes = utf8.encode(doc.toXmlString(pretty: false));
+      archive.addFile(ArchiveFile(pfad, bytes.length, bytes));
+    } catch (e) {
+      warnungen.add('Übersicht konnte nicht ergänzt werden ($e).');
+    }
+  }
+
   void _schreibeSteckbriefSheet({
     required Archive archive,
     required Map<String, String> sheetInfo,

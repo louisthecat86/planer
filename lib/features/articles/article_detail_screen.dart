@@ -35,16 +35,24 @@ const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 const String kMaschinenNotizParam = 'Maschineneinstellungen';
 const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
 
-/// Nur diese beiden Maschinen haben ein festes Plattenraster
-/// (Bratstraße 10+10, Dampftunnel 12). Alle anderen bekommen das
-/// freie Notizfeld „Maschineneinstellungen".
+/// Nur diese Maschinen haben ein festes Plattenraster
+/// (Bratstraße 10+10, Dampftunnel 12). „Heißluftofen" ist dieselbe
+/// Anlage wie der Dampftunnel — beide Namen führen zum 12er-Raster.
+/// Alle anderen bekommen das freie Notizfeld „Maschineneinstellungen".
 bool istPlattenMaschine(String maschineName) {
   final n = maschineName.toLowerCase();
-  return n.contains('bratstra') || n.contains('dampftunnel');
+  return n.contains('bratstra') ||
+      n.contains('dampftunnel') ||
+      n.contains('heißluft') ||
+      n.contains('heissluft');
 }
 
-bool istDampftunnelMaschine(String maschineName) =>
-    maschineName.toLowerCase().contains('dampftunnel');
+bool istDampftunnelMaschine(String maschineName) {
+  final n = maschineName.toLowerCase();
+  return n.contains('dampftunnel') ||
+      n.contains('heißluft') ||
+      n.contains('heissluft');
+}
 
 bool _istBratstrasseMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('bratstra');
@@ -676,6 +684,32 @@ class _StepsList extends ConsumerWidget {
     );
   }
 
+  /// Öffnet die geführte Leistungsdaten-Maske: fragt je Abteilung des
+  /// Prozesses Menge/Zeit/Personen ab und schreibt die Werte auf den
+  /// jeweils ersten Schritt der Abteilungsgruppe (Excel-Konvention).
+  Future<void> _leistungsdatenErfassen(
+    BuildContext context,
+    WidgetRef ref,
+    List<List<({ProductStep step, int nummer})>> gruppen,
+  ) async {
+    if (gruppen.isEmpty) return;
+    final geaendert = await showDialog<bool>(
+      context: context,
+      builder: (_) => _LeistungsdatenDialog(
+        eintraege: [
+          for (final g in gruppen)
+            (
+              abteilung: Abteilung.fromDbValue(g.first.step.abteilung),
+              erster: g.first.step,
+            ),
+        ],
+      ),
+    );
+    if (geaendert == true) {
+      ref.invalidate(productStepsProvider(productId));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -728,26 +762,46 @@ class _StepsList extends ConsumerWidget {
           )
         : _kartenBereich(zweiSpaltig, karten);
 
-    Widget umschalter() => SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(
-              value: true,
-              icon: Icon(Icons.account_tree_outlined, size: 16),
-              label: Text('Diagramm', style: TextStyle(fontSize: 12)),
+    Widget umschalter() => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.account_tree_outlined, size: 16),
+                  label: Text('Diagramm', style: TextStyle(fontSize: 12)),
+                ),
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.view_agenda_outlined, size: 16),
+                  label: Text('Karten', style: TextStyle(fontSize: 12)),
+                ),
+              ],
+              selected: {diagramm},
+              onSelectionChanged: (sel) =>
+                  ref.read(prozessDiagrammProvider.notifier).state = sel.first,
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+              ),
+              showSelectedIcon: false,
             ),
-            ButtonSegment(
-              value: false,
-              icon: Icon(Icons.view_agenda_outlined, size: 16),
-              label: Text('Karten', style: TextStyle(fontSize: 12)),
+            const SizedBox(width: 8),
+            // Geführte Erfassung der Referenzleistung je Abteilung
+            // (Menge/Zeit/Personen) — daraus rechnet die App kg/h und
+            // skaliert die Dauer jeder Planmenge.
+            OutlinedButton.icon(
+              onPressed: () => _leistungsdatenErfassen(context, ref, gruppen),
+              icon: const Icon(Icons.speed, size: 16),
+              label: const Text(
+                'Leistungsdaten',
+                style: TextStyle(fontSize: 12),
+              ),
+              style: OutlinedButton.styleFrom(
+                visualDensity: VisualDensity.compact,
+              ),
             ),
           ],
-          selected: {diagramm},
-          onSelectionChanged: (sel) =>
-              ref.read(prozessDiagrammProvider.notifier).state = sel.first,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-          ),
-          showSelectedIcon: false,
         );
 
     return LayoutBuilder(
@@ -3948,6 +4002,238 @@ class _InlineHinweis extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Leistungsdaten-Dialog: Referenzleistung je Abteilung erfassen
+// ---------------------------------------------------------------------------
+
+/// Geführte Maske: fragt für jede Abteilung des Prozesses die
+/// Referenzleistung ab — „Menge X kg in Zeit Y mit Z Personen". Daraus
+/// zeigt sie live die Kennzahl kg/h und schreibt die Werte beim Speichern
+/// auf den ersten Schritt jeder Abteilungsgruppe. Mit diesen Basiswerten
+/// skaliert die App die Dauer jeder Planmenge
+/// (Dauer = Fixzeit + Zeit × Planmenge ÷ Referenzmenge).
+class _LeistungsdatenDialog extends ConsumerStatefulWidget {
+  const _LeistungsdatenDialog({required this.eintraege});
+
+  final List<({Abteilung abteilung, ProductStep erster})> eintraege;
+
+  @override
+  ConsumerState<_LeistungsdatenDialog> createState() =>
+      _LeistungsdatenDialogState();
+}
+
+class _LeistungsdatenDialogState
+    extends ConsumerState<_LeistungsdatenDialog> {
+  late final List<TextEditingController> _menge;
+  late final List<TextEditingController> _zeit;
+  late final List<TextEditingController> _personen;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    String zeitText(double min) {
+      if (min <= 0) return '';
+      final h = min ~/ 60;
+      final m = (min % 60).round();
+      return '$h:${m.toString().padLeft(2, '0')}';
+    }
+
+    _menge = [
+      for (final e in widget.eintraege)
+        TextEditingController(
+          text: e.erster.basisMengeKg > 0
+              ? e.erster.basisMengeKg.round().toString()
+              : '',
+        ),
+    ];
+    _zeit = [
+      for (final e in widget.eintraege)
+        TextEditingController(text: zeitText(e.erster.basisDauerMinuten)),
+    ];
+    _personen = [
+      for (final e in widget.eintraege)
+        TextEditingController(
+          text: e.erster.basisMitarbeiter > 0
+              ? e.erster.basisMitarbeiter.toString()
+              : '',
+        ),
+    ];
+  }
+
+  @override
+  void dispose() {
+    for (final c in [..._menge, ..._zeit, ..._personen]) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /// Parst „h:mm" oder eine reine Minutenzahl zu Minuten.
+  static double? _minuten(String eingabe) {
+    final t = eingabe.trim();
+    if (t.isEmpty) return null;
+    if (t.contains(':')) {
+      final teile = t.split(':');
+      if (teile.length != 2) return null;
+      final h = int.tryParse(teile[0]);
+      final m = int.tryParse(teile[1]);
+      if (h == null || m == null || m < 0 || m > 59) return null;
+      return (h * 60 + m).toDouble();
+    }
+    return double.tryParse(t.replaceAll(',', '.'));
+  }
+
+  String _kgProStunde(int i) {
+    final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
+    final min = _minuten(_zeit[i].text);
+    if (kg == null || kg <= 0 || min == null || min <= 0) return '—';
+    final kgh = kg / (min / 60);
+    return '${kgh.toStringAsFixed(0)} kg/h';
+  }
+
+  Future<void> _speichern() async {
+    setState(() => _busy = true);
+    final db = ref.read(databaseProvider);
+    final jetzt = DateTime.now();
+    var geschrieben = 0;
+
+    for (var i = 0; i < widget.eintraege.length; i++) {
+      final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
+      final min = _minuten(_zeit[i].text);
+      final pers = int.tryParse(_personen[i].text.trim());
+      // Nur vollständig ausgefüllte Abteilungen schreiben — leere Zeilen
+      // lassen den bestehenden Stand unangetastet.
+      if (kg == null || kg <= 0 || min == null || min <= 0) continue;
+
+      await (db.update(db.productSteps)
+            ..where((st) => st.id.equals(widget.eintraege[i].erster.id)))
+          .write(
+        ProductStepsCompanion(
+          mengeKg: Value(kg),
+          basisMengeKg: Value(kg),
+          basisDauerMinuten: Value(min),
+          basisMitarbeiter:
+              pers != null && pers > 0 ? Value(pers) : const Value.absent(),
+          updatedAt: Value(jetzt),
+        ),
+      );
+      geschrieben++;
+    }
+
+    if (geschrieben > 0) {
+      ref.read(autoBackupTriggerProvider).fireDebounced(
+            reason: 'Leistungsdaten erfasst',
+          );
+    }
+    if (mounted) Navigator.of(context).pop(geschrieben > 0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      title: const Text('Leistungsdaten je Abteilung'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Referenz: Welche Menge schafft die Abteilung bei diesem '
+                'Artikel in welcher Zeit mit wie vielen Personen? Daraus '
+                'skaliert die App die Dauer jeder Planmenge.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 14),
+              for (var i = 0; i < widget.eintraege.length; i++) ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.eintraege[i].abteilung.anzeigeName,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      _kgProStunde(i),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _menge[i],
+                        decoration: const InputDecoration(
+                          labelText: 'Menge',
+                          suffixText: 'kg',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: TextField(
+                        controller: _zeit[i],
+                        decoration: const InputDecoration(
+                          labelText: 'Zeit',
+                          hintText: 'h:mm',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 92,
+                      child: TextField(
+                        controller: _personen[i],
+                        decoration: const InputDecoration(
+                          labelText: 'Personen',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _speichern,
+          child: Text(_busy ? 'Speichern …' : 'Speichern'),
+        ),
+      ],
     );
   }
 }
