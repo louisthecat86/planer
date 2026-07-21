@@ -1193,14 +1193,26 @@ class ExcelExportServiceV3 {
       }
     }
     var freiIdx = 0;
-    // Überlauf beginnt zwei Zeilen unter der letzten belegten Zeile
-    // (Historie ist zu diesem Zeitpunkt bereits geschrieben).
+    // Der Überlauf-Block muss der Historie ausweichen und ihr Raum zum
+    // Wachsen lassen. Die Historie ist an dieser Stelle bereits
+    // geschrieben (siehe Aufruf oben), daher kennen wir ihre echte Länge:
+    // maxZeile ist die aktuell letzte belegte Zeile. Zusätzlich halten wir
+    // ab dem Historie-Header mindestens 20 Datenzeilen frei, damit auch
+    // nachträglich per Hand ergänzte Chargen noch Platz haben.
+    const kMinHistorieZeilen = 20;
+    final historieHeader = _findeHistorieHeaderZeile(doc, sharedStrings);
     var maxZeile = 0;
     for (final row in sheetData.findElements('row')) {
       final r = int.tryParse(row.getAttribute('r') ?? '') ?? 0;
       if (r > maxZeile) maxZeile = r;
     }
     var naechsteUeberlaufZeile = maxZeile + 2;
+    if (historieHeader != null) {
+      final minStart = historieHeader + kMinHistorieZeilen + 2;
+      if (minStart > naechsteUeberlaufZeile) {
+        naechsteUeberlaufZeile = minStart;
+      }
+    }
     var ueberlaufMarkerGesetzt = false;
     for (final name in poolNamen) {
       final key = name.toLowerCase();
@@ -1209,9 +1221,9 @@ class ExcelExportServiceV3 {
         slotFuerName[key] = freieSlots[freiIdx++];
         continue;
       }
-      // Überlauf: zweiter Parameter-Block unterhalb der Historie — dort
-      // ist Platz ohne Zeilen zu verschieben (die Historie-Formeln
-      // bleiben unangetastet). Der Import liest ihn mit.
+      // Überlauf: zweiter Parameter-Block WEIT unterhalb der Historie,
+      // damit die Historie 20+ Zeilen zum Wachsen behält. Kein Verschieben
+      // vorhandener Zeilen — die Historie-Formeln bleiben unangetastet.
       if (!ueberlaufMarkerGesetzt) {
         _setzeZelleInlineStr(
           sheetData,

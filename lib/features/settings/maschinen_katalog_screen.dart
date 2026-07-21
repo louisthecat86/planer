@@ -8,6 +8,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/sheet_utils.dart';
+import 'maschinen_seed.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -60,7 +61,16 @@ class MaschinenKatalogScreen extends ConsumerWidget {
     final katalog = ref.watch(maschinenKatalogProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Maschinen-Katalog')),
+      appBar: AppBar(
+        title: const Text('Maschinen-Katalog'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.playlist_add),
+            tooltip: 'Standard-Maschinen ergänzen',
+            onPressed: () => _seedDialog(context, ref),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _oeffneEditor(context, ref, null),
         icon: const Icon(Icons.add),
@@ -134,6 +144,85 @@ class MaschinenKatalogScreen extends ConsumerWidget {
       teile.join('   ·   '),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
+    );
+  }
+
+  /// Fragt nach und ergänzt dann den Standard-Maschinenpark: legt fehlende
+  /// Maschinen und deren Steckbrief-Parameter an. Bereits vorhandene
+  /// Maschinen (per Name) bleiben unberührt.
+  Future<void> _seedDialog(BuildContext context, WidgetRef ref) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Standard-Maschinen ergänzen'),
+        content: Text(
+          'Legt die ${kSeedMaschinen.length} Maschinen des Standard-'
+          'Maschinenparks mit ihren Parametern an. Bereits vorhandene '
+          'Maschinen werden nicht verändert und nicht doppelt angelegt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Ergänzen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final db = ref.read(databaseProvider);
+    final vorhandene = await (db.select(db.machines)
+          ..where((m) => m.deletedAt.isNull()))
+        .get();
+    final vorhandeneNamen =
+        vorhandene.map((m) => m.name.toLowerCase()).toSet();
+
+    var neueMaschinen = 0;
+    var neueParams = 0;
+    for (final seed in kSeedMaschinen) {
+      if (vorhandeneNamen.contains(seed.name.toLowerCase())) continue;
+      final maschineId = const Uuid().v4();
+      await db.into(db.machines).insert(
+            MachinesCompanion.insert(
+              id: maschineId,
+              name: seed.name,
+              abteilung: seed.abteilung,
+            ),
+          );
+      neueMaschinen++;
+      for (var i = 0; i < seed.params.length; i++) {
+        final p = seed.params[i];
+        await db.into(db.machineParameterDefs).insert(
+              MachineParameterDefsCompanion.insert(
+                id: const Uuid().v4(),
+                maschineId: maschineId,
+                parameterName: p.name,
+                einheit: Value(p.einheit),
+                sortierung: Value(i),
+              ),
+            );
+        neueParams++;
+      }
+    }
+
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Standard-Maschinen ergänzt');
+    ref.invalidate(maschinenKatalogProvider);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          neueMaschinen == 0
+              ? 'Alle Standard-Maschinen sind bereits vorhanden.'
+              : '$neueMaschinen Maschinen und $neueParams Parameter ergänzt.',
+        ),
+      ),
     );
   }
 
