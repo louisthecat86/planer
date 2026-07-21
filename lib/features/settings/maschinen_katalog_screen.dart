@@ -130,8 +130,11 @@ class MaschinenKatalogScreen extends ConsumerWidget {
       if ((m.eignungHinweis ?? '').trim().isNotEmpty) m.eignungHinweis!.trim(),
     ];
     if (teile.isEmpty) return null;
-    return Text(teile.join('   ·   '), maxLines: 1,
-        overflow: TextOverflow.ellipsis);
+    return Text(
+      teile.join('   ·   '),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+    );
   }
 
   Future<void> _oeffneEditor(
@@ -335,7 +338,8 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
             .write(MachineParameterDefsCompanion(
           sortierung: Value(sort),
           updatedAt: Value(jetzt),
-        ));
+        ),
+      );
     await setze(defs[index], ziel);
     await setze(defs[ziel], index);
     ref.invalidate(maschinenParameterDefsProvider(defs[index].maschineId));
@@ -501,7 +505,10 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
                                   onPressed: i == 0
                                       ? null
                                       : () => _parameterVerschieben(
-                                          liste, i, -1),
+                                          liste,
+                                          i,
+                                          -1,
+                                        ),
                                 ),
                                 IconButton(
                                   icon: const Icon(
@@ -512,7 +519,10 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
                                   onPressed: i == liste.length - 1
                                       ? null
                                       : () => _parameterVerschieben(
-                                          liste, i, 1),
+                                          liste,
+                                          i,
+                                          1,
+                                        ),
                                 ),
                                 IconButton(
                                   icon: const Icon(
