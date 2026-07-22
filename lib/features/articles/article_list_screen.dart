@@ -594,11 +594,16 @@ class _ArticleTile extends StatelessWidget {
                     value: 'loeschen',
                     child: Row(
                       children: [
-                        Icon(Icons.delete_outline,
-                            size: 18, color: Colors.red),
+                        Icon(
+                          Icons.delete_outline,
+                          size: 18,
+                          color: Colors.red,
+                        ),
                         SizedBox(width: 10),
-                        Text('Löschen',
-                            style: TextStyle(color: Colors.red)),
+                        Text(
+                          'Löschen',
+                          style: TextStyle(color: Colors.red),
+                        ),
                       ],
                     ),
                   ),
