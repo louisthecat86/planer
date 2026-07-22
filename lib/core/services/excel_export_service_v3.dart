@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' hide Column;
@@ -823,10 +822,11 @@ class ExcelExportServiceV3 {
                 ? _minutenZuHmm(s.basisDauerMinuten)
                 : null,
             fixZeitMin: s.fixZeitMinuten,
-          ));
+          ),);
           // Werte dieses Schritts (alle Parameter mit Wert).
           final werte = <GenWert>[];
-          for (final p in paramsByStep[s.id] ?? const []) {
+          for (final p
+              in paramsByStep[s.id] ?? const <ProductStepParameter>[]) {
             werte.add(GenWert(p.parameterName, p.wert));
           }
           werteJeSchritt[nr] = werte;
