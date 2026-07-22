@@ -587,8 +587,7 @@ class ExcelImportServiceV3 {
               final vorhanden = proName[key];
               if (vorhanden == null) {
                 proName[key] = p;
-              } else if ((vorhanden.wert ?? '').isEmpty &&
-                  (p.wert ?? '').isNotEmpty) {
+              } else if (vorhanden.wert.isEmpty && p.wert.isNotEmpty) {
                 // Befüllten Wert bevorzugen.
                 proName[key] = p;
               }
