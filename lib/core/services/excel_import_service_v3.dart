@@ -857,23 +857,22 @@ class ExcelImportServiceV3 {
     }
 
     final kategorie = _cellStr(rows[1], 0);
+    String? produktgruppeDb;
     if (kategorie == null || kategorie.isEmpty) {
-      errors.add(
-        _ValidationError(
-          sheet: sheetName,
-          artikelnr: sheetName,
-          feld: 'Kategorie',
-          grund: 'Zelle A2 (Kategorie-Titel) leer',
-        ),
-      );
-      return null;
-    }
-    final produktgruppeDb = _kategorieZuProduktgruppe[kategorie];
-    if (produktgruppeDb == null) {
+      // Kein Abbruch: Artikel ohne Kategorie wird ohne Produktgruppe
+      // importiert (z.B. ältere App-Artikel ohne Kategoriezeile).
       warnings.add(
-        'Sheet "$sheetName": Unbekannte Kategorie "$kategorie" '
-        '— Produktgruppe bleibt leer.',
+        'Sheet "$sheetName": Keine Kategorie in A2 — '
+        'Produktgruppe bleibt leer.',
       );
+    } else {
+      produktgruppeDb = _kategorieZuProduktgruppe[kategorie];
+      if (produktgruppeDb == null) {
+        warnings.add(
+          'Sheet "$sheetName": Unbekannte Kategorie "$kategorie" '
+          '— Produktgruppe bleibt leer.',
+        );
+      }
     }
 
     final kopf = _leseArtikelkopf(rows, sheetName, warnings);

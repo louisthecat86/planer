@@ -130,52 +130,6 @@ class ArtikelSheetGenerator {
     return '<c r="$ref"$s/>';
   }
 
-  // ── Feste Raster für Bratstraße und Dampftunnel ───────────────────────
-  // Namen exakt so, wie App und Import sie erwarten.
-  static const _bratstrasseRaster = <String>[
-    'Höhe (mm)',
-    'Durchlaufzeit',
-    'Platte Oben 1', 'Platte Oben 2', 'Platte Oben 3', 'Platte Oben 4',
-    'Platte Oben 5', 'Platte Oben 6', 'Platte Oben 7', 'Platte Oben 8',
-    'Platte Oben 9', 'Platte Oben 10',
-    'Platte Unten 1', 'Platte Unten 2', 'Platte Unten 3', 'Platte Unten 4',
-    'Platte Unten 5', 'Platte Unten 6', 'Platte Unten 7', 'Platte Unten 8',
-    'Platte Unten 9', 'Platte Unten 10',
-  ];
-
-  static const _dampftunnelRaster = <String>[
-    'Eingangstemperatur (°C)',
-    'Ausgangstemperatur (°C)',
-    'Dampf',
-    'Umluft',
-    'Einlaufzeit',
-    'Auslaufzeit',
-    'Platte 1', 'Platte 2', 'Platte 3', 'Platte 4', 'Platte 5',
-    'Platte 6', 'Platte 7', 'Platte 8', 'Platte 9', 'Platte 10',
-  ];
-
-  /// Liefert die Parameter-Zeilen (Namen) eines Anlagen-Blocks:
-  /// feste Raster für Bratstraße/Dampftunnel, sonst der Steckbrief.
-  static List<String> _blockZeilen(
-    String anlage,
-    Map<String, List<(String, String?)>> steckbrief,
-  ) {
-    final lower = anlage.toLowerCase();
-    if (lower.contains('bratstra')) return _bratstrasseRaster;
-    if (lower.contains('dampftunnel') ||
-        lower.contains('heißluft') ||
-        lower.contains('heissluft') ||
-        lower.contains('kombiofen')) {
-      return _dampftunnelRaster;
-    }
-    final defs = steckbrief[anlage];
-    if (defs == null) return const [];
-    return [
-      for (final d in defs)
-        (d.$2 == null || d.$2!.isEmpty) ? d.$1 : '${d.$1} (${d.$2})',
-    ];
-  }
-
   /// Baut das komplette Sheet-XML für einen Artikel. [reiterFarbe] ist die
   /// ARGB-Hex-Reiterfarbe (oder null). Rückgabe: fertige worksheet-XML.
   String generiere(GenArtikel a, {String? reiterFarbe}) {
@@ -249,17 +203,11 @@ class ArtikelSheetGenerator {
       ('Prozessschritt', _sLabelGelb, (s) => s.prozessschritt),
       ('Anlagen', _sLabelGrau, (s) => s.anlage),
       ('Personen', _sLabelGelb, (s) => s.personen?.toString()),
-      (
-        'Menge (kg)',
-        _sLabelGelb,
-        (s) => s.mengeKg == null ? null : _zahl(s.mengeKg!),
-      ),
+      ('Menge (kg)', _sLabelGelb,
+          (s) => s.mengeKg == null ? null : _zahl(s.mengeKg!)),
       ('Zeit (hh:mm)', _sLabelGelb, zeit),
-      (
-        'Fixe Zeit (min)',
-        _sLabelGelb,
-        (s) => s.fixZeitMin == null ? null : _zahl(s.fixZeitMin!),
-      ),
+      ('Fixe Zeit (min)', _sLabelGelb,
+          (s) => s.fixZeitMin == null ? null : _zahl(s.fixZeitMin!)),
     ];
     for (final (label, stil, getter) in felder) {
       final cells = StringBuffer(_cellStr(1, r, label, stil: stil));
@@ -301,7 +249,7 @@ class ArtikelSheetGenerator {
     r++;
 
     // Maschinenblöcke in PROZESS-Reihenfolge; gleiche Anlage in Folge
-    // teilt sich einen Block.
+    // teilt sich einen Block (mehrere Wert-Spalten).
     final bloecke = <({String anlage, List<int> schrittNrs})>[];
     for (final s in schritte) {
       final anlage = s.anlage;
@@ -315,13 +263,41 @@ class ArtikelSheetGenerator {
 
     for (final block in bloecke) {
       blockKopf(block.anlage.toUpperCase());
-      final zeilen = _blockZeilen(block.anlage, a.steckbriefJeAnlage);
-      if (zeilen.isEmpty) {
+
+      // Die Zeilen (Parameternamen) eines Blocks ergeben sich aus zwei
+      // Quellen, in stabiler Reihenfolge:
+      //  1. den Steckbrief-Definitionen der Anlage (auch leere → als
+      //     Pflegezeilen in Excel),
+      //  2. den tatsächlich am Schritt hinterlegten Parametern (damit auch
+      //     Werte erscheinen, die über die Defs hinausgehen — z.B. mehr
+      //     Platten als der Katalog kennt).
+      // So bekommt jede Anlage genau ihre echten Parameter; getrennte
+      // Anlagen (Bratstraße vs. Heißluftofen) überlagern sich nie.
+      final zeilenNamen = <String>[];
+      final gesehen = <String>{};
+
+      // (1) Steckbrief-Defs der Anlage (Name inkl. Einheit als Label).
+      for (final def in a.steckbriefJeAnlage[block.anlage] ?? const []) {
+        final label =
+            (def.$2 == null || def.$2!.isEmpty) ? def.$1 : '${def.$1} (${def.$2})';
+        if (gesehen.add(def.$1.toLowerCase())) zeilenNamen.add(label);
+      }
+      // (2) Tatsächliche Parameter der Schritte dieses Blocks.
+      for (final nr in block.schrittNrs) {
+        for (final w in a.werteJeSchritt[nr] ?? const <GenWert>[]) {
+          if (gesehen.add(w.parameterName.toLowerCase())) {
+            zeilenNamen.add(w.parameterName);
+          }
+        }
+      }
+
+      if (zeilenNamen.isEmpty) {
         rows.add(vollzeile(r, '(keine Parameter hinterlegt)', _sHinweis));
         r++;
         continue;
       }
-      for (final zeile in zeilen) {
+
+      for (final zeile in zeilenNamen) {
         final cells = StringBuffer(_cellStr(1, r, zeile, stil: _sHinweis));
         for (var c = 2; c <= gesamtSpalten; c++) {
           // Wert nur in Spalten der Schritte dieses Blocks.
@@ -354,13 +330,9 @@ class ArtikelSheetGenerator {
 
     // ── HISTORISCHE DATEN ───────────────────────────────────────────────
     blockKopf('HISTORISCHE DATEN');
-    rows.add(
-      vollzeile(
-        r,
-        'Jede produzierte Charge als eine Zeile — die App mittelt daraus.',
-        _sHinweis,
-      ),
-    );
+    const histHinweis =
+        'Jede produzierte Charge als eine Zeile — die App mittelt daraus.';
+    rows.add(vollzeile(r, histHinweis, _sHinweis));
     r++;
     // Spaltenüberschriften
     const histSpalten = [
@@ -447,3 +419,5 @@ class ArtikelSheetGenerator {
   static String _zahl(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
 }
+
+
