@@ -363,6 +363,70 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     }
   }
 
+  /// Löscht die Maschine (Soft-Delete) samt ihrer Steckbrief-Parameter.
+  /// Warnt vorher, falls die Maschine noch Prozessschritten zugeordnet ist —
+  /// diese Schritte behalten dann ihren gespeicherten Maschinen-Text,
+  /// verlieren aber die Verknüpfung zum Katalog.
+  Future<void> _loescheMaschine() async {
+    final id = _maschineId;
+    final maschine = widget.maschine;
+    if (id == null || maschine == null) return;
+
+    final db = ref.read(databaseProvider);
+
+    // Verwendung prüfen: aktive Schritte mit dieser Maschine.
+    final nutzendeSchritte = await (db.select(db.productSteps)
+          ..where((s) => s.maschineId.equals(id))
+          ..where((s) => s.deletedAt.isNull()))
+        .get();
+
+    if (!mounted) return;
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Maschine löschen'),
+        content: Text(
+          nutzendeSchritte.isEmpty
+              ? '„${maschine.name}" wirklich löschen? Der Steckbrief '
+                  'dieser Maschine wird mit entfernt.'
+              : '„${maschine.name}" wird aktuell in '
+                  '${nutzendeSchritte.length} Prozessschritt(en) verwendet. '
+                  'Beim Löschen verlieren diese Schritte die Verknüpfung '
+                  'zur Maschine (der Name bleibt als Text erhalten). '
+                  'Trotzdem löschen?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+
+    setState(() => _busy = true);
+    final jetzt = DateTime.now();
+
+    // Steckbrief-Parameter der Maschine mitlöschen.
+    await (db.update(db.machineParameterDefs)
+          ..where((d) => d.maschineId.equals(id)))
+        .write(MachineParameterDefsCompanion(deletedAt: Value(jetzt)));
+    // Maschine selbst.
+    await (db.update(db.machines)..where((m) => m.id.equals(id)))
+        .write(MachinesCompanion(deletedAt: Value(jetzt)));
+
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Maschine gelöscht');
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
   Future<void> _parameterHinzufuegen() async {
     final id = _maschineId;
     if (id == null) return;
@@ -525,6 +589,23 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
               label: Text(_busy ? 'Speichern …' : 'Maschine speichern'),
             ),
           ),
+
+          // Löschen nur für bereits gespeicherte Maschinen anbieten.
+          if (widget.maschine != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              width: double.infinity,
+              height: 46,
+              child: OutlinedButton.icon(
+                onPressed: _busy ? null : _loescheMaschine,
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                label: const Text(
+                  'Maschine löschen',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ),
+          ],
 
           const SizedBox(height: 24),
           Text(

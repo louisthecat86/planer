@@ -121,32 +121,53 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
 
     final db = ref.read(databaseProvider);
 
-    // Artikelnummer muss eindeutig sein — sie ist der Schlüssel zur Excel.
-    final vorhanden = await (db.select(db.products)
+    // Artikelnummer muss unter den AKTIVEN eindeutig sein — sie ist der
+    // Schlüssel zur Excel. Ein früher gelöschter Artikel mit derselben
+    // Nummer wird reaktiviert statt doppelt angelegt.
+    final gleicheNr = await (db.select(db.products)
           ..where((p) => p.artikelnummer.equals(res.nummer)))
         .get();
-    if (vorhanden.isNotEmpty) {
+    final aktiverKonflikt =
+        gleicheNr.where((p) => p.deletedAt == null).toList();
+    if (aktiverKonflikt.isNotEmpty) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             'Artikelnummer ${res.nummer} existiert bereits '
-            '(${vorhanden.first.artikelbezeichnung}).',
+            '(${aktiverKonflikt.first.artikelbezeichnung}).',
           ),
         ),
       );
       return;
     }
 
-    final id = const Uuid().v4();
-    await db.into(db.products).insert(
-          ProductsCompanion.insert(
-            id: id,
-            artikelnummer: res.nummer,
-            artikelbezeichnung: res.bez,
-            produktgruppe: Value(res.gruppe),
-          ),
-        );
+    // Wurde die Nummer früher gelöscht? Dann reaktivieren (die unique-
+    // Bedingung auf artikelnummer verböte sonst einen zweiten Insert).
+    final geloescht =
+        gleicheNr.where((p) => p.deletedAt != null).toList();
+    final String id;
+    if (geloescht.isNotEmpty) {
+      id = geloescht.first.id;
+      await (db.update(db.products)..where((x) => x.id.equals(id))).write(
+        ProductsCompanion(
+          artikelbezeichnung: Value(res.bez),
+          produktgruppe: Value(res.gruppe),
+          deletedAt: const Value(null),
+          updatedAt: Value(DateTime.now()),
+        ),
+      );
+    } else {
+      id = const Uuid().v4();
+      await db.into(db.products).insert(
+            ProductsCompanion.insert(
+              id: id,
+              artikelnummer: res.nummer,
+              artikelbezeichnung: res.bez,
+              produktgruppe: Value(res.gruppe),
+            ),
+          );
+    }
 
     ref
         .read(autoBackupTriggerProvider)
@@ -157,6 +178,66 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     context.pushNamed(
       'articleDetail',
       pathParameters: {'productId': id},
+    );
+  }
+
+  /// Löscht einen Artikel per Soft-Delete (deletedAt) — samt seiner
+  /// Schritte und Parameter. Der Artikel verschwindet aus der App;
+  /// in der Excel bleibt das Sheet bestehen (dort ggf. von Hand löschen,
+  /// sonst kommt er beim nächsten Import zurück).
+  Future<void> _loescheArtikel(BuildContext context, _ArticleInfo info) async {
+    final p = info.product;
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Artikel löschen'),
+        content: Text(
+          '„${p.artikelbezeichnung}" (Nr. ${p.artikelnummer}) wirklich '
+          'löschen? Die Prozessdaten des Artikels werden entfernt.\n\n'
+          'Hinweis: In einer bereits exportierten Excel bleibt das '
+          'Artikel-Blatt bestehen und muss dort separat gelöscht werden.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Löschen'),
+          ),
+        ],
+      ),
+    );
+    if (bestaetigt != true) return;
+
+    final db = ref.read(databaseProvider);
+    final jetzt = DateTime.now();
+
+    // Schritte des Artikels ermitteln, um deren Parameter mitzulöschen.
+    final steps = await (db.select(db.productSteps)
+          ..where((s) => s.productId.equals(p.id)))
+        .get();
+    for (final s in steps) {
+      await (db.update(db.productStepParameters)
+            ..where((pp) => pp.stepId.equals(s.id)))
+          .write(ProductStepParametersCompanion(deletedAt: Value(jetzt)));
+    }
+    await (db.update(db.productSteps)
+          ..where((s) => s.productId.equals(p.id)))
+        .write(ProductStepsCompanion(deletedAt: Value(jetzt)));
+    await (db.update(db.products)..where((x) => x.id.equals(p.id)))
+        .write(ProductsCompanion(deletedAt: Value(jetzt)));
+
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Artikel gelöscht');
+    ref.invalidate(articlesProvider);
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('„${p.artikelbezeichnung}" gelöscht.')),
     );
   }
 
@@ -284,7 +365,10 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
                     vertical: 8,
                   ),
                   itemCount: filtered.length,
-                  itemBuilder: (_, i) => _ArticleTile(info: filtered[i]),
+                  itemBuilder: (_, i) => _ArticleTile(
+                    info: filtered[i],
+                    onDelete: () => _loescheArtikel(context, filtered[i]),
+                  ),
                 ),
         ),
       ],
@@ -344,9 +428,10 @@ class _EmptyState extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _ArticleTile extends StatelessWidget {
-  const _ArticleTile({required this.info});
+  const _ArticleTile({required this.info, required this.onDelete});
 
   final _ArticleInfo info;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -478,10 +563,46 @@ class _ArticleTile extends StatelessWidget {
                 ),
               ),
 
-              Icon(
-                Icons.chevron_right,
-                size: 20,
-                color: theme.colorScheme.onSurfaceVariant,
+              PopupMenuButton<String>(
+                icon: Icon(
+                  Icons.more_vert,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+                onSelected: (v) {
+                  if (v == 'oeffnen') {
+                    context.pushNamed(
+                      'articleDetail',
+                      pathParameters: {'productId': p.id},
+                    );
+                  } else if (v == 'loeschen') {
+                    onDelete();
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'oeffnen',
+                    child: Row(
+                      children: [
+                        Icon(Icons.edit_outlined, size: 18),
+                        SizedBox(width: 10),
+                        Text('Öffnen / Bearbeiten'),
+                      ],
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'loeschen',
+                    child: Row(
+                      children: [
+                        Icon(Icons.delete_outline,
+                            size: 18, color: Colors.red),
+                        SizedBox(width: 10),
+                        Text('Löschen',
+                            style: TextStyle(color: Colors.red)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
