@@ -277,9 +277,13 @@ class ArtikelSheetGenerator {
       final gesehen = <String>{};
 
       // (1) Steckbrief-Defs der Anlage (Name inkl. Einheit als Label).
-      for (final def in a.steckbriefJeAnlage[block.anlage] ?? const []) {
-        final label =
-            (def.$2 == null || def.$2!.isEmpty) ? def.$1 : '${def.$1} (${def.$2})';
+      final defs = a.steckbriefJeAnlage[block.anlage] ??
+          const <(String, String?)>[];
+      for (final def in defs) {
+        final einheit = def.$2;
+        final label = (einheit == null || einheit.isEmpty)
+            ? def.$1
+            : '${def.$1} ($einheit)';
         if (gesehen.add(def.$1.toLowerCase())) zeilenNamen.add(label);
       }
       // (2) Tatsächliche Parameter der Schritte dieses Blocks.

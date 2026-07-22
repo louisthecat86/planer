@@ -903,7 +903,7 @@ class ExcelImportServiceV3 {
       sheetName: sheetName,
       artikelnummer: kopf.nummer,
       bezeichnung: kopf.bezeichnung,
-      kategorie: kategorie,
+      kategorie: kategorie ?? '',
       produktgruppeDb: produktgruppeDb,
       sonstigeInfos: sonstige,
       schritte: schritte,
