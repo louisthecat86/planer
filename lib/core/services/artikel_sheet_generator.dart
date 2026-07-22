@@ -196,70 +196,50 @@ class ArtikelSheetGenerator {
     final rows = <String>[];
     var r = 1;
 
+    // Helfer: baut eine Zeile mit einer Label-Zelle in A und gestylten
+    // Leerzellen bis zum rechten Rand — für gemergte Vollbreite-Zeilen.
+    String vollzeile(int row, String label, int stil) {
+      final b = StringBuffer(_cellStr(1, row, label, stil: stil));
+      for (var c = 2; c <= gesamtSpalten; c++) {
+        b.write(_cellLeer(c, row, stil: stil));
+      }
+      return '<row r="$row">$b</row>';
+    }
+
     // Helfer: Blockkopf über die gesamte Sheet-Breite (gemerged).
     final merges = <String>[];
     void blockKopf(String text) {
-      rows.add('<row r="$r">${_cellStr(1, r, text, stil: _sBlockHeader)}'
-          '${[
-        for (var c = 2; c <= gesamtSpalten; c++)
-          _cellLeer(c, r, stil: _sBlockHeader)
-      ].join()}</row>',
-    );
+      rows.add(vollzeile(r, text, _sBlockHeader));
       merges.add('${_colLetter(1)}$r:${_colLetter(gesamtSpalten)}$r');
       r++;
     }
 
     // ── Kategoriezeile (2 Zeilen, gemerged, farbig) ─────────────────────
     r = 2;
-    rows.add('<row r="2">${_cellStr(1, 2, a.kategorieName, stil: _sKategorie)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++)
-        _cellLeer(c, 2, stil: _sKategorie)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(2, a.kategorieName, _sKategorie));
     merges.add('A2:${_colLetter(gesamtSpalten)}2');
-    rows.add('<row r="3">${_cellStr(1, 3, '', stil: _sKategorie)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++)
-        _cellLeer(c, 3, stil: _sKategorie)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(3, '', _sKategorie));
     merges.add('A3:${_colLetter(gesamtSpalten)}3');
 
     // ── Artikelkopf (Z5 Label, Z6 Nr — Bezeichnung) ─────────────────────
-    rows.add('<row r="5">${_cellStr(1, 5, 'Artikelbezeichnung', stil: _sBlockHeader)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++)
-        _cellLeer(c, 5, stil: _sBlockHeader)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(5, 'Artikelbezeichnung', _sBlockHeader));
     merges.add('A5:${_colLetter(gesamtSpalten)}5');
-    rows.add('<row r="6">'
-        '${_cellStr(1, 6, '${a.artikelnummer} — ${a.bezeichnung}', stil: _sKopf)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++) _cellLeer(c, 6, stil: _sKopf)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(6, '${a.artikelnummer} — ${a.bezeichnung}', _sKopf));
     merges.add('A6:${_colLetter(gesamtSpalten)}6');
 
     // ── PROZESSSCHRITTE ─────────────────────────────────────────────────
     r = 8;
     blockKopf('PROZESSSCHRITTE');
     // r ist jetzt 9 → Hinweiszeile
-    rows.add('<row r="9">'
-        '${_cellStr(1, 9, 'Eine Spalte pro Prozessschritt', stil: _sHinweis)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++) _cellLeer(c, 9, stil: _sHinweis)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(9, 'Eine Spalte pro Prozessschritt', _sHinweis));
     merges.add('A9:${_colLetter(gesamtSpalten)}9');
     r = 10;
     // Schritt-Nummern-Zeile
-    rows.add('<row r="10">${[
-      for (var i = 0; i < n; i++)
-        _cellStr(2 + i, 10, 'Schritt ${schritte[i].nr}')
-    ].join()}</row>',
-    );
+    final nummernZeile = StringBuffer();
+    for (var i = 0; i < n; i++) {
+      nummernZeile.write(_cellStr(2 + i, 10, 'Schritt ${schritte[i].nr}'));
+    }
+    rows.add('<row r="10">$nummernZeile</row>');
     r = 11;
 
     // Prozess-Felder
@@ -331,13 +311,7 @@ class ArtikelSheetGenerator {
       blockKopf(block.anlage.toUpperCase());
       final zeilen = _blockZeilen(block.anlage, a.steckbriefJeAnlage);
       if (zeilen.isEmpty) {
-        rows.add('<row r="$r">'
-            '${_cellStr(1, r, '(keine Parameter hinterlegt)', stil: _sHinweis)}'
-            '${[
-          for (var c = 2; c <= gesamtSpalten; c++)
-            _cellLeer(c, r, stil: _sHinweis)
-        ].join()}</row>',
-    );
+        rows.add(vollzeile(r, '(keine Parameter hinterlegt)', _sHinweis));
         r++;
         continue;
       }
@@ -374,44 +348,41 @@ class ArtikelSheetGenerator {
 
     // ── HISTORISCHE DATEN ───────────────────────────────────────────────
     blockKopf('HISTORISCHE DATEN');
-    rows.add('<row r="$r">'
-        '${_cellStr(1, r, 'Jede produzierte Charge als eine Zeile — die App mittelt daraus.', stil: _sHinweis)}'
-        '${[
-      for (var c = 2; c <= gesamtSpalten; c++) _cellLeer(c, r, stil: _sHinweis)
-    ].join()}</row>',
-    );
+    rows.add(vollzeile(
+      r,
+      'Jede produzierte Charge als eine Zeile — die App mittelt daraus.',
+      _sHinweis,
+    ));
     r++;
     // Spaltenüberschriften
     const histSpalten = [
       'Datum', 'Kg Rohware', 'Kg Fertigware', 'Verlust %', 'Startzeit',
       'Endzeit', 'Produktionszeit', 'kg/h roh', 'kg/h gegart', 'Notizen',
     ];
-    rows.add('<row r="$r">${[
-      for (var i = 0; i < histSpalten.length; i++)
-        _cellStr(1 + i, r, histSpalten[i], stil: _sHistSpalten)
-    ].join()}</row>',
-    );
+    final histKopf = StringBuffer();
+    for (var i = 0; i < histSpalten.length; i++) {
+      histKopf.write(_cellStr(1 + i, r, histSpalten[i], stil: _sHistSpalten));
+    }
+    rows.add('<row r="$r">$histKopf</row>');
     final headerRow = r;
     r++;
     // 20 Formel-Datenzeilen (Verlust, Produktionszeit, kg/h automatisch).
     for (var k = 0; k < 20; k++) {
       final rr = headerRow + 1 + k;
+      final fVerlust = 'IF(OR(B$rr="",C$rr=""),"",1-C$rr/B$rr)';
+      final fZeit = 'IF(OR(E$rr="",F$rr=""),"",F$rr-E$rr)';
+      final fRoh = 'IF(OR(B$rr="",G$rr=""),"",B$rr/(G$rr*24))';
+      final fGegart = 'IF(OR(C$rr="",G$rr=""),"",C$rr/(G$rr*24))';
       final cells = StringBuffer()
         ..write(_cellLeer(1, rr, stil: _sFormel)) // Datum
         ..write(_cellLeer(2, rr, stil: _sFormel)) // Kg Rohware
         ..write(_cellLeer(3, rr, stil: _sFormel)) // Kg Fertigware
-        ..write(_cellFormel(4, rr, 'IF(OR(B$rr="",C$rr=""),"",1-C$rr/B$rr)',
-            stil: _sFormel),) // Verlust
+        ..write(_cellFormel(4, rr, fVerlust, stil: _sFormel)) // Verlust
         ..write(_cellLeer(5, rr, stil: _sFormel)) // Startzeit
         ..write(_cellLeer(6, rr, stil: _sFormel)) // Endzeit
-        ..write(_cellFormel(7, rr, 'IF(OR(E$rr="",F$rr=""),"",F$rr-E$rr)',
-            stil: _sFormel),) // Produktionszeit
-        ..write(_cellFormel(
-            8, rr, 'IF(OR(B$rr="",G$rr=""),"",B$rr/(G$rr*24))',
-            stil: _sFormel,),) // kg/h roh
-        ..write(_cellFormel(
-            9, rr, 'IF(OR(C$rr="",G$rr=""),"",C$rr/(G$rr*24))',
-            stil: _sFormel,),) // kg/h gegart
+        ..write(_cellFormel(7, rr, fZeit, stil: _sFormel)) // Produktionszeit
+        ..write(_cellFormel(8, rr, fRoh, stil: _sFormel)) // kg/h roh
+        ..write(_cellFormel(9, rr, fGegart, stil: _sFormel)) // kg/h gegart
         ..write(_cellLeer(10, rr, stil: _sFormel)); // Notizen
       rows.add('<row r="$rr">$cells</row>');
     }
