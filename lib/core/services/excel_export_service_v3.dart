@@ -5,7 +5,9 @@ import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' hide Column;
 import 'package:xml/xml.dart';
 
+import '../constants/abteilungen.dart';
 import '../database/database.dart';
+import 'artikel_sheet_generator.dart';
 import 'excel_import_service_v3.dart';
 
 /// Name der Notiz-Parameterzeile (identisch zur App-Konstante in
@@ -143,6 +145,12 @@ class ExcelExportServiceV3 {
     final alleMaschinen = await _db.select(_db.machines).get();
     final maschinenById = {for (final m in alleMaschinen) m.id: m};
 
+    // Maschinen-Steckbriefe (Parameterdefinitionen), nach sortierung —
+    // der Sheet-Generator übernimmt diese Reihenfolge in die Blöcke.
+    final alleSteckbriefe = await (_db.select(_db.machineParameterDefs)
+          ..orderBy([(d) => OrderingTerm.asc(d.sortierung)]))
+        .get();
+
     // Historie je Artikel (importierte + in der App erfasste Zeilen).
     final alleHistorie = await _db.select(_db.productionHistory).get();
     final historieByProduct = <String, List<ProductionHistoryData>>{};
@@ -170,6 +178,10 @@ class ExcelExportServiceV3 {
       archive: archive,
       sheetInfo: sheetInfo,
       artikel: alleArtikel,
+      alleSchritte: alleSchritte,
+      alleParameter: alleParameter,
+      alleMaschinen: alleMaschinen,
+      alleSteckbriefe: alleSteckbriefe,
       warnungen: warnungen,
     );
 
@@ -185,8 +197,6 @@ class ExcelExportServiceV3 {
 
     // Maschinen-Steckbriefe (Parameterdefinitionen je Anlage) als eigenes
     // Sheet mitschreiben — Teil des vollständigen Excel-Backups.
-    final alleSteckbriefe =
-        await _db.select(_db.machineParameterDefs).get();
     _schreibeSteckbriefSheet(
       archive: archive,
       sheetInfo: sheetInfo,
@@ -675,10 +685,22 @@ class ExcelExportServiceV3 {
     sheetInfo[sheetName] = neuerPfad;
   }
 
+  /// Minuten (double) zu „h:mm"-Text (z.B. 125.0 → „2:05").
+  static String _minutenZuHmm(double min) {
+    final gesamt = min.round();
+    final h = gesamt ~/ 60;
+    final m = gesamt % 60;
+    return '$h:${m.toString().padLeft(2, '0')}';
+  }
+
   int _legeFehlendeArtikelSheetsAn({
     required Archive archive,
     required Map<String, String> sheetInfo,
     required List<Product> artikel,
+    required List<ProductStep> alleSchritte,
+    required List<ProductStepParameter> alleParameter,
+    required List<Machine> alleMaschinen,
+    required List<MachineParameterDef> alleSteckbriefe,
     required List<String> warnungen,
   }) {
     final fehlende = artikel
@@ -747,58 +769,92 @@ class ExcelExportServiceV3 {
     }
 
     var angelegt = 0;
-    for (final art in fehlende) {
-      // Blueprint der Kategorie finden (Fallback: irgendein Blueprint).
-      String? blueprintName = art.produktgruppe == null
-          ? null
-          : _produktgruppeZuKategorie[art.produktgruppe];
-      if (blueprintName == null || !sheetInfo.containsKey(blueprintName)) {
-        blueprintName = _produktgruppeZuKategorie.values
-            .where(sheetInfo.containsKey)
-            .firstOrNull;
-      }
-      final quellPfad =
-          blueprintName == null ? null : sheetInfo[blueprintName];
-      final quellFile =
-          quellPfad == null ? null : archive.findFile(quellPfad);
-      if (quellFile == null) {
-        warnungen.add(
-          'Artikel ${art.artikelnummer}: Kein Blueprint-Sheet gefunden — '
-          'Sheet nicht angelegt.',
-        );
-        continue;
-      }
+    // Vorbereitung: Steckbriefe je Maschinenname, Maschinenname je Id.
+    final maschineNameById = <String, String>{
+      for (final m in alleMaschinen)
+        if (m.deletedAt == null) m.id: m.name,
+    };
+    final steckbriefJeMaschine = <String, List<(String, String?)>>{};
+    for (final d in alleSteckbriefe) {
+      if (d.deletedAt != null) continue;
+      final name = maschineNameById[d.maschineId];
+      if (name == null) continue;
+      steckbriefJeMaschine
+          .putIfAbsent(name, () => [])
+          .add((d.parameterName, d.einheit));
+    }
+    // Reihenfolge der Steckbrief-Parameter nach sortierung.
+    // (alleSteckbriefe kommt bereits sortiert aus dem Aufrufer.)
 
+    const generator = ArtikelSheetGenerator();
+
+    for (final art in fehlende) {
       try {
-        // Blueprint klonen + Artikelkopf setzen (A6 = "Nr — Bezeichnung",
-        // exakt das Format, das der Import wieder einliest).
-        final doc = XmlDocument.parse(
-          utf8.decode(quellFile.content as List<int>),
-        );
-        final sheetData = doc.findAllElements('sheetData').firstOrNull;
-        if (sheetData == null) {
-          warnungen.add(
-            'Artikel ${art.artikelnummer}: Blueprint ohne sheetData — '
-            'Sheet nicht angelegt.',
-          );
-          continue;
+        // Schritte dieses Artikels in Reihenfolge.
+        final schritte = alleSchritte
+            .where((s) => s.productId == art.id && s.deletedAt == null)
+            .toList()
+          ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
+
+        // Parameter je Schritt-Id.
+        final paramsByStep = <String, List<ProductStepParameter>>{};
+        for (final p in alleParameter) {
+          if (p.deletedAt != null) continue;
+          paramsByStep.putIfAbsent(p.stepId, () => []).add(p);
         }
-        _setzeZelleInlineStr(
-          sheetData,
-          row: 6,
-          colLetter: 'A',
-          wert: '${art.artikelnummer} — ${art.artikelbezeichnung}',
+
+        // GenSchritt-Liste + Werte je Schritt-Nr aufbauen.
+        final genSchritte = <GenSchritt>[];
+        final werteJeSchritt = <int, List<GenWert>>{};
+        for (var i = 0; i < schritte.length; i++) {
+          final s = schritte[i];
+          final nr = i + 1;
+          final abt = Abteilung.fromDbValue(s.abteilung);
+          final maschinenName =
+              s.maschineId == null ? null : maschineNameById[s.maschineId];
+          genSchritte.add(GenSchritt(
+            nr: nr,
+            abteilung: abt.anzeigeName,
+            prozessschritt: s.prozessschritt,
+            anlage: maschinenName ?? s.maschine,
+            personen: s.basisMitarbeiter > 0 ? s.basisMitarbeiter : null,
+            mengeKg: s.basisMengeKg > 0 ? s.basisMengeKg : null,
+            zeitText: s.basisDauerMinuten > 0
+                ? _minutenZuHmm(s.basisDauerMinuten)
+                : null,
+            fixZeitMin: s.fixZeitMinuten,
+          ));
+          // Werte dieses Schritts (alle Parameter mit Wert).
+          final werte = <GenWert>[];
+          for (final p in paramsByStep[s.id] ?? const []) {
+            werte.add(GenWert(p.parameterName, p.wert));
+          }
+          werteJeSchritt[nr] = werte;
+        }
+
+        final kategorie = art.produktgruppe == null
+            ? ''
+            : (_produktgruppeZuKategorie[art.produktgruppe] ?? '');
+        final reiterFarbe = art.produktgruppe == null
+            ? null
+            : _produktgruppeZuFarbe[art.produktgruppe];
+
+        final genInput = GenArtikel(
+          artikelnummer: art.artikelnummer,
+          bezeichnung: art.artikelbezeichnung,
+          kategorieName: kategorie,
+          schritte: genSchritte,
+          werteJeSchritt: werteJeSchritt,
+          steckbriefJeAnlage: steckbriefJeMaschine,
         );
-        // Blaupausen-Hinweis ("für jeden neuen Artikel kopieren …")
-        // im geklonten Sheet entfernen — A2 (Kategorie) bleibt, sie
-        // bestimmt beim Re-Import die Produktgruppe.
-        _setzeZelleInlineStr(sheetData, row: 3, colLetter: 'A', wert: '');
+        final sheetXml =
+            generator.generiere(genInput, reiterFarbe: reiterFarbe);
 
         maxDateiNr++;
         maxSheetId++;
         maxRid++;
         final neuerPfad = 'xl/worksheets/sheet$maxDateiNr.xml';
-        final xmlBytes = utf8.encode(doc.toXmlString(pretty: false));
+        final xmlBytes = utf8.encode(sheetXml);
         archive.addFile(ArchiveFile(neuerPfad, xmlBytes.length, xmlBytes));
 
         // Relationship (Target RELATIV — absolute Pfade crashen den
@@ -814,10 +870,6 @@ class ExcelExportServiceV3 {
         relsRoot.children.add(rel);
 
         // Workbook-Eintrag (Sheet-Name = Artikelnummer).
-        // WICHTIG: xmlns:r muss am Element selbst deklariert sein — die
-        // Vorlage deklariert es pro <sheet> (nicht am Root). Ohne diese
-        // Zeile hätte r:id ein undeklariertes Präfix → Excel meldet die
-        // gesamte Arbeitsmappe als beschädigt.
         final sheetEl = XmlElement(XmlName('sheet'));
         sheetEl.setAttribute(
           'xmlns:r',
