@@ -269,6 +269,9 @@ class ExcelExportServiceV3 {
         customParameterUebersprungen += aktualisiert.customUebersprungen;
         historienGeschrieben += aktualisiert.historie;
 
+        // Reiterfarbe nach Produktgruppe setzen (nur Farbe, keine Struktur).
+        _setzeReiterfarbe(doc, artikel.produktgruppe);
+
         final neuesXml = utf8.encode(doc.toXmlString(pretty: false));
         archive.addFile(
           ArchiveFile(
@@ -332,6 +335,51 @@ class ExcelExportServiceV3 {
     'sous_vide': 'Sous Vide gegarte Produkte',
     'angebratene_bruehwurst': 'Angebratene Brühwürste',
   };
+
+  /// Reiterfarbe (ARGB-Hex) je Produktgruppe — identisch zu den Farben der
+  /// vorhandenen Kategorie-Sheets, damit App-generierte Sheets farblich in
+  /// dieselbe Systematik passen (Brühwurst rot, Bratstraße natur braun …).
+  static const Map<String, String> _produktgruppeZuFarbe = {
+    'bruehwurst': 'FFD32F2F',
+    'rohwurst': 'FF7B1FA2',
+    'kochpoekelware': 'FFC2185B',
+    'rohpoekelware': 'FFE64A19',
+    'aufschnitt': 'FF1976D2',
+    'bratstrasse_natur': 'FF5D4037',
+    'bratstrasse_paniert': 'FFF57C00',
+    'hackprodukt_gegart': 'FF388E3C',
+    'hackprodukt_roh': 'FF0097A7',
+    'braten': 'FF455A64',
+    'sous_vide': 'FF303F9F',
+    'angebratene_bruehwurst': 'FFFFA000',
+  };
+
+  /// Setzt die Reiterfarbe eines Artikel-Sheets nach seiner Produktgruppe.
+  /// Ändert nur die Farbe, sonst nichts. `<sheetPr>` muss laut OOXML das
+  /// erste Kind von `<worksheet>` sein; fehlt es, wird es dort angelegt.
+  void _setzeReiterfarbe(XmlDocument doc, String? produktgruppe) {
+    if (produktgruppe == null) return;
+    final farbe = _produktgruppeZuFarbe[produktgruppe];
+    if (farbe == null) return;
+
+    final worksheet = doc.findAllElements('worksheet').firstOrNull;
+    if (worksheet == null) return;
+
+    var sheetPr = worksheet.findElements('sheetPr').firstOrNull;
+    if (sheetPr == null) {
+      sheetPr = XmlElement(XmlName('sheetPr'));
+      // sheetPr muss vor allen anderen Kindern stehen.
+      worksheet.children.insert(0, sheetPr);
+    }
+
+    var tabColor = sheetPr.findElements('tabColor').firstOrNull;
+    if (tabColor == null) {
+      tabColor = XmlElement(XmlName('tabColor'));
+      // tabColor ist das erste zulässige Kind von sheetPr.
+      sheetPr.children.insert(0, tabColor);
+    }
+    tabColor.setAttribute('rgb', farbe);
+  }
 
   /// Legt für App-Artikel ohne Vorlage-Sheet ein neues Sheet an, indem das
   /// Blueprint-Sheet der passenden Kategorie geklont wird. Der Artikelkopf
