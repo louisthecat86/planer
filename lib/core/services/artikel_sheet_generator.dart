@@ -264,19 +264,16 @@ class ArtikelSheetGenerator {
     for (final block in bloecke) {
       blockKopf(block.anlage.toUpperCase());
 
-      // Die Zeilen (Parameternamen) eines Blocks ergeben sich aus zwei
-      // Quellen, in stabiler Reihenfolge:
-      //  1. den Steckbrief-Definitionen der Anlage (auch leere → als
-      //     Pflegezeilen in Excel),
-      //  2. den tatsächlich am Schritt hinterlegten Parametern (damit auch
-      //     Werte erscheinen, die über die Defs hinausgehen — z.B. mehr
-      //     Platten als der Katalog kennt).
-      // So bekommt jede Anlage genau ihre echten Parameter; getrennte
-      // Anlagen (Bratstraße vs. Heißluftofen) überlagern sich nie.
+      // Die Zeilen (Parameternamen) und Werte eines Blocks kommen
+      // AUSSCHLIESSLICH aus den Parametern der Schritte dieses Blocks —
+      // so überlagern sich gleichnamige Parameter verschiedener Anlagen
+      // (z.B. „Platte Unten 1" bei Bratstraße UND Heißluftofen) nie.
+      // Zusätzlich werden leere Steckbrief-Defs der Anlage als Pflege-
+      // zeilen ergänzt.
       final zeilenNamen = <String>[];
       final gesehen = <String>{};
 
-      // (1) Steckbrief-Defs der Anlage (Name inkl. Einheit als Label).
+      // (1) Steckbrief-Defs der Anlage (auch leere → Pflegezeilen).
       final defs = a.steckbriefJeAnlage[block.anlage] ??
           const <(String, String?)>[];
       for (final def in defs) {
@@ -304,11 +301,12 @@ class ArtikelSheetGenerator {
       for (final zeile in zeilenNamen) {
         final cells = StringBuffer(_cellStr(1, r, zeile, stil: _sHinweis));
         for (var c = 2; c <= gesamtSpalten; c++) {
-          // Wert nur in Spalten der Schritte dieses Blocks.
+          // Wert nur aus dem Schritt, dessen Spalte c ist UND der zu
+          // diesem Block gehört. Damit bleibt jeder Wert in seiner Anlage.
           String? wert;
           for (final nr in block.schrittNrs) {
             if (spalteVonSchritt[nr] == c) {
-              wert = _wertFuer(a, nr, zeile);
+              wert = _wertFuerSchritt(a, nr, zeile);
               break;
             }
           }
@@ -403,21 +401,36 @@ class ArtikelSheetGenerator {
         '</worksheet>';
   }
 
-  /// Sucht den Wert eines Parameters für einen Schritt.
-  static String? _wertFuer(GenArtikel a, int schrittNr, String zeileLabel) {
+  /// Sucht den Wert eines Parameters innerhalb der Parameter GENAU dieses
+  /// einen Schritts. Weil nur die Werte des jeweiligen Schritts durchsucht
+  /// werden, können gleichnamige Parameter verschiedener Anlagen (z.B.
+  /// „Platte Unten 1" bei Bratstraße und Heißluftofen) nicht kollidieren.
+  /// Kommt derselbe Name im Schritt mehrfach vor (Altlast aus früheren
+  /// Zyklen), wird der erste BEFÜLLTE Wert bevorzugt — so geht kein Wert
+  /// verloren, falls eine leere Dublette vor der befüllten steht.
+  static String? _wertFuerSchritt(
+    GenArtikel a,
+    int schrittNr,
+    String zeileLabel,
+  ) {
     final werte = a.werteJeSchritt[schrittNr];
     if (werte == null) return null;
     // zeileLabel kann "Name (Einheit)" sein → auf den reinen Namen matchen.
     final reinerName = zeileLabel.contains(' (')
         ? zeileLabel.substring(0, zeileLabel.lastIndexOf(' ('))
         : zeileLabel;
+    final ziel = reinerName.toLowerCase();
+    final zielVoll = zeileLabel.toLowerCase();
+    String? ersterTreffer;
     for (final w in werte) {
-      if (w.parameterName.toLowerCase() == reinerName.toLowerCase() ||
-          w.parameterName.toLowerCase() == zeileLabel.toLowerCase()) {
-        return w.wert;
+      final name = w.parameterName.toLowerCase();
+      if (name == ziel || name == zielVoll) {
+        // Befüllten Wert sofort nehmen; leeren nur als Fallback merken.
+        if ((w.wert ?? '').isNotEmpty) return w.wert;
+        ersterTreffer ??= w.wert;
       }
     }
-    return null;
+    return ersterTreffer;
   }
 
   static String _zahl(double v) =>

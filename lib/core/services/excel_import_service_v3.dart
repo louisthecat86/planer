@@ -576,7 +576,25 @@ class ExcelImportServiceV3 {
 
           int paramIdx = 0;
           for (final entry in s.parameterByGruppe.entries) {
+            // Dubletten zusammenführen: derselbe Parametername darf pro
+            // Gruppe nur EINMAL geschrieben werden. Bei mehreren Einträgen
+            // gewinnt der erste befüllte Wert (leere sind Altlast aus
+            // früheren Export/Import-Zyklen). Das versiegt die Quelle der
+            // wuchernden Doppel-Parameter dauerhaft.
+            final proName = <String, _ParsedParam>{};
             for (final p in entry.value) {
+              final key = p.name.toLowerCase();
+              final vorhanden = proName[key];
+              if (vorhanden == null) {
+                proName[key] = p;
+              } else if ((vorhanden.wert ?? '').isEmpty &&
+                  (p.wert ?? '').isNotEmpty) {
+                // Befüllten Wert bevorzugen.
+                proName[key] = p;
+              }
+            }
+
+            for (final p in proName.values) {
               final istSteckbrief =
                   steckbriefNamen.contains(p.name.toLowerCase());
               await _db.into(_db.productStepParameters).insert(
