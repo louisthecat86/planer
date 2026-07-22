@@ -249,11 +249,17 @@ class ArtikelSheetGenerator {
       ('Prozessschritt', _sLabelGelb, (s) => s.prozessschritt),
       ('Anlagen', _sLabelGrau, (s) => s.anlage),
       ('Personen', _sLabelGelb, (s) => s.personen?.toString()),
-      ('Menge (kg)', _sLabelGelb,
-          (s) => s.mengeKg == null ? null : _zahl(s.mengeKg!)),
+      (
+        'Menge (kg)',
+        _sLabelGelb,
+        (s) => s.mengeKg == null ? null : _zahl(s.mengeKg!),
+      ),
       ('Zeit (hh:mm)', _sLabelGelb, zeit),
-      ('Fixe Zeit (min)', _sLabelGelb,
-          (s) => s.fixZeitMin == null ? null : _zahl(s.fixZeitMin!)),
+      (
+        'Fixe Zeit (min)',
+        _sLabelGelb,
+        (s) => s.fixZeitMin == null ? null : _zahl(s.fixZeitMin!),
+      ),
     ];
     for (final (label, stil, getter) in felder) {
       final cells = StringBuffer(_cellStr(1, r, label, stil: stil));
@@ -348,11 +354,13 @@ class ArtikelSheetGenerator {
 
     // ── HISTORISCHE DATEN ───────────────────────────────────────────────
     blockKopf('HISTORISCHE DATEN');
-    rows.add(vollzeile(
-      r,
-      'Jede produzierte Charge als eine Zeile — die App mittelt daraus.',
-      _sHinweis,
-    ));
+    rows.add(
+      vollzeile(
+        r,
+        'Jede produzierte Charge als eine Zeile — die App mittelt daraus.',
+        _sHinweis,
+      ),
+    );
     r++;
     // Spaltenüberschriften
     const histSpalten = [
@@ -439,5 +447,3 @@ class ArtikelSheetGenerator {
   static String _zahl(double v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
 }
-
-
