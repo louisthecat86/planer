@@ -1106,13 +1106,29 @@ class ExcelImportServiceV3 {
             .putIfAbsent(aktuelleGruppe, () => [])
             .add(
               _ParsedParam(
-                name: label.trim(),
+                // Einheiten-Zusatz abschneiden: Der Generator schreibt
+                // Steckbrief-Zeilen als „Name (Einheit)". Ohne das
+                // Abschneiden käme beim Reimport ein NEUER Parametername
+                // („Lochgröße (mm)") in die App, der nicht mehr zum
+                // Katalog-Eintrag („Lochgröße") passt.
+                name: _basisLabel(label),
                 wert: wert,
                 istCustom: inCustomBlock,
               ),
             );
       }
     }
+  }
+
+  /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:
+  /// „Lochgröße (mm)" → „Lochgröße". Gegenstück zur gleichnamigen
+  /// Normalisierung im Export, damit der Roundtrip namensstabil bleibt.
+  static String _basisLabel(String label) {
+    final l = label.trim();
+    if (!l.endsWith(')')) return l;
+    final idx = l.lastIndexOf(' (');
+    if (idx <= 0) return l;
+    return l.substring(0, idx).trim();
   }
 
   bool _istGruppenHeader(String label, List<Data?> row, int maxSchritt) {

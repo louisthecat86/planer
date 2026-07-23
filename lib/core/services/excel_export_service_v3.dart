@@ -1929,6 +1929,14 @@ class ExcelExportServiceV3 {
     final sheetData = doc.findAllElements('sheetData').firstOrNull;
     if (sheetData == null) return null;
     final ziel = gesuchtesLabel.trim();
+    final zielBasis = _basisLabel(ziel);
+
+    // Der Generator schreibt Steckbrief-Zeilen als „Name (Einheit)",
+    // gespeichert ist aber nur „Name". Ohne diese Normalisierung fand die
+    // Suche z.B. „Lochgröße" nicht in der Zeile „Lochgröße (mm)" — der
+    // Wert landete dann im Slot-Bereich statt im Maschinenblock.
+    bool passt(String label) =>
+        label == ziel || _basisLabel(label).toLowerCase() == zielBasis.toLowerCase();
 
     // Zeilen in Dokumentreihenfolge mit ihrem A-Label sammeln.
     final eintraege = <({int rNum, String label})>[];
@@ -1954,7 +1962,7 @@ class ExcelExportServiceV3 {
         for (var i = startIdx + 1; i < eintraege.length; i++) {
           final e = eintraege[i];
           if (_istBlockHeader(e.label)) break; // nächster Block → Ende
-          if (e.label == ziel) return e.rNum;
+          if (passt(e.label)) return e.rNum;
         }
         // Im Block nicht gefunden → unten globaler Fallback.
       }
@@ -1962,9 +1970,20 @@ class ExcelExportServiceV3 {
 
     // 2) Globaler Erst-Treffer (altes Verhalten)
     for (final e in eintraege) {
-      if (e.label == ziel) return e.rNum;
+      if (passt(e.label)) return e.rNum;
     }
     return null;
+  }
+
+  /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:
+  /// „Lochgröße (mm)" → „Lochgröße". Wird beidseitig beim Vergleich
+  /// von Sheet-Labels und gespeicherten Parameternamen benutzt.
+  static String _basisLabel(String label) {
+    final l = label.trim();
+    if (!l.endsWith(')')) return l;
+    final idx = l.lastIndexOf(' (');
+    if (idx <= 0) return l;
+    return l.substring(0, idx).trim();
   }
 
   /// Block-Header-Erkennung: Label enthält Buchstaben und diese sind

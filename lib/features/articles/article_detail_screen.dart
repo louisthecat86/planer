@@ -1793,10 +1793,11 @@ class _PlattenSchemaBereich extends ConsumerWidget {
   final VoidCallback onUpdated;
 
   /// Jede Maschine zeigt NUR ihr eigenes Raster: die Bratstraße die
-  /// 10+10 Platten, der Dampftunnel seine 12. Vorher erschienen beide
-  /// Schieber bei beiden Maschinen — verwirrend und fehleranfällig.
-  bool get _istDampftunnel =>
-      maschineName.toLowerCase().contains('dampftunnel');
+  /// 10+10 Platten, der Dampftunnel/Heißluftofen seine 12. Nutzt bewusst
+  /// dieselbe Erkennung wie [istDampftunnelMaschine] — vorher stand hier
+  /// nur „dampftunnel", weshalb der Heißluftofen fälschlich das
+  /// Bratstraßen-Raster (10+10) bekam.
+  bool get _istDampftunnel => istDampftunnelMaschine(maschineName);
 
   /// Sucht einen Parameter NAME + GRUPPE — beide Gruppen enthalten Zeilen
   /// namens "Platte Unten N" (Bratstraße 1–10, Dampftunnel 1–12). Ohne die
