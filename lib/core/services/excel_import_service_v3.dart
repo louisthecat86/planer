@@ -1092,7 +1092,12 @@ class ExcelImportServiceV3 {
       if (nachHistorie) continue;
 
       if (_istGruppenHeader(label, rows[r], maxSchritt)) {
-        aktuelleGruppe = label.trim();
+        // Blocküberschrift → kanonische Parametergruppe der App.
+        // „HEISSLUFTOFEN" gehört zur Gruppe „DAMPFTUNNEL", „BRATSTRAßE"
+        // und „BRATSTRASSE" fallen zusammen. Ohne das kamen die
+        // Plattenwerte unter einem Gruppennamen zurück, den die
+        // Artikelmaske nicht kennt — sie wirkten dort gelöscht.
+        aktuelleGruppe = _gruppeFuerBlockKopf(label);
         inCustomBlock = false;
         continue;
       }
@@ -1118,6 +1123,20 @@ class ExcelImportServiceV3 {
             );
       }
     }
+  }
+
+  /// Ordnet eine Blocküberschrift der kanonischen Parametergruppe zu.
+  /// Gegenstück zu `gruppeFuerBlockKopf` im Export.
+  static String _gruppeFuerBlockKopf(String kopf) {
+    final roh = kopf.trim();
+    final n = roh.toLowerCase().replaceAll('ß', 'ss');
+    if (n.contains('bratstra')) return 'BRATSTRASSE';
+    if (n.contains('dampftunnel') ||
+        n.contains('heissluft') ||
+        n.contains('kombiofen')) {
+      return 'DAMPFTUNNEL';
+    }
+    return roh.replaceAll('ß', 'ss').replaceAll('ẞ', 'SS').toUpperCase();
   }
 
   /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:

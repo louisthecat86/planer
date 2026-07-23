@@ -1952,8 +1952,14 @@ class ExcelExportServiceV3 {
     final g = gruppe?.trim() ?? '';
     if (g.isNotEmpty) {
       var startIdx = -1;
+      final gNorm = gruppeFuerBlockKopf(g);
       for (var i = 0; i < eintraege.length; i++) {
-        if (eintraege[i].label.toLowerCase() == g.toLowerCase()) {
+        // Blocküberschrift → Parametergruppe normalisieren: der Block
+        // „HEISSLUFTOFEN" gehört zur Gruppe „DAMPFTUNNEL", „BRATSTRAßE"
+        // und „BRATSTRASSE" sind dieselbe Gruppe. Ohne das fiel die Suche
+        // auf den globalen Ersttreffer zurück — die Plattenwerte des
+        // Heißluftofens landeten dann in der Bratstraße.
+        if (gruppeFuerBlockKopf(eintraege[i].label) == gNorm) {
           startIdx = i;
           break;
         }
@@ -1973,6 +1979,23 @@ class ExcelExportServiceV3 {
       if (passt(e.label)) return e.rNum;
     }
     return null;
+  }
+
+  /// Ordnet eine Blocküberschrift bzw. einen Gruppennamen der
+  /// kanonischen Parametergruppe der App zu. Anlagen mit festem Raster
+  /// haben in der App feste Gruppennamen, die nicht dem Maschinennamen
+  /// entsprechen (Heißluftofen → DAMPFTUNNEL). Zusätzlich wird das ß
+  /// aufgelöst, damit „BRATSTRAßE" und „BRATSTRASSE" zusammenfallen.
+  static String gruppeFuerBlockKopf(String kopfOderGruppe) {
+    final roh = kopfOderGruppe.trim();
+    final n = roh.toLowerCase().replaceAll('ß', 'ss');
+    if (n.contains('bratstra')) return 'BRATSTRASSE';
+    if (n.contains('dampftunnel') ||
+        n.contains('heissluft') ||
+        n.contains('kombiofen')) {
+      return 'DAMPFTUNNEL';
+    }
+    return roh.replaceAll('ß', 'ss').replaceAll('ẞ', 'SS').toUpperCase();
   }
 
   /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:

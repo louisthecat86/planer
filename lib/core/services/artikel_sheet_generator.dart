@@ -130,6 +130,13 @@ class ArtikelSheetGenerator {
     return '<c r="$ref"$s/>';
   }
 
+  /// Überschrift eines Maschinenblocks. Wichtig: `toUpperCase()` lässt das
+  /// „ß" in Dart unverändert — aus „Bratstraße" würde „BRATSTRAßE", was
+  /// nicht zur Parametergruppe „BRATSTRASSE" der App passt. Deshalb wird
+  /// ß hier zu SS aufgelöst.
+  static String blockKopfName(String anlage) =>
+      anlage.replaceAll('ß', 'ss').replaceAll('ẞ', 'SS').toUpperCase();
+
   /// Baut das komplette Sheet-XML für einen Artikel. [reiterFarbe] ist die
   /// ARGB-Hex-Reiterfarbe (oder null). Rückgabe: fertige worksheet-XML.
   String generiere(GenArtikel a, {String? reiterFarbe}) {
@@ -262,7 +269,7 @@ class ArtikelSheetGenerator {
     }
 
     for (final block in bloecke) {
-      blockKopf(block.anlage.toUpperCase());
+      blockKopf(blockKopfName(block.anlage));
 
       // Die Zeilen (Parameternamen) und Werte eines Blocks kommen
       // AUSSCHLIESSLICH aus den Parametern der Schritte dieses Blocks —
