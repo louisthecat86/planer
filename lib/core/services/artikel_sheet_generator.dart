@@ -273,9 +273,15 @@ class ArtikelSheetGenerator {
       final zeilenNamen = <String>[];
       final gesehen = <String>{};
 
-      // (1) Steckbrief-Defs der Anlage (auch leere → Pflegezeilen).
+      // Katalog-Parameternamen dieser Anlage (klein) — sie dürfen auch
+      // leer als Pflegezeile erscheinen. Alles andere muss einen Wert
+      // haben, sonst ist es Altlast und wird weggelassen (Selbstheilung:
+      // leerer Müll verschwindet beim nächsten Export dauerhaft).
       final defs = a.steckbriefJeAnlage[block.anlage] ??
           const <(String, String?)>[];
+      final katalogNamen = <String>{for (final d in defs) d.$1.toLowerCase()};
+
+      // (1) Steckbrief-Defs der Anlage (auch leere → Pflegezeilen).
       for (final def in defs) {
         final einheit = def.$2;
         final label = (einheit == null || einheit.isEmpty)
@@ -283,12 +289,15 @@ class ArtikelSheetGenerator {
             : '${def.$1} ($einheit)';
         if (gesehen.add(def.$1.toLowerCase())) zeilenNamen.add(label);
       }
-      // (2) Tatsächliche Parameter der Schritte dieses Blocks.
+      // (2) Tatsächliche Parameter der Schritte dieses Blocks. Ein leerer
+      //     Parameter wird nur übernommen, wenn er im Katalog steht;
+      //     befüllte immer (auch wenn Katalog ihn (noch) nicht kennt).
       for (final nr in block.schrittNrs) {
         for (final w in a.werteJeSchritt[nr] ?? const <GenWert>[]) {
-          if (gesehen.add(w.parameterName.toLowerCase())) {
-            zeilenNamen.add(w.parameterName);
-          }
+          final key = w.parameterName.toLowerCase();
+          final hatWert = (w.wert ?? '').isNotEmpty;
+          if (!hatWert && !katalogNamen.contains(key)) continue;
+          if (gesehen.add(key)) zeilenNamen.add(w.parameterName);
         }
       }
 
