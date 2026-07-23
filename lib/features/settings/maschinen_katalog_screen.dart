@@ -476,26 +476,87 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
         .fireDebounced(reason: 'Maschinen-Parameter entfernt');
   }
 
-  Future<void> _parameterVerschieben(
+  /// Neue Reihenfolge nach Drag & Drop speichern. Es wird die komplette
+  /// Sortierung neu durchnummeriert — robuster als Nachbarn zu tauschen,
+  /// weil ein Element über beliebig viele Positionen wandern kann.
+  Future<void> _parameterNeuOrdnen(
     List<MachineParameterDef> defs,
-    int index,
-    int delta,
+    int altIndex,
+    int neuIndex,
   ) async {
-    final ziel = index + delta;
-    if (ziel < 0 || ziel >= defs.length) return;
+    if (defs.isEmpty) return;
+    // ReorderableListView meldet beim Verschieben nach unten einen um 1
+    // zu hohen Zielindex.
+    var ziel = neuIndex;
+    if (ziel > altIndex) ziel -= 1;
+    if (ziel == altIndex) return;
+
+    final neueListe = [...defs];
+    final bewegt = neueListe.removeAt(altIndex);
+    neueListe.insert(ziel, bewegt);
+
     final db = ref.read(databaseProvider);
     final jetzt = DateTime.now();
-    // Sortierung der beiden Nachbarn tauschen.
-    Future<void> setze(MachineParameterDef d, int sort) =>
-        (db.update(db.machineParameterDefs)..where((x) => x.id.equals(d.id)))
-            .write(MachineParameterDefsCompanion(
-          sortierung: Value(sort),
+    for (var i = 0; i < neueListe.length; i++) {
+      await (db.update(db.machineParameterDefs)
+            ..where((x) => x.id.equals(neueListe[i].id)))
+          .write(
+        MachineParameterDefsCompanion(
+          sortierung: Value(i),
           updatedAt: Value(jetzt),
         ),
       );
-    await setze(defs[index], ziel);
-    await setze(defs[ziel], index);
-    ref.invalidate(maschinenParameterDefsProvider(defs[index].maschineId));
+    }
+    ref.invalidate(maschinenParameterDefsProvider(bewegt.maschineId));
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Parameter-Reihenfolge geändert');
+  }
+
+  /// Bearbeitet Name und Einheit eines vorhandenen Steckbrief-Parameters.
+  Future<void> _parameterBearbeiten(
+    MachineParameterDef def,
+    List<MachineParameterDef> alle,
+  ) async {
+    final res = await showDialog<(String, String?)>(
+      context: context,
+      builder: (_) => _ParameterDialog(
+        name: def.parameterName,
+        einheit: def.einheit,
+      ),
+    );
+    if (res == null) return;
+
+    // Namensdubletten abfangen (unique auf maschineId+parameterName).
+    final neuerName = res.$1.trim();
+    final kollision = alle.any(
+      (d) =>
+          d.id != def.id &&
+          d.parameterName.toLowerCase() == neuerName.toLowerCase(),
+    );
+    if (kollision) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('„$neuerName" existiert bereits.')),
+        );
+      }
+      return;
+    }
+
+    final db = ref.read(databaseProvider);
+    await (db.update(db.machineParameterDefs)
+          ..where((x) => x.id.equals(def.id)))
+        .write(
+      MachineParameterDefsCompanion(
+        parameterName: Value(neuerName),
+        einheit: Value(res.$2),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    ref.invalidate(maschinenParameterDefsProvider(def.maschineId));
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Maschinen-Parameter bearbeitet');
   }
 
   @override
@@ -649,65 +710,65 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
                   error: (e, _) => Text('Fehler: $e'),
                   data: (liste) => Column(
                     children: [
-                      for (var i = 0; i < liste.length; i++)
-                        Card(
-                          margin: const EdgeInsets.only(bottom: 6),
-                          child: ListTile(
-                            dense: true,
-                            title: Text(
-                              liste[i].parameterName,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
+                      // Reihenfolge per Drag & Drop — die Pfeiltasten
+                      // entfallen dadurch. Die Liste sitzt in einem
+                      // scrollenden Sheet, daher shrinkWrap + eigene
+                      // Scroll-Physik.
+                      ReorderableListView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        buildDefaultDragHandles: false,
+                        itemCount: liste.length,
+                        onReorder: (alt, neu) =>
+                            _parameterNeuOrdnen(liste, alt, neu),
+                        itemBuilder: (context, i) {
+                          final def = liste[i];
+                          return Card(
+                            key: ValueKey(def.id),
+                            margin: const EdgeInsets.only(bottom: 6),
+                            child: ListTile(
+                              dense: true,
+                              leading: ReorderableDragStartListener(
+                                index: i,
+                                child: Icon(
+                                  Icons.drag_indicator,
+                                  size: 20,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              title: Text(
+                                def.parameterName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              subtitle: (def.einheit ?? '').isEmpty
+                                  ? null
+                                  : Text(def.einheit!),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit, size: 18),
+                                    tooltip: 'Bearbeiten',
+                                    onPressed: () =>
+                                        _parameterBearbeiten(def, liste),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.delete_outline,
+                                      size: 18,
+                                      color: Colors.red,
+                                    ),
+                                    tooltip: 'Entfernen',
+                                    onPressed: () => _parameterEntfernen(def),
+                                  ),
+                                ],
                               ),
                             ),
-                            subtitle: (liste[i].einheit ?? '').isEmpty
-                                ? null
-                                : Text(liste[i].einheit!),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_upward,
-                                    size: 18,
-                                  ),
-                                  tooltip: 'Nach oben',
-                                  onPressed: i == 0
-                                      ? null
-                                      : () => _parameterVerschieben(
-                                          liste,
-                                          i,
-                                          -1,
-                                        ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.arrow_downward,
-                                    size: 18,
-                                  ),
-                                  tooltip: 'Nach unten',
-                                  onPressed: i == liste.length - 1
-                                      ? null
-                                      : () => _parameterVerschieben(
-                                          liste,
-                                          i,
-                                          1,
-                                        ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 18,
-                                    color: Colors.red,
-                                  ),
-                                  tooltip: 'Entfernen',
-                                  onPressed: () =>
-                                      _parameterEntfernen(liste[i]),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                          );
+                        },
+                      ),
                       const SizedBox(height: 4),
                       SizedBox(
                         width: double.infinity,
@@ -734,15 +795,19 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
 // ---------------------------------------------------------------------------
 
 class _ParameterDialog extends StatefulWidget {
-  const _ParameterDialog();
+  const _ParameterDialog({this.name, this.einheit});
+
+  /// Vorbelegung beim Bearbeiten eines bestehenden Parameters.
+  final String? name;
+  final String? einheit;
 
   @override
   State<_ParameterDialog> createState() => _ParameterDialogState();
 }
 
 class _ParameterDialogState extends State<_ParameterDialog> {
-  final _name = TextEditingController();
-  final _einheit = TextEditingController();
+  late final _name = TextEditingController(text: widget.name ?? '');
+  late final _einheit = TextEditingController(text: widget.einheit ?? '');
 
   @override
   void dispose() {
@@ -761,7 +826,9 @@ class _ParameterDialogState extends State<_ParameterDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Parameter hinzufügen'),
+      title: Text(
+        widget.name == null ? 'Parameter hinzufügen' : 'Parameter bearbeiten',
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [

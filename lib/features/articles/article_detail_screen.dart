@@ -3109,9 +3109,7 @@ class _ProzessDiagramm extends StatelessWidget {
             gruppe: gruppen[g],
             position: g + 1,
             istLetzte: g == gruppen.length - 1,
-            onMoveUp: g == 0 ? null : () => onMove(g, -1),
-            onMoveDown:
-                g == gruppen.length - 1 ? null : () => onMove(g, 1),
+            onMoveTo: (von, nach) => onMove(von, nach - von),
             onReorderSchritt: (von, nach) => onReorderSchritt(g, von, nach),
             onUpdated: onUpdated,
           ),
@@ -3130,8 +3128,7 @@ class _DiagrammStation extends StatelessWidget {
     required this.gruppe,
     required this.position,
     required this.istLetzte,
-    required this.onMoveUp,
-    required this.onMoveDown,
+    required this.onMoveTo,
     required this.onReorderSchritt,
     required this.onUpdated,
   });
@@ -3141,8 +3138,10 @@ class _DiagrammStation extends StatelessWidget {
   final List<({ProductStep step, int nummer})> gruppe;
   final int position;
   final bool istLetzte;
-  final VoidCallback? onMoveUp;
-  final VoidCallback? onMoveDown;
+
+  /// Verschiebt die Abteilung von Position [von] auf Position [nach]
+  /// (Drag & Drop des ganzen Blocks — ersetzt die Pfeiltasten).
+  final void Function(int von, int nach) onMoveTo;
   final void Function(int von, int nach) onReorderSchritt;
   final VoidCallback onUpdated;
 
@@ -3153,6 +3152,34 @@ class _DiagrammStation extends StatelessWidget {
     final abt = Abteilung.fromDbValue(gruppe.first.step.abteilung);
     final farbe = abt.farbe;
 
+    return DragTarget<int>(
+      onWillAcceptWithDetails: (d) => d.data != gruppenIndex,
+      onAcceptWithDetails: (d) => onMoveTo(d.data, gruppenIndex),
+      builder: (context, candidate, rejected) {
+        final istZiel = candidate.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: istZiel ? theme.colorScheme.primary : Colors.transparent,
+              width: 2,
+            ),
+          ),
+          child: _inhalt(context, theme, dark, abt, farbe),
+        );
+      },
+    );
+  }
+
+  Widget _inhalt(
+    BuildContext context,
+    ThemeData theme,
+    bool dark,
+    Abteilung abt,
+    Color farbe,
+  ) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3261,18 +3288,34 @@ class _DiagrammStation extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: 2),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_upward, size: 17),
-                        tooltip: 'Abteilung nach oben',
-                        onPressed: onMoveUp,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.arrow_downward, size: 17),
-                        tooltip: 'Abteilung nach unten',
-                        onPressed: onMoveDown,
-                        visualDensity: VisualDensity.compact,
+                      const SizedBox(width: 6),
+                      // Griff zum Verschieben der ganzen Abteilung. Ein
+                      // eigener Griff statt der ganzen Box, damit das
+                      // Ziehen einzelner Maschinen-Knoten nicht kollidiert.
+                      Draggable<int>(
+                        data: gruppenIndex,
+                        dragAnchorStrategy: pointerDragAnchorStrategy,
+                        feedback: Material(
+                          color: Colors.transparent,
+                          child: Chip(
+                            backgroundColor: farbe,
+                            label: Text(
+                              abt.anzeigeName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                        child: Tooltip(
+                          message: 'Abteilung ziehen zum Umsortieren',
+                          child: Icon(
+                            Icons.drag_indicator,
+                            size: 20,
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                     ],
                   ),
