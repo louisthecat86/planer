@@ -787,6 +787,28 @@ class ExcelExportServiceV3 {
 
     const generator = ArtikelSheetGenerator();
 
+    // Stile aus vorhandenen Sheets ernten, damit neue Sheets exakt wie die
+    // bestehenden aussehen (inkl. Datums-/Zeitformat der Historie).
+    // Reihenfolge: erst echte Artikel-Sheets (die haben ausgefüllte
+    // Historie-Zeilen mit den Zahlenformaten), dann Kategorie-Blaupausen.
+    const metaSheets = {
+      'Übersicht',
+      'Anleitung',
+      'Anlagen-Katalog',
+      'Maschinen-Steckbriefe',
+    };
+    final kategorien = _produktgruppeZuKategorie.values.toSet();
+    final kandidaten = <String>[];
+    for (final e in sheetInfo.entries) {
+      if (metaSheets.contains(e.key) || kategorien.contains(e.key)) continue;
+      kandidaten.add(e.value);
+    }
+    for (final kat in kategorien) {
+      final p = sheetInfo[kat];
+      if (p != null) kandidaten.add(p);
+    }
+    final stile = _ernteStile(archive, kandidaten);
+
     for (final art in fehlende) {
       try {
         // Schritte dieses Artikels in Reihenfolge.
@@ -847,8 +869,11 @@ class ExcelExportServiceV3 {
           werteJeSchritt: werteJeSchritt,
           steckbriefJeAnlage: steckbriefJeMaschine,
         );
-        final sheetXml =
-            generator.generiere(genInput, reiterFarbe: reiterFarbe);
+        final sheetXml = generator.generiere(
+          genInput,
+          reiterFarbe: reiterFarbe,
+          stile: stile,
+        );
 
         maxDateiNr++;
         maxSheetId++;
@@ -1998,6 +2023,139 @@ class ExcelExportServiceV3 {
       if (passt(e.label)) return e.rNum;
     }
     return null;
+  }
+
+  /// Erntet die Zellstil-Indizes aus einem bestehenden Sheet der Mappe,
+  /// damit generierte Artikel-Sheets exakt wie die vorhandenen aussehen.
+  ///
+  /// Hart kodierte Indizes waren nicht tragfähig: Sie verschieben sich
+  /// zwischen Vorlagen-Generationen. Folge waren abweichende Farben und
+  /// — gravierender — eine Historie ohne Datums-/Zeitformat (Datum als
+  /// Zahl, Uhrzeit als Tagesbruchteil).
+  ///
+  /// [referenzSheetPfad] sollte ein vollständiges Artikel- oder
+  /// Kategorie-Sheet sein. Findet sich ein Anker nicht, bleibt der
+  /// jeweilige Standardwert stehen.
+  GenStile _ernteStile(Archive archive, List<String> kandidaten) {
+    const standard = GenStile();
+    GenStile? bester;
+    for (final pfad in kandidaten) {
+      final ergebnis = _ernteStileAus(archive, pfad);
+      if (ergebnis == null) continue;
+      // Ein Sheet mit echten Historie-Daten liefert die Zahlenformate für
+      // Datum/Uhrzeit. Leere Blaupausen haben dort keine Stile — die
+      // nehmen wir nur als Notlösung.
+      if (ergebnis.histVollstaendig) return ergebnis.stile;
+      bester ??= ergebnis.stile;
+    }
+    return bester ?? standard;
+  }
+
+  /// Erntet die Stile aus EINEM Sheet. `histVollstaendig` sagt, ob die
+  /// Historie-Datenzeile echte Zahlenformat-Stile trug.
+  ({GenStile stile, bool histVollstaendig})? _ernteStileAus(
+    Archive archive,
+    String referenzSheetPfad,
+  ) {
+    const standard = GenStile();
+    final datei = archive.findFile(referenzSheetPfad);
+    if (datei == null) return null;
+
+    final XmlDocument doc;
+    try {
+      doc = XmlDocument.parse(utf8.decode(datei.content as List<int>));
+    } catch (_) {
+      return null;
+    }
+    final sheetData = doc.findAllElements('sheetData').firstOrNull;
+    if (sheetData == null) return null;
+    final shared = _SharedStrings.fromArchive(archive);
+
+    // Zeilen einsammeln: Nummer → (A-Label, Stil je Spaltenbuchstabe)
+    final zeilen = <int, ({String label, Map<String, int> stile})>{};
+    for (final row in sheetData.findElements('row')) {
+      final rNum = int.tryParse(row.getAttribute('r') ?? '');
+      if (rNum == null) continue;
+      final stile = <String, int>{};
+      for (final c in row.findElements('c')) {
+        final ref = c.getAttribute('r') ?? '';
+        final sp = RegExp(r'^([A-Z]+)').firstMatch(ref)?.group(1);
+        final st = int.tryParse(c.getAttribute('s') ?? '');
+        if (sp != null && st != null) stile[sp] = st;
+      }
+      zeilen[rNum] = (
+        label: _leseZelleA(row, shared)?.trim() ?? '',
+        stile: stile,
+      );
+    }
+
+    int? stilVon(int zeile, [String spalte = 'A']) =>
+        zeilen[zeile]?.stile[spalte];
+
+    int? zeileMit(String label) {
+      for (final e in zeilen.entries) {
+        if (e.value.label == label) return e.key;
+      }
+      return null;
+    }
+
+    final zArtikel = zeileMit('Artikelbezeichnung');
+    final zProzess = zeileMit('PROZESSSCHRITTE');
+    final zAbteilung = zeileMit('Abteilung');
+    final zAnlagen = zeileMit('Anlagen');
+    final zMasch = zeileMit(kMaschinenSteckbriefGruppe);
+    final zDatum = zeileMit('Datum');
+
+    // Historie-Datenzeile: die Zeile direkt unter „Datum" trägt die
+    // Zahlenformate (Datum, Uhrzeit, Dauer, Prozent).
+    var histDaten = standard.histDaten;
+    var histVollstaendig = false;
+    if (zDatum != null) {
+      final daten = zeilen[zDatum + 1]?.stile;
+      if (daten != null && daten.isNotEmpty) {
+        const spalten = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'];
+        final fallback = daten['A'] ?? standard.histDaten.first;
+        histDaten = [
+          for (final sp in spalten) daten[sp] ?? fallback,
+        ];
+        // Datum (A) und Uhrzeiten (E/F) sind die kritischen Formate.
+        histVollstaendig =
+            daten['A'] != null && daten['E'] != null && daten['F'] != null;
+      }
+    }
+
+    final stile = GenStile(
+      kategorie: stilVon(2) ?? standard.kategorie,
+      kopfLabel: zArtikel == null
+          ? standard.kopfLabel
+          : (stilVon(zArtikel) ?? standard.kopfLabel),
+      kopf: zArtikel == null
+          ? standard.kopf
+          : (stilVon(zArtikel + 1) ?? standard.kopf),
+      prozessHeader: zProzess == null
+          ? standard.prozessHeader
+          : (stilVon(zProzess) ?? standard.prozessHeader),
+      blockHeader: zMasch == null
+          ? standard.blockHeader
+          : (stilVon(zMasch) ?? standard.blockHeader),
+      hinweis: zMasch == null
+          ? standard.hinweis
+          : (stilVon(zMasch + 1) ?? standard.hinweis),
+      labelGelb: zAbteilung == null
+          ? standard.labelGelb
+          : (stilVon(zAbteilung) ?? standard.labelGelb),
+      labelGrau: zAnlagen == null
+          ? standard.labelGrau
+          : (stilVon(zAnlagen) ?? standard.labelGrau),
+      wert: zAbteilung == null
+          ? standard.wert
+          : (stilVon(zAbteilung, 'B') ?? standard.wert),
+      histHeader: zDatum == null
+          ? standard.histHeader
+          : (stilVon(zDatum) ?? standard.histHeader),
+      histDaten: histDaten,
+    );
+    return (stile: stile, histVollstaendig: histVollstaendig);
   }
 
   /// Gruppen mit festem Maschinen-Raster. Nur für diese gilt die
