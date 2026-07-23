@@ -18,7 +18,16 @@ class BackupService {
   static const String _backupFilePrefix = 'planer_backup';
   static const String _autoBackupFilePrefix = 'planer_auto_backup';
   static const String _backupFileExtension = 'planerbackup';
-  static const String _currentVersion = '1.0';
+  /// Aktuelle Backup-Version.
+  ///
+  /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
+  /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
+  static const String _currentVersion = '1.1';
+
+  /// Alle Versionen, die beim Import gelesen werden können. Ältere
+  /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
+  /// Import einfach übersprungen (leere Liste).
+  static const Set<String> _supportedVersions = {'1.0', '1.1'};
 
   /// Erstellt alle notwendigen Verzeichnisse.
   static Future<Directory> _getBackupDir() async {
@@ -153,6 +162,11 @@ class BackupService {
         'machines': await _exportMachines(database),
         'product_step_parameters': await _exportProductStepParameters(database),
         'app_settings': await _exportAppSettings(database),
+        // ── ab Backup-Version 1.1 ────────────────────────────────────
+        // Ohne diese beiden Tabellen kam der Maschinen-Katalog auf einem
+        // zweiten Rechner unvollständig an (Steckbriefe fehlten komplett).
+        'machine_parameter_defs': await _exportMachineParameterDefs(database),
+        'parameter_grenzen': await _exportParameterGrenzen(database),
       },
     };
   }
@@ -178,10 +192,12 @@ class BackupService {
       final backupJson = jsonDecode(contents) as Map<String, dynamic>;
 
       // Version prüfen
+      // Version prüfen — ältere Backups bleiben lesbar.
       final version = backupJson['version'] as String?;
-      if (version != _currentVersion) {
+      if (version == null || !_supportedVersions.contains(version)) {
         throw Exception(
-          'Inkompatible Backup-Version: $version (erwartet: $_currentVersion)',
+          'Inkompatible Backup-Version: $version '
+          '(unterstützt: ${_supportedVersions.join(", ")})',
         );
       }
 
@@ -198,6 +214,9 @@ class BackupService {
         await _importRawMaterials(database, data);
         // Machines vor ProductSteps importieren (FK)
         await _importMachines(database, data);
+        // Steckbriefe hängen an den Maschinen → direkt danach.
+        await _importMachineParameterDefs(database, data);
+        await _importParameterGrenzen(database, data);
         await _importProductSteps(database, data);
         await _importProductStepParameters(database, data);
         await _importProductRawMaterials(database, data);
@@ -395,6 +414,25 @@ class BackupService {
   ) async =>
       (await db.select(db.appSettings).get()).map((s) => s.toJson()).toList();
 
+  // ── Backup-Version 1.1: Steckbriefe + Grenzen ──────────────────────
+
+  /// Maschinen-Steckbriefe (Parameterdefinitionen je Anlage). Ohne diese
+  /// Tabelle wäre der Maschinen-Katalog nach einem Restore leer.
+  static Future<List<Map<String, dynamic>>> _exportMachineParameterDefs(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.machineParameterDefs).get())
+          .map((d) => d.toJson())
+          .toList();
+
+  /// Parameter-Grenzen (Poka-Yoke: harte/weiche Min-/Max-Werte).
+  static Future<List<Map<String, dynamic>>> _exportParameterGrenzen(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.parameterGrenzen).get())
+          .map((g) => g.toJson())
+          .toList();
+
   // ============================================================================
   // PRIVATE IMPORT-METHODEN
   // ============================================================================
@@ -591,6 +629,40 @@ class BackupService {
     }
   }
 
+  // ── Backup-Version 1.1: Steckbriefe + Grenzen ──────────────────────
+  // Ältere Backups (1.0) haben diese Schlüssel nicht — dann bleibt die
+  // Liste leer und es wird nichts importiert.
+
+  static Future<void> _importMachineParameterDefs(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list = (data['machine_parameter_defs'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    for (final d in list) {
+      final def = MachineParameterDef.fromJson(d);
+      await db.into(db.machineParameterDefs).insertOnConflictUpdate(
+            def.toCompanion(true),
+          );
+    }
+  }
+
+  static Future<void> _importParameterGrenzen(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list =
+        (data['parameter_grenzen'] as List?)?.cast<Map<String, dynamic>>() ??
+            [];
+    for (final g in list) {
+      final grenze = ParameterGrenzenData.fromJson(g);
+      await db.into(db.parameterGrenzen).insertOnConflictUpdate(
+            grenze.toCompanion(true),
+          );
+    }
+  }
+
   // ============================================================================
   // CLEAR DATABASE
   // ============================================================================
@@ -611,6 +683,9 @@ class BackupService {
     await db.delete(db.rawMaterialBatches).go();
     await db.delete(db.products).go();
     await db.delete(db.rawMaterials).go();
+    // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
+    await db.delete(db.machineParameterDefs).go();
+    await db.delete(db.parameterGrenzen).go();
     // Anlagen-Katalog
     await db.delete(db.machines).go();
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
