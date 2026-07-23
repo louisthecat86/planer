@@ -485,15 +485,14 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     int neuIndex,
   ) async {
     if (defs.isEmpty) return;
-    // ReorderableListView meldet beim Verschieben nach unten einen um 1
-    // zu hohen Zielindex.
-    var ziel = neuIndex;
-    if (ziel > altIndex) ziel -= 1;
-    if (ziel == altIndex) return;
+    // onReorderItem liefert den Zielindex bereits so, als wäre das
+    // Element an [altIndex] schon entfernt — es braucht daher keine
+    // eigene Korrektur mehr (anders als beim abgelösten onReorder).
+    if (neuIndex == altIndex) return;
 
     final neueListe = [...defs];
     final bewegt = neueListe.removeAt(altIndex);
-    neueListe.insert(ziel, bewegt);
+    neueListe.insert(neuIndex.clamp(0, neueListe.length), bewegt);
 
     final db = ref.read(databaseProvider);
     final jetzt = DateTime.now();
@@ -719,7 +718,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
                         physics: const NeverScrollableScrollPhysics(),
                         buildDefaultDragHandles: false,
                         itemCount: liste.length,
-                        onReorder: (alt, neu) =>
+                        onReorderItem: (alt, neu) =>
                             _parameterNeuOrdnen(liste, alt, neu),
                         itemBuilder: (context, i) {
                           final def = liste[i];
