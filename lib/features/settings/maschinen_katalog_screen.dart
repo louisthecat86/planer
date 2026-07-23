@@ -485,9 +485,8 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     int neuIndex,
   ) async {
     if (defs.isEmpty) return;
-    // onReorderItem liefert den Zielindex bereits so, als wäre das
-    // Element an [altIndex] schon entfernt — es braucht daher keine
-    // eigene Korrektur mehr (anders als beim abgelösten onReorder).
+    // Konvention wie im Prozess-Diagramm: Das gezogene Element wird
+    // entnommen und an der Position des Ablageziels wieder eingesetzt.
     if (neuIndex == altIndex) return;
 
     final neueListe = [...defs];
@@ -710,64 +709,89 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
                   data: (liste) => Column(
                     children: [
                       // Reihenfolge per Drag & Drop — die Pfeiltasten
-                      // entfallen dadurch. Die Liste sitzt in einem
-                      // scrollenden Sheet, daher shrinkWrap + eigene
-                      // Scroll-Physik.
-                      ReorderableListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        buildDefaultDragHandles: false,
-                        itemCount: liste.length,
-                        onReorderItem: (alt, neu) =>
-                            _parameterNeuOrdnen(liste, alt, neu),
-                        itemBuilder: (context, i) {
-                          final def = liste[i];
-                          return Card(
-                            key: ValueKey(def.id),
-                            margin: const EdgeInsets.only(bottom: 6),
-                            child: ListTile(
-                              dense: true,
-                              leading: ReorderableDragStartListener(
-                                index: i,
-                                child: Icon(
-                                  Icons.drag_indicator,
-                                  size: 20,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                      // entfallen dadurch. Bewusst mit Draggable/DragTarget
+                      // statt ReorderableListView: dasselbe Muster wie im
+                      // Prozess-Diagramm, und unabhängig davon, wie die
+                      // Flutter-Version die Reorder-Callbacks gerade nennt.
+                      for (var i = 0; i < liste.length; i++)
+                        DragTarget<int>(
+                          onWillAcceptWithDetails: (d) => d.data != i,
+                          onAcceptWithDetails: (d) =>
+                              _parameterNeuOrdnen(liste, d.data, i),
+                          builder: (context, kandidaten, abgelehnt) {
+                            final def = liste[i];
+                            final istZiel = kandidaten.isNotEmpty;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 120),
+                              margin: const EdgeInsets.only(bottom: 6),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: istZiel
+                                      ? theme.colorScheme.primary
+                                      : Colors.transparent,
+                                  width: 2,
                                 ),
                               ),
-                              title: Text(
-                                def.parameterName,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              subtitle: (def.einheit ?? '').isEmpty
-                                  ? null
-                                  : Text(def.einheit!),
-                              trailing: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit, size: 18),
-                                    tooltip: 'Bearbeiten',
-                                    onPressed: () =>
-                                        _parameterBearbeiten(def, liste),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(
-                                      Icons.delete_outline,
-                                      size: 18,
-                                      color: Colors.red,
+                              child: Card(
+                                margin: EdgeInsets.zero,
+                                child: ListTile(
+                                  dense: true,
+                                  leading: Draggable<int>(
+                                    data: i,
+                                    dragAnchorStrategy:
+                                        pointerDragAnchorStrategy,
+                                    feedback: Material(
+                                      color: Colors.transparent,
+                                      child: Chip(
+                                        label: Text(def.parameterName),
+                                      ),
                                     ),
-                                    tooltip: 'Entfernen',
-                                    onPressed: () => _parameterEntfernen(def),
+                                    child: Tooltip(
+                                      message: 'Ziehen zum Umsortieren',
+                                      child: Icon(
+                                        Icons.drag_indicator,
+                                        size: 20,
+                                        color: theme
+                                            .colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
                                   ),
-                                ],
+                                  title: Text(
+                                    def.parameterName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  subtitle: (def.einheit ?? '').isEmpty
+                                      ? null
+                                      : Text(def.einheit!),
+                                  trailing: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit, size: 18),
+                                        tooltip: 'Bearbeiten',
+                                        onPressed: () =>
+                                            _parameterBearbeiten(def, liste),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                          color: Colors.red,
+                                        ),
+                                        tooltip: 'Entfernen',
+                                        onPressed: () =>
+                                            _parameterEntfernen(def),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
-                          );
-                        },
-                      ),
+                            );
+                          },
+                        ),
                       const SizedBox(height: 4),
                       SizedBox(
                         width: double.infinity,
