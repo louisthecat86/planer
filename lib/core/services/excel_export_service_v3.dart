@@ -1424,7 +1424,26 @@ class ExcelExportServiceV3 {
       final standardParams = stepParams.where((p) => !p.istCustom);
       // Steckbrief-Parameter ohne eigene Labelzeile werden weiter unten
       // über den Namens-Pool in die Slot-Zeilen geschrieben.
+      // Gruppe der Anlage dieses Schritts (für Anlagen mit festem Raster
+      // z.B. BRATSTRASSE / DAMPFTUNNEL).
+      final eigeneAnlage = step.maschine ??
+          (step.maschineId == null
+              ? null
+              : maschinenById[step.maschineId]?.name) ??
+          '';
+      final eigeneAnlagenGruppe = gruppeFuerBlockKopf(eigeneAnlage);
+
       for (final param in standardParams) {
+        // Fremde Anlagen-Gruppen überspringen: Ein Schritt darf nur in den
+        // Block SEINER Anlage schreiben. Altbestände (z.B. Plattenwerte des
+        // Heißluftofens, die früher fälschlich unter BRATSTRASSE landeten)
+        // würden sonst erneut in den falschen Block geschrieben.
+        final pGruppe = gruppeFuerBlockKopf(param.parameterGruppe);
+        if (pGruppe != kMaschinenSteckbriefGruppe &&
+            pGruppe != eigeneAnlagenGruppe &&
+            _istAnlagenGruppe(pGruppe)) {
+          continue;
+        }
         final paramRow = _findeZeileMitLabelInA(
           doc,
           sharedStrings,
@@ -1980,6 +1999,12 @@ class ExcelExportServiceV3 {
     }
     return null;
   }
+
+  /// Gruppen mit festem Maschinen-Raster. Nur für diese gilt die
+  /// Zuordnungsprüfung „gehört zum Schritt seiner Anlage"; freie Gruppen
+  /// (Notizen, Custom) bleiben unangetastet.
+  static bool _istAnlagenGruppe(String gruppe) =>
+      gruppe == 'BRATSTRASSE' || gruppe == 'DAMPFTUNNEL';
 
   /// Ordnet eine Blocküberschrift bzw. einen Gruppennamen der
   /// kanonischen Parametergruppe der App zu. Anlagen mit festem Raster

@@ -1063,6 +1063,15 @@ class ExcelImportServiceV3 {
   ) {
     String? aktuelleGruppe;
     bool inCustomBlock = false;
+    // Auf welche Schritte wirkt der aktuelle Block? Ein Maschinenblock
+    // gehört nur zu den Schritten SEINER Anlage. Ohne diese Einschränkung
+    // las der Import z.B. im Bratstraßen-Block auch die Spalte des
+    // Heißluftofens mit — dessen Plattenwerte landeten dann zusätzlich
+    // unter der Gruppe BRATSTRASSE und wurden beim nächsten Export wieder
+    // dorthin geschrieben (selbsterhaltende Doppelung).
+    // null = keine Einschränkung (generische Blöcke wie
+    // MASCHINENEINSTELLUNGEN oder ZUSÄTZLICHE PARAMETER).
+    List<_ParsedStep>? blockSchritte;
     // Nach dem Historie-Block kann ein Überlauf-Block
     // „ZUSÄTZLICHE PARAMETER (Fortsetzung)" folgen — der Export legt ihn
     // an, wenn der primäre Block zu wenige freie Zeilen hat. Die
@@ -1077,6 +1086,7 @@ class ExcelImportServiceV3 {
         nachHistorie = true;
         aktuelleGruppe = null;
         inCustomBlock = false;
+        blockSchritte = null;
         continue;
       }
       if (label == _sonstigeBlockMarker) continue;
@@ -1085,6 +1095,7 @@ class ExcelImportServiceV3 {
         aktuelleGruppe = 'CUSTOM';
         inCustomBlock = true;
         nachHistorie = false;
+        blockSchritte = null;
         continue;
       }
 
@@ -1099,12 +1110,22 @@ class ExcelImportServiceV3 {
         // Artikelmaske nicht kennt — sie wirkten dort gelöscht.
         aktuelleGruppe = _gruppeFuerBlockKopf(label);
         inCustomBlock = false;
+        // Schritte dieser Anlage ermitteln. Findet sich keiner, ist es ein
+        // generischer Block → keine Einschränkung (altes Verhalten).
+        final passende = schritte
+            .where(
+              (st) =>
+                  _gruppeFuerBlockKopf(st.maschineName ?? '') ==
+                  aktuelleGruppe,
+            )
+            .toList();
+        blockSchritte = passende.isEmpty ? null : passende;
         continue;
       }
 
       if (aktuelleGruppe == null) continue;
 
-      for (final step in schritte) {
+      for (final step in blockSchritte ?? schritte) {
         final wert = _cellStr(rows[r], step.reihenfolge);
         if (wert == null || wert.isEmpty) continue;
         step.parameterByGruppe
