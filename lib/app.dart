@@ -1,10 +1,10 @@
-import 'dart:io' show Platform;
 import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/providers/theme_mode_provider.dart';
 import 'core/providers/ui_scale_provider.dart';
 import 'core/providers/database_provider.dart';
 import 'core/services/backup_service.dart';
@@ -223,8 +223,8 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
-    // Windows-Build fest im Dunkelmodus; andere Plattformen folgen dem System.
-    final themeMode = Platform.isWindows ? ThemeMode.dark : ThemeMode.system;
+    // Anzeigemodus kommt jetzt aus den Einstellungen (dauerhaft gespeichert).
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp.router(
       title: 'Produktion Planer',
       theme: AppTheme.light(),

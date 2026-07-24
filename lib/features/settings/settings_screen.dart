@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/providers/theme_mode_provider.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/providers/ui_scale_provider.dart';
 
 /// Einstellungen — Sammelpunkt für alles, was nicht zum täglichen Planen
@@ -20,6 +22,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          const _Anzeigemodus(),
           const _AnzeigeGroesse(),
           const SizedBox(height: 8),
           _SettingsTile(
@@ -99,6 +102,92 @@ class _SettingsTile extends StatelessWidget {
         onTap: onTap,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      ),
+    );
+  }
+}
+
+/// Umschalter für Hell-/Dunkelmodus.
+///
+/// Vorher lief der Windows-Build fest im Dunkelmodus. Jetzt entscheidet
+/// jeder selbst; die Wahl wird dauerhaft gespeichert und gilt sofort.
+class _Anzeigemodus extends ConsumerWidget {
+  const _Anzeigemodus();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final modus = ref.watch(themeModeProvider);
+    final notifier = ref.read(themeModeProvider.notifier);
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.navBlau.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Icon(
+                    Icons.contrast,
+                    color: AppTheme.navBlau,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Darstellung',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        'Heller oder dunkler Modus — im Navision-Look',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: ThemeMode.light,
+                    icon: Icon(Icons.light_mode_outlined, size: 18),
+                    label: Text('Hell'),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.dark,
+                    icon: Icon(Icons.dark_mode_outlined, size: 18),
+                    label: Text('Dunkel'),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.system,
+                    icon: Icon(Icons.desktop_windows_outlined, size: 18),
+                    label: Text('System'),
+                  ),
+                ],
+                selected: {modus},
+                onSelectionChanged: (s) => notifier.setzen(s.first),
+                showSelectedIcon: false,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
