@@ -98,7 +98,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   }
 
   Future<void> _import() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls'],
     );
