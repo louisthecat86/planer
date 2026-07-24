@@ -62,6 +62,7 @@ class BoardTask {
     required this.id,
     required this.productId,
     required this.productName,
+    this.artikelnummer = '',
     required this.abteilung,
     required this.datum,
     required this.startZeit,
@@ -77,6 +78,10 @@ class BoardTask {
   final String id;
   final String productId;
   final String productName;
+
+  /// Artikelnummer — im Board wichtig, weil Bezeichnungen sich ähneln
+  /// („BIO - Rinderpatties …" vs. „BIO - Rindercevapcici …").
+  final String artikelnummer;
   final Abteilung abteilung;
 
   /// Tag des Auftrags, normalisiert auf 00:00 Uhr.
@@ -417,6 +422,9 @@ Future<List<BoardTask>> _ladeBoardTasks(
   final nameById = {
     for (final p in produkte) p.id: p.artikelbezeichnung,
   };
+  final nrById = {
+    for (final p in produkte) p.id: p.artikelnummer,
+  };
 
   final perRow = <BoardTask>[];
   for (final t in rows) {
@@ -429,6 +437,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
         maschineId: t.maschineId,
         productId: t.productId,
         productName: nameById[t.productId] ?? 'Unbekannt',
+        artikelnummer: nrById[t.productId] ?? '',
         abteilung: abteilung,
         datum: DateTime(t.datum.year, t.datum.month, t.datum.day),
         startZeit: t.startZeit,
@@ -477,6 +486,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
         maschineId: g.first.maschineId,
         productId: g.first.productId,
         productName: g.first.productName,
+        artikelnummer: g.first.artikelnummer,
         abteilung: g.first.abteilung,
         datum: g.first.datum,
         startZeit: start,

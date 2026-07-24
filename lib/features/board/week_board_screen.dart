@@ -15,7 +15,9 @@ import 'board_print_service.dart';
 import '../../core/utils/sheet_utils.dart';
 import 'board_providers.dart';
 
-const double _kLabelWidth = 148;
+// Breiter als früher (148): Namen wie „Schneideabteilung" oder
+// „Verpackung Tef1 / Multivac Tef1" brachen sonst mitten im Wort um.
+const double _kLabelWidth = 186;
 const _kDayLabels = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
 const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -870,22 +872,10 @@ class _TagesZelle extends ConsumerWidget {
               bottom: BorderSide(color: theme.dividerColor),
             ),
           ),
-          child: Stack(
-            children: [
-              Positioned.fill(child: _inhalt(context, highlight, farbe)),
-              // Rüst-/Reinigungszeit direkt an der Tageszelle — dort, wo
-              // man beim Planen ohnehin hinschaut. Auch in leeren Zellen
-              // sichtbar, denn gereinigt wird auch ohne Auftrag.
-              Positioned(
-                top: -4,
-                right: -4,
-                child: _ZusatzKnopf(
-                  minuten: cell.zusatzMinuten,
-                  onTap: () => _zusatzzeitenVerwalten(context, ref),
-                ),
-              ),
-            ],
-          ),
+          // Kein Stack: Ein Stack, dessen Kinder alle positioniert sind,
+          // schrumpft auf die Mindesthöhe — dadurch wurden Aufträge
+          // abgeschnitten. Der Knopf sitzt deshalb im normalen Fluss.
+          child: _inhalt(context, ref, highlight, farbe),
         );
       },
     );
@@ -908,36 +898,61 @@ class _TagesZelle extends ConsumerWidget {
     ref.invalidate(dayBoardProvider);
   }
 
-  Widget _inhalt(BuildContext context, bool highlight, Color farbe) {
+  Widget _inhalt(
+    BuildContext context,
+    WidgetRef ref,
+    bool highlight,
+    Color farbe,
+  ) {
     final belegt = cell.tasks.isNotEmpty || cell.zusatzzeiten.isNotEmpty;
+    final knopf = _ZusatzKnopf(
+      minuten: cell.zusatzMinuten,
+      onTap: () => _zusatzzeitenVerwalten(context, ref),
+    );
     return !belegt
               // -- LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
               //    freie Kapazität ist der Normalfall und muss nicht
               //    35-mal wiederholt werden. Nur beim Ziehen erscheint
               //    ein Hinweis.
-              ? Center(
-                  child: highlight
-                      ? Text(
-                          'Hier ablegen',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: cell.abteilung.farbe,
-                          ),
-                        )
-                      : const SizedBox.shrink(),
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: highlight
+                            ? Text(
+                                'Hier ablegen',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: cell.abteilung.farbe,
+                                ),
+                              )
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
+                    knopf,
+                  ],
                 )
               // -- BELEGTE ZELLE: Auslastung kompakt + Aufträge
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _AuslastungsPille(
-                      belegt: cell.belegtMinuten,
-                      kapazitaet: cell.kapazitaetMinuten,
-                      auslastung: cell.auslastung,
-                      farbe: farbe,
-                      status: cell.status,
-                      kompakt: kompakt,
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _AuslastungsPille(
+                            belegt: cell.belegtMinuten,
+                            kapazitaet: cell.kapazitaetMinuten,
+                            auslastung: cell.auslastung,
+                            farbe: farbe,
+                            status: cell.status,
+                            kompakt: kompakt,
+                          ),
+                        ),
+                        knopf,
+                      ],
                     ),
                     SizedBox(height: kompakt ? 3 : 6),
                     for (final task in cell.tasks)
@@ -1311,8 +1326,22 @@ class _KartenInhalt extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  task.productName,
+                // Artikelnummer voran: Bezeichnungen ähneln sich stark,
+                // die Nummer ist im Raster das schnellere Erkennungsmerkmal.
+                child: Text.rich(
+                  TextSpan(
+                    children: [
+                      if (task.artikelnummer.isNotEmpty)
+                        TextSpan(
+                          text: '${task.artikelnummer}  ',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      TextSpan(text: task.productName),
+                    ],
+                  ),
                   style: const TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
@@ -1397,8 +1426,20 @@ class _KartenInhalt extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          task.productName,
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              if (task.artikelnummer.isNotEmpty)
+                                TextSpan(
+                                  text: '${task.artikelnummer}  ',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: theme.colorScheme.primary,
+                                  ),
+                                ),
+                              TextSpan(text: task.productName),
+                            ],
+                          ),
                           style: const TextStyle(
                             fontSize: 12.5,
                             fontWeight: FontWeight.w700,
@@ -1830,7 +1871,9 @@ class _DayTaskRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    task.productName,
+                    task.artikelnummer.isEmpty
+                        ? task.productName
+                        : '${task.artikelnummer}  ${task.productName}',
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
