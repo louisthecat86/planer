@@ -1591,7 +1591,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           abteilung: klein.schritte[i].abteilungDbValue,
           fix: t1 - steigung * 100,
           proKg: steigung,
-        ));
+        ),);
       }
       if (!mounted) return;
       setState(() => _dauerModelle = modelle);
