@@ -1594,9 +1594,65 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         ),);
       }
       if (!mounted) return;
-      setState(() => _dauerModelle = modelle);
+      setState(() {
+        _dauerModelle = modelle;
+        // Bezug vorbelegen: die Bratstraße ist die durchlaufende Linie und
+        // damit der übliche Taktgeber. Gibt es sie nicht, nimm die erste
+        // Abteilung des Prozesses.
+        String? bevorzugt;
+        for (final m in modelle) {
+          if (m.abteilung.contains('bratstra')) {
+            bevorzugt = m.abteilung;
+            break;
+          }
+        }
+        _zeitAbteilung = modelle.isEmpty
+            ? null
+            : (bevorzugt ?? modelle.first.abteilung);
+      });
     } catch (_) {
-      if (mounted) setState(() => _dauerModelle = []);
+      if (mounted) {
+        setState(() {
+          _dauerModelle = [];
+          _zeitAbteilung = null;
+        });
+      }
+    }
+  }
+
+  /// Auf welche Abteilung sich die eingegebene Stundenzahl bezieht.
+  String? _zeitAbteilung;
+
+  ({String abteilung, double fix, double proKg})? get _bezugsModell {
+    final a = _zeitAbteilung;
+    if (a == null) return null;
+    for (final m in _dauerModelle) {
+      if (m.abteilung == a) return m;
+    }
+    return null;
+  }
+
+  /// Abteilungen, die für die gewählte Menge über die 9-Stunden-Kapazität
+  /// laufen würden — als ehrlicher Hinweis unter der Vorschau.
+  List<({String name, double stunden})> get _ueberlaufAbteilungen {
+    final menge = _mengeAusStunden;
+    if (menge == null) return const [];
+    final treffer = <({String name, double stunden})>[];
+    for (final m in _dauerModelle) {
+      if (m.abteilung == _zeitAbteilung) continue;
+      final minuten = m.fix + m.proKg * menge;
+      if (minuten > kStandardKapazitaetMinuten) {
+        treffer.add((name: _abteilungsName(m.abteilung), stunden: minuten / 60));
+      }
+    }
+    return treffer;
+  }
+
+  static String _abteilungsName(String dbValue) {
+    try {
+      return Abteilung.fromDbValue(dbValue).anzeigeName;
+    } catch (_) {
+      return dbValue;
     }
   }
 
@@ -1607,35 +1663,11 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   double? get _mengeAusStunden {
     if (_einheit != _MengenEinheit.stunden) return null;
     final stunden = double.tryParse(_menge.text.replaceAll(',', '.'));
-    if (stunden == null || stunden <= 0 || _dauerModelle.isEmpty) return null;
-    double? kleinste;
-    for (final m in _dauerModelle) {
-      final menge = (stunden * 60 - m.fix) / m.proKg;
-      if (menge <= 0) return null; // Zeit reicht nicht mal für die Fixzeit
-      if (kleinste == null || menge < kleinste) kleinste = menge;
-    }
-    return kleinste;
-  }
-
-  /// Name der Abteilung, die die Menge begrenzt (für den Hinweistext).
-  String? get _engpassAbteilung {
-    final stunden = double.tryParse(_menge.text.replaceAll(',', '.'));
-    if (stunden == null || stunden <= 0 || _dauerModelle.isEmpty) return null;
-    double? kleinste;
-    String? engpass;
-    for (final m in _dauerModelle) {
-      final menge = (stunden * 60 - m.fix) / m.proKg;
-      if (kleinste == null || menge < kleinste) {
-        kleinste = menge;
-        engpass = m.abteilung;
-      }
-    }
-    if (engpass == null) return null;
-    try {
-      return Abteilung.fromDbValue(engpass).anzeigeName;
-    } catch (_) {
-      return engpass;
-    }
+    final modell = _bezugsModell;
+    if (stunden == null || stunden <= 0 || modell == null) return null;
+    final menge = (stunden * 60 - modell.fix) / modell.proKg;
+    // Zeit reicht nicht einmal für die Rüst-/Fixzeit der Abteilung.
+    return menge > 0 ? menge : null;
   }
 
   /// Fertigmenge, die in der eingegebenen Zeit herauskommt.
@@ -2030,15 +2062,43 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 text: 'Für dieses Produkt fehlen Leistungsdaten — aus der '
                     'Zeit lässt sich noch keine Menge ableiten.',
               )
-            else if (_mengeAusStunden != null) ...[
-              _RohwareHinweis(
-                text: 'Schaffbar: ≈ ${_mengeAusStunden!.round()} kg Rohware'
-                    '${_fertigAusStunden != null ? '  →  ergibt ≈ '
-                        '${_fertigAusStunden!.round()} kg Fertigware' : ''}'
-                    '${_engpassAbteilung != null
-                        ? '\nBegrenzt durch: ${_engpassAbteilung!}'
-                        : ''}',
+            else ...[
+              // Worauf sich die Stundenzahl bezieht. Ohne diese Wahl wäre
+              // unklar, welche Abteilung gemeint ist — die übrigen werden
+              // aus der Menge hochgerechnet.
+              DropdownButtonFormField<String>(
+                initialValue: _zeitAbteilung,
+                decoration: const InputDecoration(
+                  labelText: 'Zeit gilt für',
+                  border: OutlineInputBorder(),
+                ),
+                items: [
+                  for (final m in _dauerModelle)
+                    DropdownMenuItem(
+                      value: m.abteilung,
+                      child: Text(_abteilungsName(m.abteilung)),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _zeitAbteilung = v),
               ),
+              const SizedBox(height: 10),
+              if (_mengeAusStunden != null) ...[
+                _RohwareHinweis(
+                  text: 'Schaffbar: ≈ ${_mengeAusStunden!.round()} kg Rohware'
+                      '${_fertigAusStunden != null ? '  →  ergibt ≈ '
+                          '${_fertigAusStunden!.round()} kg Fertigware' : ''}',
+                ),
+                // Ehrlicher Hinweis, wenn eine andere Abteilung dafür über
+                // ihre 9 Stunden laufen müsste.
+                for (final u in _ueberlaufAbteilungen) ...[
+                  const SizedBox(height: 6),
+                  _RohwareHinweis(
+                    text: 'Achtung: ${u.name} bräuchte dafür '
+                        '${u.stunden.toStringAsFixed(1)} h — mehr als die '
+                        '9 Stunden eines Tages.',
+                  ),
+                ],
+              ],
               if (_fertigAusStunden == null && _histVerlust == null) ...[
                 const SizedBox(height: 8),
                 TextField(
