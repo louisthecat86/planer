@@ -12458,6 +12458,472 @@ class MachineParameterDefsCompanion
   }
 }
 
+class $ZusatzzeitenTable extends Zusatzzeiten
+    with TableInfo<$ZusatzzeitenTable, Zusatzzeit> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ZusatzzeitenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _datumMeta = const VerificationMeta('datum');
+  @override
+  late final GeneratedColumn<DateTime> datum = GeneratedColumn<DateTime>(
+      'datum', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _spurIdMeta = const VerificationMeta('spurId');
+  @override
+  late final GeneratedColumn<String> spurId = GeneratedColumn<String>(
+      'spur_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _artMeta = const VerificationMeta('art');
+  @override
+  late final GeneratedColumn<String> art = GeneratedColumn<String>(
+      'art', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _minutenMeta =
+      const VerificationMeta('minuten');
+  @override
+  late final GeneratedColumn<double> minuten = GeneratedColumn<double>(
+      'minuten', aliasedName, false,
+      type: DriftSqlType.double, requiredDuringInsert: true);
+  static const VerificationMeta _notizMeta = const VerificationMeta('notiz');
+  @override
+  late final GeneratedColumn<String> notiz = GeneratedColumn<String>(
+      'notiz', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, datum, spurId, art, minuten, notiz, createdAt, updatedAt, deletedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'zusatzzeiten';
+  @override
+  VerificationContext validateIntegrity(Insertable<Zusatzzeit> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('datum')) {
+      context.handle(
+          _datumMeta, datum.isAcceptableOrUnknown(data['datum']!, _datumMeta));
+    } else if (isInserting) {
+      context.missing(_datumMeta);
+    }
+    if (data.containsKey('spur_id')) {
+      context.handle(_spurIdMeta,
+          spurId.isAcceptableOrUnknown(data['spur_id']!, _spurIdMeta));
+    } else if (isInserting) {
+      context.missing(_spurIdMeta);
+    }
+    if (data.containsKey('art')) {
+      context.handle(
+          _artMeta, art.isAcceptableOrUnknown(data['art']!, _artMeta));
+    } else if (isInserting) {
+      context.missing(_artMeta);
+    }
+    if (data.containsKey('minuten')) {
+      context.handle(_minutenMeta,
+          minuten.isAcceptableOrUnknown(data['minuten']!, _minutenMeta));
+    } else if (isInserting) {
+      context.missing(_minutenMeta);
+    }
+    if (data.containsKey('notiz')) {
+      context.handle(
+          _notizMeta, notiz.isAcceptableOrUnknown(data['notiz']!, _notizMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Zusatzzeit map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Zusatzzeit(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      datum: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
+      spurId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}spur_id'])!,
+      art: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}art'])!,
+      minuten: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}minuten'])!,
+      notiz: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notiz']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $ZusatzzeitenTable createAlias(String alias) {
+    return $ZusatzzeitenTable(attachedDatabase, alias);
+  }
+}
+
+class Zusatzzeit extends DataClass implements Insertable<Zusatzzeit> {
+  /// UUID.
+  final String id;
+
+  /// Tag, auf den sich der Block bezieht (auf 00:00 normalisiert).
+  final DateTime datum;
+
+  /// Kennung der Planungsspur — identisch zu `BoardSpur.id`, also
+  /// „<abteilung>|<maschineId>" bzw. „<abteilung>|" für die Sammelspur
+  /// einer Abteilung ohne eigene Anlagen-Spuren.
+  final String spurId;
+
+  /// Art des Blocks: `ruesten`, `reinigen` oder `sonstiges`.
+  final String art;
+
+  /// Dauer in Minuten.
+  final double minuten;
+
+  /// Freitext, z.B. „Wechsel hell → dunkel" oder „Grundreinigung".
+  final String? notiz;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Zusatzzeit(
+      {required this.id,
+      required this.datum,
+      required this.spurId,
+      required this.art,
+      required this.minuten,
+      this.notiz,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['datum'] = Variable<DateTime>(datum);
+    map['spur_id'] = Variable<String>(spurId);
+    map['art'] = Variable<String>(art);
+    map['minuten'] = Variable<double>(minuten);
+    if (!nullToAbsent || notiz != null) {
+      map['notiz'] = Variable<String>(notiz);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  ZusatzzeitenCompanion toCompanion(bool nullToAbsent) {
+    return ZusatzzeitenCompanion(
+      id: Value(id),
+      datum: Value(datum),
+      spurId: Value(spurId),
+      art: Value(art),
+      minuten: Value(minuten),
+      notiz:
+          notiz == null && nullToAbsent ? const Value.absent() : Value(notiz),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Zusatzzeit.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Zusatzzeit(
+      id: serializer.fromJson<String>(json['id']),
+      datum: serializer.fromJson<DateTime>(json['datum']),
+      spurId: serializer.fromJson<String>(json['spurId']),
+      art: serializer.fromJson<String>(json['art']),
+      minuten: serializer.fromJson<double>(json['minuten']),
+      notiz: serializer.fromJson<String?>(json['notiz']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'datum': serializer.toJson<DateTime>(datum),
+      'spurId': serializer.toJson<String>(spurId),
+      'art': serializer.toJson<String>(art),
+      'minuten': serializer.toJson<double>(minuten),
+      'notiz': serializer.toJson<String?>(notiz),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Zusatzzeit copyWith(
+          {String? id,
+          DateTime? datum,
+          String? spurId,
+          String? art,
+          double? minuten,
+          Value<String?> notiz = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Zusatzzeit(
+        id: id ?? this.id,
+        datum: datum ?? this.datum,
+        spurId: spurId ?? this.spurId,
+        art: art ?? this.art,
+        minuten: minuten ?? this.minuten,
+        notiz: notiz.present ? notiz.value : this.notiz,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Zusatzzeit copyWithCompanion(ZusatzzeitenCompanion data) {
+    return Zusatzzeit(
+      id: data.id.present ? data.id.value : this.id,
+      datum: data.datum.present ? data.datum.value : this.datum,
+      spurId: data.spurId.present ? data.spurId.value : this.spurId,
+      art: data.art.present ? data.art.value : this.art,
+      minuten: data.minuten.present ? data.minuten.value : this.minuten,
+      notiz: data.notiz.present ? data.notiz.value : this.notiz,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Zusatzzeit(')
+          ..write('id: $id, ')
+          ..write('datum: $datum, ')
+          ..write('spurId: $spurId, ')
+          ..write('art: $art, ')
+          ..write('minuten: $minuten, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, datum, spurId, art, minuten, notiz, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Zusatzzeit &&
+          other.id == this.id &&
+          other.datum == this.datum &&
+          other.spurId == this.spurId &&
+          other.art == this.art &&
+          other.minuten == this.minuten &&
+          other.notiz == this.notiz &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class ZusatzzeitenCompanion extends UpdateCompanion<Zusatzzeit> {
+  final Value<String> id;
+  final Value<DateTime> datum;
+  final Value<String> spurId;
+  final Value<String> art;
+  final Value<double> minuten;
+  final Value<String?> notiz;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const ZusatzzeitenCompanion({
+    this.id = const Value.absent(),
+    this.datum = const Value.absent(),
+    this.spurId = const Value.absent(),
+    this.art = const Value.absent(),
+    this.minuten = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ZusatzzeitenCompanion.insert({
+    required String id,
+    required DateTime datum,
+    required String spurId,
+    required String art,
+    required double minuten,
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        datum = Value(datum),
+        spurId = Value(spurId),
+        art = Value(art),
+        minuten = Value(minuten);
+  static Insertable<Zusatzzeit> custom({
+    Expression<String>? id,
+    Expression<DateTime>? datum,
+    Expression<String>? spurId,
+    Expression<String>? art,
+    Expression<double>? minuten,
+    Expression<String>? notiz,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (datum != null) 'datum': datum,
+      if (spurId != null) 'spur_id': spurId,
+      if (art != null) 'art': art,
+      if (minuten != null) 'minuten': minuten,
+      if (notiz != null) 'notiz': notiz,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ZusatzzeitenCompanion copyWith(
+      {Value<String>? id,
+      Value<DateTime>? datum,
+      Value<String>? spurId,
+      Value<String>? art,
+      Value<double>? minuten,
+      Value<String?>? notiz,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return ZusatzzeitenCompanion(
+      id: id ?? this.id,
+      datum: datum ?? this.datum,
+      spurId: spurId ?? this.spurId,
+      art: art ?? this.art,
+      minuten: minuten ?? this.minuten,
+      notiz: notiz ?? this.notiz,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (datum.present) {
+      map['datum'] = Variable<DateTime>(datum.value);
+    }
+    if (spurId.present) {
+      map['spur_id'] = Variable<String>(spurId.value);
+    }
+    if (art.present) {
+      map['art'] = Variable<String>(art.value);
+    }
+    if (minuten.present) {
+      map['minuten'] = Variable<double>(minuten.value);
+    }
+    if (notiz.present) {
+      map['notiz'] = Variable<String>(notiz.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ZusatzzeitenCompanion(')
+          ..write('id: $id, ')
+          ..write('datum: $datum, ')
+          ..write('spurId: $spurId, ')
+          ..write('art: $art, ')
+          ..write('minuten: $minuten, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -12486,6 +12952,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $ParameterGrenzenTable(this);
   late final $MachineParameterDefsTable machineParameterDefs =
       $MachineParameterDefsTable(this);
+  late final $ZusatzzeitenTable zusatzzeiten = $ZusatzzeitenTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -12507,7 +12974,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         weekSnapshots,
         demands,
         parameterGrenzen,
-        machineParameterDefs
+        machineParameterDefs,
+        zusatzzeiten
       ];
 }
 
@@ -19889,6 +20357,233 @@ typedef $$MachineParameterDefsTableProcessedTableManager
         ),
         MachineParameterDef,
         PrefetchHooks Function()>;
+typedef $$ZusatzzeitenTableCreateCompanionBuilder = ZusatzzeitenCompanion
+    Function({
+  required String id,
+  required DateTime datum,
+  required String spurId,
+  required String art,
+  required double minuten,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$ZusatzzeitenTableUpdateCompanionBuilder = ZusatzzeitenCompanion
+    Function({
+  Value<String> id,
+  Value<DateTime> datum,
+  Value<String> spurId,
+  Value<String> art,
+  Value<double> minuten,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$ZusatzzeitenTableFilterComposer
+    extends Composer<_$AppDatabase, $ZusatzzeitenTable> {
+  $$ZusatzzeitenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get spurId => $composableBuilder(
+      column: $table.spurId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get art => $composableBuilder(
+      column: $table.art, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get minuten => $composableBuilder(
+      column: $table.minuten, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ZusatzzeitenTableOrderingComposer
+    extends Composer<_$AppDatabase, $ZusatzzeitenTable> {
+  $$ZusatzzeitenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get spurId => $composableBuilder(
+      column: $table.spurId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get art => $composableBuilder(
+      column: $table.art, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get minuten => $composableBuilder(
+      column: $table.minuten, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ZusatzzeitenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ZusatzzeitenTable> {
+  $$ZusatzzeitenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get datum =>
+      $composableBuilder(column: $table.datum, builder: (column) => column);
+
+  GeneratedColumn<String> get spurId =>
+      $composableBuilder(column: $table.spurId, builder: (column) => column);
+
+  GeneratedColumn<String> get art =>
+      $composableBuilder(column: $table.art, builder: (column) => column);
+
+  GeneratedColumn<double> get minuten =>
+      $composableBuilder(column: $table.minuten, builder: (column) => column);
+
+  GeneratedColumn<String> get notiz =>
+      $composableBuilder(column: $table.notiz, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$ZusatzzeitenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ZusatzzeitenTable,
+    Zusatzzeit,
+    $$ZusatzzeitenTableFilterComposer,
+    $$ZusatzzeitenTableOrderingComposer,
+    $$ZusatzzeitenTableAnnotationComposer,
+    $$ZusatzzeitenTableCreateCompanionBuilder,
+    $$ZusatzzeitenTableUpdateCompanionBuilder,
+    (Zusatzzeit, BaseReferences<_$AppDatabase, $ZusatzzeitenTable, Zusatzzeit>),
+    Zusatzzeit,
+    PrefetchHooks Function()> {
+  $$ZusatzzeitenTableTableManager(_$AppDatabase db, $ZusatzzeitenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ZusatzzeitenTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ZusatzzeitenTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ZusatzzeitenTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<DateTime> datum = const Value.absent(),
+            Value<String> spurId = const Value.absent(),
+            Value<String> art = const Value.absent(),
+            Value<double> minuten = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ZusatzzeitenCompanion(
+            id: id,
+            datum: datum,
+            spurId: spurId,
+            art: art,
+            minuten: minuten,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required DateTime datum,
+            required String spurId,
+            required String art,
+            required double minuten,
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ZusatzzeitenCompanion.insert(
+            id: id,
+            datum: datum,
+            spurId: spurId,
+            art: art,
+            minuten: minuten,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ZusatzzeitenTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ZusatzzeitenTable,
+    Zusatzzeit,
+    $$ZusatzzeitenTableFilterComposer,
+    $$ZusatzzeitenTableOrderingComposer,
+    $$ZusatzzeitenTableAnnotationComposer,
+    $$ZusatzzeitenTableCreateCompanionBuilder,
+    $$ZusatzzeitenTableUpdateCompanionBuilder,
+    (Zusatzzeit, BaseReferences<_$AppDatabase, $ZusatzzeitenTable, Zusatzzeit>),
+    Zusatzzeit,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -19927,4 +20622,6 @@ class $AppDatabaseManager {
       $$ParameterGrenzenTableTableManager(_db, _db.parameterGrenzen);
   $$MachineParameterDefsTableTableManager get machineParameterDefs =>
       $$MachineParameterDefsTableTableManager(_db, _db.machineParameterDefs);
+  $$ZusatzzeitenTableTableManager get zusatzzeiten =>
+      $$ZusatzzeitenTableTableManager(_db, _db.zusatzzeiten);
 }

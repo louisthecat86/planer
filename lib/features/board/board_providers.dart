@@ -24,8 +24,20 @@ mixin _Auslastung {
   List<BoardTask> get tasks;
   double get kapazitaetMinuten;
 
-  double get belegtMinuten =>
+  /// Rüst-, Reinigungs- und sonstige Nebenzeiten dieser Spur an diesem Tag.
+  /// Sie blockieren dieselbe Anlage wie die Produktion und zählen deshalb
+  /// voll in die Belegung.
+  List<Zusatzzeit> get zusatzzeiten => const [];
+
+  /// Reine Produktionszeit der Aufträge.
+  double get produktionsMinuten =>
       tasks.fold(0, (summe, t) => summe + t.dauerMinuten);
+
+  /// Summe der Nebenzeiten (Rüsten, Reinigen, Sonstiges).
+  double get zusatzMinuten =>
+      zusatzzeiten.fold(0, (summe, z) => summe + z.minuten);
+
+  double get belegtMinuten => produktionsMinuten + zusatzMinuten;
 
   /// Verbleibende freie Minuten (negativ bei Überbuchung).
   double get freiMinuten => kapazitaetMinuten - belegtMinuten;
@@ -147,6 +159,7 @@ class BoardCell with _Auslastung {
     required this.tag,
     required this.tasks,
     required this.kapazitaetMinuten,
+    this.zusatzzeiten = const [],
   });
 
   final BoardSpur spur;
@@ -158,6 +171,8 @@ class BoardCell with _Auslastung {
   final List<BoardTask> tasks;
   @override
   final double kapazitaetMinuten;
+  @override
+  final List<Zusatzzeit> zusatzzeiten;
 }
 
 /// Das komplette Wochenboard (Abteilungen × Mo–Fr).
@@ -200,6 +215,7 @@ class DayLane with _Auslastung {
     required this.spur,
     required this.tasks,
     required this.kapazitaetMinuten,
+    this.zusatzzeiten = const [],
   });
 
   final BoardSpur spur;
@@ -210,6 +226,8 @@ class DayLane with _Auslastung {
   final List<BoardTask> tasks;
   @override
   final double kapazitaetMinuten;
+  @override
+  final List<Zusatzzeit> zusatzzeiten;
 }
 
 /// Die komplette Tagesübersicht (alle Abteilungen für einen Tag).
@@ -226,6 +244,30 @@ class DayBoard {
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
+
+/// Tagesschlüssel für die Zuordnung von Nebenzeiten (ohne Uhrzeit).
+String _tagKey(DateTime d) => DateTime(d.year, d.month, d.day)
+    .toIso8601String();
+
+/// Lädt Rüst-/Reinigungszeiten im Zeitraum und gruppiert sie nach
+/// „<spurId>|<tag>". Gelöschte Einträge bleiben außen vor.
+Future<Map<String, List<Zusatzzeit>>> _ladeZusatzzeiten(
+  AppDatabase db, {
+  required DateTime vonTag,
+  required DateTime bisTag,
+}) async {
+  final von = DateTime(vonTag.year, vonTag.month, vonTag.day);
+  final bis = DateTime(bisTag.year, bisTag.month, bisTag.day, 23, 59, 59);
+  final zeilen = await (db.select(db.zusatzzeiten)
+        ..where((z) => z.deletedAt.isNull())
+        ..where((z) => z.datum.isBetweenValues(von, bis)))
+      .get();
+  final map = <String, List<Zusatzzeit>>{};
+  for (final z in zeilen) {
+    (map['${z.spurId}|${_tagKey(z.datum)}'] ??= []).add(z);
+  }
+  return map;
+}
 
 /// Wochenboard für die Woche, in die [anyDayInWeek] fällt.
 ///
@@ -271,6 +313,13 @@ final weekBoardProvider =
     _sortiereTasks(liste);
   }
 
+  // Nebenzeiten (Rüsten/Reinigen) der Woche laden und den Zellen zuordnen.
+  final zusatzProZelle = await _ladeZusatzzeiten(
+    db,
+    vonTag: tage.first,
+    bisTag: tage.last,
+  );
+
   final cells = <String, BoardCell>{};
   for (final spur in spuren) {
     for (final tag in tage) {
@@ -279,6 +328,7 @@ final weekBoardProvider =
         spur: spur,
         tag: tag,
         tasks: tasksProZelle[key] ?? const [],
+        zusatzzeiten: zusatzProZelle['${spur.id}|${_tagKey(tag)}'] ?? const [],
         kapazitaetMinuten: spur.kapazitaetMinuten,
       );
     }
@@ -320,6 +370,8 @@ final dayBoardProvider =
     (tasksProSpur[_spurKeyFuerTask(task, anlagenIds)] ??= []).add(task);
   }
 
+  final zusatzProSpur = await _ladeZusatzzeiten(db, vonTag: tag, bisTag: tag);
+
   final lanes = <DayLane>[];
   for (final spur in spuren) {
     final liste = tasksProSpur[spur.id] ?? <BoardTask>[];
@@ -328,6 +380,8 @@ final dayBoardProvider =
       DayLane(
         spur: spur,
         tasks: liste,
+        zusatzzeiten:
+            zusatzProSpur['${spur.id}|${_tagKey(tag)}'] ?? const [],
         kapazitaetMinuten: spur.kapazitaetMinuten,
       ),
     );

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/utils/zeit.dart';
@@ -1263,6 +1264,7 @@ class _DayList extends StatelessWidget {
         for (final lane in day.lanes)
           _DayDeptCard(
             lane: lane,
+            tag: day.tag,
             onTapTask: onTapTask,
             onReorder: onReorder,
           ),
@@ -1271,19 +1273,21 @@ class _DayList extends StatelessWidget {
   }
 }
 
-class _DayDeptCard extends StatelessWidget {
+class _DayDeptCard extends ConsumerWidget {
   const _DayDeptCard({
     required this.lane,
+    required this.tag,
     required this.onTapTask,
     required this.onReorder,
   });
 
   final DayLane lane;
+  final DateTime tag;
   final void Function(BoardTask) onTapTask;
   final void Function(List<BoardTask>, int, int) onReorder;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final farbe = _ampelFarbe(lane.status);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1321,6 +1325,12 @@ class _DayDeptCard extends StatelessWidget {
                     color: farbe,
                   ),
                 ),
+                IconButton(
+                  icon: const Icon(Icons.more_time, size: 18),
+                  tooltip: 'Rüst-/Reinigungszeit hinzufügen',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _zusatzzeitAnlegen(context, ref),
+                ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1334,6 +1344,37 @@ class _DayDeptCard extends StatelessWidget {
                 color: farbe,
               ),
             ),
+            // Nebenzeiten sichtbar machen — sie stecken in der Belegung
+            // oben, sollen aber nachvollziehbar bleiben.
+            if (lane.zusatzzeiten.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final z in lane.zusatzzeiten)
+                    InputChip(
+                      avatar: Icon(
+                        z.art == 'reinigen'
+                            ? Icons.cleaning_services
+                            : (z.art == 'ruesten'
+                                ? Icons.build_outlined
+                                : Icons.schedule),
+                        size: 15,
+                      ),
+                      label: Text(
+                        '${_artName(z.art)} ${Zeit.kurz(z.minuten)}'
+                        '${(z.notiz ?? '').trim().isEmpty
+                            ? ''
+                            : ' · ${z.notiz!.trim()}'}',
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      onDeleted: () => _zusatzzeitLoeschen(ref, z),
+                      deleteIcon: const Icon(Icons.close, size: 15),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 8),
             if (lane.tasks.isEmpty)
               Padding(
@@ -1364,6 +1405,142 @@ class _DayDeptCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  /// Legt eine Rüst-/Reinigungszeit für diese Spur an diesem Tag an.
+  Future<void> _zusatzzeitAnlegen(BuildContext context, WidgetRef ref) async {
+    final res = await showDialog<({String art, double minuten, String? notiz})>(
+      context: context,
+      builder: (_) => _ZusatzzeitDialog(spurName: lane.spur.anzeigeName),
+    );
+    if (res == null) return;
+    final db = ref.read(databaseProvider);
+    await db.into(db.zusatzzeiten).insert(
+          ZusatzzeitenCompanion.insert(
+            id: const Uuid().v4(),
+            datum: DateTime(tag.year, tag.month, tag.day),
+            spurId: lane.spur.id,
+            art: res.art,
+            minuten: res.minuten,
+            notiz: Value(res.notiz),
+          ),
+        );
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Nebenzeit angelegt');
+    ref.invalidate(dayBoardProvider);
+    ref.invalidate(weekBoardProvider);
+  }
+
+  Future<void> _zusatzzeitLoeschen(WidgetRef ref, Zusatzzeit z) async {
+    final db = ref.read(databaseProvider);
+    await (db.update(db.zusatzzeiten)..where((t) => t.id.equals(z.id)))
+        .write(ZusatzzeitenCompanion(deletedAt: Value(DateTime.now())));
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Nebenzeit gelöscht');
+    ref.invalidate(dayBoardProvider);
+    ref.invalidate(weekBoardProvider);
+  }
+}
+
+/// Dialog zum Erfassen einer Rüst-/Reinigungszeit.
+class _ZusatzzeitDialog extends StatefulWidget {
+  const _ZusatzzeitDialog({required this.spurName});
+
+  final String spurName;
+
+  @override
+  State<_ZusatzzeitDialog> createState() => _ZusatzzeitDialogState();
+}
+
+class _ZusatzzeitDialogState extends State<_ZusatzzeitDialog> {
+  String _art = 'ruesten';
+  double? _minuten;
+  final _notiz = TextEditingController();
+
+  @override
+  void dispose() {
+    _notiz.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rüst-/Reinigungszeit'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              widget.spurName,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'ruesten', label: Text('Rüsten')),
+                ButtonSegment(value: 'reinigen', label: Text('Reinigen')),
+                ButtonSegment(value: 'sonstiges', label: Text('Sonstiges')),
+              ],
+              selected: {_art},
+              onSelectionChanged: (s) => setState(() => _art = s.first),
+              showSelectedIcon: false,
+            ),
+            const SizedBox(height: 14),
+            ZeitEingabe(
+              label: 'Dauer',
+              minuten: _minuten,
+              onChanged: (m) => setState(() => _minuten = m),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _notiz,
+              decoration: const InputDecoration(
+                labelText: 'Notiz (optional)',
+                hintText: 'z.B. Wechsel hell → dunkel',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: (_minuten ?? 0) <= 0
+              ? null
+              : () => Navigator.of(context).pop((
+                  art: _art,
+                  minuten: _minuten!,
+                  notiz: _notiz.text.trim().isEmpty
+                      ? null
+                      : _notiz.text.trim(),
+                )),
+          child: const Text('Übernehmen'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Lesbarer Name der Nebenzeit-Art.
+String _artName(String art) {
+  switch (art) {
+    case 'ruesten':
+      return 'Rüsten';
+    case 'reinigen':
+      return 'Reinigen';
+    default:
+      return 'Sonstiges';
   }
 }
 

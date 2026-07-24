@@ -18,6 +18,7 @@ import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
 import 'tables/task_dependencies.dart';
 import 'tables/week_snapshots.dart';
+import 'tables/zusatzzeiten.dart';
 
 part 'database.g.dart';
 
@@ -48,6 +49,7 @@ part 'database.g.dart';
     Demands,
     ParameterGrenzen,
     MachineParameterDefs,
+    Zusatzzeiten,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -57,7 +59,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -313,6 +315,13 @@ class AppDatabase extends _$AppDatabase {
           // --- v12 -> v13: Maschinen-Steckbriefe (Parameterdefinitionen) -
           if (from < 13) {
             await m.createTable(machineParameterDefs);
+          }
+
+          // --- v13 -> v14: Rüst-/Reinigungszeiten je Tag und Spur -------
+          // Ohne sie war die Tagesauslastung zu optimistisch: Umrüsten und
+          // Reinigen blockieren dieselbe Anlage wie die Produktion.
+          if (from < 14) {
+            await m.createTable(zusatzzeiten);
           }
         },
         beforeOpen: (details) async {

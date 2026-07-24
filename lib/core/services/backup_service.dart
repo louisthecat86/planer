@@ -22,12 +22,12 @@ class BackupService {
   ///
   /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
   /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
-  static const String _currentVersion = '1.1';
+  static const String _currentVersion = '1.2';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
   /// Import einfach übersprungen (leere Liste).
-  static const Set<String> _supportedVersions = {'1.0', '1.1'};
+  static const Set<String> _supportedVersions = {'1.0', '1.1', '1.2'};
 
   /// Erstellt alle notwendigen Verzeichnisse.
   static Future<Directory> _getBackupDir() async {
@@ -167,6 +167,8 @@ class BackupService {
         // zweiten Rechner unvollständig an (Steckbriefe fehlten komplett).
         'machine_parameter_defs': await _exportMachineParameterDefs(database),
         'parameter_grenzen': await _exportParameterGrenzen(database),
+        // ── ab Backup-Version 1.2 ────────────────────────────────────
+        'zusatzzeiten': await _exportZusatzzeiten(database),
       },
     };
   }
@@ -217,6 +219,7 @@ class BackupService {
         // Steckbriefe hängen an den Maschinen → direkt danach.
         await _importMachineParameterDefs(database, data);
         await _importParameterGrenzen(database, data);
+        await _importZusatzzeiten(database, data);
         await _importProductSteps(database, data);
         await _importProductStepParameters(database, data);
         await _importProductRawMaterials(database, data);
@@ -431,6 +434,14 @@ class BackupService {
   ) async =>
       (await db.select(db.parameterGrenzen).get())
           .map((g) => g.toJson())
+          .toList();
+
+  /// Rüst-/Reinigungszeiten je Tag und Planungsspur.
+  static Future<List<Map<String, dynamic>>> _exportZusatzzeiten(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.zusatzzeiten).get())
+          .map((z) => z.toJson())
           .toList();
 
   // ============================================================================
@@ -648,6 +659,20 @@ class BackupService {
     }
   }
 
+  static Future<void> _importZusatzzeiten(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list =
+        (data['zusatzzeiten'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final z in list) {
+      final eintrag = Zusatzzeit.fromJson(z);
+      await db.into(db.zusatzzeiten).insertOnConflictUpdate(
+            eintrag.toCompanion(true),
+          );
+    }
+  }
+
   static Future<void> _importParameterGrenzen(
     AppDatabase db,
     Map<String, dynamic> data,
@@ -684,6 +709,7 @@ class BackupService {
     await db.delete(db.products).go();
     await db.delete(db.rawMaterials).go();
     // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
+    await db.delete(db.zusatzzeiten).go();
     await db.delete(db.machineParameterDefs).go();
     await db.delete(db.parameterGrenzen).go();
     // Anlagen-Katalog
