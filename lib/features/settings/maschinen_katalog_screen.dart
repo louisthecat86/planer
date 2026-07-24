@@ -8,6 +8,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/utils/zeit.dart';
 import 'maschinen_seed.dart';
 
 // ---------------------------------------------------------------------------
@@ -136,7 +137,7 @@ class MaschinenKatalogScreen extends ConsumerWidget {
   Widget? _untertitel(Machine m) {
     final teile = <String>[
       if (m.istPlanungsressource)
-        'Eigene Planungsspur · ${(m.kapazitaetMinutenProTag / 60).toStringAsFixed(1).replaceAll('.0', '')} h/Tag',
+        'Eigene Planungsspur · ${Zeit.kurz(m.kapazitaetMinutenProTag.toDouble())}/Tag',
       if ((m.eignungHinweis ?? '').trim().isNotEmpty) m.eignungHinweis!.trim(),
     ];
     if (teile.isEmpty) return null;

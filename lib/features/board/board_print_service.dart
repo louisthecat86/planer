@@ -2,6 +2,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/utils/zeit.dart';
+
 import 'board_providers.dart';
 
 /// Wandelt eine App-Farbe (0xAARRGGBB) in eine PDF-Farbe. So übernimmt der
@@ -323,8 +325,7 @@ class BoardPrintService {
   // -------------------------------------------------------------------------
 
   static String _fmtH(double minuten) {
-    final s = (minuten / 60).toStringAsFixed(1);
-    return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
+    return Zeit.kurzOhneEinheit(minuten);
   }
 
   static int _isoKw(DateTime date) {

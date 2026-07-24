@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/utils/zeit.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -53,11 +54,12 @@ int _isoKw(DateTime date) {
 String _fmtTagTitel(DateTime d) =>
     '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.${d.year}';
 
-/// Minuten als Stunden mit max. einer Nachkommastelle ("6.5", "8").
-String _fmtStunden(double minuten) {
-  final s = (minuten / 60).toStringAsFixed(1);
-  return s.endsWith('.0') ? s.substring(0, s.length - 2) : s;
-}
+/// Minuten als „h:mm" ("6:30", "8:00").
+///
+/// Bewusst KEINE Dezimalstunden mehr: „6,5" wurde als 6 h 50 min
+/// missverstanden. Der Doppelpunkt macht unmissverständlich klar, dass
+/// hinten Minuten stehen.
+String _fmtStunden(double minuten) => Zeit.kurzOhneEinheit(minuten);
 
 Color _ampelFarbe(CapacityStatus status) {
   switch (status) {
@@ -1086,7 +1088,7 @@ class _KartenInhalt extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 7),
                 child: Text(
                   '${task.mengeKg.toStringAsFixed(0)}kg·'
-                  '${_fmtStunden(task.dauerMinuten)}h',
+                  '${_fmtStunden(task.dauerMinuten)} h',
                   style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
@@ -1656,16 +1658,18 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     }
   }
 
-  /// Aus der eingegebenen Stundenzahl die planbare ROHWARENMENGE.
-  ///
-  /// Es gewinnt die kleinste Menge über alle Abteilungen: Sobald EINE
-  /// Abteilung die Zeit überschreiten würde, ist Schluss.
+  /// Gewünschte Produktionsdauer in MINUTEN (aus der Stunden/Minuten-
+  /// Eingabe). Bewusst getrennt vom Mengenfeld — Zeit ist keine Menge.
+  double? _zeitMinuten;
+
+  /// Aus der eingegebenen Dauer die planbare ROHWARENMENGE — bezogen auf
+  /// die gewählte Abteilung.
   double? get _mengeAusStunden {
     if (_einheit != _MengenEinheit.stunden) return null;
-    final stunden = double.tryParse(_menge.text.replaceAll(',', '.'));
+    final dauer = _zeitMinuten;
     final modell = _bezugsModell;
-    if (stunden == null || stunden <= 0 || modell == null) return null;
-    final menge = (stunden * 60 - modell.fix) / modell.proKg;
+    if (dauer == null || dauer <= 0 || modell == null) return null;
+    final menge = (dauer - modell.fix) / modell.proKg;
     // Zeit reicht nicht einmal für die Rüst-/Fixzeit der Abteilung.
     return menge > 0 ? menge : null;
   }
@@ -1737,7 +1741,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           ? (_dauerModelle.isEmpty
               ? 'Für dieses Produkt lässt sich aus der Zeit keine Menge '
                   'ableiten — es fehlen Leistungsdaten.'
-              : 'Bitte eine gültige Stundenzahl eingeben.')
+              : 'Bitte eine gültige Produktionszeit eingeben.')
           : 'Bitte eine gültige Menge (kg) eingeben.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(hinweis)),
@@ -2038,21 +2042,26 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             showSelectedIcon: false,
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _menge,
-            decoration: InputDecoration(
-              labelText: switch (_einheit) {
-                _MengenEinheit.rohware => 'Menge Rohware (kg)',
-                _MengenEinheit.fertigware => 'Menge Fertigware (kg)',
-                _MengenEinheit.stunden => 'Produktionszeit (Stunden)',
-              },
-              suffixText:
-                  _einheit == _MengenEinheit.stunden ? 'h' : 'kg',
-              border: const OutlineInputBorder(),
+          if (_einheit == _MengenEinheit.stunden)
+            ZeitEingabe(
+              label: 'Produktionszeit',
+              minuten: _zeitMinuten,
+              onChanged: (m) => setState(() => _zeitMinuten = m),
+            )
+          else
+            TextField(
+              controller: _menge,
+              decoration: InputDecoration(
+                labelText: _einheit == _MengenEinheit.rohware
+                    ? 'Menge Rohware (kg)'
+                    : 'Menge Fertigware (kg)',
+                suffixText: 'kg',
+                border: const OutlineInputBorder(),
+              ),
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              onChanged: (_) => setState(() {}),
             ),
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (_) => setState(() {}),
-          ),
 
           // Zeit-Eingabe: zeigt, was in dieser Zeit zu schaffen ist.
           if (_einheit == _MengenEinheit.stunden) ...[
@@ -2094,7 +2103,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                   const SizedBox(height: 6),
                   _RohwareHinweis(
                     text: 'Achtung: ${u.name} bräuchte dafür '
-                        '${u.stunden.toStringAsFixed(1)} h — mehr als die '
+                        '${Zeit.kurz(u.stunden * 60)} — mehr als die '
                         '9 Stunden eines Tages.',
                   ),
                 ],

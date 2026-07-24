@@ -6,6 +6,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
+import '../../core/utils/zeit.dart';
 
 const _wkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -115,7 +116,7 @@ class _WeekSnapshotDetailScreenState
         Text(
           '${_d(snap.wochenStart)}–${_d(ende)}${snap.jahr} · '
           '${daten.anzahlAuftraege} Aufträge · '
-          '${(daten.gesamtBelegtMinuten / 60).toStringAsFixed(1)} h gesamt',
+          '${Zeit.kurz(daten.gesamtBelegtMinuten)} gesamt',
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 20),
@@ -276,9 +277,9 @@ class _AuslastungsBalken extends StatelessWidget {
               ),
               Text(
                 wochenKap > 0
-                    ? '${(belegt / 60).toStringAsFixed(1)} / '
-                        '${(wochenKap / 60).toStringAsFixed(1)} h · $prozent%'
-                    : '${(belegt / 60).toStringAsFixed(1)} h',
+                    ? '${Zeit.kurzOhneEinheit(belegt)} / '
+                        '${Zeit.kurz(wochenKap)} · $prozent%'
+                    : Zeit.kurz(belegt),
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -396,7 +397,7 @@ class _TaskZeile extends StatelessWidget {
           ),
           Text(
             '${task.mengeKg.toStringAsFixed(0)} kg · '
-            '${(task.dauerMinuten / 60).toStringAsFixed(1)} h',
+            Zeit.kurz(task.dauerMinuten),
             style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
           ),
         ],

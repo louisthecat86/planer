@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
+import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 import '../shell/home_screen.dart';
 
@@ -161,7 +162,7 @@ class _SnapshotKarte extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final daten = dekodiereSnapshot(snap);
     final ende = snap.wochenStart.add(const Duration(days: 6));
-    final stunden = (daten.gesamtBelegtMinuten / 60).toStringAsFixed(1);
+    final stunden = Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -274,7 +275,7 @@ class _AbteilungsZeile extends StatelessWidget {
             ),
           ),
           Text(
-            '${(belegt / 60).toStringAsFixed(1)} h · '
+            '${Zeit.kurz(belegt)} · '
             '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge',
             style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
           ),

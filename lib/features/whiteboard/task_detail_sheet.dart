@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/utils/zeit.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
@@ -810,8 +811,11 @@ class _DauerAnzeige extends StatelessWidget {
             animation: dauerController,
             builder: (context, _) {
               final txt = dauerController.text.trim();
+              // Immer Stunden + Minuten — „150 min" liest sich in der
+              // Produktion schlechter als „2 h 30 min".
+              final minuten = double.tryParse(txt);
               return Text(
-                txt.isEmpty ? '–' : '$txt min',
+                minuten == null ? '–' : Zeit.lang(minuten),
                 style: theme.textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.w800,
                 ),

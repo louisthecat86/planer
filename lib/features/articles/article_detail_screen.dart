@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/utils/zeit.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -356,14 +357,7 @@ String _fmtKg(double? v) {
 
 String _fmtProzent(double anteil) => '${(anteil * 100).toStringAsFixed(1)} %';
 
-String _fmtDauer(double? minuten) {
-  if (minuten == null) return '—';
-  final h = (minuten / 60).floor();
-  final m = (minuten % 60).round();
-  if (h == 0) return '$m min';
-  if (m == 0) return '$h h';
-  return '$h h $m min';
-}
+String _fmtDauer(double? minuten) => Zeit.lang(minuten);
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -4328,20 +4322,14 @@ class _LeistungsdatenDialog extends ConsumerStatefulWidget {
 class _LeistungsdatenDialogState
     extends ConsumerState<_LeistungsdatenDialog> {
   late final List<TextEditingController> _menge;
-  late final List<TextEditingController> _zeit;
+  /// Dauer je Abteilung in MINUTEN (aus der Stunden/Minuten-Eingabe).
+  late List<double?> _zeitMin;
   late final List<TextEditingController> _personen;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    String zeitText(double min) {
-      if (min <= 0) return '';
-      final h = min ~/ 60;
-      final m = (min % 60).round();
-      return '$h:${m.toString().padLeft(2, '0')}';
-    }
-
     _menge = [
       for (final e in widget.eintraege)
         TextEditingController(
@@ -4350,9 +4338,9 @@ class _LeistungsdatenDialogState
               : '',
         ),
     ];
-    _zeit = [
+    _zeitMin = [
       for (final e in widget.eintraege)
-        TextEditingController(text: zeitText(e.erster.basisDauerMinuten)),
+        e.erster.basisDauerMinuten > 0 ? e.erster.basisDauerMinuten : null,
     ];
     _personen = [
       for (final e in widget.eintraege)
@@ -4366,30 +4354,15 @@ class _LeistungsdatenDialogState
 
   @override
   void dispose() {
-    for (final c in [..._menge, ..._zeit, ..._personen]) {
+    for (final c in [..._menge, ..._personen]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  /// Parst „h:mm" oder eine reine Minutenzahl zu Minuten.
-  static double? _minuten(String eingabe) {
-    final t = eingabe.trim();
-    if (t.isEmpty) return null;
-    if (t.contains(':')) {
-      final teile = t.split(':');
-      if (teile.length != 2) return null;
-      final h = int.tryParse(teile[0]);
-      final m = int.tryParse(teile[1]);
-      if (h == null || m == null || m < 0 || m > 59) return null;
-      return (h * 60 + m).toDouble();
-    }
-    return double.tryParse(t.replaceAll(',', '.'));
-  }
-
   String _kgProStunde(int i) {
     final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
-    final min = _minuten(_zeit[i].text);
+    final min = _zeitMin[i];
     if (kg == null || kg <= 0 || min == null || min <= 0) return '—';
     final kgh = kg / (min / 60);
     return '${kgh.toStringAsFixed(0)} kg/h';
@@ -4403,7 +4376,7 @@ class _LeistungsdatenDialogState
 
     for (var i = 0; i < widget.eintraege.length; i++) {
       final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
-      final min = _minuten(_zeit[i].text);
+      final min = _zeitMin[i];
       final pers = int.tryParse(_personen[i].text.trim());
       // Nur vollständig ausgefüllte Abteilungen schreiben — leere Zeilen
       // lassen den bestehenden Stand unangetastet.
@@ -4490,17 +4463,13 @@ class _LeistungsdatenDialogState
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Expanded(
-                      child: TextField(
-                        controller: _zeit[i],
-                        decoration: const InputDecoration(
-                          labelText: 'Zeit',
-                          hintText: 'h:mm',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
+                    // Getrennte Stunden-/Minutenfelder: „0:08" war als
+                    // Freitext fehleranfällig und ließ offen, ob 8 Minuten
+                    // oder 8 Stunden gemeint sind.
+                    ZeitEingabe(
+                      kompakt: true,
+                      minuten: _zeitMin[i],
+                      onChanged: (m) => setState(() => _zeitMin[i] = m),
                     ),
                     const SizedBox(width: 8),
                     SizedBox(
