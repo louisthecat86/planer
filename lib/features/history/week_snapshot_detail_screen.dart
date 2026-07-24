@@ -397,7 +397,7 @@ class _TaskZeile extends StatelessWidget {
           ),
           Text(
             '${task.mengeKg.toStringAsFixed(0)} kg · '
-            Zeit.kurz(task.dauerMinuten),
+            '${Zeit.kurz(task.dauerMinuten)}',
             style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
           ),
         ],
