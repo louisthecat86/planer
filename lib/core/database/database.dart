@@ -18,6 +18,8 @@ import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
 import 'tables/task_dependencies.dart';
 import 'tables/week_snapshots.dart';
+import 'tables/navision_artikel_katalog.dart';
+import 'tables/navision_umrechnungen.dart';
 import 'tables/zusatzzeiten.dart';
 
 part 'database.g.dart';
@@ -50,6 +52,8 @@ part 'database.g.dart';
     ParameterGrenzen,
     MachineParameterDefs,
     Zusatzzeiten,
+    NavisionArtikelKatalog,
+    NavisionUmrechnungen,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -59,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -322,6 +326,18 @@ class AppDatabase extends _$AppDatabase {
           // Reinigen blockieren dieselbe Anlage wie die Produktion.
           if (from < 14) {
             await m.createTable(zusatzzeiten);
+          }
+
+          // --- v14 -> v15: Artikelkatalog aus Navision -----------------
+          if (from < 15) {
+            await m.createTable(navisionArtikelKatalog);
+          }
+
+          // --- v15 -> v16: Einheiten-Umrechnung (BTL/PACK → kg) --------
+          // Eigene Tabelle, weil der Katalog bei jedem Import ersetzt wird
+          // und die mühsam erfassten Faktoren sonst verloren gingen.
+          if (from < 16) {
+            await m.createTable(navisionUmrechnungen);
           }
         },
         beforeOpen: (details) async {

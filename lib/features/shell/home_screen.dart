@@ -55,7 +55,7 @@ class HomeScreen extends ConsumerWidget {
         // vier nebeneinander, gibt es vier Spalten — sonst zwei, sonst eine.
         // So klappt der Umbruch bei jeder Zoomstufe sauber.
         const minAblauf = 200.0;
-        const anzahlAblauf = 5; // Bedarf, Planung, Erfassung, Historie, Artikel
+        const anzahlAblauf = 6; // inkl. Navision-Import
         int ablaufSpalten = (gesamt / (minAblauf + spacing)).floor();
         ablaufSpalten = ablaufSpalten.clamp(1, anzahlAblauf);
         // Eine einzelne Kachel in der letzten Zeile sieht abgehängt aus.
@@ -76,6 +76,13 @@ class HomeScreen extends ConsumerWidget {
             label: 'Bedarf',
             subtitle: 'Was produziert werden muss',
             onTap: () => context.pushNamed('bedarf'),
+          ),
+          // Direkt hinter dem Bedarf: von dort kommen die Mengen her.
+          _NavigationTile(
+            icon: Icons.sync_alt_rounded,
+            label: 'Navision-Import',
+            subtitle: 'Artikel und Bedarf aus der Warenwirtschaft',
+            onTap: () => context.pushNamed('navisionImport'),
           ),
           _NavigationTile(
             icon: Icons.calendar_view_week_rounded,

@@ -22,12 +22,17 @@ class BackupService {
   ///
   /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
   /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
-  static const String _currentVersion = '1.2';
+  static const String _currentVersion = '1.3';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
   /// Import einfach übersprungen (leere Liste).
-  static const Set<String> _supportedVersions = {'1.0', '1.1', '1.2'};
+  static const Set<String> _supportedVersions = {
+    '1.0',
+    '1.1',
+    '1.2',
+    '1.3',
+  };
 
   /// Erstellt alle notwendigen Verzeichnisse.
   static Future<Directory> _getBackupDir() async {
@@ -169,6 +174,8 @@ class BackupService {
         'parameter_grenzen': await _exportParameterGrenzen(database),
         // ── ab Backup-Version 1.2 ────────────────────────────────────
         'zusatzzeiten': await _exportZusatzzeiten(database),
+        // ── ab Backup-Version 1.3 ────────────────────────────────────
+        'navision_umrechnungen': await _exportNavisionUmrechnungen(database),
       },
     };
   }
@@ -220,6 +227,7 @@ class BackupService {
         await _importMachineParameterDefs(database, data);
         await _importParameterGrenzen(database, data);
         await _importZusatzzeiten(database, data);
+        await _importNavisionUmrechnungen(database, data);
         await _importProductSteps(database, data);
         await _importProductStepParameters(database, data);
         await _importProductRawMaterials(database, data);
@@ -434,6 +442,17 @@ class BackupService {
   ) async =>
       (await db.select(db.parameterGrenzen).get())
           .map((g) => g.toJson())
+          .toList();
+
+  /// Einheiten-Umrechnung für Navision-Artikel (BTL/PACK → kg).
+  /// Der Artikelkatalog selbst wird NICHT gesichert — er ist eine Kopie
+  /// aus Navision und jederzeit neu einlesbar. Die Faktoren dagegen sind
+  /// Handarbeit und wären sonst verloren.
+  static Future<List<Map<String, dynamic>>> _exportNavisionUmrechnungen(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.navisionUmrechnungen).get())
+          .map((u) => u.toJson())
           .toList();
 
   /// Rüst-/Reinigungszeiten je Tag und Planungsspur.
@@ -659,6 +678,21 @@ class BackupService {
     }
   }
 
+  static Future<void> _importNavisionUmrechnungen(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list = (data['navision_umrechnungen'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    for (final u in list) {
+      final eintrag = NavisionUmrechnung.fromJson(u);
+      await db.into(db.navisionUmrechnungen).insertOnConflictUpdate(
+            eintrag.toCompanion(true),
+          );
+    }
+  }
+
   static Future<void> _importZusatzzeiten(
     AppDatabase db,
     Map<String, dynamic> data,
@@ -709,6 +743,7 @@ class BackupService {
     await db.delete(db.products).go();
     await db.delete(db.rawMaterials).go();
     // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
+    await db.delete(db.navisionUmrechnungen).go();
     await db.delete(db.zusatzzeiten).go();
     await db.delete(db.machineParameterDefs).go();
     await db.delete(db.parameterGrenzen).go();

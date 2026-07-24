@@ -13,6 +13,7 @@ import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
 import 'features/backup/backup_management_screen.dart';
 import 'features/bedarf/bedarf_screen.dart';
+import 'features/navision/navision_import_screen.dart';
 import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
@@ -78,6 +79,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'bedarf',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: BedarfScreen(),
+        ),
+      ),
+      // Navision-Import: Artikelkatalog aus der Warenwirtschaft ansehen,
+      // filtern und daraus Bedarf erzeugen.
+      GoRoute(
+        path: '/navision',
+        name: 'navisionImport',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: NavisionImportScreen(),
         ),
       ),
       // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
