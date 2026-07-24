@@ -55,8 +55,15 @@ class HomeScreen extends ConsumerWidget {
         // vier nebeneinander, gibt es vier Spalten — sonst zwei, sonst eine.
         // So klappt der Umbruch bei jeder Zoomstufe sauber.
         const minAblauf = 200.0;
+        const anzahlAblauf = 5; // Bedarf, Planung, Erfassung, Historie, Artikel
         int ablaufSpalten = (gesamt / (minAblauf + spacing)).floor();
-        ablaufSpalten = ablaufSpalten.clamp(1, 4);
+        ablaufSpalten = ablaufSpalten.clamp(1, anzahlAblauf);
+        // Eine einzelne Kachel in der letzten Zeile sieht abgehängt aus.
+        // Lieber eine Spalte weniger und dafür zwei ausgewogene Reihen
+        // (bei fünf Kacheln also 3 + 2 statt 4 + 1).
+        while (ablaufSpalten > 2 && anzahlAblauf % ablaufSpalten == 1) {
+          ablaufSpalten--;
+        }
         final ablaufBreite =
             (gesamt - spacing * (ablaufSpalten - 1)) / ablaufSpalten;
         final breit = ablaufSpalten >= 3;
@@ -305,45 +312,63 @@ class _NavigationTile extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          // Stack mit dem Inhalt als UNPOSITIONIERTEM Kind — nur so behält
+          // die Kachel ihre Höhe; das Wasserzeichen liegt dahinter.
+          child: Stack(
             children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: akzent.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(3),
-                ),
-                child: Icon(icon, color: akzent, size: 24),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: akzent,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Expanded(
-                child: Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11.5,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-              Align(
-                alignment: Alignment.bottomRight,
+              // Sehr dezente Untermalung: dasselbe Symbol groß und blass
+              // in der Ecke. Gibt der Fläche Charakter, ohne vom Text
+              // abzulenken.
+              Positioned(
+                right: -12,
+                bottom: -14,
                 child: Icon(
-                  Icons.chevron_right,
-                  size: 18,
-                  color: theme.colorScheme.onSurfaceVariant,
+                  icon,
+                  size: 96,
+                  color: akzent.withValues(alpha: 0.06),
                 ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: akzent.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                    child: Icon(icon, color: akzent, size: 24),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: akzent,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Expanded(
+                    child: Text(
+                      subtitle,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                  Align(
+                    alignment: Alignment.bottomRight,
+                    child: Icon(
+                      Icons.chevron_right,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

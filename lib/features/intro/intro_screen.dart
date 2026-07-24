@@ -1,9 +1,10 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-/// Intro-Screen im dunklen App-Design.
+/// Intro-Screen im Navision-Design.
 ///
 /// Eine Logo-Kachel (Zahnrad auf Primär-Verlauf, wie die Home-Kacheln)
 /// und der Schriftzug "Produktion Planer" entwickeln sich aus einem
@@ -187,8 +188,8 @@ class _IntroInhalt extends StatelessWidget {
         // wie der Schriftzug — die App plant Fleischverarbeitung, kein
         // Roboterwerk.
         SizedBox(
-          width: 132,
-          height: 96,
+          width: 168,
+          height: 116,
           child: CustomPaint(painter: _SteakPainter(farbe)),
         ),
         const SizedBox(height: 26),
@@ -211,10 +212,13 @@ class _IntroInhalt extends StatelessWidget {
   }
 }
 
-/// Zeichnet ein stilisiertes T-Bone-Steak in einer einzigen Farbe.
+/// Zeichnet ein Steak in Draufsicht — angelehnt an die Comic-Vorlage:
+/// heller Fettrand außen, dunklere Fleischfläche innen, die von Y-förmigen
+/// Fettadern in Segmente geteilt wird, und ein runder Knochen in der Mitte.
 ///
-/// Bewusst als Zeichnung und nicht als Icon: Material bietet kein Steak,
-/// und so lässt sich die Form exakt an die Schriftfarbe koppeln.
+/// Alles entsteht aus EINER Farbe (der Schriftfarbe) in verschiedenen
+/// Deckkraft-Stufen, damit Logo und Schriftzug zusammengehören und die
+/// Zeichnung in Hell- wie Dunkelmodus funktioniert.
 class _SteakPainter extends CustomPainter {
   _SteakPainter(this.farbe);
 
@@ -225,58 +229,91 @@ class _SteakPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    final fuellung = Paint()
-      ..color = farbe.withValues(alpha: 0.16)
-      ..style = PaintingStyle.fill;
-    final kante = Paint()
-      ..color = farbe
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.2
-      ..strokeJoin = StrokeJoin.round;
+    // ── Umriss: liegendes Oval mit leichter Delle rechts unten ──────
+    // Bewusst ohne Matrix-Transformation aufgebaut: Die Innenform entsteht
+    // aus denselben relativen Punkten, nur zur Mitte hin gestaucht. Das
+    // spart eine Abhängigkeit von Matrix4 (dort ist `translate` inzwischen
+    // veraltet) und bleibt gut lesbar.
+    Path formMit(double faktorX, double faktorY) {
+      Offset p(double fx, double fy) => Offset(
+            w * (0.5 + (fx - 0.5) * faktorX),
+            h * (0.5 + (fy - 0.5) * faktorY),
+          );
+      final pfad = Path()..moveTo(p(0.30, 0.08).dx, p(0.30, 0.08).dy);
+      void kurve(
+        double x1,
+        double y1,
+        double x2,
+        double y2,
+        double x3,
+        double y3,
+      ) {
+        final a = p(x1, y1);
+        final b = p(x2, y2);
+        final c = p(x3, y3);
+        pfad.cubicTo(a.dx, a.dy, b.dx, b.dy, c.dx, c.dy);
+      }
 
-    // Umriss: unregelmäßige, „fleischige" Rundung.
-    final fleisch = Path()
-      ..moveTo(w * 0.30, h * 0.12)
-      ..cubicTo(w * 0.62, h * 0.02, w * 0.98, h * 0.20, w * 0.94, h * 0.50)
-      ..cubicTo(w * 0.90, h * 0.80, w * 0.62, h * 0.97, w * 0.38, h * 0.90)
-      ..cubicTo(w * 0.18, h * 0.84, w * 0.10, h * 0.62, w * 0.14, h * 0.42)
-      ..cubicTo(w * 0.17, h * 0.26, w * 0.22, h * 0.16, w * 0.30, h * 0.12)
-      ..close();
-    canvas.drawPath(fleisch, fuellung);
-    canvas.drawPath(fleisch, kante);
+      kurve(0.62, 0.00, 0.95, 0.10, 0.97, 0.40);
+      kurve(0.99, 0.62, 0.86, 0.74, 0.72, 0.86);
+      kurve(0.58, 0.98, 0.32, 1.00, 0.17, 0.86);
+      kurve(0.02, 0.72, 0.01, 0.36, 0.10, 0.22);
+      kurve(0.16, 0.13, 0.22, 0.10, 0.30, 0.08);
+      return pfad..close();
+    }
 
-    // Knochen: der klassische T-Bone am linken Rand.
-    final knochen = Paint()
-      ..color = farbe
+    final umriss = formMit(1, 1);
+
+    // Fettrand (hell) — die gesamte Fläche.
+    canvas.drawPath(umriss, Paint()..color = farbe.withValues(alpha: 0.20));
+
+    // ── Fleisch: dieselbe Form, zur Mitte hin gestaucht ─────────────
+    final fleisch = formMit(0.80, 0.76);
+    canvas.drawPath(fleisch, Paint()..color = farbe.withValues(alpha: 0.55));
+
+    // ── Fettadern: drei Striche vom Knochen nach außen (Y-Form) ─────
+    // Sie werden auf die Fleischfläche beschnitten, damit sie nicht in
+    // den Fettrand laufen.
+    canvas.save();
+    canvas.clipPath(fleisch);
+    final ader = Paint()
+      ..color = farbe.withValues(alpha: 0.20)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
+      ..strokeWidth = w * 0.075
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(w * 0.30, h * 0.30),
-      Offset(w * 0.30, h * 0.74),
-      knochen,
+    final mitte = Offset(w * 0.42, h * 0.48);
+    for (final winkel in [-1.9, 0.35, 1.85]) {
+      canvas.drawLine(
+        mitte,
+        mitte + Offset(w * 0.9 * math.cos(winkel), h * 0.9 * math.sin(winkel)),
+        ader,
+      );
+    }
+    canvas.restore();
+
+    // ── Knochen: heller Kreis in der Mitte ──────────────────────────
+    canvas.drawCircle(
+      mitte,
+      w * 0.085,
+      Paint()..color = farbe.withValues(alpha: 0.22),
     );
-    canvas.drawLine(
-      Offset(w * 0.30, h * 0.52),
-      Offset(w * 0.52, h * 0.52),
-      knochen,
+    canvas.drawCircle(
+      mitte,
+      w * 0.085,
+      Paint()
+        ..color = farbe.withValues(alpha: 0.45)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
     );
 
-    // Zwei kurze Striche als Grill-/Maserungsandeutung.
-    final maserung = Paint()
-      ..color = farbe.withValues(alpha: 0.55)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..strokeCap = StrokeCap.round;
-    canvas.drawLine(
-      Offset(w * 0.62, h * 0.30),
-      Offset(w * 0.78, h * 0.38),
-      maserung,
-    );
-    canvas.drawLine(
-      Offset(w * 0.58, h * 0.66),
-      Offset(w * 0.76, h * 0.72),
-      maserung,
+    // ── Außenkante zuletzt, damit sie sauber obenauf liegt ──────────
+    canvas.drawPath(
+      umriss,
+      Paint()
+        ..color = farbe
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.2
+        ..strokeJoin = StrokeJoin.round,
     );
   }
 
