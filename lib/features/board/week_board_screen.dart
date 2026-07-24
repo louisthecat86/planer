@@ -1554,16 +1554,17 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
   // ── Zeitmodell: Minuten = Fixanteil + Faktor × Menge ─────────────────
   // Die Schrittdauer ist „Fixzeit + Zeit × (Menge / Referenzmenge)", also
-  // linear in der Menge. Damit lässt sich die Rechnung auch umkehren:
-  // aus einer gewünschten Produktionsdauer die passende Menge bestimmen.
-  // Ermittelt wird die Gerade über zwei Probe-Rechnungen.
-  double? _dauerFixMin;
-  double? _dauerProKg;
+  // linear in der Menge — die Rechnung lässt sich damit umkehren.
+  //
+  // WICHTIG: Es wird JE ABTEILUNG gerechnet, nicht über die Summe. Im
+  // Wochenplan bekommt jede Abteilung ihren eigenen Tag mit 9 Stunden;
+  // „2 Stunden produzieren" heißt also 2 Stunden AN DER LINIE, nicht
+  // 2 Stunden über alle Abteilungen zusammengezählt. Maßgeblich ist die
+  // engste Abteilung — sie begrenzt, was in der Zeit zu schaffen ist.
+  List<({String abteilung, double fix, double proKg})> _dauerModelle = [];
 
   Future<void> _ladeZeitmodell(String productId) async {
     final db = ref.read(databaseProvider);
-    double summe(GeplanterPlan p) =>
-        p.schritte.fold<double>(0, (a, e) => a + e.dauerMinuten);
     try {
       final klein = await berechneSchrittPlan(
         db: db,
@@ -1577,35 +1578,64 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         mengeKg: 1000,
         startTag: _startTag,
       );
-      final t1 = summe(klein);
-      final t2 = summe(gross);
-      final steigung = (t2 - t1) / 900.0;
-      if (!mounted) return;
-      setState(() {
-        _dauerProKg = steigung > 0 ? steigung : null;
-        _dauerFixMin = t1 - steigung * 100;
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _dauerProKg = null;
-          _dauerFixMin = null;
-        });
+      final modelle = <({String abteilung, double fix, double proKg})>[];
+      final anzahl = klein.schritte.length < gross.schritte.length
+          ? klein.schritte.length
+          : gross.schritte.length;
+      for (var i = 0; i < anzahl; i++) {
+        final t1 = klein.schritte[i].dauerMinuten;
+        final t2 = gross.schritte[i].dauerMinuten;
+        final steigung = (t2 - t1) / 900.0;
+        if (steigung <= 0) continue; // reine Fixzeit — begrenzt nicht
+        modelle.add((
+          abteilung: klein.schritte[i].abteilungDbValue,
+          fix: t1 - steigung * 100,
+          proKg: steigung,
+        ));
       }
+      if (!mounted) return;
+      setState(() => _dauerModelle = modelle);
+    } catch (_) {
+      if (mounted) setState(() => _dauerModelle = []);
     }
   }
 
   /// Aus der eingegebenen Stundenzahl die planbare ROHWARENMENGE.
+  ///
+  /// Es gewinnt die kleinste Menge über alle Abteilungen: Sobald EINE
+  /// Abteilung die Zeit überschreiten würde, ist Schluss.
   double? get _mengeAusStunden {
     if (_einheit != _MengenEinheit.stunden) return null;
     final stunden = double.tryParse(_menge.text.replaceAll(',', '.'));
-    final proKg = _dauerProKg;
-    final fix = _dauerFixMin;
-    if (stunden == null || stunden <= 0 || proKg == null || fix == null) {
-      return null;
+    if (stunden == null || stunden <= 0 || _dauerModelle.isEmpty) return null;
+    double? kleinste;
+    for (final m in _dauerModelle) {
+      final menge = (stunden * 60 - m.fix) / m.proKg;
+      if (menge <= 0) return null; // Zeit reicht nicht mal für die Fixzeit
+      if (kleinste == null || menge < kleinste) kleinste = menge;
     }
-    final menge = (stunden * 60 - fix) / proKg;
-    return menge > 0 ? menge : null;
+    return kleinste;
+  }
+
+  /// Name der Abteilung, die die Menge begrenzt (für den Hinweistext).
+  String? get _engpassAbteilung {
+    final stunden = double.tryParse(_menge.text.replaceAll(',', '.'));
+    if (stunden == null || stunden <= 0 || _dauerModelle.isEmpty) return null;
+    double? kleinste;
+    String? engpass;
+    for (final m in _dauerModelle) {
+      final menge = (stunden * 60 - m.fix) / m.proKg;
+      if (kleinste == null || menge < kleinste) {
+        kleinste = menge;
+        engpass = m.abteilung;
+      }
+    }
+    if (engpass == null) return null;
+    try {
+      return Abteilung.fromDbValue(engpass).anzeigeName;
+    } catch (_) {
+      return engpass;
+    }
   }
 
   /// Fertigmenge, die in der eingegebenen Zeit herauskommt.
@@ -1672,7 +1702,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     final menge = _planMenge;
     if (menge == null || menge <= 0) {
       final hinweis = _einheit == _MengenEinheit.stunden
-          ? (_dauerProKg == null
+          ? (_dauerModelle.isEmpty
               ? 'Für dieses Produkt lässt sich aus der Zeit keine Menge '
                   'ableiten — es fehlen Leistungsdaten.'
               : 'Bitte eine gültige Stundenzahl eingeben.')
@@ -1995,7 +2025,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           // Zeit-Eingabe: zeigt, was in dieser Zeit zu schaffen ist.
           if (_einheit == _MengenEinheit.stunden) ...[
             const SizedBox(height: 10),
-            if (_dauerProKg == null)
+            if (_dauerModelle.isEmpty)
               const _RohwareHinweis(
                 text: 'Für dieses Produkt fehlen Leistungsdaten — aus der '
                     'Zeit lässt sich noch keine Menge ableiten.',
@@ -2004,7 +2034,10 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               _RohwareHinweis(
                 text: 'Schaffbar: ≈ ${_mengeAusStunden!.round()} kg Rohware'
                     '${_fertigAusStunden != null ? '  →  ergibt ≈ '
-                        '${_fertigAusStunden!.round()} kg Fertigware' : ''}',
+                        '${_fertigAusStunden!.round()} kg Fertigware' : ''}'
+                    '${_engpassAbteilung != null
+                        ? '\nBegrenzt durch: ${_engpassAbteilung!}'
+                        : ''}',
               ),
               if (_fertigAusStunden == null && _histVerlust == null) ...[
                 const SizedBox(height: 8),
