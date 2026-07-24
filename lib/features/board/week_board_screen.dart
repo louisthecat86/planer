@@ -3117,26 +3117,68 @@ class _SummenZelle extends StatelessWidget {
   }
 }
 
-/// Zeigt die offenen Bedarfe im Planen-Dialog.
+/// Zeigt die offenen Bedarfe im Planen-Dialog — als suchbare Liste.
 ///
-/// Damit beginnt die Planung dort, wo sie im Betrieb wirklich beginnt:
-/// bei dem, was gebraucht wird. Ein Tipp übernimmt Artikel und offene
-/// Menge in den Dialog; die Verknüpfung sorgt dafür, dass die
-/// Bedarfsliste anschließend automatisch weiß, was noch fehlt.
+/// Früher war das eine waagerechte Kartenleiste. Das trug, solange eine
+/// Handvoll Positionen erfasst war; sobald der Bedarf aus Navision kommt,
+/// sind es schnell dreistellige Zahlen — und man scrollt sich zu Tode.
 ///
-/// Ist kein Bedarf erfasst, erscheint hier nichts — freies Planen bleibt
-/// jederzeit möglich.
-class _BedarfVorschlaege extends ConsumerWidget {
+/// Deshalb jetzt: dringendste zuerst (überfällig, dann nach Termin), eine
+/// Suchzeile darüber und eine kompakte, senkrechte Liste mit fester Höhe.
+/// So bleibt der Dialog gleich groß, egal ob zehn oder dreihundert
+/// Positionen offen sind.
+class _BedarfVorschlaege extends ConsumerStatefulWidget {
   const _BedarfVorschlaege({required this.gewaehlt, required this.onWaehlen});
 
   final BedarfInfo? gewaehlt;
   final void Function(BedarfInfo?) onWaehlen;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BedarfVorschlaege> createState() =>
+      _BedarfVorschlaegeState();
+}
+
+class _BedarfVorschlaegeState extends ConsumerState<_BedarfVorschlaege> {
+  final _suche = TextEditingController();
+
+  @override
+  void dispose() {
+    _suche.dispose();
+    super.dispose();
+  }
+
+  /// Reihenfolge: überfällig zuerst, dann nach Termin, dann Priorität,
+  /// zuletzt alphabetisch. Das ist die Reihenfolge, in der man in der
+  /// Produktion tatsächlich abarbeitet.
+  List<BedarfInfo> _sortiert(List<BedarfInfo> liste) {
+    final kopie = [...liste];
+    kopie.sort((a, b) {
+      if (a.ueberfaellig != b.ueberfaellig) return a.ueberfaellig ? -1 : 1;
+      final ta = a.bedarf.termin;
+      final tb = b.bedarf.termin;
+      if (ta != null && tb != null && ta != tb) return ta.compareTo(tb);
+      if (ta == null && tb != null) return 1;
+      if (ta != null && tb == null) return -1;
+      if (a.bedarf.prioritaet != b.bedarf.prioritaet) {
+        return b.bedarf.prioritaet.compareTo(a.bedarf.prioritaet);
+      }
+      return a.artikelName.compareTo(b.artikelName);
+    });
+    return kopie;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final offen = ref.watch(offeneBedarfeProvider).valueOrNull;
     if (offen == null || offen.isEmpty) return const SizedBox.shrink();
+
+    final suchText = _suche.text.trim().toLowerCase();
+    final gefiltert = _sortiert(offen).where((i) {
+      if (suchText.isEmpty) return true;
+      return i.artikelName.toLowerCase().contains(suchText) ||
+          i.artikelNummer.toLowerCase().contains(suchText);
+    }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3150,107 +3192,156 @@ class _BedarfVorschlaege extends ConsumerWidget {
             ),
             const SizedBox(width: 5),
             Text(
-              'Offener Bedarf',
+              'Offener Bedarf (${offen.length})',
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            const Spacer(),
+            // Suche erst ab einer Menge einblenden, bei der sie nützt.
+            if (offen.length > 6)
+              SizedBox(
+                width: 210,
+                height: 34,
+                child: TextField(
+                  controller: _suche,
+                  style: const TextStyle(fontSize: 12.5),
+                  decoration: InputDecoration(
+                    hintText: 'Artikel suchen …',
+                    prefixIcon: const Icon(Icons.search, size: 16),
+                    suffixIcon: _suche.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close, size: 15),
+                            onPressed: () => setState(_suche.clear),
+                          ),
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
           ],
         ),
         const SizedBox(height: 6),
-        SizedBox(
-          height: 62,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: offen.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final info = offen[i];
-              final aktiv = gewaehlt?.bedarf.id == info.bedarf.id;
-              final farbe = info.ueberfaellig
-                  ? theme.colorScheme.error
-                  : theme.colorScheme.primary;
-
-              return InkWell(
-                onTap: () => onWaehlen(aktiv ? null : info),
-                borderRadius: BorderRadius.circular(8),
-                child: Container(
-                  width: 210,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: aktiv
-                        ? farbe.withValues(alpha: 0.14)
-                        : theme.colorScheme.surfaceContainerHighest
-                            .withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: aktiv
-                          ? farbe
-                          : theme.dividerColor,
-                      width: aktiv ? 1.5 : 1,
+        Container(
+          constraints: const BoxConstraints(maxHeight: 168),
+          decoration: BoxDecoration(
+            border: Border.all(color: theme.dividerColor),
+            borderRadius: BorderRadius.circular(3),
+          ),
+          child: gefiltert.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Text(
+                    'Kein offener Bedarf passt zur Suche.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        info.artikelName,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Text(
-                            '${info.offenKg.round()} kg offen',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: farbe,
+                )
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: gefiltert.length,
+                  itemBuilder: (context, i) {
+                    final info = gefiltert[i];
+                    final aktiv =
+                        widget.gewaehlt?.bedarf.id == info.bedarf.id;
+                    final farbe = info.ueberfaellig
+                        ? theme.colorScheme.error
+                        : theme.colorScheme.primary;
+                    return InkWell(
+                      onTap: () =>
+                          widget.onWaehlen(aktiv ? null : info),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: aktiv
+                              ? farbe.withValues(alpha: 0.12)
+                              : null,
+                          border: Border(
+                            bottom: BorderSide(color: theme.dividerColor),
+                            left: BorderSide(
+                              color: aktiv ? farbe : Colors.transparent,
+                              width: 3,
                             ),
                           ),
-                          if (info.bedarf.termin != null) ...[
-                            Text(
-                              '  ·  ',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 66,
+                              child: Text(
+                                info.artikelNummer,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: theme.colorScheme.primary,
+                                ),
                               ),
                             ),
-                            Text(
-                              '${info.bedarf.termin!.day.toString().padLeft(2, '0')}.'
-                              '${info.bedarf.termin!.month.toString().padLeft(2, '0')}.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: info.ueberfaellig
-                                    ? FontWeight.w700
-                                    : FontWeight.normal,
-                                color: info.ueberfaellig
-                                    ? theme.colorScheme.error
-                                    : theme.colorScheme.onSurfaceVariant,
+                            Expanded(
+                              child: Text(
+                                info.artikelName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12.5),
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${info.offenKg.round()} kg',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: farbe,
+                              ),
+                            ),
+                            if (info.bedarf.termin != null) ...[
+                              const SizedBox(width: 10),
+                              SizedBox(
+                                width: 52,
+                                child: Text(
+                                  '${info.bedarf.termin!.day.toString().padLeft(2, '0')}.'
+                                  '${info.bedarf.termin!.month.toString().padLeft(2, '0')}.',
+                                  textAlign: TextAlign.end,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    fontWeight: info.ueberfaellig
+                                        ? FontWeight.w800
+                                        : FontWeight.normal,
+                                    color: info.ueberfaellig
+                                        ? theme.colorScheme.error
+                                        : theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ),
+                            ] else
+                              const SizedBox(width: 62),
                           ],
-                        ],
+                        ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
+        if (gefiltert.length > 5)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              '${gefiltert.length} Positionen · dringendste zuerst',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontSize: 11,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
         const SizedBox(height: 14),
       ],
     );
