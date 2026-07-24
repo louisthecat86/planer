@@ -68,46 +68,42 @@ class HomeScreen extends ConsumerWidget {
             icon: Icons.playlist_add_check_rounded,
             label: 'Bedarf',
             subtitle: 'Was produziert werden muss',
-            color: const Color(0xFF6A1B9A),
             onTap: () => context.pushNamed('bedarf'),
           ),
           _NavigationTile(
             icon: Icons.calendar_view_week_rounded,
             label: 'Planung',
             subtitle: 'Woche im Board einplanen',
-            color: const Color(0xFF2E7D32),
             onTap: () => context.pushNamed('board'),
           ),
           _NavigationTile(
             icon: Icons.fact_check_rounded,
             label: 'Produktionserfassung',
             subtitle: 'Ist-Daten der Woche',
-            color: const Color(0xFFEF6C00),
             onTap: () => context.pushNamed('erfassung'),
           ),
           _NavigationTile(
             icon: Icons.history_rounded,
             label: 'Wochen-Historie',
             subtitle: 'Rückblick und Kennzahlen',
-            color: const Color(0xFF00897B),
             onTap: () => context.pushNamed('wochenHistorie'),
+          ),
+          // Artikel gehört zum täglichen Arbeiten, nicht in die Verwaltung —
+          // die Stammdaten sind die Grundlage jeder Planung.
+          _NavigationTile(
+            icon: Icons.inventory_2_rounded,
+            label: 'Artikel',
+            subtitle: 'Abläufe, Maschinen, Zeiten',
+            onTap: () => context.pushNamed('articles'),
           ),
         ];
 
         // ── Verwaltung: seltener gebraucht, bewusst kleiner und ruhiger. ──
         final verwaltung = [
           _KompakteKachel(
-            icon: Icons.inventory_2_rounded,
-            label: 'Artikel',
-            subtitle: 'Abläufe, Maschinen, Zeiten',
-            farbe: const Color(0xFF5C9CE6),
-            onTap: () => context.pushNamed('articles'),
-          ),
-          _KompakteKachel(
             icon: Icons.settings_rounded,
             label: 'Einstellungen',
-            subtitle: 'Excel, Backup, Kapazität',
-            farbe: const Color(0xFF9E9E9E),
+            subtitle: 'Excel, Backup, Darstellung',
             onTap: () => context.pushNamed('settings'),
           ),
         ];
@@ -268,84 +264,88 @@ class _KopfBereich extends ConsumerWidget {
 // Navigation tile
 // ---------------------------------------------------------------------------
 
+/// Große Kachel im Navision-Stil: kantig, flach, eine Akzentfarbe.
+///
+/// Vorher waren es bunte Farbverläufe mit runden Ecken. NAV arbeitet
+/// stattdessen mit ruhigen Flächen, dünnen Kanten und einem einzigen Blau —
+/// die Unterscheidung leisten Symbol und Beschriftung, nicht die Farbe.
 class _NavigationTile extends StatelessWidget {
   const _NavigationTile({
     required this.icon,
     required this.label,
     required this.subtitle,
-    required this.color,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String subtitle;
-  final Color color;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
+    final theme = Theme.of(context);
+    final akzent = theme.colorScheme.primary;
+    return Material(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(3),
       clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         onTap: onTap,
-        child: Ink(
+        child: Container(
           decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(3),
+            border: Border.all(color: theme.dividerColor),
+            // Schmale Akzentkante links — das NAV-Muster für aktive Bereiche.
             gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color,
-                Color.alphaBlend(Colors.black.withValues(alpha: 0.20), color),
-              ],
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [akzent, akzent, Colors.transparent],
+              stops: const [0, 0.012, 0.012],
             ),
           ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 16, 14, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(9),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.22),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 28),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: akzent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(3),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  label,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
+                child: Icon(icon, color: akzent, size: 24),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: akzent,
                 ),
-                const SizedBox(height: 3),
-                Expanded(
-                  child: Text(
-                    subtitle,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      color: Colors.white.withValues(alpha: 0.85),
-                    ),
+              ),
+              const SizedBox(height: 2),
+              Expanded(
+                child: Text(
+                  subtitle,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: Icon(
-                    Icons.arrow_forward_rounded,
-                    size: 18,
-                    color: Colors.white.withValues(alpha: 0.7),
-                  ),
+              ),
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -382,14 +382,12 @@ class _KompakteKachel extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.subtitle,
-    required this.farbe,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
   final String subtitle;
-  final Color farbe;
   final VoidCallback onTap;
 
   @override
@@ -397,13 +395,13 @@ class _KompakteKachel extends StatelessWidget {
     final theme = Theme.of(context);
     return Material(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(3),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(3),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(3),
             border: Border.all(
               color: theme.colorScheme.outline.withValues(alpha: 0.25),
             ),
@@ -411,7 +409,11 @@ class _KompakteKachel extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
             children: [
-              Icon(icon, color: farbe, size: 22),
+              Icon(
+                icon,
+                color: theme.colorScheme.onSurfaceVariant,
+                size: 22,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
