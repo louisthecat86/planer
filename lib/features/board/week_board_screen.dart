@@ -813,7 +813,7 @@ class _SpurLabel extends StatelessWidget {
   }
 }
 
-class _TagesZelle extends StatelessWidget {
+class _TagesZelle extends ConsumerWidget {
   const _TagesZelle({
     required this.cell,
     required this.kompakt,
@@ -827,12 +827,14 @@ class _TagesZelle extends StatelessWidget {
   final void Function(BoardTask) onMoveHere;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final farbe = _ampelFarbe(cell.status);
     final now = DateTime.now();
     final istHeute = cell.tag == DateTime(now.year, now.month, now.day);
-    final belegt = cell.tasks.isNotEmpty;
+    // Auch reine Nebenzeiten machen die Zelle „belegt" — sonst bliebe
+    // sie flach und die erfasste Reinigungszeit unsichtbar.
+    final belegt = cell.tasks.isNotEmpty || cell.zusatzzeiten.isNotEmpty;
 
     return DragTarget<BoardTask>(
       onWillAcceptWithDetails: (details) {
@@ -868,7 +870,47 @@ class _TagesZelle extends StatelessWidget {
               bottom: BorderSide(color: theme.dividerColor),
             ),
           ),
-          child: !belegt
+          child: Stack(
+            children: [
+              Positioned.fill(child: _inhalt(context, highlight, farbe)),
+              // Rüst-/Reinigungszeit direkt an der Tageszelle — dort, wo
+              // man beim Planen ohnehin hinschaut. Auch in leeren Zellen
+              // sichtbar, denn gereinigt wird auch ohne Auftrag.
+              Positioned(
+                top: -4,
+                right: -4,
+                child: _ZusatzKnopf(
+                  minuten: cell.zusatzMinuten,
+                  onTap: () => _zusatzzeitenVerwalten(context, ref),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _zusatzzeitenVerwalten(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => _ZusatzzeitVerwaltung(
+        spurName: cell.spur.anzeigeName,
+        tag: cell.tag,
+        spurId: cell.spur.id,
+        eintraege: cell.zusatzzeiten,
+      ),
+    );
+    ref.invalidate(weekBoardProvider);
+    ref.invalidate(dayBoardProvider);
+  }
+
+  Widget _inhalt(BuildContext context, bool highlight, Color farbe) {
+    final belegt = cell.tasks.isNotEmpty || cell.zusatzzeiten.isNotEmpty;
+    return !belegt
               // -- LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
               //    freie Kapazität ist der Normalfall und muss nicht
               //    35-mal wiederholt werden. Nur beim Ziehen erscheint
@@ -908,9 +950,205 @@ class _TagesZelle extends StatelessWidget {
                         ),
                       ),
                   ],
+                );
+  }
+}
+
+/// Kleiner Knopf an der Tageszelle für Rüst-/Reinigungszeiten.
+///
+/// Zeigt die bereits erfasste Nebenzeit an, damit man sie im Wochenraster
+/// auf einen Blick sieht, ohne die Zelle zu öffnen.
+class _ZusatzKnopf extends StatelessWidget {
+  const _ZusatzKnopf({required this.minuten, required this.onTap});
+
+  final double minuten;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hat = minuten > 0;
+    return Tooltip(
+      message: hat
+          ? 'Nebenzeiten: ${Zeit.kurz(minuten)} — zum Bearbeiten tippen'
+          : 'Rüst-/Reinigungszeit erfassen',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.more_time,
+                size: 14,
+                color: hat
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurfaceVariant
+                        .withValues(alpha: 0.45),
+              ),
+              if (hat) ...[
+                const SizedBox(width: 2),
+                Text(
+                  Zeit.kurzOhneEinheit(minuten),
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Verwaltet die Nebenzeiten einer Spur an einem Tag: anlegen und löschen
+/// in einem Dialog, damit es auch im engen Wochenraster bedienbar bleibt.
+class _ZusatzzeitVerwaltung extends ConsumerStatefulWidget {
+  const _ZusatzzeitVerwaltung({
+    required this.spurName,
+    required this.tag,
+    required this.spurId,
+    required this.eintraege,
+  });
+
+  final String spurName;
+  final DateTime tag;
+  final String spurId;
+  final List<Zusatzzeit> eintraege;
+
+  @override
+  ConsumerState<_ZusatzzeitVerwaltung> createState() =>
+      _ZusatzzeitVerwaltungState();
+}
+
+class _ZusatzzeitVerwaltungState
+    extends ConsumerState<_ZusatzzeitVerwaltung> {
+  late List<Zusatzzeit> _liste = [...widget.eintraege];
+
+  Future<void> _anlegen() async {
+    final res = await showDialog<({String art, double minuten, String? notiz})>(
+      context: context,
+      builder: (_) => _ZusatzzeitDialog(spurName: widget.spurName),
+    );
+    if (res == null) return;
+    final db = ref.read(databaseProvider);
+    final id = const Uuid().v4();
+    await db.into(db.zusatzzeiten).insert(
+          ZusatzzeitenCompanion.insert(
+            id: id,
+            datum: DateTime(widget.tag.year, widget.tag.month, widget.tag.day),
+            spurId: widget.spurId,
+            art: res.art,
+            minuten: res.minuten,
+            notiz: Value(res.notiz),
+          ),
         );
-      },
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Nebenzeit angelegt');
+    final neu = await (db.select(db.zusatzzeiten)
+          ..where((t) => t.id.equals(id)))
+        .getSingleOrNull();
+    if (neu != null && mounted) setState(() => _liste = [..._liste, neu]);
+  }
+
+  Future<void> _loeschen(Zusatzzeit z) async {
+    final db = ref.read(databaseProvider);
+    await (db.update(db.zusatzzeiten)..where((t) => t.id.equals(z.id)))
+        .write(ZusatzzeitenCompanion(deletedAt: Value(DateTime.now())));
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Nebenzeit gelöscht');
+    if (mounted) {
+      setState(() => _liste = _liste.where((e) => e.id != z.id).toList());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final summe = _liste.fold<double>(0, (a, z) => a + z.minuten);
+    return AlertDialog(
+      title: const Text('Rüst- und Reinigungszeiten'),
+      content: SizedBox(
+        width: 460,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${widget.spurName} · ${_fmtTagTitel(widget.tag)}',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_liste.isEmpty)
+              Text(
+                'Noch keine Nebenzeiten erfasst.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              )
+            else
+              for (final z in _liste)
+                ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    z.art == 'reinigen'
+                        ? Icons.cleaning_services
+                        : (z.art == 'ruesten'
+                            ? Icons.build_outlined
+                            : Icons.schedule),
+                    size: 18,
+                  ),
+                  title: Text(
+                    '${_artName(z.art)} · ${Zeit.kurz(z.minuten)}',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  subtitle: (z.notiz ?? '').trim().isEmpty
+                      ? null
+                      : Text(z.notiz!.trim()),
+                  trailing: IconButton(
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red,
+                    ),
+                    tooltip: 'Entfernen',
+                    onPressed: () => _loeschen(z),
+                  ),
+                ),
+            if (_liste.isNotEmpty) ...[
+              const Divider(),
+              Text(
+                'Summe: ${Zeit.kurz(summe)}',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ],
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _anlegen,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Zeit hinzufügen'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Fertig'),
+        ),
+      ],
     );
   }
 }
@@ -1518,13 +1756,15 @@ class _ZusatzzeitDialogState extends State<_ZusatzzeitDialog> {
         FilledButton(
           onPressed: (_minuten ?? 0) <= 0
               ? null
-              : () => Navigator.of(context).pop((
-                  art: _art,
-                  minuten: _minuten!,
-                  notiz: _notiz.text.trim().isEmpty
-                      ? null
-                      : _notiz.text.trim(),
-                )),
+              : () {
+                  Navigator.of(context).pop((
+                    art: _art,
+                    minuten: _minuten!,
+                    notiz: _notiz.text.trim().isEmpty
+                        ? null
+                        : _notiz.text.trim(),
+                  ),);
+                },
           child: const Text('Übernehmen'),
         ),
       ],
