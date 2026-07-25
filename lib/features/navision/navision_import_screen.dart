@@ -31,26 +31,19 @@ final appArtikelnummernProvider = FutureProvider<Set<String>>((ref) async {
   return liste.map((p) => p.artikelnummer).toSet();
 });
 
-/// Bereits (offen) im Bedarf liegende Fertigmenge je Artikelnummer, in kg.
-/// „Offen" = nicht gelöscht und nicht manuell erledigt. Grundlage für die
-/// Delta-Übernahme: nur die Differenz zwischen Navision-Bedarf und dieser
-/// Menge wird neu angelegt — so entstehen über Tage keine Doppelungen.
+/// Bereits im Bedarf liegende Fertigmenge je Artikelnummer, in kg — abgeleitet
+/// aus dem [bedarfProvider], damit sich die Netto-Rechnung automatisch
+/// aktualisiert, sobald im Bedarf-Screen etwas gelöscht, ergänzt oder abgehakt
+/// wird. Manuell erledigte Positionen zählen nicht mehr als deckend; gelöschte
+/// tauchen gar nicht erst auf und geben den Navision-Bedarf wieder frei.
 final imBedarfKgProvider = FutureProvider<Map<String, double>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final bedarfe = await (db.select(db.demands)
-        ..where((d) => d.deletedAt.isNull())
-        ..where((d) => d.manuellErledigt.equals(false)))
-      .get();
-  if (bedarfe.isEmpty) return <String, double>{};
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
-  final nummerById = {for (final p in produkte) p.id: p.artikelnummer};
+  final bedarfe = await ref.watch(bedarfProvider.future);
   final map = <String, double>{};
   for (final b in bedarfe) {
-    final nr = nummerById[b.productId];
-    if (nr == null) continue;
-    map[nr] = (map[nr] ?? 0) + b.mengeKgFertig;
+    if (b.bedarf.manuellErledigt) continue;
+    if (b.artikelNummer.isEmpty || b.artikelNummer == '—') continue;
+    map[b.artikelNummer] =
+        (map[b.artikelNummer] ?? 0) + b.bedarf.mengeKgFertig;
   }
   return map;
 });
