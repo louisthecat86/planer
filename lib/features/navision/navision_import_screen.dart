@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -101,31 +103,68 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['xlsx', 'xls'],
+      withData: true, // Desktop liefert sonst teils nur einen Pfad, keine Bytes
     );
-    final pfad = picked?.files.firstOrNull?.path;
-    if (pfad == null) return;
+    if (picked == null) return; // Auswahl abgebrochen — bewusst still
 
+    final datei = picked.files.isNotEmpty ? picked.files.first : null;
+    var bytes = datei?.bytes;
+
+    // Fallback: füllt eine Plattform die Bytes trotz withData nicht, liefert
+    // aber einen Pfad, dann lesen wir die Datei selbst ein.
+    if (bytes == null && datei?.path != null) {
+      try {
+        bytes = await File(datei!.path!).readAsBytes();
+      } catch (e) {
+        debugPrint('[NAV] Datei über Pfad lesen fehlgeschlagen: $e');
+      }
+    }
+
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Die gewählte Datei ließ sich nicht lesen (weder Inhalt noch '
+            'Pfad verfügbar). Bitte erneut versuchen.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    debugPrint('[NAV] Datei gewählt: ${datei?.name} · ${bytes.length} Bytes');
     setState(() => _busy = true);
     try {
       final service = NavisionImportService(ref.read(databaseProvider));
-      final res = await service.importiere(pfad);
+      final res = await service.importiere(bytes);
       ref.invalidate(navisionKatalogProvider);
       ref
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Navision-Import');
       if (!mounted) return;
+      final warnHinweis =
+          res.warnungen.isEmpty ? '' : ' · ${res.warnungen.length} Hinweis(e)';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(seconds: 5),
           content: Text(
-            '${res.uebernommen} Artikel übernommen · '
-            '${res.mitAuftrag} mit offenen Aufträgen',
+            res.uebernommen == 0
+                ? 'Keine Artikel eingelesen (${res.gelesen} Datenzeilen '
+                    'geprüft). Details siehe Log-Ausgabe.'
+                : '${res.uebernommen} Artikel übernommen · '
+                    '${res.mitAuftrag} mit offenen Aufträgen$warnHinweis',
           ),
         ),
       );
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[NAV] Import fehlgeschlagen: $e\n$st');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Import fehlgeschlagen: $e')),
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text('Import fehlgeschlagen: $e'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

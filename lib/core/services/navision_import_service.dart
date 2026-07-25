@@ -1,7 +1,6 @@
-import 'dart:io';
-
 import 'package:drift/drift.dart';
 import 'package:excel/excel.dart';
+import 'package:flutter/foundation.dart';
 
 import '../database/database.dart';
 
@@ -88,16 +87,48 @@ class NavisionImportService {
     return double.tryParse(bereinigt) ?? 0;
   }
 
-  Future<NavisionImportErgebnis> importiere(String dateipfad) async {
-    final bytes = await File(dateipfad).readAsBytes();
-    final excel = Excel.decodeBytes(bytes);
+  /// Liest die Navision-Artikelübersicht aus den Roh-Bytes einer .xlsx-Datei.
+  ///
+  /// Bewusst Bytes statt Dateipfad: Auf dem Desktop liefert der FilePicker
+  /// mit Custom-Filter teils gar keinen Pfad (nur Bytes), und Bytes
+  /// funktionieren auf jeder Plattform gleich.
+  Future<NavisionImportErgebnis> importiere(Uint8List bytes) async {
+    debugPrint('[NAV] Import gestartet — ${bytes.length} Bytes');
+
+    // Grober Format-Check: echte .xlsx sind ZIP-Container und beginnen mit
+    // der Signatur „PK" (0x50 0x4B). Ein umbenanntes altes .xls oder eine
+    // als Excel getarnte HTML-Tabelle hat das nicht — dann sofort raus mit
+    // klarer Ansage statt kryptischem Parser-Crash.
+    if (bytes.length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
+      throw Exception(
+        'Das ist keine echte Excel-Datei (.xlsx). In Navision bitte über '
+        '„Öffnen in Excel" bzw. „Nach Microsoft Excel" exportieren und die '
+        'so erzeugte .xlsx wählen — ein umbenanntes .xls oder eine '
+        'HTML-Tabelle kann die App nicht lesen.',
+      );
+    }
+
+    final Excel excel;
+    try {
+      excel = Excel.decodeBytes(bytes);
+    } catch (e) {
+      debugPrint('[NAV] decodeBytes fehlgeschlagen: $e');
+      throw Exception('Die Datei ließ sich nicht als Excel öffnen: $e');
+    }
+
     final warnungen = <String>[];
 
+    if (excel.tables.isEmpty) {
+      throw Exception('Die Datei enthält kein Tabellenblatt.');
+    }
     final sheetName = excel.tables.keys.first;
     final tabelle = excel.tables[sheetName];
     if (tabelle == null || tabelle.rows.isEmpty) {
       throw Exception('Die Datei enthält keine Daten.');
     }
+    debugPrint(
+      '[NAV] Blatt „$sheetName" · ${tabelle.rows.length} Zeilen',
+    );
 
     // Kopfzeile suchen: die Zeile, in der „Nr." und „Beschreibung" stehen.
     int? kopfZeile;
@@ -122,6 +153,10 @@ class NavisionImportService {
       final feld = _spalten[_norm(_text(kopf[c]) ?? '')];
       if (feld != null) spalteVon[feld] = c;
     }
+    debugPrint(
+      '[NAV] Kopfzeile in Zeile ${kopfZeile + 1} · '
+      'erkannte Spalten: ${spalteVon.keys.join(', ')}',
+    );
     if (!spalteVon.containsKey('nummer')) {
       throw Exception('Spalte „Nr." fehlt.');
     }
@@ -189,6 +224,11 @@ class NavisionImportService {
         uebernommen++;
       }
     });
+
+    debugPrint(
+      '[NAV] fertig — gelesen=$gelesen · uebernommen=$uebernommen · '
+      'mitAuftrag=$mitAuftrag · Warnungen=${warnungen.length}',
+    );
 
     return NavisionImportErgebnis(
       gelesen: gelesen,
