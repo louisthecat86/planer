@@ -10,6 +10,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_import_service.dart';
+import '../bedarf/bedarf_screen.dart';
 
 /// Der eingelesene Navision-Katalog.
 final navisionKatalogProvider =
@@ -28,6 +29,40 @@ final appArtikelnummernProvider = FutureProvider<Set<String>>((ref) async {
         ..where((p) => p.deletedAt.isNull()))
       .get();
   return liste.map((p) => p.artikelnummer).toSet();
+});
+
+/// Bereits (offen) im Bedarf liegende Fertigmenge je Artikelnummer, in kg.
+/// „Offen" = nicht gelöscht und nicht manuell erledigt. Grundlage für die
+/// Delta-Übernahme: nur die Differenz zwischen Navision-Bedarf und dieser
+/// Menge wird neu angelegt — so entstehen über Tage keine Doppelungen.
+final imBedarfKgProvider = FutureProvider<Map<String, double>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final bedarfe = await (db.select(db.demands)
+        ..where((d) => d.deletedAt.isNull())
+        ..where((d) => d.manuellErledigt.equals(false)))
+      .get();
+  if (bedarfe.isEmpty) return <String, double>{};
+  final produkte = await (db.select(db.products)
+        ..where((p) => p.deletedAt.isNull()))
+      .get();
+  final nummerById = {for (final p in produkte) p.id: p.artikelnummer};
+  final map = <String, double>{};
+  for (final b in bedarfe) {
+    final nr = nummerById[b.productId];
+    if (nr == null) continue;
+    map[nr] = (map[nr] ?? 0) + b.mengeKgFertig;
+  }
+  return map;
+});
+
+/// Gespeicherte Umrechnungsfaktoren (Artikelnummer → kg je Basiseinheit).
+/// Nur ein Anzeige-Hinweis für die Netto-Rechnung bei nicht-kg-Artikeln;
+/// die verbindliche Umrechnung passiert beim Übernehmen mit Einheitenprüfung.
+final umrechnungsFaktorenProvider =
+    FutureProvider<Map<String, double>>((ref) async {
+  final db = ref.watch(databaseProvider);
+  final rows = await db.select(db.navisionUmrechnungen).get();
+  return {for (final u in rows) u.nummer: u.kgJeEinheit};
 });
 
 /// Navision-Import: Artikelkatalog ansehen, filtern und Bedarf übernehmen.
@@ -78,10 +113,43 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   static bool istKg(NavisionArtikel a) =>
       (a.basiseinheit ?? '').toUpperCase() == 'KG';
 
-  List<NavisionArtikel> _gefiltert(List<NavisionArtikel> alle) {
+  /// Netto noch offener Bedarf in kg: Navision-Bedarf (in kg) minus die
+  /// bereits offen im Bedarf liegende Menge. null, wenn die kg-Menge mangels
+  /// Umrechnungsfaktor (noch) nicht bestimmbar ist.
+  static double? nettoOffenKg(
+    NavisionArtikel a,
+    Map<String, double> imBedarfKg,
+    Map<String, double> faktoren,
+  ) {
+    final double? navKg;
+    if (istKg(a)) {
+      navKg = offenerBedarf(a);
+    } else {
+      final f = faktoren[a.nummer];
+      navKg = (f != null && f > 0) ? offenerBedarf(a) * f : null;
+    }
+    if (navKg == null) return null;
+    final netto = navKg - (imBedarfKg[a.nummer] ?? 0);
+    return netto > 0 ? netto : 0;
+  }
+
+  List<NavisionArtikel> _gefiltert(
+    List<NavisionArtikel> alle,
+    Map<String, double> imBedarfKg,
+    Map<String, double> faktoren,
+  ) {
     final suchText = _suche.text.trim().toLowerCase();
     return alle.where((a) {
-      if (_nurBedarf && offenerBedarf(a) <= 0) return false;
+      if (_nurBedarf) {
+        final netto = nettoOffenKg(a, imBedarfKg, faktoren);
+        // netto == null → mangels Faktor nicht bestimmbar → sichtbar
+        // lassen, solange Navision überhaupt Bedarf zeigt.
+        if (netto == null) {
+          if (offenerBedarf(a) <= 0) return false;
+        } else if (netto <= 0) {
+          return false;
+        }
+      }
       if (_nurBestand && a.lagerbestand <= 0) return false;
       if (_produktgruppe != null && a.produktgruppe != _produktgruppe) {
         return false;
@@ -235,9 +303,22 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         .get();
     final idVonNummer = {for (final p in vorhandene) p.artikelnummer: p.id};
 
+    // Was liegt je Produkt bereits OFFEN im Bedarf? Nur die Differenz zu
+    // Navision wird neu angelegt — so entstehen über Tage keine Doppelungen.
+    final offeneDemands = await (db.select(db.demands)
+          ..where((d) => d.deletedAt.isNull())
+          ..where((d) => d.manuellErledigt.equals(false)))
+        .get();
+    final bereitsKgVon = <String, double>{};
+    for (final d in offeneDemands) {
+      bereitsKgVon[d.productId] =
+          (bereitsKgVon[d.productId] ?? 0) + d.mengeKgFertig;
+    }
+
     var angelegt = 0;
     var uebernommen = 0;
     var uebersprungen = 0;
+    var bereitsGedeckt = 0;
 
     for (final a in offen) {
       final menge = offenerBedarf(a);
@@ -270,26 +351,40 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         angelegt++;
       }
 
+      // Delta: nur der noch nicht gedeckte Teil des Navision-Bedarfs.
+      final bereits = bereitsKgVon[productId] ?? 0;
+      final delta = kg - bereits;
+      if (delta < 0.5) {
+        bereitsGedeckt++;
+        continue; // schon vollständig im Bedarf → nichts Doppeltes anlegen
+      }
+
+      final abzug =
+          bereits > 0 ? ' · abzügl. ${_fmt(bereits)} kg im Bedarf' : '';
       final herkunft = istKg(a)
           ? 'Aus Navision · Auftrag ${_fmt(a.mengeInAuftrag)} kg · '
-              'Bestand ${_fmt(a.lagerbestand)} kg'
+              'Bestand ${_fmt(a.lagerbestand)} kg$abzug'
           : 'Aus Navision · ${_fmt(menge)} ${a.basiseinheit} '
-              '× ${_fmt(faktorVon[a.nummer] ?? 0)} kg';
+              '× ${_fmt(faktorVon[a.nummer] ?? 0)} kg$abzug';
 
       await db.into(db.demands).insert(
             DemandsCompanion.insert(
               id: const Uuid().v4(),
               productId: productId,
-              mengeKgFertig: kg,
+              mengeKgFertig: delta,
               quelle: const Value('bestellung'),
               notizen: Value(herkunft),
             ),
           );
+      bereitsKgVon[productId] = bereits + delta;
       uebernommen++;
     }
 
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf aus NAV');
     ref.invalidate(appArtikelnummernProvider);
+    ref.invalidate(bedarfProvider);
+    ref.invalidate(imBedarfKgProvider);
+    ref.invalidate(umrechnungsFaktorenProvider);
     if (!mounted) return;
     setState(_markiert.clear);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -297,6 +392,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         content: Text(
           '$uebernommen Bedarfspositionen angelegt'
           '${angelegt > 0 ? ' · $angelegt Artikel neu erstellt' : ''}'
+          '${bereitsGedeckt > 0 ? ' · $bereitsGedeckt bereits gedeckt' : ''}'
           '${uebersprungen > 0 ? ' · $uebersprungen ohne Umrechnung '
               'übersprungen' : ''}',
         ),
@@ -312,6 +408,10 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     final katalog = ref.watch(navisionKatalogProvider);
     final appNummern = ref.watch(appArtikelnummernProvider).valueOrNull ??
         const <String>{};
+    final imBedarfKg = ref.watch(imBedarfKgProvider).valueOrNull ??
+        const <String, double>{};
+    final faktoren = ref.watch(umrechnungsFaktorenProvider).valueOrNull ??
+        const <String, double>{};
 
     return Scaffold(
       appBar: AppBar(
@@ -330,7 +430,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         error: (e, _) => Center(child: Text('Fehler: $e')),
         data: (alle) {
           if (alle.isEmpty) return _leerHinweis(context);
-          final liste = _gefiltert(alle);
+          final liste = _gefiltert(alle, imBedarfKg, faktoren);
           final markierte =
               liste.where((a) => _markiert.contains(a.nummer)).toList();
           final fehlendeMitBedarf = alle
@@ -346,7 +446,13 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                 _fehlendeBanner(context, fehlendeMitBedarf),
               const Divider(height: 1),
               Expanded(
-                child: _tabelle(context, liste, appNummern),
+                child: _tabelle(
+                  context,
+                  liste,
+                  appNummern,
+                  imBedarfKg,
+                  faktoren,
+                ),
               ),
               if (markierte.isNotEmpty)
                 _aktionsLeiste(context, markierte),
@@ -536,6 +642,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     BuildContext context,
     List<NavisionArtikel> liste,
     Set<String> appNummern,
+    Map<String, double> imBedarfKg,
+    Map<String, double> faktoren,
   ) {
     final theme = Theme.of(context);
     if (liste.isEmpty) {
@@ -554,6 +662,10 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         final a = liste[i];
         final bedarf = offenerBedarf(a);
         final inApp = appNummern.contains(a.nummer);
+        final bereitsKg = imBedarfKg[a.nummer] ?? 0;
+        final nettoKg = nettoOffenKg(a, imBedarfKg, faktoren);
+        final imBedarfBereits = bereitsKg > 0;
+        final gedeckt = imBedarfBereits && nettoKg != null && nettoKg <= 0;
         final markiert = _markiert.contains(a.nummer);
         return InkWell(
           onTap: () => setState(() {
@@ -563,7 +675,9 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
             decoration: BoxDecoration(
               color: markiert
                   ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-                  : null,
+                  : (gedeckt
+                      ? Colors.green.withValues(alpha: 0.07)
+                      : null),
               border: Border(bottom: BorderSide(color: theme.dividerColor)),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -612,6 +726,41 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      if (imBedarfBereits)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 3),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                gedeckt
+                                    ? Icons.check_circle
+                                    : Icons.playlist_add_check,
+                                size: 13,
+                                color: gedeckt
+                                    ? Colors.green.shade700
+                                    : Colors.orange.shade800,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                nettoKg == null
+                                    ? 'im Bedarf: ${_fmt(bereitsKg)} kg'
+                                    : (gedeckt
+                                        ? 'komplett im Bedarf '
+                                            '(${_fmt(bereitsKg)} kg)'
+                                        : 'im Bedarf ${_fmt(bereitsKg)} kg · '
+                                            'offen ${_fmt(nettoKg)} kg'),
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: gedeckt
+                                      ? Colors.green.shade700
+                                      : Colors.orange.shade800,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                     ],
