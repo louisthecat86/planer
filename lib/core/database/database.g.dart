@@ -39,6 +39,16 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
       'notizen', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _istEingepflegtMeta =
+      const VerificationMeta('istEingepflegt');
+  @override
+  late final GeneratedColumn<bool> istEingepflegt = GeneratedColumn<bool>(
+      'ist_eingepflegt', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("ist_eingepflegt" IN (0, 1))'),
+      defaultValue: const Constant(true));
   static const VerificationMeta _produktgruppeMeta =
       const VerificationMeta('produktgruppe');
   @override
@@ -319,6 +329,7 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         artikelbezeichnung,
         beschreibung,
         notizen,
+        istEingepflegt,
         produktgruppe,
         verpackungsart,
         gebindeGroesseKg,
@@ -405,6 +416,12 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
     if (data.containsKey('notizen')) {
       context.handle(_notizenMeta,
           notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('ist_eingepflegt')) {
+      context.handle(
+          _istEingepflegtMeta,
+          istEingepflegt.isAcceptableOrUnknown(
+              data['ist_eingepflegt']!, _istEingepflegtMeta));
     }
     if (data.containsKey('produktgruppe')) {
       context.handle(
@@ -676,6 +693,8 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.string, data['${effectivePrefix}beschreibung']),
       notizen: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      istEingepflegt: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}ist_eingepflegt'])!,
       produktgruppe: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}produktgruppe']),
       verpackungsart: attachedDatabase.typeMapping
@@ -793,6 +812,13 @@ class Product extends DataClass implements Insertable<Product> {
   final String artikelbezeichnung;
   final String? beschreibung;
   final String? notizen;
+
+  /// Pflegestatus. false = automatisch aus Navision angelegter Stub, für
+  /// den die Artikelmaske noch nicht ausgefüllt wurde; true = gepflegt.
+  /// Default true, damit bestehende Artikel bei der Migration unangetastet
+  /// als „eingepflegt" gelten. Wird true, sobald der Artikel eine
+  /// Produktgruppe bekommt / die Maske gespeichert wird.
+  final bool istEingepflegt;
 
   /// Produktgruppe als [ProductGroup.dbValue]. NULL = noch nicht klassifiziert
   /// (nur für Altdaten, neue Artikel sollten eine Gruppe haben).
@@ -921,6 +947,7 @@ class Product extends DataClass implements Insertable<Product> {
       required this.artikelbezeichnung,
       this.beschreibung,
       this.notizen,
+      required this.istEingepflegt,
       this.produktgruppe,
       this.verpackungsart,
       this.gebindeGroesseKg,
@@ -978,6 +1005,7 @@ class Product extends DataClass implements Insertable<Product> {
     if (!nullToAbsent || notizen != null) {
       map['notizen'] = Variable<String>(notizen);
     }
+    map['ist_eingepflegt'] = Variable<bool>(istEingepflegt);
     if (!nullToAbsent || produktgruppe != null) {
       map['produktgruppe'] = Variable<String>(produktgruppe);
     }
@@ -1126,6 +1154,7 @@ class Product extends DataClass implements Insertable<Product> {
       notizen: notizen == null && nullToAbsent
           ? const Value.absent()
           : Value(notizen),
+      istEingepflegt: Value(istEingepflegt),
       produktgruppe: produktgruppe == null && nullToAbsent
           ? const Value.absent()
           : Value(produktgruppe),
@@ -1267,6 +1296,7 @@ class Product extends DataClass implements Insertable<Product> {
           serializer.fromJson<String>(json['artikelbezeichnung']),
       beschreibung: serializer.fromJson<String?>(json['beschreibung']),
       notizen: serializer.fromJson<String?>(json['notizen']),
+      istEingepflegt: serializer.fromJson<bool>(json['istEingepflegt']),
       produktgruppe: serializer.fromJson<String?>(json['produktgruppe']),
       verpackungsart: serializer.fromJson<String?>(json['verpackungsart']),
       gebindeGroesseKg: serializer.fromJson<double?>(json['gebindeGroesseKg']),
@@ -1332,6 +1362,7 @@ class Product extends DataClass implements Insertable<Product> {
       'artikelbezeichnung': serializer.toJson<String>(artikelbezeichnung),
       'beschreibung': serializer.toJson<String?>(beschreibung),
       'notizen': serializer.toJson<String?>(notizen),
+      'istEingepflegt': serializer.toJson<bool>(istEingepflegt),
       'produktgruppe': serializer.toJson<String?>(produktgruppe),
       'verpackungsart': serializer.toJson<String?>(verpackungsart),
       'gebindeGroesseKg': serializer.toJson<double?>(gebindeGroesseKg),
@@ -1391,6 +1422,7 @@ class Product extends DataClass implements Insertable<Product> {
           String? artikelbezeichnung,
           Value<String?> beschreibung = const Value.absent(),
           Value<String?> notizen = const Value.absent(),
+          bool? istEingepflegt,
           Value<String?> produktgruppe = const Value.absent(),
           Value<String?> verpackungsart = const Value.absent(),
           Value<double?> gebindeGroesseKg = const Value.absent(),
@@ -1443,6 +1475,7 @@ class Product extends DataClass implements Insertable<Product> {
         beschreibung:
             beschreibung.present ? beschreibung.value : this.beschreibung,
         notizen: notizen.present ? notizen.value : this.notizen,
+        istEingepflegt: istEingepflegt ?? this.istEingepflegt,
         produktgruppe:
             produktgruppe.present ? produktgruppe.value : this.produktgruppe,
         verpackungsart:
@@ -1547,6 +1580,9 @@ class Product extends DataClass implements Insertable<Product> {
           ? data.beschreibung.value
           : this.beschreibung,
       notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      istEingepflegt: data.istEingepflegt.present
+          ? data.istEingepflegt.value
+          : this.istEingepflegt,
       produktgruppe: data.produktgruppe.present
           ? data.produktgruppe.value
           : this.produktgruppe,
@@ -1666,6 +1702,7 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('istEingepflegt: $istEingepflegt, ')
           ..write('produktgruppe: $produktgruppe, ')
           ..write('verpackungsart: $verpackungsart, ')
           ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
@@ -1722,6 +1759,7 @@ class Product extends DataClass implements Insertable<Product> {
         artikelbezeichnung,
         beschreibung,
         notizen,
+        istEingepflegt,
         produktgruppe,
         verpackungsart,
         gebindeGroesseKg,
@@ -1777,6 +1815,7 @@ class Product extends DataClass implements Insertable<Product> {
           other.artikelbezeichnung == this.artikelbezeichnung &&
           other.beschreibung == this.beschreibung &&
           other.notizen == this.notizen &&
+          other.istEingepflegt == this.istEingepflegt &&
           other.produktgruppe == this.produktgruppe &&
           other.verpackungsart == this.verpackungsart &&
           other.gebindeGroesseKg == this.gebindeGroesseKg &&
@@ -1830,6 +1869,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<String> artikelbezeichnung;
   final Value<String?> beschreibung;
   final Value<String?> notizen;
+  final Value<bool> istEingepflegt;
   final Value<String?> produktgruppe;
   final Value<String?> verpackungsart;
   final Value<double?> gebindeGroesseKg;
@@ -1882,6 +1922,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.artikelbezeichnung = const Value.absent(),
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.istEingepflegt = const Value.absent(),
     this.produktgruppe = const Value.absent(),
     this.verpackungsart = const Value.absent(),
     this.gebindeGroesseKg = const Value.absent(),
@@ -1935,6 +1976,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     required String artikelbezeichnung,
     this.beschreibung = const Value.absent(),
     this.notizen = const Value.absent(),
+    this.istEingepflegt = const Value.absent(),
     this.produktgruppe = const Value.absent(),
     this.verpackungsart = const Value.absent(),
     this.gebindeGroesseKg = const Value.absent(),
@@ -1990,6 +2032,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<String>? artikelbezeichnung,
     Expression<String>? beschreibung,
     Expression<String>? notizen,
+    Expression<bool>? istEingepflegt,
     Expression<String>? produktgruppe,
     Expression<String>? verpackungsart,
     Expression<double>? gebindeGroesseKg,
@@ -2043,6 +2086,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (artikelbezeichnung != null) 'artikelbezeichnung': artikelbezeichnung,
       if (beschreibung != null) 'beschreibung': beschreibung,
       if (notizen != null) 'notizen': notizen,
+      if (istEingepflegt != null) 'ist_eingepflegt': istEingepflegt,
       if (produktgruppe != null) 'produktgruppe': produktgruppe,
       if (verpackungsart != null) 'verpackungsart': verpackungsart,
       if (gebindeGroesseKg != null) 'gebinde_groesse_kg': gebindeGroesseKg,
@@ -2106,6 +2150,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<String>? artikelbezeichnung,
       Value<String?>? beschreibung,
       Value<String?>? notizen,
+      Value<bool>? istEingepflegt,
       Value<String?>? produktgruppe,
       Value<String?>? verpackungsart,
       Value<double?>? gebindeGroesseKg,
@@ -2158,6 +2203,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       artikelbezeichnung: artikelbezeichnung ?? this.artikelbezeichnung,
       beschreibung: beschreibung ?? this.beschreibung,
       notizen: notizen ?? this.notizen,
+      istEingepflegt: istEingepflegt ?? this.istEingepflegt,
       produktgruppe: produktgruppe ?? this.produktgruppe,
       verpackungsart: verpackungsart ?? this.verpackungsart,
       gebindeGroesseKg: gebindeGroesseKg ?? this.gebindeGroesseKg,
@@ -2230,6 +2276,9 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     }
     if (notizen.present) {
       map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (istEingepflegt.present) {
+      map['ist_eingepflegt'] = Variable<bool>(istEingepflegt.value);
     }
     if (produktgruppe.present) {
       map['produktgruppe'] = Variable<String>(produktgruppe.value);
@@ -2387,6 +2436,7 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('artikelbezeichnung: $artikelbezeichnung, ')
           ..write('beschreibung: $beschreibung, ')
           ..write('notizen: $notizen, ')
+          ..write('istEingepflegt: $istEingepflegt, ')
           ..write('produktgruppe: $produktgruppe, ')
           ..write('verpackungsart: $verpackungsart, ')
           ..write('gebindeGroesseKg: $gebindeGroesseKg, ')
@@ -14061,6 +14111,7 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   required String artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<bool> istEingepflegt,
   Value<String?> produktgruppe,
   Value<String?> verpackungsart,
   Value<double?> gebindeGroesseKg,
@@ -14114,6 +14165,7 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<String> artikelbezeichnung,
   Value<String?> beschreibung,
   Value<String?> notizen,
+  Value<bool> istEingepflegt,
   Value<String?> produktgruppe,
   Value<String?> verpackungsart,
   Value<double?> gebindeGroesseKg,
@@ -14259,6 +14311,10 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istEingepflegt => $composableBuilder(
+      column: $table.istEingepflegt,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get produktgruppe => $composableBuilder(
       column: $table.produktgruppe, builder: (column) => ColumnFilters(column));
@@ -14528,6 +14584,10 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get notizen => $composableBuilder(
       column: $table.notizen, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<bool> get istEingepflegt => $composableBuilder(
+      column: $table.istEingepflegt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get produktgruppe => $composableBuilder(
       column: $table.produktgruppe,
       builder: (column) => ColumnOrderings(column));
@@ -14716,6 +14776,9 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get notizen =>
       $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<bool> get istEingepflegt => $composableBuilder(
+      column: $table.istEingepflegt, builder: (column) => column);
 
   GeneratedColumn<String> get produktgruppe => $composableBuilder(
       column: $table.produktgruppe, builder: (column) => column);
@@ -14972,6 +15035,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<String> artikelbezeichnung = const Value.absent(),
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<bool> istEingepflegt = const Value.absent(),
             Value<String?> produktgruppe = const Value.absent(),
             Value<String?> verpackungsart = const Value.absent(),
             Value<double?> gebindeGroesseKg = const Value.absent(),
@@ -15025,6 +15089,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            istEingepflegt: istEingepflegt,
             produktgruppe: produktgruppe,
             verpackungsart: verpackungsart,
             gebindeGroesseKg: gebindeGroesseKg,
@@ -15078,6 +15143,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             required String artikelbezeichnung,
             Value<String?> beschreibung = const Value.absent(),
             Value<String?> notizen = const Value.absent(),
+            Value<bool> istEingepflegt = const Value.absent(),
             Value<String?> produktgruppe = const Value.absent(),
             Value<String?> verpackungsart = const Value.absent(),
             Value<double?> gebindeGroesseKg = const Value.absent(),
@@ -15131,6 +15197,7 @@ class $$ProductsTableTableManager extends RootTableManager<
             artikelbezeichnung: artikelbezeichnung,
             beschreibung: beschreibung,
             notizen: notizen,
+            istEingepflegt: istEingepflegt,
             produktgruppe: produktgruppe,
             verpackungsart: verpackungsart,
             gebindeGroesseKg: gebindeGroesseKg,

@@ -263,6 +263,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                 artikelbezeichnung:
                     a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
                 beschreibung: Value(a.beschreibung2),
+                istEingepflegt: const Value(false),
               ),
             );
         idVonNummer[a.nummer] = productId;
@@ -332,10 +333,17 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           final liste = _gefiltert(alle);
           final markierte =
               liste.where((a) => _markiert.contains(a.nummer)).toList();
+          final fehlendeMitBedarf = alle
+              .where(
+                (a) => offenerBedarf(a) > 0 && !appNummern.contains(a.nummer),
+              )
+              .toList();
 
           return Column(
             children: [
               _filterLeiste(context, alle, liste.length),
+              if (fehlendeMitBedarf.isNotEmpty)
+                _fehlendeBanner(context, fehlendeMitBedarf),
               const Divider(height: 1),
               Expanded(
                 child: _tabelle(context, liste, appNummern),
@@ -732,6 +740,127 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         ),
       ),
     );
+  }
+
+  /// Kompakter Hinweis über der Tabelle: N Artikel mit offenem Bedarf haben
+  /// noch keine Artikelmaske. Ein Klick legt für alle eine Stub-Maske an.
+  Widget _fehlendeBanner(
+    BuildContext context,
+    List<NavisionArtikel> fehlende,
+  ) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.info_outline,
+              size: 18,
+              color: theme.colorScheme.onTertiaryContainer,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                '${fehlende.length} Artikel mit Bedarf haben noch keine '
+                'Artikelmaske in der App.',
+                style: TextStyle(
+                  color: theme.colorScheme.onTertiaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed: _busy ? null : () => _fehlendeAnlegen(fehlende),
+              icon: const Icon(Icons.playlist_add_check, size: 18),
+              label: Text('Fehlende anlegen (${fehlende.length})'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Legt für alle übergebenen Navision-Artikel eine „nicht eingepflegte"
+  /// Stub-Artikelmaske an — aber nur, wenn die Artikelnummer noch nicht
+  /// existiert. Der Abgleich läuft über die eindeutige Artikelnummer, es
+  /// wird also nichts doppelt angelegt und keine bereits gepflegte Maske
+  /// überschrieben.
+  Future<void> _fehlendeAnlegen(List<NavisionArtikel> fehlende) async {
+    final anzahl = fehlende.length;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Fehlende Artikel anlegen?'),
+        content: Text(
+          'Für $anzahl Artikel mit offenem Bedarf, die es in der Artikelliste '
+          'noch nicht gibt, wird je eine Artikelmaske angelegt und als '
+          '„nicht eingepflegt" markiert. Bereits vorhandene Artikel bleiben '
+          'unberührt.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('$anzahl anlegen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    setState(() => _busy = true);
+    try {
+      final db = ref.read(databaseProvider);
+      var angelegt = 0;
+      await db.transaction(() async {
+        // Alle bestehenden Nummern EINMAL laden (inkl. soft-deleted — die
+        // Unique-Spalte artikelnummer ist auch dann noch belegt).
+        final vorhandene = await db.select(db.products).get();
+        final nummern = vorhandene.map((p) => p.artikelnummer).toSet();
+        for (final a in fehlende) {
+          if (nummern.contains(a.nummer)) continue;
+          await db.into(db.products).insert(
+                ProductsCompanion.insert(
+                  id: const Uuid().v4(),
+                  artikelnummer: a.nummer,
+                  artikelbezeichnung:
+                      a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
+                  beschreibung: Value(a.beschreibung2),
+                  istEingepflegt: const Value(false),
+                ),
+              );
+          nummern.add(a.nummer);
+          angelegt++;
+        }
+      });
+      ref.invalidate(appArtikelnummernProvider);
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Navision-Stubs angelegt');
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 5),
+          content: Text(
+            '$angelegt Artikelmaske(n) angelegt · als „nicht eingepflegt" '
+            'markiert. Du findest sie in der Artikelliste.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Anlegen fehlgeschlagen: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 

@@ -65,6 +65,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   String _search = '';
   _SortField _sortField = _SortField.bezeichnung;
   bool _sortAsc = true;
+  bool _nurNichtEingepflegt = false;
 
   List<_ArticleInfo> _filtered(List<_ArticleInfo> all) {
     var list = all;
@@ -79,6 +80,11 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
             (p.beschreibung?.toLowerCase().contains(q) ?? false) ||
             (p.planungsgruppe?.toLowerCase().contains(q) ?? false);
       }).toList();
+    }
+
+    // Pflegestatus-Filter
+    if (_nurNichtEingepflegt) {
+      list = list.where((a) => !a.product.istEingepflegt).toList();
     }
 
     // Sortierung
@@ -309,6 +315,16 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
                 ),
               ),
 
+              // Filter: nur noch nicht eingepflegte Artikel
+              FilterChip(
+                label: const Text('Nicht eingepflegt'),
+                selected: _nurNichtEingepflegt,
+                visualDensity: VisualDensity.compact,
+                onSelected: (v) =>
+                    setState(() => _nurNichtEingepflegt = v),
+              ),
+              const SizedBox(width: 8),
+
               // Sortier-Menü
               PopupMenuButton<_SortField>(
                 icon: const Icon(Icons.sort),
@@ -506,6 +522,28 @@ class _ArticleTile extends StatelessWidget {
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
                     ),
+                    if (!p.istEingepflegt) ...[
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(color: Colors.orange.shade400),
+                        ),
+                        child: Text(
+                          'Noch nicht eingepflegt',
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.orange.shade900,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     // Abteilungs-Kürzel + Metadaten
                     Row(

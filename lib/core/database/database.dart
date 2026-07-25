@@ -63,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -338,6 +338,17 @@ class AppDatabase extends _$AppDatabase {
           // und die mühsam erfassten Faktoren sonst verloren gingen.
           if (from < 16) {
             await m.createTable(navisionUmrechnungen);
+          }
+          // --- v16 -> v17: Pflegestatus für Artikel ----------------
+          // Stub-Artikel aus dem Navision-Abgleich werden mit
+          // ist_eingepflegt = 0 angelegt. Bestehende Artikel gelten
+          // dank DEFAULT 1 automatisch als eingepflegt.
+          if (from < 17) {
+            await _addColumnIfNotExists(
+              'products',
+              'ist_eingepflegt',
+              'INTEGER NOT NULL DEFAULT 1',
+            );
           }
         },
         beforeOpen: (details) async {

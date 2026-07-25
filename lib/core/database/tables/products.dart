@@ -27,6 +27,14 @@ class Products extends Table {
   TextColumn get beschreibung => text().nullable()();
   TextColumn get notizen => text().nullable()();
 
+  /// Pflegestatus. false = automatisch aus Navision angelegter Stub, für
+  /// den die Artikelmaske noch nicht ausgefüllt wurde; true = gepflegt.
+  /// Default true, damit bestehende Artikel bei der Migration unangetastet
+  /// als „eingepflegt" gelten. Wird true, sobald der Artikel eine
+  /// Produktgruppe bekommt / die Maske gespeichert wird.
+  BoolColumn get istEingepflegt =>
+      boolean().withDefault(const Constant(true))();
+
   // ── Produktgruppe (steuert welche Zusatzfelder relevant sind) ─────────
 
   /// Produktgruppe als [ProductGroup.dbValue]. NULL = noch nicht klassifiziert
