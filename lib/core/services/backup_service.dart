@@ -509,6 +509,11 @@ class BackupService {
     final products =
         (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     for (final p in products) {
+      // Abwärtskompatibel: Backups, die vor der Spalte istEingepflegt
+      // erstellt wurden, kennen den Schlüssel nicht. Fehlt er (oder ist
+      // null), gilt der Artikel als eingepflegt (Default true) — sonst
+      // scheitert Product.fromJson mit „Null is not a subtype of bool".
+      if (p['istEingepflegt'] == null) p['istEingepflegt'] = true;
       final product = Product.fromJson(p);
       await db.into(db.products).insert(
             product.toCompanion(true),
