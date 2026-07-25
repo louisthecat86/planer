@@ -22,7 +22,8 @@ class BackupService {
   ///
   /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
   /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
-  static const String _currentVersion = '1.3';
+  /// 1.4 → inkl. `demands`, `production_history`, `week_snapshots`
+  static const String _currentVersion = '1.4';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -32,6 +33,7 @@ class BackupService {
     '1.1',
     '1.2',
     '1.3',
+    '1.4',
   };
 
   /// Erstellt alle notwendigen Verzeichnisse.
@@ -176,6 +178,9 @@ class BackupService {
         'zusatzzeiten': await _exportZusatzzeiten(database),
         // ── ab Backup-Version 1.3 ────────────────────────────────────
         'navision_umrechnungen': await _exportNavisionUmrechnungen(database),
+        'demands': await _exportDemands(database),
+        'production_history': await _exportProductionHistory(database),
+        'week_snapshots': await _exportWeekSnapshots(database),
       },
     };
   }
@@ -236,6 +241,11 @@ class BackupService {
         await _importProductionRuns(database, data);
         await _importTaskDependencies(database, data);
         await _importOrderListItems(database, data);
+        // Bedarf, Produktionshistorie und Wochen-Snapshots — kommen nach
+        // products (production_history hat einen FK darauf).
+        await _importDemands(database, data);
+        await _importProductionHistory(database, data);
+        await _importWeekSnapshots(database, data);
         await _importAppSettings(database, data);
       });
     } catch (e) {
@@ -461,6 +471,31 @@ class BackupService {
   ) async =>
       (await db.select(db.zusatzzeiten).get())
           .map((z) => z.toJson())
+          .toList();
+
+  // ── Backup-Version 1.4: Bedarf, Historie, Wochen-Snapshots ─────────
+
+  /// Offener Bedarf (u.a. aus dem Navision-Import). Wurde früher NICHT
+  /// gesichert — ein Restore hat ihn stillschweigend verloren.
+  static Future<List<Map<String, dynamic>>> _exportDemands(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.demands).get()).map((d) => d.toJson()).toList();
+
+  /// Artikelweite Produktionshistorie (Rohware rein → Fertigware raus).
+  static Future<List<Map<String, dynamic>>> _exportProductionHistory(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.productionHistory).get())
+          .map((h) => h.toJson())
+          .toList();
+
+  /// Eingefrorene Wochen-Planstände (Snapshots).
+  static Future<List<Map<String, dynamic>>> _exportWeekSnapshots(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.weekSnapshots).get())
+          .map((s) => s.toJson())
           .toList();
 
   // ============================================================================
@@ -722,6 +757,53 @@ class BackupService {
     }
   }
 
+  // ── Backup-Version 1.4: Bedarf, Historie, Wochen-Snapshots ─────────
+  // Ältere Backups haben diese Schlüssel nicht — dann bleibt die Liste
+  // leer und es wird nichts importiert.
+
+  static Future<void> _importDemands(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list =
+        (data['demands'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final d in list) {
+      final demand = Demand.fromJson(d);
+      await db.into(db.demands).insertOnConflictUpdate(
+            demand.toCompanion(true),
+          );
+    }
+  }
+
+  static Future<void> _importProductionHistory(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list = (data['production_history'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        [];
+    for (final h in list) {
+      final eintrag = ProductionHistoryData.fromJson(h);
+      await db.into(db.productionHistory).insertOnConflictUpdate(
+            eintrag.toCompanion(true),
+          );
+    }
+  }
+
+  static Future<void> _importWeekSnapshots(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final list =
+        (data['week_snapshots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final s in list) {
+      final snapshot = WeekSnapshot.fromJson(s);
+      await db.into(db.weekSnapshots).insertOnConflictUpdate(
+            snapshot.toCompanion(true),
+          );
+    }
+  }
+
   // ============================================================================
   // CLEAR DATABASE
   // ============================================================================
@@ -740,6 +822,10 @@ class BackupService {
     // Produkte und ihre Material-Verknüpfungen
     await db.delete(db.productRawMaterials).go();
     await db.delete(db.rawMaterialBatches).go();
+    // Historie & Bedarf verweisen auf products (production_history per FK) —
+    // vor dem Löschen der Produkte leeren, sonst FOREIGN KEY constraint failed.
+    await db.delete(db.productionHistory).go();
+    await db.delete(db.demands).go();
     await db.delete(db.products).go();
     await db.delete(db.rawMaterials).go();
     // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
@@ -749,6 +835,8 @@ class BackupService {
     await db.delete(db.parameterGrenzen).go();
     // Anlagen-Katalog
     await db.delete(db.machines).go();
+    // Wochen-Snapshots (eigenständig, keine FK).
+    await db.delete(db.weekSnapshots).go();
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
     await db.delete(db.appSettings).go();
   }
@@ -793,3 +881,4 @@ class BackupInfo {
   String get formattedTimestamp =>
       DateFormat('dd.MM.yyyy HH:mm').format(timestamp);
 }
+
