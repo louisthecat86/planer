@@ -103,6 +103,13 @@ class _ArticleInfoEditorDialogState
           produktgruppe: Value(_produktgruppe),
           beschreibung: Value(beschr.isEmpty ? null : beschr),
           notizen: Value(notizen.isEmpty ? null : notizen),
+          // Sobald eine Produktgruppe gesetzt ist, gilt der Artikel als
+          // eingepflegt — das „nicht eingepflegt"-Badge verschwindet. Ohne
+          // Gruppe bleibt der Status unverändert (ein Stub bleibt Stub, ein
+          // bereits gepflegter Altdaten-Artikel bleibt eingepflegt).
+          istEingepflegt: _produktgruppe != null
+              ? const Value(true)
+              : const Value.absent(),
           updatedAt: Value(DateTime.now()),
         ),
       );
