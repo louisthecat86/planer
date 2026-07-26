@@ -180,6 +180,40 @@ class BoardCell with _Auslastung {
   final List<Zusatzzeit> zusatzzeiten;
 }
 
+/// Ein Schritt einer Auftragskette, der AUSSERHALB der aktuell gezeigten
+/// Woche liegt — Basis für die Kettenmarker.
+class KettenSchritt {
+  const KettenSchritt({
+    required this.abteilung,
+    required this.datum,
+    required this.kw,
+  });
+
+  final Abteilung abteilung;
+
+  /// Tag des Schritts, 00:00 Uhr.
+  final DateTime datum;
+
+  /// ISO-Kalenderwoche des Schritts.
+  final int kw;
+}
+
+/// Kettenmarker für eine Auftragskette: die nächstgelegene Vor- bzw.
+/// Folgestufe, die außerhalb der aktuell gezeigten Woche liegt. Damit man
+/// bei wochenübergreifenden Produktionen (z.B. KW29 schneiden → KW30
+/// Bratstraße) den Zusammenhang nicht verliert.
+class KettenNachbar {
+  const KettenNachbar({this.vorher, this.nachher});
+
+  /// Letzter Schritt der Kette VOR dieser Woche (null = keiner).
+  final KettenSchritt? vorher;
+
+  /// Erster Schritt der Kette NACH dieser Woche (null = keiner).
+  final KettenSchritt? nachher;
+
+  bool get hatNachbarn => vorher != null || nachher != null;
+}
+
 /// Das komplette Wochenboard (Abteilungen × Mo–Fr).
 class WeekBoard {
   WeekBoard({
@@ -187,6 +221,7 @@ class WeekBoard {
     required this.tage,
     required this.spuren,
     required this.cells,
+    this.kettenNachbarn = const {},
   });
 
   /// Montag der Woche, 00:00 Uhr.
@@ -200,6 +235,12 @@ class WeekBoard {
 
   /// Zellen, indiziert über [_cellKey].
   final Map<String, BoardCell> cells;
+
+  /// Kettenmarker je kettenId: Vor-/Folgestufen außerhalb dieser Woche.
+  final Map<String, KettenNachbar> kettenNachbarn;
+
+  /// Kettenmarker für einen Task (über seine [BoardTask.kettenId]).
+  KettenNachbar? nachbarnFuer(BoardTask task) => kettenNachbarn[task.kettenId];
 
   /// Zelle für eine Spur an einem Tag.
   BoardCell cellFor(BoardSpur spur, DateTime tag) {
@@ -292,6 +333,16 @@ final weekBoardProvider =
   final wochenEndeExkl = wochenStart.add(const Duration(days: 7));
 
   final alleTasks = await _ladeBoardTasks(db, wochenStart, wochenEndeExkl);
+
+  // Kettenmarker: Vor-/Folgestufen derselben Auftragskette, die außerhalb
+  // dieser Woche liegen (wochenübergreifende Produktionen).
+  final kettenNachbarn = await _ladeKettenNachbarn(
+    db,
+    wochenStart: wochenStart,
+    wochenEndeExkl: wochenEndeExkl,
+    kettenIds: alleTasks.map((t) => t.kettenId).toSet(),
+  );
+
   final planungsAnlagen = await _ladePlanungsAnlagen(db);
   final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
@@ -344,6 +395,7 @@ final weekBoardProvider =
     tage: tage,
     spuren: spuren,
     cells: cells,
+    kettenNachbarn: kettenNachbarn,
   );
 });
 
@@ -530,6 +582,79 @@ Abteilung? _abteilungOf(String dbValue) {
   } catch (_) {
     return null;
   }
+}
+
+/// Sammelt je Auftragskette den nächstgelegenen Schritt VOR und NACH der
+/// aktuell gezeigten Woche. Lädt dazu alle Tasks der betroffenen Ketten —
+/// Wurzeln (`id ∈ kettenIds`) und Kinder (`parentTaskId ∈ kettenIds`) —
+/// auch außerhalb des Wochenfensters.
+Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
+  AppDatabase db, {
+  required DateTime wochenStart,
+  required DateTime wochenEndeExkl,
+  required Set<String> kettenIds,
+}) async {
+  if (kettenIds.isEmpty) return const {};
+
+  final rows = await (db.select(db.productionTasks)
+        ..where((t) => t.deletedAt.isNull())
+        ..where((t) => t.status.isNotIn(const ['storniert']))
+        ..where(
+          (t) => t.id.isIn(kettenIds) | t.parentTaskId.isIn(kettenIds),
+        ))
+      .get();
+
+  final vorher = <String, ({Abteilung abteilung, DateTime datum})>{};
+  final nachher = <String, ({Abteilung abteilung, DateTime datum})>{};
+  for (final t in rows) {
+    final abt = _abteilungOf(t.abteilung);
+    if (abt == null) continue;
+    final tag = DateTime(t.datum.year, t.datum.month, t.datum.day);
+    final ketten = t.parentTaskId ?? t.id;
+    if (tag.isBefore(wochenStart)) {
+      final cur = vorher[ketten];
+      if (cur == null || tag.isAfter(cur.datum)) {
+        vorher[ketten] = (abteilung: abt, datum: tag);
+      }
+    } else if (!tag.isBefore(wochenEndeExkl)) {
+      final cur = nachher[ketten];
+      if (cur == null || tag.isBefore(cur.datum)) {
+        nachher[ketten] = (abteilung: abt, datum: tag);
+      }
+    }
+  }
+
+  final result = <String, KettenNachbar>{};
+  for (final ketten in kettenIds) {
+    final v = vorher[ketten];
+    final na = nachher[ketten];
+    if (v == null && na == null) continue;
+    result[ketten] = KettenNachbar(
+      vorher: v == null
+          ? null
+          : KettenSchritt(
+              abteilung: v.abteilung,
+              datum: v.datum,
+              kw: _isoKw(v.datum),
+            ),
+      nachher: na == null
+          ? null
+          : KettenSchritt(
+              abteilung: na.abteilung,
+              datum: na.datum,
+              kw: _isoKw(na.datum),
+            ),
+    );
+  }
+  return result;
+}
+
+/// ISO-8601-Kalenderwoche (1..53) — über den Donnerstag derselben Woche.
+int _isoKw(DateTime date) {
+  final d = DateTime(date.year, date.month, date.day);
+  final donnerstag = d.add(Duration(days: 4 - d.weekday));
+  final jahresStart = DateTime(donnerstag.year, 1, 1);
+  return 1 + (donnerstag.difference(jahresStart).inDays ~/ 7);
 }
 
 /// Montag der Woche von [d], normalisiert auf 00:00 Uhr.

@@ -28,6 +28,8 @@ class WeekSnapshotArchiveScreen extends ConsumerStatefulWidget {
 class _WeekSnapshotArchiveScreenState
     extends ConsumerState<WeekSnapshotArchiveScreen> {
   bool _busy = false;
+  bool _kalender = true;
+  DateTime _monat = DateTime(DateTime.now().year, DateTime.now().month);
 
   Future<void> _archiviere() async {
     final sel = ref.read(selectedDateProvider);
@@ -39,7 +41,36 @@ class _WeekSnapshotArchiveScreenState
       helpText: 'Woche zum Archivieren wählen (beliebiger Tag der Woche)',
     );
     if (picked == null) return;
+    await _archiviereWoche(picked);
+  }
 
+  /// Klick auf eine leere Woche im Kalender: kurz nachfragen, dann archivieren.
+  Future<void> _archiviereWocheMitFrage(DateTime tagDerWoche) async {
+    final kw = isoKalenderwoche(montagDerWoche(tagDerWoche));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('KW $kw archivieren?'),
+        content: const Text(
+          'Der aktuelle Plan dieser Woche wird als Momentaufnahme '
+          'eingefroren und erscheint danach in der Historie.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Archivieren'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) await _archiviereWoche(tagDerWoche);
+  }
+
+  Future<void> _archiviereWoche(DateTime tagDerWoche) async {
     setState(() => _busy = true);
     try {
       final db = ref.read(databaseProvider);
@@ -51,7 +82,7 @@ class _WeekSnapshotArchiveScreenState
 
       await erstelleWochenSnapshot(
         db: db,
-        wochenStart: picked,
+        wochenStart: tagDerWoche,
         kapazitaeten: kapazitaeten,
       );
       ref.read(autoBackupTriggerProvider).fireDebounced(
@@ -60,7 +91,7 @@ class _WeekSnapshotArchiveScreenState
       ref.invalidate(weekSnapshotsProvider);
 
       if (mounted) {
-        final kw = isoKalenderwoche(montagDerWoche(picked));
+        final kw = isoKalenderwoche(montagDerWoche(tagDerWoche));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('KW $kw archiviert.')),
         );
@@ -130,21 +161,147 @@ class _WeekSnapshotArchiveScreenState
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Fehler: $e')),
         data: (snaps) {
-          if (snaps.isEmpty) {
-            return const _LeerHinweis();
-          }
-          return ListView.builder(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
-            itemCount: snaps.length,
-            itemBuilder: (context, i) => _SnapshotKarte(
-              snap: snaps[i],
-              onDelete: () => _loeschen(snaps[i]),
-            ),
+          return Column(
+            children: [
+              // Umschalter: Kalender oder Liste
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: SegmentedButton<bool>(
+                    segments: const [
+                      ButtonSegment(
+                        value: true,
+                        icon: Icon(Icons.calendar_month, size: 16),
+                        label: Text('Kalender'),
+                      ),
+                      ButtonSegment(
+                        value: false,
+                        icon: Icon(Icons.view_list, size: 16),
+                        label: Text('Liste'),
+                      ),
+                    ],
+                    selected: {_kalender},
+                    onSelectionChanged: (s) =>
+                        setState(() => _kalender = s.first),
+                    showSelectedIcon: false,
+                    style: const ButtonStyle(
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ),
+              Expanded(
+                child: _kalender
+                    ? _buildKalender(context, snaps)
+                    : (snaps.isEmpty
+                        ? const _LeerHinweis()
+                        : ListView.builder(
+                            padding:
+                                const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                            itemCount: snaps.length,
+                            itemBuilder: (context, i) => _SnapshotKarte(
+                              snap: snaps[i],
+                              onDelete: () => _loeschen(snaps[i]),
+                            ),
+                          )),
+              ),
+            ],
           );
         },
       ),
     );
   }
+
+  /// Kalender-Ansicht: Monat mit Wochenzeilen. Archivierte Wochen sind
+  /// hervorgehoben und öffnen per Klick ihre Auswertung; leere Wochen lassen
+  /// sich per Klick archivieren.
+  Widget _buildKalender(BuildContext context, List<WeekSnapshot> snaps) {
+    final theme = Theme.of(context);
+    final snapVonMontag = <String, WeekSnapshot>{
+      for (final s in snaps) _tagKey(s.wochenStart): s,
+    };
+
+    final ersterDesMonats = DateTime(_monat.year, _monat.month, 1);
+    final letzterDesMonats = DateTime(_monat.year, _monat.month + 1, 0);
+    var montag = montagDerWoche(ersterDesMonats);
+    final wochen = <DateTime>[];
+    while (!montag.isAfter(letzterDesMonats)) {
+      wochen.add(montag);
+      montag = montag.add(const Duration(days: 7));
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
+      children: [
+        // Monats-Navigation: < Monat Jahr >
+        Row(
+          children: [
+            IconButton(
+              tooltip: 'Vorheriger Monat',
+              onPressed: () => setState(
+                () => _monat = DateTime(_monat.year, _monat.month - 1),
+              ),
+              icon: const Icon(Icons.chevron_left),
+            ),
+            Expanded(
+              child: Text(
+                '${_monatsName(_monat.month)} ${_monat.year}',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Nächster Monat',
+              onPressed: () => setState(
+                () => _monat = DateTime(_monat.year, _monat.month + 1),
+              ),
+              icon: const Icon(Icons.chevron_right),
+            ),
+          ],
+        ),
+        // Wochentagskopf
+        Padding(
+          padding: const EdgeInsets.only(left: 46, top: 2, bottom: 4),
+          child: Row(
+            children: [
+              for (final t in const ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'])
+                Expanded(
+                  child: Text(
+                    t,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        for (final w in wochen)
+          _KalenderWoche(
+            montag: w,
+            anzeigeMonat: _monat.month,
+            snapshot: snapVonMontag[_tagKey(w)],
+            onOeffnen: (s) => context.pushNamed(
+              'wochenHistorieDetail',
+              pathParameters: {'snapshotId': s.id},
+            ),
+            onArchivieren:
+                _busy ? null : () => _archiviereWocheMitFrage(w),
+          ),
+      ],
+    );
+  }
+
+  static String _tagKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+
+  static String _monatsName(int m) => const [
+        'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
+        'August', 'September', 'Oktober', 'November', 'Dezember',
+      ][m - 1];
 }
 
 // ---------------------------------------------------------------------------
@@ -293,6 +450,186 @@ class _AbteilungsZeile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Eine Wochenzeile im Kalender: KW-Badge, sieben Tageszellen und eine
+/// Statuszeile. Archiviert = hervorgehoben und öffnet die Auswertung; leer =
+/// antippen archiviert die Woche.
+class _KalenderWoche extends StatelessWidget {
+  const _KalenderWoche({
+    required this.montag,
+    required this.anzeigeMonat,
+    required this.snapshot,
+    required this.onOeffnen,
+    required this.onArchivieren,
+  });
+
+  final DateTime montag;
+  final int anzeigeMonat;
+  final WeekSnapshot? snapshot;
+  final void Function(WeekSnapshot) onOeffnen;
+  final VoidCallback? onArchivieren;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final kw = isoKalenderwoche(montag);
+    final snap = snapshot;
+    final hatSnap = snap != null;
+    final heute = DateTime.now();
+    final daten = hatSnap ? dekodiereSnapshot(snap) : null;
+    final tage = [for (var i = 0; i < 7; i++) montag.add(Duration(days: i))];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Material(
+        color: hatSnap
+            ? colors.primaryContainer.withValues(alpha: 0.35)
+            : colors.surfaceContainerHighest.withValues(alpha: 0.20),
+        borderRadius: BorderRadius.circular(10),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: hatSnap ? () => onOeffnen(snap) : onArchivieren,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 40,
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  decoration: BoxDecoration(
+                    color: hatSnap
+                        ? colors.primary
+                        : colors.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        'KW',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: hatSnap
+                              ? colors.onPrimary
+                              : colors.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        '$kw',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color:
+                              hatSnap ? colors.onPrimary : colors.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          for (final tag in tage)
+                            Expanded(
+                              child: _KalenderTag(
+                                tag: tag,
+                                imMonat: tag.month == anzeigeMonat,
+                                istHeute: tag.year == heute.year &&
+                                    tag.month == heute.month &&
+                                    tag.day == heute.day,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      if (hatSnap)
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.check_circle,
+                              size: 13,
+                              color: colors.primary,
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                'archiviert · ${daten!.anzahlAuftraege} '
+                                'Aufträge · '
+                                '${Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten)} h '
+                                '· antippen zum Öffnen',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: colors.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        )
+                      else if (onArchivieren != null)
+                        Text(
+                          'antippen, um diese Woche zu archivieren',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Eine einzelne Tageszelle im Kalender.
+class _KalenderTag extends StatelessWidget {
+  const _KalenderTag({
+    required this.tag,
+    required this.imMonat,
+    required this.istHeute,
+  });
+
+  final DateTime tag;
+  final bool imMonat;
+  final bool istHeute;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 1),
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      decoration: istHeute
+          ? BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(6),
+            )
+          : null,
+      child: Text(
+        '${tag.day}',
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: istHeute ? FontWeight.w800 : FontWeight.w500,
+          color: imMonat
+              ? theme.colorScheme.onSurface
+              : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
+        ),
       ),
     );
   }
