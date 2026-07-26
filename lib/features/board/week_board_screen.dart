@@ -664,6 +664,7 @@ class _SpurZeile extends StatelessWidget {
           for (final tag in board.tage)
             Expanded(
               child: _TagesZelle(
+                board: board,
                 cell: board.cellFor(spur, tag),
                 kompakt: kompakt,
                 onTapTask: onTapTask,
@@ -817,12 +818,14 @@ class _SpurLabel extends StatelessWidget {
 
 class _TagesZelle extends ConsumerWidget {
   const _TagesZelle({
+    required this.board,
     required this.cell,
     required this.kompakt,
     required this.onTapTask,
     required this.onMoveHere,
   });
 
+  final WeekBoard board;
   final BoardCell cell;
   final bool kompakt;
   final void Function(BoardTask) onTapTask;
@@ -958,10 +961,23 @@ class _TagesZelle extends ConsumerWidget {
                     for (final task in cell.tasks)
                       Padding(
                         padding: EdgeInsets.only(bottom: kompakt ? 3 : 4),
-                        child: _AuftragsKarte(
-                          task: task,
-                          kompakt: kompakt,
-                          onTap: () => onTapTask(task),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _AuftragsKarte(
+                              task: task,
+                              kompakt: kompakt,
+                              onTap: () => onTapTask(task),
+                            ),
+                            if (board.nachbarnFuer(task) != null)
+                              _KettenMarker(
+                                nachbar: board.nachbarnFuer(task)!,
+                                onSprung: (datum) => ref
+                                    .read(selectedDateProvider.notifier)
+                                    .state = datum,
+                              ),
+                          ],
                         ),
                       ),
                   ],
@@ -1497,6 +1513,79 @@ Color _kettenFarbe(String kettenId, Brightness helligkeit) {
   return helligkeit == Brightness.dark
       ? farbe
       : Color.alphaBlend(Colors.black.withValues(alpha: 0.15), farbe);
+}
+
+/// Markiert an einer Auftragskarte, dass dieselbe Produktionskette Schritte
+/// in einer anderen Woche hat (wochenübergreifende Produktion). Antippen
+/// springt in die betreffende Woche.
+class _KettenMarker extends StatelessWidget {
+  const _KettenMarker({required this.nachbar, required this.onSprung});
+
+  final KettenNachbar nachbar;
+  final void Function(DateTime) onSprung;
+
+  @override
+  Widget build(BuildContext context) {
+    final v = nachbar.vorher;
+    final n = nachbar.nachher;
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 2,
+        children: [
+          if (v != null)
+            _chip(
+              context,
+              '◀ Vorstufe · KW${v.kw}',
+              'Vorstufe: ${v.abteilung.anzeigeName} in KW${v.kw} '
+                  '(${v.datum.day}.${v.datum.month}.) — antippen zum Springen',
+              () => onSprung(v.datum),
+            ),
+          if (n != null)
+            _chip(
+              context,
+              'Folgestufe · KW${n.kw} ▶',
+              'Folgestufe: ${n.abteilung.anzeigeName} in KW${n.kw} '
+                  '(${n.datum.day}.${n.datum.month}.) — antippen zum Springen',
+              () => onSprung(n.datum),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(
+    BuildContext context,
+    String text,
+    String tooltip,
+    VoidCallback onTap,
+  ) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(5),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _LeerHinweis extends StatelessWidget {
