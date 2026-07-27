@@ -11,6 +11,7 @@ import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/excel_export_service_v3.dart';
 import '../../core/services/excel_import_dispatcher.dart';
+import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../articles/article_detail_screen.dart';
 import '../articles/article_list_screen.dart';
 
@@ -166,6 +167,73 @@ class _DataManagementScreenState
   // ──────────────────────────────────────────────────────────────────────
   // EXCEL-EXPORT
   // ──────────────────────────────────────────────────────────────────────
+
+  // ── Maschinen-Katalog als eigene Excel ─────────────────────────────
+
+  Future<void> _katalogExport() async {
+    try {
+      _setBusy(true, msg: 'Katalog wird erstellt …');
+      final pfad = await MaschinenKatalogExcelService.exportiere(
+        ref.read(databaseProvider),
+      );
+      if (pfad == null) {
+        _setBusy(false);
+        return;
+      }
+      _setBusy(false, msg: 'Maschinen-Katalog gespeichert: $pfad');
+    } catch (e) {
+      _setBusy(false, msg: 'Katalog-Export fehlgeschlagen: $e',
+          color: Colors.red,);
+    }
+  }
+
+  Future<void> _katalogImport() async {
+    final picked = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+      withData: true,
+    );
+    if (picked == null) return;
+
+    final datei = picked.files.isNotEmpty ? picked.files.first : null;
+    var bytes = datei?.bytes;
+    if (bytes == null && datei?.path != null) {
+      try {
+        bytes = await File(datei!.path!).readAsBytes();
+      } catch (_) {
+        bytes = null;
+      }
+    }
+    if (bytes == null) {
+      _setBusy(false, msg: 'Die Datei ließ sich nicht lesen.',
+          color: Colors.red,);
+      return;
+    }
+
+    try {
+      _setBusy(true, msg: 'Katalog wird eingelesen …');
+      final res = await MaschinenKatalogExcelService.importiere(
+        ref.read(databaseProvider),
+        bytes,
+      );
+      ref.read(autoBackupTriggerProvider).fireDebounced(
+            reason: 'Maschinen-Katalog importiert',
+          );
+      setState(() {
+        _importFehler = [];
+        _importWarnungen = res.warnungen;
+      });
+      _setBusy(
+        false,
+        msg: 'Katalog eingelesen · ${res.anlagenGesamt} Anlagen '
+            '(${res.anlagenNeu} neu) · ${res.parameterGesamt} Parameter '
+            '(${res.parameterNeu} neu)',
+      );
+    } catch (e) {
+      _setBusy(false, msg: 'Katalog-Import fehlgeschlagen: $e',
+          color: Colors.red,);
+    }
+  }
 
   Future<void> _excelExport() async {
     try {
@@ -544,6 +612,33 @@ class _DataManagementScreenState
           const SizedBox(height: 20),
 
           // ── Sektion: Speicherort ─────────────────────────────────────
+          // Der Maschinen-Katalog lässt sich getrennt vom Gesamtbackup
+          // sichern und einspielen — praktisch, um ihn weiterzugeben oder
+          // auf einem zweiten Rechner zu übernehmen.
+          _Sektion(
+            icon: Icons.precision_manufacturing,
+            titel: 'Maschinen-Katalog (Excel)',
+            beschreibung:
+                'Alle Anlagen samt Abteilung, Kapazität und Parameter-'
+                'Steckbriefen als eigene Excel-Datei sichern — und ebenso '
+                'wieder einlesen. Der Import gleicht über den Anlagen-Namen '
+                'ab: Vorhandenes wird aktualisiert, Neues ergänzt, nichts '
+                'gelöscht.',
+            children: [
+              _ActionButton(
+                icon: Icons.save_alt,
+                label: 'Katalog als Excel exportieren',
+                onPressed: _busy ? null : _katalogExport,
+              ),
+              const SizedBox(height: 8),
+              _ActionButton(
+                icon: Icons.upload_file,
+                label: 'Katalog aus Excel einlesen',
+                onPressed: _busy ? null : _katalogImport,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
           _Sektion(
             icon: Icons.folder,
             titel: 'Speicherort',
