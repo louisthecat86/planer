@@ -9,6 +9,7 @@ import '../../core/constants/machines.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../bedarf/bedarf_screen.dart';
 import 'article_info_editor_dialog.dart';
 
 // ---------------------------------------------------------------------------
@@ -67,7 +68,10 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   bool _sortAsc = true;
   bool _nurNichtEingepflegt = false;
 
-  List<_ArticleInfo> _filtered(List<_ArticleInfo> all) {
+  List<_ArticleInfo> _filtered(
+    List<_ArticleInfo> all,
+    Map<String, double> bedarfKg,
+  ) {
     var list = all;
 
     // Suche
@@ -98,6 +102,25 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
           cmp = a.product.artikelnummer.compareTo(b.product.artikelnummer);
         case _SortField.schritte:
           cmp = a.steps.length.compareTo(b.steps.length);
+        case _SortField.bedarf:
+          // Aufsteigend heißt: wenig Bedarf zuerst. Ein Tipp auf dasselbe
+          // Feld dreht die Richtung — dann steht der größte Bedarf oben.
+          cmp = (bedarfKg[a.product.artikelnummer] ?? 0)
+              .compareTo(bedarfKg[b.product.artikelnummer] ?? 0);
+        case _SortField.pflegestatus:
+          // Offene Stubs zuerst, damit man sie abarbeiten kann.
+          cmp = (a.product.istEingepflegt ? 1 : 0)
+              .compareTo(b.product.istEingepflegt ? 1 : 0);
+        case _SortField.produktgruppe:
+          cmp = (a.product.produktgruppe ?? '~')
+              .compareTo(b.product.produktgruppe ?? '~');
+      }
+      // Gleichstand alphabetisch auflösen — sonst springen Zeilen bei
+      // jedem Neuaufbau umher.
+      if (cmp == 0) {
+        cmp = a.product.artikelbezeichnung
+            .compareTo(b.product.artikelbezeichnung);
+        return cmp;
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -250,6 +273,15 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   @override
   Widget build(BuildContext context) {
     final articlesAsync = ref.watch(articlesProvider);
+    // Offene Bedarfsmengen je Artikelnummer — Grundlage der Sortierung
+    // „Offener Bedarf". Fehlt der Bedarf, wird mit 0 sortiert.
+    final bedarfe = ref.watch(bedarfProvider).valueOrNull;
+    final bedarfKg = <String, double>{};
+    for (final b in bedarfe ?? const <BedarfInfo>[]) {
+      if (b.bedarf.manuellErledigt) continue;
+      bedarfKg[b.artikelNummer] =
+          (bedarfKg[b.artikelNummer] ?? 0) + b.offenKg;
+    }
 
     return Scaffold(
       floatingActionButton: FloatingActionButton.extended(
@@ -268,16 +300,20 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
         ],
       ),
       body: articlesAsync.when(
-        data: (articles) =>
-            articles.isEmpty ? const _EmptyState() : _buildBody(articles),
+        data: (articles) => articles.isEmpty
+            ? const _EmptyState()
+            : _buildBody(articles, bedarfKg),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Fehler: $e')),
       ),
     );
   }
 
-  Widget _buildBody(List<_ArticleInfo> all) {
-    final filtered = _filtered(all);
+  Widget _buildBody(
+    List<_ArticleInfo> all,
+    Map<String, double> bedarfKg,
+  ) {
+    final filtered = _filtered(all, bedarfKg);
 
     return Column(
       children: [
@@ -399,7 +435,10 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
 enum _SortField {
   bezeichnung('Bezeichnung'),
   artikelnr('Artikelnr'),
-  schritte('Schritte');
+  schritte('Schritte'),
+  bedarf('Offener Bedarf'),
+  pflegestatus('Pflegestatus'),
+  produktgruppe('Produktgruppe');
 
   const _SortField(this.label);
   final String label;

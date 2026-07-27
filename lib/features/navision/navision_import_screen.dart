@@ -72,6 +72,19 @@ class NavisionImportScreen extends ConsumerStatefulWidget {
       _NavisionImportScreenState();
 }
 
+/// Sortierkriterien der Navision-Liste.
+enum _NavSort {
+  bedarfAbst('Offener Bedarf ↓'),
+  bedarfAufst('Offener Bedarf ↑'),
+  nummer('Artikelnummer'),
+  bezeichnung('Bezeichnung A–Z'),
+  bestandAbst('Lagerbestand ↓'),
+  auftragAbst('Menge in Auftrag ↓');
+
+  const _NavSort(this.label);
+  final String label;
+}
+
 class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   final _suche = TextEditingController();
   String? _produktgruppe;
@@ -80,6 +93,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   String? _einheit;
   bool _nurBedarf = true;
   bool _nurBestand = false;
+  _NavSort _sort = _NavSort.bedarfAbst;
   bool _busy = false;
   final Set<String> _markiert = {};
 
@@ -132,7 +146,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     Map<String, double> faktoren,
   ) {
     final suchText = _suche.text.trim().toLowerCase();
-    return alle.where((a) {
+    final liste = alle.where((a) {
       if (_nurBedarf) {
         final netto = nettoOffenKg(a, imBedarfKg, faktoren);
         // netto == null → mangels Faktor nicht bestimmbar → sichtbar
@@ -158,6 +172,35 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           a.beschreibung.toLowerCase().contains(suchText) ||
           (a.beschreibung2 ?? '').toLowerCase().contains(suchText);
     }).toList();
+
+    // Sortierung. Beim Bedarf wird der NETTO-Wert genutzt (Navision minus
+    // was schon im Bedarf liegt) — das ist die Zahl, die tatsächlich
+    // Arbeit bedeutet. Fehlt der Umrechnungsfaktor, greift ersatzweise
+    // der reine Navision-Bedarf.
+    double netto(NavisionArtikel a) =>
+        nettoOffenKg(a, imBedarfKg, faktoren) ?? offenerBedarf(a);
+
+    switch (_sort) {
+      case _NavSort.bedarfAbst:
+        liste.sort((a, b) => netto(b).compareTo(netto(a)));
+      case _NavSort.bedarfAufst:
+        liste.sort((a, b) => netto(a).compareTo(netto(b)));
+      case _NavSort.nummer:
+        liste.sort(
+          (a, b) => a.nummer.toLowerCase().compareTo(b.nummer.toLowerCase()),
+        );
+      case _NavSort.bezeichnung:
+        liste.sort(
+          (a, b) => a.beschreibung
+              .toLowerCase()
+              .compareTo(b.beschreibung.toLowerCase()),
+        );
+      case _NavSort.bestandAbst:
+        liste.sort((a, b) => b.lagerbestand.compareTo(a.lagerbestand));
+      case _NavSort.auftragAbst:
+        liste.sort((a, b) => b.mengeInAuftrag.compareTo(a.mengeInAuftrag));
+    }
+    return liste;
   }
 
   Future<void> _import() async {
@@ -594,6 +637,28 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                 label: const Text('Nur mit Bestand'),
                 selected: _nurBestand,
                 onSelected: (v) => setState(() => _nurBestand = v),
+              ),
+              // Sortierung der Liste
+              SizedBox(
+                height: 38,
+                child: DropdownButtonFormField<_NavSort>(
+                  initialValue: _sort,
+                  isDense: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Sortierung',
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  ),
+                  style: const TextStyle(fontSize: 12.5),
+                  items: [
+                    for (final s in _NavSort.values)
+                      DropdownMenuItem(value: s, child: Text(s.label)),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _sort = v ?? _NavSort.bedarfAbst),
+                ),
               ),
               if (_produktgruppe != null ||
                   _kategorie != null ||

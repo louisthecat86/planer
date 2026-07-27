@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/providers/theme_mode_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/ui_scale_provider.dart';
+import '../../core/providers/database_provider.dart';
 
 /// Einstellungen — Sammelpunkt für alles, was nicht zum täglichen Planen
 /// gehört: Anzeigegröße und Stammdaten (Excel-Import/-Export, Backup,
@@ -22,33 +23,44 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
+          const _Abschnitt('Darstellung'),
           const _Anzeigemodus(),
+          const SizedBox(height: 8),
           const _AnzeigeGroesse(),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.folder_open_rounded,
-            color: const Color(0xFF00838F),
-            title: 'Stammdaten',
-            subtitle: 'Excel importieren & exportieren, Backup und '
-                'Wiederherstellung',
-            onTap: () => context.pushNamed('data'),
+          const SizedBox(height: 20),
+          const _Abschnitt('Verwaltung'),
+          const SizedBox(height: 6),
+          _KachelGrid(
+            kacheln: [
+              _Kachel(
+                icon: Icons.folder_open_rounded,
+                color: const Color(0xFF00838F),
+                title: 'Stammdaten',
+                subtitle: 'Excel importieren & exportieren, Backup & '
+                    'Wiederherstellung',
+                onTap: () => context.pushNamed('data'),
+              ),
+              _Kachel(
+                icon: Icons.precision_manufacturing_rounded,
+                color: const Color(0xFF00695C),
+                title: 'Maschinen-Katalog',
+                subtitle: 'Anlagen anlegen & Parameter-Steckbriefe pflegen',
+                onTap: () => context.pushNamed('maschinen'),
+              ),
+              _Kachel(
+                icon: Icons.rule_rounded,
+                color: const Color(0xFF6D4C41),
+                title: 'Maschinen-Grenzen',
+                subtitle: 'Plausible Wertebereiche je Anlage — blockt '
+                    'Tippfehler',
+                onTap: () => context.pushNamed('grenzen'),
+              ),
+            ],
           ),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.precision_manufacturing_rounded,
-            color: const Color(0xFF00695C),
-            title: 'Maschinen-Katalog',
-            subtitle: 'Anlagen anlegen & Parameter-Steckbriefe pflegen',
-            onTap: () => context.pushNamed('maschinen'),
-          ),
-          const SizedBox(height: 8),
-          _SettingsTile(
-            icon: Icons.rule_rounded,
-            color: const Color(0xFF6D4C41),
-            title: 'Maschinen-Grenzen',
-            subtitle: 'Plausible Wertebereiche je Anlage — blockt Tippfehler',
-            onTap: () => context.pushNamed('grenzen'),
-          ),
+          const SizedBox(height: 20),
+          const _Abschnitt('Gefahrenzone'),
+          const SizedBox(height: 6),
+          const _GefahrenZone(),
           const SizedBox(height: 24),
           Center(
             child: Text(
@@ -65,8 +77,57 @@ class SettingsScreen extends ConsumerWidget {
   }
 }
 
-class _SettingsTile extends StatelessWidget {
-  const _SettingsTile({
+/// Kleiner Abschnitts-Titel zwischen den Karten-Gruppen.
+class _Abschnitt extends StatelessWidget {
+  const _Abschnitt(this.titel);
+
+  final String titel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
+      child: Text(
+        titel.toUpperCase(),
+        style: theme.textTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.6,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+}
+
+/// Responsives Kachel-Raster (1–3 Spalten je nach Breite).
+class _KachelGrid extends StatelessWidget {
+  const _KachelGrid({required this.kacheln});
+
+  final List<Widget> kacheln;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final spalten = c.maxWidth >= 720 ? 3 : (c.maxWidth >= 460 ? 2 : 1);
+        const spacing = 10.0;
+        final breite = (c.maxWidth - spacing * (spalten - 1)) / spalten;
+        return Wrap(
+          spacing: spacing,
+          runSpacing: spacing,
+          children: [
+            for (final k in kacheln) SizedBox(width: breite, child: k),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Eine Navigations-Kachel (Icon oben, Titel, kurze Beschreibung).
+class _Kachel extends StatelessWidget {
+  const _Kachel({
     required this.icon,
     required this.color,
     required this.title,
@@ -82,27 +143,279 @@ class _SettingsTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Card(
       clipBehavior: Clip.antiAlias,
-      child: ListTile(
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: color),
-        ),
-        title: Text(
-          title,
-          style: const TextStyle(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(subtitle),
-        trailing: const Icon(Icons.chevron_right),
+      margin: EdgeInsets.zero,
+      child: InkWell(
         onTap: onTap,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: 26),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 15,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+}
+
+/// „Gefahrenzone": kompletter App-Reset. Löscht ALLE Daten aus der lokalen
+/// SQLite-Datenbank. Backup-Dateien auf der Platte bleiben unberührt.
+class _GefahrenZone extends ConsumerStatefulWidget {
+  const _GefahrenZone();
+
+  @override
+  ConsumerState<_GefahrenZone> createState() => _GefahrenZoneState();
+}
+
+class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
+  bool _busy = false;
+
+  Future<void> _reset() async {
+    final theme = Theme.of(context);
+    // 1. Warnung
+    final weiter = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(
+          Icons.warning_amber_rounded,
+          color: theme.colorScheme.error,
+        ),
+        title: const Text('App komplett zurücksetzen?'),
+        content: const Text(
+          'Dabei werden ALLE Daten unwiderruflich gelöscht: Artikel, '
+          'Schritte, Anlagen, Bedarf, Planung, Historie und Einstellungen.\n\n'
+          'Bereits erstellte Backup-Dateien bleiben erhalten — daraus '
+          'könntest du später wiederherstellen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: theme.colorScheme.error,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Weiter'),
+          ),
+        ],
+      ),
+    );
+    if (weiter != true) return;
+
+    // 2. Tippen zum Bestätigen
+    if (!mounted) return;
+    final bestaetigt = await showDialog<bool>(
+      context: context,
+      builder: (_) => const _ResetBestaetigungDialog(),
+    );
+    if (bestaetigt != true) return;
+
+    // 3. Datenbank leeren
+    setState(() => _busy = true);
+    try {
+      final db = ref.read(databaseProvider);
+      // Foreign Keys AUSSERHALB der Transaktion abschalten, damit die
+      // Löschreihenfolge egal ist (sonst FOREIGN KEY constraint failed).
+      await db.customStatement('PRAGMA foreign_keys = OFF');
+      await db.transaction(() async {
+        for (final tabelle in db.allTables) {
+          await db.delete(tabelle).go();
+        }
+      });
+      await db.customStatement('PRAGMA foreign_keys = ON');
+
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(Icons.check_circle, color: Color(0xFF2E7D32)),
+          title: const Text('Zurückgesetzt'),
+          content: const Text(
+            'Alle Daten wurden gelöscht. Bitte starte die App einmal neu, '
+            'damit überall der leere Stand angezeigt wird.',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Verstanden'),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Zurücksetzen fehlgeschlagen: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final error = theme.colorScheme.error;
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      color: error.withValues(alpha: 0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: error.withValues(alpha: 0.4)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: error.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.delete_forever_rounded, color: error),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'App zurücksetzen',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      Text(
+                        'Löscht alle Daten der App (SQLite). Backup-Dateien '
+                        'bleiben erhalten.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                style: FilledButton.styleFrom(backgroundColor: error),
+                onPressed: _busy ? null : _reset,
+                icon: _busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(Icons.delete_forever_rounded),
+                label: Text(_busy ? 'Wird gelöscht …' : 'App zurücksetzen'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Zweite Sicherheitsstufe: der Nutzer muss „LÖSCHEN" eintippen.
+class _ResetBestaetigungDialog extends StatefulWidget {
+  const _ResetBestaetigungDialog();
+
+  @override
+  State<_ResetBestaetigungDialog> createState() =>
+      _ResetBestaetigungDialogState();
+}
+
+class _ResetBestaetigungDialogState extends State<_ResetBestaetigungDialog> {
+  final _ctrl = TextEditingController();
+  static const _wort = 'LÖSCHEN';
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final passt = _ctrl.text.trim().toUpperCase() == _wort;
+    return AlertDialog(
+      title: const Text('Wirklich löschen?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Tippe zur Bestätigung das Wort „LÖSCHEN" ein.'),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              hintText: 'LÖSCHEN',
+              border: OutlineInputBorder(),
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) {
+              if (passt) Navigator.of(context).pop(true);
+            },
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          style: FilledButton.styleFrom(
+            backgroundColor: theme.colorScheme.error,
+          ),
+          onPressed: passt ? () => Navigator.of(context).pop(true) : null,
+          child: const Text('Endgültig löschen'),
+        ),
+      ],
     );
   }
 }

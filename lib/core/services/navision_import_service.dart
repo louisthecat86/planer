@@ -31,23 +31,70 @@ class NavisionImportService {
 
   final AppDatabase _db;
 
-  /// Erwartete Überschriften → Feldname. Kleingeschrieben und ohne
-  /// Sonderzeichen verglichen, damit „Nr." und „Nr" beide passen.
-  static const Map<String, String> _spalten = {
-    'lagerbestand': 'lagerbestand',
-    'nummer2': 'nummer2',
-    'nr': 'nummer',
-    'beschreibung': 'beschreibung',
-    'beschreibung2': 'beschreibung2',
-    'suchbegriff': 'suchbegriff',
-    'plucode': 'pluCode',
-    'fertstuecklistennr': 'stuecklistenNr',
-    'basiseinheitencode': 'basiseinheit',
-    'mengeinfa': 'mengeInFa',
-    'mengeinauftrag': 'mengeInAuftrag',
-    'produktbuchungsgruppe': 'produktbuchungsgruppe',
-    'artikelkategoriencode': 'artikelkategorie',
-    'produktgruppencode': 'produktgruppe',
+  /// Feldname → mögliche Überschriften in der Navision-Ausgabe.
+  ///
+  /// Bewusst mit Aliasen: Jeder Mitarbeiter hat in Navision seine eigene
+  /// Spaltenansicht — Spalten können fehlen, zusätzlich da sein, anders
+  /// heißen oder in anderer Reihenfolge stehen. Verglichen wird
+  /// normalisiert (klein, ohne Punkte/Leerzeichen, Umlaute aufgelöst),
+  /// damit „Nr.", „Nr" und „Artikelnr." alle passen.
+  static const Map<String, List<String>> _spaltenAliase = {
+    'nummer': ['nr', 'nummer', 'artikelnr', 'artikelnummer', 'artikel'],
+    'nummer2': ['nummer2', 'nr2'],
+    'beschreibung': [
+      'beschreibung',
+      'beschreibung1',
+      'bezeichnung',
+      'artikelbeschreibung',
+      'artikelbezeichnung',
+      'name',
+    ],
+    'beschreibung2': ['beschreibung2', 'bezeichnung2'],
+    'suchbegriff': ['suchbegriff'],
+    'pluCode': ['plucode', 'plu'],
+    'stuecklistenNr': [
+      'fertstuecklistennr',
+      'stuecklistennr',
+      'fertigungsstuecklistennr',
+      'stueckliste',
+    ],
+    'basiseinheit': [
+      'basiseinheitencode',
+      'basiseinheit',
+      'einheitencode',
+      'einheit',
+      'masseinheit',
+    ],
+    'lagerbestand': ['lagerbestand', 'bestand', 'lagerbestandmenge'],
+    'mengeInFa': [
+      'mengeinfa',
+      'mengeinfertigungsauftrag',
+      'mengeinfertigungsauftragen',
+    ],
+    'mengeInAuftrag': [
+      'mengeinauftrag',
+      'mengeinauftragen',
+      'mengeinverkaufsauftrag',
+      'mengeinverkaufsauftragen',
+    ],
+    'produktbuchungsgruppe': ['produktbuchungsgruppe', 'produktbuchungsgr'],
+    'artikelkategorie': ['artikelkategoriencode', 'artikelkategorie'],
+    'produktgruppe': ['produktgruppencode', 'produktgruppe'],
+  };
+
+  /// Umgekehrte Zuordnung Überschrift → Feldname (einmal aufgebaut).
+  static final Map<String, String> _feldVonUeberschrift = {
+    for (final e in _spaltenAliase.entries)
+      for (final alias in e.value) alias: e.key,
+  };
+
+  /// Klartextnamen für Meldungen.
+  static const Map<String, String> _feldNamen = {
+    'nummer': 'Nr.',
+    'beschreibung': 'Beschreibung',
+    'basiseinheit': 'Basiseinheitencode',
+    'lagerbestand': 'Lagerbestand',
+    'mengeInAuftrag': 'Menge in Auftrag',
   };
 
   static String _norm(String s) => s
@@ -130,41 +177,72 @@ class NavisionImportService {
       '[NAV] Blatt „$sheetName" · ${tabelle.rows.length} Zeilen',
     );
 
-    // Kopfzeile suchen: die Zeile, in der „Nr." und „Beschreibung" stehen.
+    // Kopfzeile suchen — nicht über feste Namen, sondern über die Zeile mit
+    // den MEISTEN erkannten Spalten. Dadurch ist es egal, welche Spalten der
+    // jeweilige Navision-Nutzer ein- oder ausgeblendet hat, solange die
+    // Artikelnummer dabei ist. Es werden mehr Zeilen geprüft als früher,
+    // weil manche Ansichten zusätzliche Titelzeilen voranstellen.
     int? kopfZeile;
-    for (var r = 0; r < tabelle.rows.length && r < 20; r++) {
-      final werte = tabelle.rows[r].map((c) => _norm(_text(c) ?? '')).toList();
-      if (werte.contains('nr') && werte.contains('beschreibung')) {
+    Map<String, int> spalteVon = {};
+    var besteTreffer = 0;
+    final maxPruefen =
+        tabelle.rows.length < 40 ? tabelle.rows.length : 40;
+    for (var r = 0; r < maxPruefen; r++) {
+      final zeile = tabelle.rows[r];
+      final treffer = <String, int>{};
+      for (var c = 0; c < zeile.length; c++) {
+        final feld = _feldVonUeberschrift[_norm(_text(zeile[c]) ?? '')];
+        // Erste Fundstelle gewinnt — doppelte Überschriften kippen die
+        // Zuordnung damit nicht.
+        if (feld != null && !treffer.containsKey(feld)) treffer[feld] = c;
+      }
+      // Ohne Artikelnummer ist eine Zeile als Kopfzeile wertlos.
+      if (!treffer.containsKey('nummer')) continue;
+      if (treffer.length > besteTreffer) {
+        besteTreffer = treffer.length;
         kopfZeile = r;
-        break;
+        spalteVon = treffer;
       }
     }
+
     if (kopfZeile == null) {
+      // Zur Fehlersuche: zeigen, was in den ersten Zeilen überhaupt stand.
+      final gefunden = <String>[];
+      for (var r = 0; r < maxPruefen && gefunden.length < 15; r++) {
+        for (final c in tabelle.rows[r]) {
+          final t = _text(c);
+          if (t != null && t.isNotEmpty) gefunden.add(t);
+          if (gefunden.length >= 15) break;
+        }
+      }
       throw Exception(
-        'Kopfzeile nicht gefunden — erwartet werden die Spalten '
-        '„Nr." und „Beschreibung".',
+        'Keine Kopfzeile mit einer Artikelnummer-Spalte gefunden. Erwartet '
+        'wird eine Spalte „Nr." (auch „Artikelnr." o.ä.). '
+        'Gefundene Überschriften: ${gefunden.join(' | ')}',
       );
     }
 
-    // Spaltenzuordnung aufbauen.
-    final spalteVon = <String, int>{};
-    final kopf = tabelle.rows[kopfZeile];
-    for (var c = 0; c < kopf.length; c++) {
-      final feld = _spalten[_norm(_text(kopf[c]) ?? '')];
-      if (feld != null) spalteVon[feld] = c;
-    }
     debugPrint(
       '[NAV] Kopfzeile in Zeile ${kopfZeile + 1} · '
-      'erkannte Spalten: ${spalteVon.keys.join(', ')}',
+      '${spalteVon.length} Spalten erkannt: ${spalteVon.keys.join(', ')}',
     );
-    if (!spalteVon.containsKey('nummer')) {
-      throw Exception('Spalte „Nr." fehlt.');
-    }
-    for (final pflicht in ['mengeInAuftrag', 'lagerbestand']) {
-      if (!spalteVon.containsKey(pflicht)) {
+
+    // Ab hier bricht NICHTS mehr ab: Fehlende Spalten werden gemeldet, der
+    // Import läuft mit dem durch, was die Datei hergibt. Die betroffenen
+    // Felder bleiben leer bzw. 0.
+    for (final feld in ['beschreibung', 'basiseinheit']) {
+      if (!spalteVon.containsKey(feld)) {
         warnungen.add(
-          'Spalte für „$pflicht" nicht gefunden — Bedarfsrechnung '
-          'ist dadurch unvollständig.',
+          'Spalte „${_feldNamen[feld] ?? feld}" fehlt in dieser Ansicht — '
+          'das Feld bleibt leer.',
+        );
+      }
+    }
+    for (final feld in ['mengeInAuftrag', 'lagerbestand']) {
+      if (!spalteVon.containsKey(feld)) {
+        warnungen.add(
+          'Spalte „${_feldNamen[feld] ?? feld}" fehlt — ohne sie lässt sich '
+          'der Bedarf nicht berechnen. In Navision bitte einblenden.',
         );
       }
     }
