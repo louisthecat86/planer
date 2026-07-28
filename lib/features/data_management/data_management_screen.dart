@@ -47,6 +47,9 @@ class _DataManagementScreenState
   String? _datenbankPfad;
   String? _backupPfad;
 
+  /// Selbst gewählter Backup-Ordner (null = Standard).
+  String? _eigenerOrdner;
+
   // ── Backup-Liste ───────────────────────────────────────────────────
   List<BackupInfo> _backups = [];
   bool _backupsGeladen = false;
@@ -58,6 +61,8 @@ class _DataManagementScreenState
   }
 
   Future<void> _ladeUebersicht() async {
+    final eigener = await BackupService.getEigenerBackupOrdner();
+    if (mounted) setState(() => _eigenerOrdner = eigener);
     try {
       final dbDir = await BackupService.getDatabaseDirectoryPath();
       final bDir = await BackupService.getBackupDirectoryPath();
@@ -167,6 +172,29 @@ class _DataManagementScreenState
   // ──────────────────────────────────────────────────────────────────────
   // EXCEL-EXPORT
   // ──────────────────────────────────────────────────────────────────────
+
+  // ── Backup-Ordner festlegen ────────────────────────────────────────
+
+  Future<void> _backupOrdnerWaehlen() async {
+    final ordner = await FilePicker.getDirectoryPath(
+      dialogTitle: 'Ordner für Backups wählen',
+    );
+    if (ordner == null || ordner.trim().isEmpty) return;
+    try {
+      await BackupService.setzeEigenenBackupOrdner(ordner);
+      await _ladeUebersicht();
+      _setBusy(false, msg: 'Backups werden ab jetzt hier abgelegt: $ordner');
+    } catch (e) {
+      _setBusy(false, msg: 'Ordner konnte nicht gesetzt werden: $e',
+          color: Colors.red,);
+    }
+  }
+
+  Future<void> _backupOrdnerZuruecksetzen() async {
+    await BackupService.setzeEigenenBackupOrdner(null);
+    await _ladeUebersicht();
+    _setBusy(false, msg: 'Standard-Ordner wieder aktiv.');
+  }
 
   // ── Maschinen-Katalog als eigene Excel ─────────────────────────────
 
@@ -494,68 +522,52 @@ class _DataManagementScreenState
             const SizedBox(height: 20),
           ],
 
-          // ── Sektion: Excel ───────────────────────────────────────────
-          _Sektion(
-            icon: Icons.table_chart,
-            titel: 'Excel-Vorlage',
-            beschreibung:
-                'Importiere eine v3-Excel-Vorlage oder exportiere die '
-                'aktuellen Daten in deine Vorlage.',
+          // ── Kategorien: je Bereich eine Kachel mit Import/Export ────
+          _KategorieGrid(
             children: [
-              _ActionButton(
-                icon: Icons.upload_file,
-                label: 'Excel-Datei importieren',
-                onPressed: _busy ? null : _excelImport,
+              _KategorieKachel(
+                icon: Icons.inventory_2,
+                titel: 'Artikel & Prozesse',
+                beschreibung:
+                    'Artikel, Schritte und Parameter als v3-Excel-Vorlage.',
+                onExport: _busy ? null : _excelExport,
+                onImport: _busy ? null : _excelImport,
               ),
-              const SizedBox(height: 8),
-              _ActionButton(
-                icon: Icons.save_alt,
-                label: 'Excel exportieren',
-                onPressed: _busy ? null : _excelExport,
+              _KategorieKachel(
+                icon: Icons.precision_manufacturing,
+                titel: 'Maschinen-Katalog',
+                beschreibung:
+                    'Anlagen, Abteilung, Kapazität und Parameter-Steckbriefe '
+                    'als Excel. Der Import gleicht über den Anlagen-Namen ab.',
+                onExport: _busy ? null : _katalogExport,
+                onImport: _busy ? null : _katalogImport,
+              ),
+              _KategorieKachel(
+                icon: Icons.cloud_upload,
+                titel: 'Komplett-Backup',
+                beschreibung:
+                    'Der gesamte Datenstand als JSON. Beim Wiederherstellen '
+                    'werden alle aktuellen Daten überschrieben.',
+                exportLabel: 'Backup speichern',
+                importLabel: 'Wiederherstellen',
+                onExport: _busy ? null : _backupErstellenManuell,
+                onImport: _busy ? null : _backupAusDateiWaehlen,
+                zusatzIcon: Icons.bolt,
+                zusatzTooltip: 'Schnell-Backup in den Backup-Ordner',
+                onZusatz: _busy ? null : _backupErstellenAuto,
               ),
             ],
           ),
           const SizedBox(height: 20),
 
-          // ── Sektion: Backup erstellen ────────────────────────────────
-          _Sektion(
-            icon: Icons.backup,
-            titel: 'Backup',
-            beschreibung:
-                'Sichere die kompletten App-Daten (Artikel, Schritte, '
-                'Anlagen, Pläne) als JSON-Datei. Ein Backup enthält den '
-                'gesamten Datenstand und kann jederzeit wiederhergestellt '
-                'werden.',
-            children: [
-              _ActionButton(
-                icon: Icons.bolt,
-                label: 'Schnell-Backup im App-Ordner',
-                onPressed: _busy ? null : _backupErstellenAuto,
-              ),
-              const SizedBox(height: 8),
-              _ActionButton(
-                icon: Icons.save_as,
-                label: 'Backup an gewähltem Ort speichern',
-                onPressed: _busy ? null : _backupErstellenManuell,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // ── Sektion: Backup wiederherstellen ─────────────────────────
+          // ── Vorhandene Backups ───────────────────────────────────────
           _Sektion(
             icon: Icons.restore,
-            titel: 'Backup wiederherstellen',
+            titel: 'Vorhandene Backups',
             beschreibung:
-                'Stelle einen früheren Datenstand wieder her. Achtung: '
-                'Alle aktuellen Daten werden überschrieben.',
+                'Früher gesicherte Stände — zum Wiederherstellen oder '
+                'Löschen ausklappen.',
             children: [
-              _ActionButton(
-                icon: Icons.folder_open,
-                label: 'Backup-Datei auswählen …',
-                onPressed: _busy ? null : _backupAusDateiWaehlen,
-              ),
-              const SizedBox(height: 12),
               if (!_backupsGeladen)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 12),
@@ -611,34 +623,7 @@ class _DataManagementScreenState
           ),
           const SizedBox(height: 20),
 
-          // ── Sektion: Speicherort ─────────────────────────────────────
-          // Der Maschinen-Katalog lässt sich getrennt vom Gesamtbackup
-          // sichern und einspielen — praktisch, um ihn weiterzugeben oder
-          // auf einem zweiten Rechner zu übernehmen.
-          _Sektion(
-            icon: Icons.precision_manufacturing,
-            titel: 'Maschinen-Katalog (Excel)',
-            beschreibung:
-                'Alle Anlagen samt Abteilung, Kapazität und Parameter-'
-                'Steckbriefen als eigene Excel-Datei sichern — und ebenso '
-                'wieder einlesen. Der Import gleicht über den Anlagen-Namen '
-                'ab: Vorhandenes wird aktualisiert, Neues ergänzt, nichts '
-                'gelöscht.',
-            children: [
-              _ActionButton(
-                icon: Icons.save_alt,
-                label: 'Katalog als Excel exportieren',
-                onPressed: _busy ? null : _katalogExport,
-              ),
-              const SizedBox(height: 8),
-              _ActionButton(
-                icon: Icons.upload_file,
-                label: 'Katalog aus Excel einlesen',
-                onPressed: _busy ? null : _katalogImport,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 4),
           _Sektion(
             icon: Icons.folder,
             titel: 'Speicherort',
@@ -655,11 +640,31 @@ class _DataManagementScreenState
               ),
               const SizedBox(height: 8),
               _PfadZeile(
-                label: 'Backup-Ordner',
+                label: _eigenerOrdner == null
+                    ? 'Backup-Ordner (Standard)'
+                    : 'Backup-Ordner (selbst gewählt)',
                 pfad: _backupPfad,
                 onCopy: _backupPfad != null
                     ? () => _kopiereInZwischenablage(_backupPfad!)
                     : null,
+              ),
+              const SizedBox(height: 12),
+              _KachelReihe(
+                children: [
+                  _ActionKachel(
+                    icon: Icons.drive_folder_upload,
+                    label: 'Backup-Ordner wählen …',
+                    hinweis: 'z.B. Netzlaufwerk oder USB-Stick',
+                    onPressed: _busy ? null : _backupOrdnerWaehlen,
+                  ),
+                  if (_eigenerOrdner != null)
+                    _ActionKachel(
+                      icon: Icons.settings_backup_restore,
+                      label: 'Standard-Ordner',
+                      hinweis: 'Eigene Wahl zurücksetzen',
+                      onPressed: _busy ? null : _backupOrdnerZuruecksetzen,
+                    ),
+                ],
               ),
             ],
           ),
@@ -858,26 +863,271 @@ class _Sektion extends StatelessWidget {
 // Aktion-Button
 // ──────────────────────────────────────────────────────────────────────────
 
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({
+/// Raster der Kategorie-Kacheln (1–3 Spalten je nach Breite).
+class _KategorieGrid extends StatelessWidget {
+  const _KategorieGrid({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final spalten = c.maxWidth >= 900 ? 3 : (c.maxWidth >= 560 ? 2 : 1);
+        const abstand = 12.0;
+        final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
+        return Wrap(
+          spacing: abstand,
+          runSpacing: abstand,
+          children: [
+            for (final k in children) SizedBox(width: breite, child: k),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Eine Datenkategorie als Kachel: Titel, kurze Erklärung und unten zwei
+/// kleine Knöpfe für Export und Import. Dadurch steht je Bereich EINE
+/// Kachel statt drei bildschirmbreiter Abschnitte.
+class _KategorieKachel extends StatelessWidget {
+  const _KategorieKachel({
+    required this.icon,
+    required this.titel,
+    required this.beschreibung,
+    required this.onExport,
+    required this.onImport,
+    this.exportLabel = 'Exportieren',
+    this.importLabel = 'Importieren',
+    this.zusatzIcon,
+    this.zusatzTooltip,
+    this.onZusatz,
+  });
+
+  final IconData icon;
+  final String titel;
+  final String beschreibung;
+  final String exportLabel;
+  final String importLabel;
+  final VoidCallback? onExport;
+  final VoidCallback? onImport;
+
+  /// Optionale dritte Aktion (z.B. Schnell-Backup) als reines Icon.
+  final IconData? zusatzIcon;
+  final String? zusatzTooltip;
+  final VoidCallback? onZusatz;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 20,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    titel,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                if (zusatzIcon != null)
+                  IconButton(
+                    icon: Icon(zusatzIcon, size: 19),
+                    tooltip: zusatzTooltip,
+                    visualDensity: VisualDensity.compact,
+                    onPressed: onZusatz,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              beschreibung,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.3,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onExport,
+                    icon: const Icon(Icons.file_upload_outlined, size: 17),
+                    label: Text(
+                      exportLabel,
+                      style: const TextStyle(fontSize: 12.5),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FilledButton.tonalIcon(
+                    onPressed: onImport,
+                    icon: const Icon(Icons.file_download_outlined, size: 17),
+                    label: Text(
+                      importLabel,
+                      style: const TextStyle(fontSize: 12.5),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Responsives Kachel-Raster: 1–3 Spalten je nach Breite. Ersetzt die
+/// früheren bildschirmbreiten Knöpfe — die wirkten bei fünf Abschnitten
+/// untereinander sehr unruhig.
+class _KachelReihe extends StatelessWidget {
+  const _KachelReihe({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        final spalten = c.maxWidth >= 780 ? 3 : (c.maxWidth >= 460 ? 2 : 1);
+        const abstand = 10.0;
+        final anzahl = children.length < spalten ? children.length : spalten;
+        final breite = anzahl <= 1
+            ? c.maxWidth
+            : (c.maxWidth - abstand * (anzahl - 1)) / anzahl;
+        return Wrap(
+          spacing: abstand,
+          runSpacing: abstand,
+          children: [
+            for (final k in children) SizedBox(width: breite, child: k),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// Eine Aktions-Kachel: Icon, Titel, kurze Erklärung darunter.
+class _ActionKachel extends StatelessWidget {
+  const _ActionKachel({
     required this.icon,
     required this.label,
     required this.onPressed,
+    this.hinweis,
   });
 
   final IconData icon;
   final String label;
+  final String? hinweis;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 44,
-      child: FilledButton.tonalIcon(
-        onPressed: onPressed,
-        icon: Icon(icon, size: 18),
-        label: Text(label),
+    final theme = Theme.of(context);
+    final aktiv = onPressed != null;
+    final farbe = aktiv
+        ? theme.colorScheme.primary
+        : theme.colorScheme.onSurface.withValues(alpha: 0.35);
+
+    return Card(
+      margin: EdgeInsets.zero,
+      clipBehavior: Clip.antiAlias,
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest
+          .withValues(alpha: aktiv ? 0.55 : 0.25),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      child: InkWell(
+        onTap: onPressed,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: farbe.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, size: 20, color: farbe),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13.5,
+                        color: aktiv ? null : farbe,
+                      ),
+                    ),
+                    if (hinweis != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        hinweis!,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          height: 1.25,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

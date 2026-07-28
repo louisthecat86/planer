@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
@@ -65,6 +66,14 @@ class MaschinenKatalogScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Maschinen-Katalog'),
         actions: [
+          // Die Grenzwerte gehören sachlich zum Katalog — sie beschreiben,
+          // welche Werte an einer Anlage plausibel sind. Deshalb hier statt
+          // als eigener Punkt in den Einstellungen.
+          IconButton(
+            icon: const Icon(Icons.rule_rounded),
+            tooltip: 'Grenzwerte je Anlage',
+            onPressed: () => context.pushNamed('grenzen'),
+          ),
           IconButton(
             icon: const Icon(Icons.playlist_add),
             tooltip: 'Standard-Maschinen ergänzen',

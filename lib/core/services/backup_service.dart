@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../database/database.dart';
 
@@ -36,8 +37,62 @@ class BackupService {
     '1.4',
   };
 
+  /// Schlüssel des selbst gewählten Backup-Ordners.
+  ///
+  /// Bewusst in den SharedPreferences und nicht in `app_settings`: Der Pfad
+  /// muss auch dann lesbar sein, wenn die Datenbank gerade zurückgesetzt
+  /// oder aus einem Backup ersetzt wird — und er ist gerätespezifisch, ein
+  /// Backup soll ihn also NICHT mit auf einen anderen Rechner tragen.
+  static const String _prefsKeyBackupDir = 'backup_verzeichnis';
+
+  /// Der selbst gewählte Backup-Ordner, oder null = Standard.
+  static Future<String?> getEigenerBackupOrdner() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final p = prefs.getString(_prefsKeyBackupDir);
+      return (p != null && p.trim().isNotEmpty) ? p.trim() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Legt den Backup-Ordner fest. null oder leer stellt den Standard
+  /// wieder her.
+  static Future<void> setzeEigenenBackupOrdner(String? pfad) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (pfad == null || pfad.trim().isEmpty) {
+      await prefs.remove(_prefsKeyBackupDir);
+    } else {
+      await prefs.setString(_prefsKeyBackupDir, pfad.trim());
+    }
+  }
+
+  /// Der Standard-Ordner (unabhängig von einer eigenen Wahl).
+  static Future<String> getStandardBackupOrdner() async {
+    final appDocDir = await getApplicationDocumentsDirectory();
+    return '${appDocDir.path}/$_backupDirName';
+  }
+
   /// Erstellt alle notwendigen Verzeichnisse.
+  ///
+  /// Ist ein eigener Ordner hinterlegt und erreichbar, wird dieser genutzt —
+  /// sonst fällt der Service still auf den Standard zurück. Damit gehen
+  /// Backups nie verloren, nur weil ein Netzlaufwerk gerade nicht da ist.
   static Future<Directory> _getBackupDir() async {
+    final eigener = await getEigenerBackupOrdner();
+    if (eigener != null) {
+      try {
+        final dir = Directory(eigener);
+        if (!await dir.exists()) {
+          await dir.create(recursive: true);
+        }
+        return dir;
+      } catch (_) {
+        // Nicht erreichbar (Netzlaufwerk getrennt, keine Rechte) →
+        // Standard nutzen.
+      }
+    }
+
     final appDocDir = await getApplicationDocumentsDirectory();
     final backupDir = Directory('${appDocDir.path}/$_backupDirName');
 

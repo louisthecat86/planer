@@ -23,37 +23,29 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(12),
         children: [
-          const _Abschnitt('Darstellung'),
-          const _Anzeigemodus(),
-          const SizedBox(height: 8),
-          const _AnzeigeGroesse(),
-          const SizedBox(height: 20),
-          const _Abschnitt('Verwaltung'),
-          const SizedBox(height: 6),
           _KachelGrid(
             kacheln: [
               _Kachel(
-                icon: Icons.folder_open_rounded,
+                icon: Icons.palette_rounded,
+                color: const Color(0xFF5E35B1),
+                title: 'Ansicht',
+                subtitle: 'Hell/Dunkel und Anzeigegröße der App',
+                onTap: () => _zeigeAnsichtSheet(context),
+              ),
+              _Kachel(
+                icon: Icons.swap_vert_rounded,
                 color: const Color(0xFF00838F),
-                title: 'Stammdaten',
-                subtitle: 'Excel importieren & exportieren, Backup & '
-                    'Wiederherstellung',
+                title: 'Import / Export',
+                subtitle: 'Artikel, Maschinen-Katalog und Backup sichern '
+                    'oder einlesen',
                 onTap: () => context.pushNamed('data'),
               ),
               _Kachel(
                 icon: Icons.precision_manufacturing_rounded,
                 color: const Color(0xFF00695C),
                 title: 'Maschinen-Katalog',
-                subtitle: 'Anlagen anlegen & Parameter-Steckbriefe pflegen',
+                subtitle: 'Anlagen, Parameter-Steckbriefe und Grenzwerte',
                 onTap: () => context.pushNamed('maschinen'),
-              ),
-              _Kachel(
-                icon: Icons.rule_rounded,
-                color: const Color(0xFF6D4C41),
-                title: 'Maschinen-Grenzen',
-                subtitle: 'Plausible Wertebereiche je Anlage — blockt '
-                    'Tippfehler',
-                onTap: () => context.pushNamed('grenzen'),
               ),
             ],
           ),
@@ -75,6 +67,52 @@ class SettingsScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Öffnet die Ansicht-Einstellungen (Hell/Dunkel + Größe) als Sheet.
+///
+/// Bewusst kein eigener Screen: Es sind zwei Schalter, die man kurz
+/// verstellt — dafür lohnt kein Seitenwechsel.
+void _zeigeAnsichtSheet(BuildContext context) {
+  final container = ProviderScope.containerOf(context);
+  showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    ),
+    builder: (ctx) => UncontrolledProviderScope(
+      container: container,
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          24 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Ansicht',
+                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+            ),
+            const _Anzeigemodus(),
+            const SizedBox(height: 8),
+            const _AnzeigeGroesse(),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 /// Kleiner Abschnitts-Titel zwischen den Karten-Gruppen.
