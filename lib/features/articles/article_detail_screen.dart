@@ -363,6 +363,183 @@ String _fmtDauer(double? minuten) => Zeit.lang(minuten);
 // Screen
 // ---------------------------------------------------------------------------
 
+/// Räumt Parameter auf, die für denselben Schritt doppelt existieren —
+/// einmal in der Gruppe der Anlage (aus der Excel importiert) und einmal in
+/// „MASCHINENEINSTELLUNGEN" (von der App angelegt, bevor der Abgleich
+/// namensbasiert wurde).
+///
+/// Behalten wird die Zeile in der Anlagen-Gruppe: Sie steht im Excel-Export
+/// an der richtigen Stelle. Ihr Wert wird — falls sie leer ist oder die
+/// andere Zeile neuer gepflegt wurde — aus der Dublette übernommen; die
+/// überzählige Zeile wird anschließend soft-deleted.
+Future<void> _bereinigeDoppelteParameter(
+  BuildContext context,
+  WidgetRef ref,
+  String productId,
+) async {
+  final db = ref.read(databaseProvider);
+
+  final schritte = await (db.select(db.productSteps)
+        ..where((s) => s.productId.equals(productId))
+        ..where((s) => s.deletedAt.isNull()))
+      .get();
+  if (schritte.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dieser Artikel hat keine Schritte.')),
+      );
+    }
+    return;
+  }
+
+  // Je Schritt die Parameter nach Namen bündeln.
+  final aufgaben = <({
+    ProductStepParameter behalten,
+    List<ProductStepParameter> entfernen,
+    String? neuerWert,
+  })>[];
+
+  for (final s in schritte) {
+    final params = await (db.select(db.productStepParameters)
+          ..where((p) => p.stepId.equals(s.id))
+          ..where((p) => p.deletedAt.isNull()))
+        .get();
+
+    final nachName = <String, List<ProductStepParameter>>{};
+    for (final p in params) {
+      if (p.istCustom) continue;
+      nachName
+          .putIfAbsent(p.parameterName.trim().toLowerCase(), () => [])
+          .add(p);
+    }
+
+    for (final gruppe in nachName.values) {
+      if (gruppe.length < 2) continue;
+
+      // Behalten: bevorzugt die Zeile in der Anlagen-Gruppe.
+      final behalten = gruppe.firstWhere(
+        (p) => p.parameterGruppe != kMaschinenNotizGruppe,
+        orElse: () => gruppe.first,
+      );
+
+      // Wert: den zuletzt gepflegten, nicht leeren nehmen.
+      ProductStepParameter? bester;
+      for (final p in gruppe) {
+        if ((p.wert ?? '').trim().isEmpty) continue;
+        if (bester == null || p.updatedAt.isAfter(bester.updatedAt)) {
+          bester = p;
+        }
+      }
+
+      final rest = gruppe.where((p) => p.id != behalten.id).toList();
+      aufgaben.add(
+        (
+          behalten: behalten,
+          entfernen: rest,
+          neuerWert: bester?.wert,
+        ),
+      );
+    }
+  }
+
+  if (!context.mounted) return;
+
+  if (aufgaben.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Keine doppelten Parameter gefunden — alles sauber.'),
+      ),
+    );
+    return;
+  }
+
+  final anzahlZeilen =
+      aufgaben.fold<int>(0, (s, a) => s + a.entfernen.length);
+  final beispiele = aufgaben
+      .take(5)
+      .map((a) => '• ${a.behalten.parameterName}')
+      .join('\n');
+
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text('$anzahlZeilen doppelte Zeile(n) bereinigen?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${aufgaben.length} Parameter kommen doppelt vor. Behalten wird '
+            'jeweils die Zeile in der Anlagen-Gruppe (sie steht im '
+            'Excel-Export an der richtigen Stelle), mit dem zuletzt '
+            'gepflegten Wert.',
+          ),
+          const SizedBox(height: 12),
+          Text(
+            beispiele +
+                (aufgaben.length > 5
+                    ? '\n• … und ${aufgaben.length - 5} weitere'
+                    : ''),
+            style: const TextStyle(fontSize: 12.5),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(ctx).pop(true),
+          child: const Text('Bereinigen'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true) return;
+
+  final jetzt = DateTime.now();
+  await db.transaction(() async {
+    for (final a in aufgaben) {
+      if ((a.neuerWert ?? '').trim() != (a.behalten.wert ?? '').trim()) {
+        await (db.update(db.productStepParameters)
+              ..where((p) => p.id.equals(a.behalten.id)))
+            .write(
+          ProductStepParametersCompanion(
+            wert: Value(a.neuerWert),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      }
+      for (final weg in a.entfernen) {
+        await (db.update(db.productStepParameters)
+              ..where((p) => p.id.equals(weg.id)))
+            .write(
+          ProductStepParametersCompanion(
+            deletedAt: Value(jetzt),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      }
+    }
+  });
+
+  ref.read(autoBackupTriggerProvider).fireDebounced(
+        reason: 'Doppelte Parameter bereinigt',
+      );
+  for (final s in schritte) {
+    ref.invalidate(stepParametersProvider(s.id));
+  }
+  ref.invalidate(productStepsProvider(productId));
+
+  if (!context.mounted) return;
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text('$anzahlZeilen doppelte Zeile(n) entfernt.'),
+    ),
+  );
+}
+
 class ArticleDetailScreen extends ConsumerWidget {
   const ArticleDetailScreen({super.key, required this.productId});
 
@@ -382,6 +559,15 @@ class ArticleDetailScreen extends ConsumerWidget {
             error: (_, __) => const Text('Fehler'),
           ),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.cleaning_services_outlined),
+              tooltip: 'Doppelte Parameter bereinigen',
+              onPressed: () => _bereinigeDoppelteParameter(
+                context,
+                ref,
+                productId,
+              ),
+            ),
             IconButton(
               icon: const Icon(Icons.print),
               tooltip: 'Prozessblatt drucken',
@@ -2478,11 +2664,25 @@ class _ParameterListe extends ConsumerWidget {
         ),
       );
     } else {
+      // Neue Zeile in die Gruppe legen, die dieser Schritt bereits für
+      // Maschinenwerte benutzt (z.B. „BRATSTRASSE" oder „FÜLLMASCHINE /
+      // VERBUFA"). Nur wenn es noch keine gibt, greift die Standardgruppe.
+      // So landet der Wert im Excel-Export im richtigen Block.
+      final alle = ref.read(stepParametersProvider(stepId)).valueOrNull ??
+          const <ProductStepParameter>[];
+      var zielGruppe = kMaschinenNotizGruppe;
+      for (final p in alle) {
+        if (p.istCustom) continue;
+        if (p.parameterGruppe == kMaschinenNotizGruppe) continue;
+        zielGruppe = p.parameterGruppe;
+        break;
+      }
+
       await db.into(db.productStepParameters).insert(
             ProductStepParametersCompanion(
               id: Value(const Uuid().v4()),
               stepId: Value(stepId),
-              parameterGruppe: const Value(kMaschinenNotizGruppe),
+              parameterGruppe: Value(zielGruppe),
               parameterName: Value(def.parameterName),
               wert: Value(neuerWert.isEmpty ? null : neuerWert),
               reihenfolge: Value(50 + def.sortierung),
@@ -2541,15 +2741,18 @@ class _ParameterListe extends ConsumerWidget {
             : ref.watch(_steckbriefDefsProvider(maschineId!));
         final defs = defsAsync.valueOrNull ?? const <MachineParameterDef>[];
         final defNamen =
-            defs.map((d) => d.parameterName.toLowerCase()).toSet();
+            defs.map((d) => d.parameterName.trim().toLowerCase()).toSet();
 
         // Standard-Parameter nach Gruppen aufteilen. Zeilen, die zu einem
         // Steckbrief-Feld gehören, erscheinen im Steckbrief-Block und
         // werden hier ausgefiltert (sonst doppelt sichtbar).
         final standardByGruppe = <String, List<ProductStepParameter>>{};
         for (final p in standardParams) {
-          if (p.parameterGruppe == kMaschinenNotizGruppe &&
-              defNamen.contains(p.parameterName.toLowerCase())) {
+          // Alles, was der Steckbrief-Block oben schon zeigt, hier
+          // ausblenden — unabhängig von der Gruppe. Sonst stünde derselbe
+          // Wert zweimal in der Maske (einmal aus der Excel-Gruppe, einmal
+          // im Steckbrief).
+          if (defNamen.contains(p.parameterName.trim().toLowerCase())) {
             continue;
           }
           standardByGruppe.putIfAbsent(p.parameterGruppe, () => []).add(p);
@@ -2643,14 +2846,26 @@ class _SteckbriefBlock extends StatelessWidget {
   final List<ProductStepParameter> params;
   final void Function(MachineParameterDef, ProductStepParameter?) onEdit;
 
+  /// Sucht die Wertzeile zu einem Steckbrief-Feld — bewusst NUR über den
+  /// Parameternamen, unabhängig von der Parametergruppe.
+  ///
+  /// Grund: Aus der alten Excel importierte Werte liegen in der Gruppe der
+  /// jeweiligen Anlage (z.B. „FÜLLMASCHINE / VERBUFA"), während die App
+  /// früher ausschließlich in „MASCHINENEINSTELLUNGEN" gesucht hat. Dadurch
+  /// wirkte ein gepflegter Wert leer, und beim Speichern entstand eine
+  /// zweite Zeile in einer anderen Gruppe — im Excel-Export tauchte der Wert
+  /// dann außerhalb des Maschinenblocks auf.
   ProductStepParameter? _wertZeile(MachineParameterDef def) {
+    final gesucht = def.parameterName.trim().toLowerCase();
+    ProductStepParameter? treffer;
     for (final p in params) {
-      if (p.parameterGruppe == kMaschinenNotizGruppe &&
-          p.parameterName.toLowerCase() == def.parameterName.toLowerCase()) {
-        return p;
-      }
+      if (p.parameterName.trim().toLowerCase() != gesucht) continue;
+      // Die Zeile in der Maschinengruppe hat Vorrang — sie steht im Export
+      // an der richtigen Stelle.
+      if (p.parameterGruppe != kMaschinenNotizGruppe) return p;
+      treffer ??= p;
     }
-    return null;
+    return treffer;
   }
 
   @override
