@@ -2070,14 +2070,42 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
     );
     if (bestaetigt != true) return;
     final db = ref.read(databaseProvider);
-    await (db.update(db.productSteps)
-          ..where((s) => s.id.equals(widget.step.id)))
-        .write(
-      ProductStepsCompanion(
-        deletedAt: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    final jetzt = DateTime.now();
+
+    await db.transaction(() async {
+      await (db.update(db.productSteps)
+            ..where((s) => s.id.equals(widget.step.id)))
+          .write(
+        ProductStepsCompanion(
+          deletedAt: Value(jetzt),
+          updatedAt: Value(jetzt),
+        ),
+      );
+
+      // Übrige Schritte lückenlos neu durchnummerieren (1..n).
+      //
+      // Ohne das behält der Rest seine alte `reihenfolge` — löscht man
+      // Schritt 1, bleiben 2,3,4 stehen. Die App sortiert das zwar weg,
+      // der Excel-Export nimmt die Nummer aber als Spalte: „Schritt 1"
+      // bliebe leer und alles stünde eine Spalte zu weit rechts.
+      final rest = await (db.select(db.productSteps)
+            ..where((s) => s.productId.equals(widget.step.productId))
+            ..where((s) => s.deletedAt.isNull())
+            ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+          .get();
+      for (var i = 0; i < rest.length; i++) {
+        if (rest[i].reihenfolge == i + 1) continue;
+        await (db.update(db.productSteps)
+              ..where((s) => s.id.equals(rest[i].id)))
+            .write(
+          ProductStepsCompanion(
+            reihenfolge: Value(i + 1),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      }
+    });
+
     ref.read(autoBackupTriggerProvider).fireDebounced(
           reason: 'Schritt aus Prozess entfernt',
         );

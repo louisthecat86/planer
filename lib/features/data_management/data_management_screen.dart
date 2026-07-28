@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
-import '../../core/services/excel_export_service_v3.dart';
+import '../../core/services/excel_export_service_v4.dart';
 import '../../core/services/excel_import_dispatcher.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../articles/article_detail_screen.dart';
@@ -267,17 +267,8 @@ class _DataManagementScreenState
     try {
       _setBusy(true, msg: 'Excel wird erstellt …');
 
-      final svc = ExcelExportServiceV3(ref.read(databaseProvider));
+      final svc = ExcelExportServiceV4(ref.read(databaseProvider));
       final result = await svc.export();
-
-      if (result.hatFehler) {
-        _setBusy(
-          false,
-          msg: 'Export-Fehler: ${result.fehler.first}',
-          color: Colors.red,
-        );
-        return;
-      }
 
       final zielPfad = await FilePicker.saveFile(
         dialogTitle: 'Excel-Export speichern',
@@ -293,23 +284,11 @@ class _DataManagementScreenState
 
       await File(zielPfad).writeAsBytes(result.bytes);
 
-      final extras = <String>[];
-      if (result.artikelSheetsAngelegt > 0) {
-        extras.add(
-          '${result.artikelSheetsAngelegt} neue Artikel-Sheets angelegt',
-        );
-      }
-      if (result.maschinenInKatalog > 0) {
-        extras.add(
-          '${result.maschinenInKatalog} Anlagen in den Katalog übernommen',
-        );
-      }
-
       _setBusy(
         false,
-        msg: 'Excel exportiert: ${result.artikelAktualisiert} Artikel '
-            'aktualisiert'
-            '${extras.isEmpty ? '' : ' · ${extras.join(' · ')}'}',
+        msg: 'Excel exportiert: ${result.anzahlArtikel} Artikel · '
+            '${result.anzahlSchritte} Schritte · '
+            '${result.anzahlParameter} Parameter',
       );
 
       // Export-Hinweise (z.B. Katalog voll) ebenfalls anzeigen.

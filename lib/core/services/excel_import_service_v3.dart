@@ -1052,7 +1052,25 @@ class ExcelImportServiceV3 {
     }
 
     if (teile.isEmpty) return null;
-    return teile.join('\n');
+
+    // Wörtliche Wiederholungen herausnehmen.
+    //
+    // Der Block wird zellweise eingesammelt; standen dort Reste aus einer
+    // älteren Vorlage neben dem aktuellen Text, landete derselbe Satz
+    // mehrfach in der Beschreibung — und wuchs mit jedem Durchlauf
+    // App → Excel → App weiter. Doppelte Teile werden deshalb übersprungen,
+    // ebenso Teile, die bereits wörtlich in einem vorherigen enthalten sind.
+    final eindeutig = <String>[];
+    for (final teil in teile) {
+      final t = teil.trim();
+      if (t.isEmpty) continue;
+      if (eindeutig.any((v) => v == t || v.contains(t))) continue;
+      eindeutig.removeWhere((v) => t.contains(v));
+      eindeutig.add(t);
+    }
+
+    if (eindeutig.isEmpty) return null;
+    return eindeutig.join('\n');
   }
 
   void _parseParameter(

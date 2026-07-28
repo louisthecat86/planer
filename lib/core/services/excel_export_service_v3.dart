@@ -1054,6 +1054,39 @@ class ExcelExportServiceV3 {
     }
     if (markerZeile == null) return; // Vorlage ohne den Block
 
+    // Den GANZEN Block zuerst leeren (Marker-Zeile Spalten B..K sowie alle
+    // Zeilen bis zur Historie).
+    //
+    // Der Import sammelt jede nicht-leere Zelle dieses Blocks ein und fügt
+    // sie mit Zeilenumbruch zusammen. Schrieb der Export nur in EINE Zelle,
+    // blieben Reste aus älteren Vorlagen daneben stehen — und wurden beim
+    // nächsten Import zusätzlich übernommen. Der Text wuchs dadurch mit
+    // jedem Durchlauf App → Excel → App weiter an.
+    int? historieZeile;
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '');
+      if (r == null || r <= markerZeile) continue;
+      final label = _leseZelleA(row, sharedStrings)?.trim() ?? '';
+      if (label.contains(_historieMarker)) {
+        historieZeile = r;
+        break;
+      }
+    }
+    final bis = (historieZeile ?? (markerZeile + 6)) - 1;
+
+    const spalten = {'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'};
+    for (final row in sheetData.findElements('row')) {
+      final r = int.tryParse(row.getAttribute('r') ?? '');
+      if (r == null || r < markerZeile || r > bis) continue;
+      for (final c in row.findElements('c')) {
+        final ref = c.getAttribute('r') ?? '';
+        final col = RegExp(r'^([A-Z]+)').firstMatch(ref)?.group(1);
+        if (col == null || !spalten.contains(col)) continue;
+        c.children.clear();
+        c.attributes.removeWhere((a) => a.name.local == 't');
+      }
+    }
+
     final wert = (text ?? '').trim();
     _setzeZelleInlineStr(
       sheetData,
@@ -1275,7 +1308,13 @@ class ExcelExportServiceV3 {
     final hatLabelzeile = <String, bool>{};
     bool gehoertInSlot(ProductStepParameter p) {
       if (p.istCustom) return true;
-      if (p.parameterGruppe != kMaschinenSteckbriefGruppe) return false;
+      // Früher kamen NUR Werte der Gruppe MASCHINENEINSTELLUNGEN in einen
+      // Slot. Dadurch verschwanden alle Werte anlagenspezifischer Gruppen
+      // (BRATSTRASSE, DAMPFTUNNEL, FÜLLMASCHINE / VERBUFA …) spurlos,
+      // sobald die Blaupause der Kategorie den passenden Block nicht
+      // kennt — z.B. eine Bratstraße in „Hackprodukte roh". Jetzt gilt:
+      // Was keine eigene Labelzeile hat, wandert in einen Slot bzw. in
+      // den Überlauf-Block. So steht in der Excel, was in der App steht.
       if ((p.wert ?? '').trim().isEmpty) return false;
       final key = '${p.parameterGruppe}|${p.parameterName.toLowerCase()}';
       hatLabelzeile[key] ??= _findeZeileMitLabelInA(
@@ -1363,8 +1402,13 @@ class ExcelExportServiceV3 {
       naechsteUeberlaufZeile++;
     }
 
+    var schrittIndex = 0;
     for (final step in schritte) {
-      final col = step.reihenfolge; // 1..10 → Spalte B..K
+      // Fortlaufende Spalte statt `step.reihenfolge`: Nach dem Löschen
+      // eines Schritts können Lücken in der Nummerierung bleiben (2,3,4).
+      // Direkt als Spalte genommen bliebe „Schritt 1" leer und alles
+      // stünde eine Spalte zu weit rechts.
+      final col = ++schrittIndex; // 1..10 → Spalte B..K
       if (col < 1 || col > 10) continue;
       final colLetter = _spaltenBuchstabe(col + 1);
 
