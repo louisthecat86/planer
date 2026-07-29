@@ -499,6 +499,12 @@ class ExcelImportServiceV3 {
         final altFixZeit = <int, double?>{};
         if (existing == null) {
           productId = _uuid.v4();
+          // Pflegestatus: Ein Artikel, der ohne Prozessschritte hereinkommt,
+          // ist eine reine Hülle (typisch beim Übernehmen einer kompletten
+          // Navision-Artikelliste). Er wird deshalb als „nicht eingepflegt"
+          // markiert und taucht in der Artikelliste unter dem gleichnamigen
+          // Filter auf — sonst wären hunderte leere Artikel nicht von den
+          // fertig gepflegten zu unterscheiden.
           await _db.into(_db.products).insert(
                 ProductsCompanion(
                   id: Value(productId),
@@ -506,6 +512,7 @@ class ExcelImportServiceV3 {
                   artikelbezeichnung: Value(art.bezeichnung),
                   produktgruppe: Value(art.produktgruppeDb),
                   beschreibung: Value(art.sonstigeInfos),
+                  istEingepflegt: Value(art.schritte.isNotEmpty),
                 ),
               );
           artikelNeu++;
@@ -521,6 +528,13 @@ class ExcelImportServiceV3 {
               // bliebe eine in der App gepflegte Besonderheit nicht erhalten.
               beschreibung: art.sonstigeInfos != null
                   ? Value(art.sonstigeInfos)
+                  : const Value.absent(),
+              // Bringt die Datei Schritte mit, gilt der Artikel als
+              // eingepflegt. Bewusst nur in diese Richtung: Ein in der App
+              // gepflegter Artikel darf durch eine schrittlose Excel-Zeile
+              // nicht wieder auf „offen" zurückfallen.
+              istEingepflegt: art.schritte.isNotEmpty
+                  ? const Value(true)
                   : const Value.absent(),
               updatedAt: Value(DateTime.now()),
             ),

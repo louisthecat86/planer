@@ -302,7 +302,18 @@ class ExcelExportServiceV4 {
   void _baueAnlagenKatalog(Excel excel, List<Machine> maschinen) {
     final s = excel['Anlagen-Katalog'];
     _setz(s, 0, 0, 'Anlagen-Katalog', _titel);
-    const kopf = ['Anlage', 'Abteilung', 'Kapazität (Min/Tag)', 'Hinweis'];
+    // Spaltenfolge ist vom Import vorgegeben: A Anlage, B Abteilung,
+    // C typische Parameter, D eigene Planungsspur (X), E Kapazität in
+    // STUNDEN, F Hinweis. Weicht man davon ab, liest der Rückimport die
+    // Werte in die falschen Felder.
+    const kopf = [
+      'Anlage',
+      'Abteilung',
+      'Typische Parameter',
+      'Eigene Spur',
+      'Kapazität (h)',
+      'Hinweis',
+    ];
     for (var c = 0; c < kopf.length; c++) {
       _setz(s, c, 2, kopf[c], _kopfStil);
     }
@@ -310,13 +321,16 @@ class ExcelExportServiceV4 {
     for (final m in maschinen) {
       _setz(s, 0, row, m.name);
       _setz(s, 1, row, _abteilungsName(m.abteilung));
-      _setzZahl(s, 2, row, m.kapazitaetMinutenProTag);
-      _setz(s, 3, row, m.eignungHinweis ?? '');
+      _setz(s, 2, row, m.typischeParameter ?? '');
+      _setz(s, 3, row, m.istPlanungsressource ? 'X' : '');
+      _setzZahl(s, 4, row, m.kapazitaetMinutenProTag / 60);
+      _setz(s, 5, row, m.eignungHinweis ?? '');
       row++;
     }
     s.setColumnWidth(0, 26);
     s.setColumnWidth(1, 20);
-    s.setColumnWidth(3, 34);
+    s.setColumnWidth(2, 28);
+    s.setColumnWidth(5, 34);
   }
 
   void _baueSteckbriefe(
