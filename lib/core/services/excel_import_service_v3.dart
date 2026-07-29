@@ -222,6 +222,10 @@ class ExcelImportServiceV3 {
   final AppDatabase _db;
   final _uuid = const Uuid();
 
+  /// Anzahl der Schritt-Spalten eines Artikelblatts (B..U = 20). Muss mit
+  /// dem Limit im Schritt-Editor und im Excel-Export übereinstimmen.
+  static const int _maxSpalten = 20;
+
   static const _metaSheets = <String>{
     'Übersicht',
     'Anleitung',
@@ -1033,7 +1037,7 @@ class ExcelImportServiceV3 {
   /// Liest den Freitext aus dem Block „Sonstige Informationen".
   ///
   /// Erfasst wird alles zwischen dem Marker und dem HISTORISCHE-DATEN-Block:
-  /// die Wertzellen der Marker-Zeile selbst (B..K) sowie alle folgenden
+  /// die Wertzellen der Marker-Zeile selbst (B..U) sowie alle folgenden
   /// Zeilen (inkl. Spalte A, falls dort Freitext steht). Mehrere Fundstellen
   /// werden zu einem Text zusammengeführt.
   String? _parseSonstigeInfos(List<List<Data?>> rows, int startRow) {
@@ -1046,8 +1050,8 @@ class ExcelImportServiceV3 {
       if (!gefunden) {
         if (label != null && label.trim() == _sonstigeBlockMarker) {
           gefunden = true;
-          // Werte in der Marker-Zeile selbst (Spalten B..K)
-          for (var c = 1; c <= 10; c++) {
+          // Werte in der Marker-Zeile selbst (Spalten B..U)
+          for (var c = 1; c <= _maxSpalten; c++) {
             final w = _cellStr(rows[r], c);
             if (w != null && w.trim().isNotEmpty) teile.add(w.trim());
           }
@@ -1059,7 +1063,7 @@ class ExcelImportServiceV3 {
       if (label != null && label.contains(_historieBlockMarker)) break;
 
       if (label != null && label.trim().isNotEmpty) teile.add(label.trim());
-      for (var c = 1; c <= 10; c++) {
+      for (var c = 1; c <= _maxSpalten; c++) {
         final w = _cellStr(rows[r], c);
         if (w != null && w.trim().isNotEmpty) teile.add(w.trim());
       }

@@ -27,11 +27,11 @@ import '../../core/services/auto_backup_trigger.dart';
 /// **Reihenfolge-Logik im Insert-Modus:**
 /// Die neue `reihenfolge` ist `MAX(reihenfolge) + 1` über **alle** Schritte
 /// des Produkts — *inklusive* Soft-deleted. So erbt ein neuer Schritt nicht
-/// die Excel-Spalte (B..K) eines gelöschten Schritts; die Spaltenzuordnung
+/// die Excel-Spalte (B..U) eines gelöschten Schritts; die Spaltenzuordnung
 /// im Excel-Export bleibt stabil (Variante 2: gelöschte Spalten unangetastet).
 ///
-/// **Excel-Spalten-Sperre:**
-/// Die v3-Excel-Vorlage hat 10 Schritt-Spalten (B..K). Bei `MAX(reihenfolge)
+/// **Spalten-Sperre des Artikelblatts:**
+/// Die v3-Excel-Vorlage hat 10 Schritt-Spalten (B..U). Bei `MAX(reihenfolge)
 /// >= 10` wird der Insert blockiert und eine Fehlermeldung im Dialog
 /// angezeigt. Der aufrufende Screen sollte zusätzlich vor dem Öffnen des
 /// Dialogs prüfen und mit einer Snackbar abweisen — der Check hier ist
@@ -131,8 +131,14 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   bool _isSaving = false;
   String? _saveError;
 
-  /// Maximalzahl Schritte = Excel-Spalten B..K (= 10).
-  static const int _maxSchritte = 10;
+  /// Maximalzahl Schritte = Spalten des Artikelblatts (B..U = 20).
+  ///
+  /// Zehn reichten nicht: Allein die Bratstraße durchläuft bei panierten
+  /// Artikeln bis zu acht Anlagen (Verbufa, Panieranlage, Öl-/Wasserzugabe,
+  /// Bratstraße, Heißluftofen, Schockfroster …), dazu kommen Zerlegung,
+  /// Waage und Verpackung. Der Wert muss mit `_maxSchritte` im
+  /// Excel-Export und der Spaltengrenze im Import übereinstimmen.
+  static const int _maxSchritte = 20;
 
   bool get _isInsertMode => widget._isInsertMode;
 
@@ -263,7 +269,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       final db = ref.read(databaseProvider);
 
       if (_isInsertMode) {
-        // Pre-Check: Excel-Spalten-Limit (B..K = 10).
+        // Pre-Check: Spaltenlimit des Artikelblatts (B..U = 20).
         final currentMax = await _ermittleMaxReihenfolge(db);
         if (currentMax >= _maxSchritte) {
           if (mounted) {

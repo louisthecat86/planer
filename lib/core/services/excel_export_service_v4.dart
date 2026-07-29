@@ -56,8 +56,9 @@ class ExcelExportServiceV4 {
   static const String _markerSonstige = 'Sonstige Informationen';
   static const String _markerHistorie = 'HISTORISCHE DATEN';
 
-  /// Maximale Anzahl Schritt-Spalten (B..K) — wie vom Import erwartet.
-  static const int _maxSchritte = 10;
+  /// Maximale Anzahl Schritt-Spalten (B..U). Muss mit dem Limit im
+  /// Schritt-Editor und der Spaltengrenze des Imports übereinstimmen.
+  static const int _maxSchritte = 20;
 
   static const Map<String, String> _produktgruppeLabels = {
     'bruehwurst': 'Brühwurst',
