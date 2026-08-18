@@ -7,19 +7,25 @@ Future<void> main() async {
   final db = AppDatabase();
   try {
     final bytes = await File('Artikel11.xlsx').readAsBytes();
-    print('bytes ${bytes.length}');
+    stdout.writeln('bytes ${bytes.length}');
     final service = NavisionImportService(db);
     final res = await service.importiere(bytes);
-    print('RESULT: gelesen=${res.gelesen} uebernommen=${res.uebernommen} mitAuftrag=${res.mitAuftrag} warnungen=${res.warnungen.length}');
+    stdout.writeln(
+      'RESULT: gelesen=${res.gelesen} uebernommen=${res.uebernommen} '
+      'mitAuftrag=${res.mitAuftrag} warnungen=${res.warnungen.length}',
+    );
     final rows = await db.select(db.navisionArtikelKatalog).get();
-    print('DB rows ${rows.length}');
+    stdout.writeln('DB rows ${rows.length}');
     if (rows.isNotEmpty) {
       final first = rows.first;
-      print('first: ${first.nummer} | ${first.beschreibung} | bestand=${first.lagerbestand} | auftrag=${first.mengeInAuftrag}');
+      stdout.writeln(
+        'first: ${first.nummer} | ${first.beschreibung} | '
+        'bestand=${first.lagerbestand} | auftrag=${first.mengeInAuftrag}',
+      );
     }
   } catch (e, st) {
-    print('ERROR: $e');
-    print(st);
+    stdout.writeln('ERROR: $e');
+    stdout.writeln(st);
   } finally {
     await db.close();
   }
