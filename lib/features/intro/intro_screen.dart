@@ -184,15 +184,19 @@ class _IntroInhalt extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Lebensmittel statt Maschine: ein Comic-Steak in derselben Farbe
-        // wie der Schriftzug — die App plant Fleischverarbeitung, kein
-        // Roboterwerk.
+        // Nutze das saubere Steak-PNG mit transparentem Hintergrund statt der
+        // selbst gezeichneten Platzhalter-Version. Das Bild passt farblich zum
+        // blauen Navision-Theme der App.
         SizedBox(
-          width: 168,
-          height: 116,
-          child: CustomPaint(painter: _SteakPainter(farbe)),
+          width: 200,
+          height: 120,
+          child: Image.asset(
+            'assets/intro/steak_blue.png',
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+          ),
         ),
-        const SizedBox(height: 26),
+        const SizedBox(height: 18),
         Text(
           'Produktions Planer',
           textAlign: TextAlign.center,

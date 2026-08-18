@@ -91,7 +91,11 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   String? _kategorie;
   String? _buchungsgruppe;
   String? _einheit;
-  bool _nurBedarf = true;
+  // Standardmäßig alle importierten Navision-Artikel anzeigen. Viele
+  // Navision-Exporte enthalten vor allem Null-/0-Bedarf-Zeilen; der Filter
+  // „Nur mit Bedarf“ würde sonst sofort die komplette Liste verbergen und
+  // den Eindruck erwecken, der Import sei fehlgeschlagen.
+  bool _nurBedarf = false;
   bool _nurBestand = false;
   _NavSort _sort = _NavSort.bedarfAbst;
   bool _busy = false;
@@ -528,11 +532,6 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            FilledButton.icon(
-              onPressed: _busy ? null : _import,
-              icon: const Icon(Icons.upload_file, size: 18),
-              label: const Text('Artikelübersicht einlesen'),
-            ),
           ],
         ),
       ),
