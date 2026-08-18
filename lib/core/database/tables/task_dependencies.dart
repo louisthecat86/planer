@@ -15,9 +15,11 @@ class TaskDependencies extends Table {
   TextColumn get id => text()();
 
   /// Der Task, der wartet.
+  @ReferenceName('fromTaskDependencies')
   TextColumn get fromTaskId => text().references(ProductionTasks, #id)();
 
   /// Der Task, auf den gewartet wird.
+  @ReferenceName('toTaskDependencies')
   TextColumn get toTaskId => text().references(ProductionTasks, #id)();
 
   /// Typ der Abhängigkeit. Erlaubte Werte: 'finish_to_start' (Standard),

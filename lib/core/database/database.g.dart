@@ -18261,6 +18261,39 @@ final class $$ProductionTasksTableReferences extends BaseReferences<
     return ProcessedTableManager(
         manager.$state.copyWith(prefetchedData: cache));
   }
+
+  static MultiTypedResultKey<$TaskDependenciesTable, List<TaskDependency>>
+      _fromTaskDependenciesTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.taskDependencies,
+              aliasName: $_aliasNameGenerator(
+                  db.productionTasks.id, db.taskDependencies.fromTaskId));
+
+  $$TaskDependenciesTableProcessedTableManager get fromTaskDependencies {
+    final manager = $$TaskDependenciesTableTableManager(
+            $_db, $_db.taskDependencies)
+        .filter((f) => f.fromTaskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache =
+        $_typedResult.readTableOrNull(_fromTaskDependenciesTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
+
+  static MultiTypedResultKey<$TaskDependenciesTable, List<TaskDependency>>
+      _toTaskDependenciesTable(_$AppDatabase db) =>
+          MultiTypedResultKey.fromTable(db.taskDependencies,
+              aliasName: $_aliasNameGenerator(
+                  db.productionTasks.id, db.taskDependencies.toTaskId));
+
+  $$TaskDependenciesTableProcessedTableManager get toTaskDependencies {
+    final manager = $$TaskDependenciesTableTableManager(
+            $_db, $_db.taskDependencies)
+        .filter((f) => f.toTaskId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_toTaskDependenciesTable($_db));
+    return ProcessedTableManager(
+        manager.$state.copyWith(prefetchedData: cache));
+  }
 }
 
 class $$ProductionTasksTableFilterComposer
@@ -18358,6 +18391,48 @@ class $$ProductionTasksTableFilterComposer
             $$ProductionRunsTableFilterComposer(
               $db: $db,
               $table: $db.productionRuns,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> fromTaskDependencies(
+      Expression<bool> Function($$TaskDependenciesTableFilterComposer f) f) {
+    final $$TaskDependenciesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.taskDependencies,
+        getReferencedColumn: (t) => t.fromTaskId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TaskDependenciesTableFilterComposer(
+              $db: $db,
+              $table: $db.taskDependencies,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<bool> toTaskDependencies(
+      Expression<bool> Function($$TaskDependenciesTableFilterComposer f) f) {
+    final $$TaskDependenciesTableFilterComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.taskDependencies,
+        getReferencedColumn: (t) => t.toTaskId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TaskDependenciesTableFilterComposer(
+              $db: $db,
+              $table: $db.taskDependencies,
               $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
               joinBuilder: joinBuilder,
               $removeJoinBuilderFromRootComposer:
@@ -18552,6 +18627,48 @@ class $$ProductionTasksTableAnnotationComposer
             ));
     return f(composer);
   }
+
+  Expression<T> fromTaskDependencies<T extends Object>(
+      Expression<T> Function($$TaskDependenciesTableAnnotationComposer a) f) {
+    final $$TaskDependenciesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.taskDependencies,
+        getReferencedColumn: (t) => t.fromTaskId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TaskDependenciesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.taskDependencies,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
+
+  Expression<T> toTaskDependencies<T extends Object>(
+      Expression<T> Function($$TaskDependenciesTableAnnotationComposer a) f) {
+    final $$TaskDependenciesTableAnnotationComposer composer = $composerBuilder(
+        composer: this,
+        getCurrentColumn: (t) => t.id,
+        referencedTable: $db.taskDependencies,
+        getReferencedColumn: (t) => t.toTaskId,
+        builder: (joinBuilder,
+                {$addJoinBuilderToRootComposer,
+                $removeJoinBuilderFromRootComposer}) =>
+            $$TaskDependenciesTableAnnotationComposer(
+              $db: $db,
+              $table: $db.taskDependencies,
+              $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+              joinBuilder: joinBuilder,
+              $removeJoinBuilderFromRootComposer:
+                  $removeJoinBuilderFromRootComposer,
+            ));
+    return f(composer);
+  }
 }
 
 class $$ProductionTasksTableTableManager extends RootTableManager<
@@ -18565,7 +18682,11 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
     $$ProductionTasksTableUpdateCompanionBuilder,
     (ProductionTask, $$ProductionTasksTableReferences),
     ProductionTask,
-    PrefetchHooks Function({bool productId, bool productionRunsRefs})> {
+    PrefetchHooks Function(
+        {bool productId,
+        bool productionRunsRefs,
+        bool fromTaskDependencies,
+        bool toTaskDependencies})> {
   $$ProductionTasksTableTableManager(
       _$AppDatabase db, $ProductionTasksTable table)
       : super(TableManagerState(
@@ -18668,11 +18789,16 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
                   ))
               .toList(),
           prefetchHooksCallback: (
-              {productId = false, productionRunsRefs = false}) {
+              {productId = false,
+              productionRunsRefs = false,
+              fromTaskDependencies = false,
+              toTaskDependencies = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [
-                if (productionRunsRefs) db.productionRuns
+                if (productionRunsRefs) db.productionRuns,
+                if (fromTaskDependencies) db.taskDependencies,
+                if (toTaskDependencies) db.taskDependencies
               ],
               addJoins: <
                   T extends TableManagerState<
@@ -18714,6 +18840,32 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
                         referencedItemsForCurrentItem: (item,
                                 referencedItems) =>
                             referencedItems.where((e) => e.taskId == item.id),
+                        typedResults: items),
+                  if (fromTaskDependencies)
+                    await $_getPrefetchedData<ProductionTask,
+                            $ProductionTasksTable, TaskDependency>(
+                        currentTable: table,
+                        referencedTable: $$ProductionTasksTableReferences
+                            ._fromTaskDependenciesTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductionTasksTableReferences(db, table, p0)
+                                .fromTaskDependencies,
+                        referencedItemsForCurrentItem:
+                            (item, referencedItems) => referencedItems
+                                .where((e) => e.fromTaskId == item.id),
+                        typedResults: items),
+                  if (toTaskDependencies)
+                    await $_getPrefetchedData<ProductionTask,
+                            $ProductionTasksTable, TaskDependency>(
+                        currentTable: table,
+                        referencedTable: $$ProductionTasksTableReferences
+                            ._toTaskDependenciesTable(db),
+                        managerFromTypedResult: (p0) =>
+                            $$ProductionTasksTableReferences(db, table, p0)
+                                .toTaskDependencies,
+                        referencedItemsForCurrentItem: (item,
+                                referencedItems) =>
+                            referencedItems.where((e) => e.toTaskId == item.id),
                         typedResults: items)
                 ];
               },
@@ -18733,7 +18885,11 @@ typedef $$ProductionTasksTableProcessedTableManager = ProcessedTableManager<
     $$ProductionTasksTableUpdateCompanionBuilder,
     (ProductionTask, $$ProductionTasksTableReferences),
     ProductionTask,
-    PrefetchHooks Function({bool productId, bool productionRunsRefs})>;
+    PrefetchHooks Function(
+        {bool productId,
+        bool productionRunsRefs,
+        bool fromTaskDependencies,
+        bool toTaskDependencies})>;
 typedef $$ProductionRunsTableCreateCompanionBuilder = ProductionRunsCompanion
     Function({
   required String id,
