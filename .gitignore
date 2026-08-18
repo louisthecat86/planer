@@ -13,6 +13,7 @@ ios/Pods/
 # Local files
 *.iml
 *.lock
+!pubspec.lock
 *.log
 .DS_Store
 android/.gradle/
