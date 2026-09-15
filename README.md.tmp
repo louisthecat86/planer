@@ -1,0 +1,23 @@
+# Produktion Planer
+
+Offline-first **Produktionsplaner fÃ¼r den Fleischbereich**. LÃ¤uft als Desktop-App
+(Windows/Linux/macOS) und als Android-APK (Tablet) aus einer einzigen
+Flutter-Codebase.
+
+Das Ziel: Die Abteilungen sollen jeden Arbeitstag mÃ¶glichst gut ausgelastet
+sein (Richtwert 8 h pro Abteilung). Aus den hinterlegten Produktions-Schritten
+und ihren Zeiten erzeugt die App einen Ã¼bersichtlichen, per Drag & Drop
+bedienbaren Wochen- und Tagesplan.
+
+## Das Konzept in einer Schleife
+
+```
+Excel-Vorlage (v3)  â”€â”€Importâ”€â”€â–¶  Stammdaten (Produkte, Schritte, Anlagen, Parameter)
+                                        â”‚
+                                  Schritte werden zu Tasks
+                                        â–¼
+                          Planungsboard (Abteilungen Ã— Tage, je 8 h, Drag & Drop)
+                                        â”‚
+                                   AusfÃ¼hrung
+                                        â–¼
+                          Ist-Erfassung â”€â”€â–¶ Mittelwerte neu â”€â”€â”
