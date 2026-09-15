@@ -414,10 +414,22 @@ class NavisionImportService {
     }
     final sheetName = excel.tables.keys.first;
     final tabelle = excel.tables[sheetName];
-    if (tabelle == null || tabelle.rows.isEmpty) {
+    if (tabelle == null) {
       throw Exception('Die Datei enthält keine Daten.');
     }
-    protokoll.add('[NAV] Blatt „$sheetName" · ${tabelle.rows.length} Zeilen');
+    // EINMAL auslesen und festhalten. `Sheet.rows` ist im excel-Paket ein
+    // berechneter Getter: Jeder Zugriff baut die komplette Zeilenliste neu
+    // aus der internen Zellstruktur auf. In der Datenschleife stand er
+    // zweimal je Durchlauf (Bedingung + Zugriff) — bei gut 4.000 Zeilen
+    // also rund 8.000 vollständige Neuaufbauten der ganzen Tabelle. Das
+    // waren gemessene 43 von 57 Sekunden Importdauer.
+    final zeilenRoh = tabelle.rows;
+    final anzahlZeilen = zeilenRoh.length;
+    if (anzahlZeilen == 0) {
+      throw Exception('Die Datei enthält keine Daten.');
+    }
+
+    protokoll.add('[NAV] Blatt „$sheetName" · $anzahlZeilen Zeilen');
 
     // Kopfzeile suchen — nicht über feste Namen, sondern über die Zeile mit
     // den MEISTEN erkannten Spalten. Dadurch ist es egal, welche Spalten der
@@ -427,9 +439,9 @@ class NavisionImportService {
     int? kopfZeile;
     Map<String, int> spalteVon = {};
     var besteTreffer = 0;
-    final maxPruefen = tabelle.rows.length < 40 ? tabelle.rows.length : 40;
+    final maxPruefen = anzahlZeilen < 40 ? anzahlZeilen : 40;
     for (var r = 0; r < maxPruefen; r++) {
-      final zeile = tabelle.rows[r];
+      final zeile = zeilenRoh[r];
       final treffer = <String, int>{};
       for (var c = 0; c < zeile.length; c++) {
         final feld = _feldVonUeberschrift[_norm(_text(zeile[c]) ?? '')];
@@ -450,7 +462,7 @@ class NavisionImportService {
       // Zur Fehlersuche: zeigen, was in den ersten Zeilen überhaupt stand.
       final gefunden = <String>[];
       for (var r = 0; r < maxPruefen && gefunden.length < 15; r++) {
-        for (final c in tabelle.rows[r]) {
+        for (final c in zeilenRoh[r]) {
           final t = _text(c);
           if (t != null && t.isNotEmpty) gefunden.add(t);
           if (gefunden.length >= 15) break;
@@ -506,7 +518,7 @@ class NavisionImportService {
     var mitAuftrag = 0;
 
     final ersteDatenZeile = kopfZeile + 1;
-    final gesamtZeilen = tabelle.rows.length - ersteDatenZeile;
+    final gesamtZeilen = anzahlZeilen - ersteDatenZeile;
     void melde(int fertig) {
       fortschritt?.send(<Object?>[
         NavisionPhase.zeilen.index,
@@ -517,11 +529,11 @@ class NavisionImportService {
 
     melde(0);
 
-    for (var r = ersteDatenZeile; r < tabelle.rows.length; r++) {
+    for (var r = ersteDatenZeile; r < anzahlZeilen; r++) {
       // Alle 200 Zeilen melden — oft genug für einen flüssigen Balken,
       // selten genug, dass das Verschicken nicht selbst ins Gewicht fällt.
       if ((r - ersteDatenZeile) % 200 == 0) melde(r - ersteDatenZeile);
-      final zeile = tabelle.rows[r];
+      final zeile = zeilenRoh[r];
       final nummer = feld(zeile, 'nummer');
       if (nummer == null) continue;
       gelesen++;
