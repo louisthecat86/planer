@@ -778,6 +778,59 @@ List<BoardSpur> _baueSpuren(
   return spuren;
 }
 
+/// Tageskapazität je Abteilung in Minuten, für die Woche um [wochenStart].
+///
+/// Seit Migration v9 ist die planbare Ressource die ANLAGE, nicht die
+/// Abteilung: In der Verpackung laufen Multivac, Tiefzieher und
+/// Kleinbeutel-Anlage echt parallel. Eine Abteilung hat deshalb so viel
+/// Tageskapazität, wie ihre Spuren zusammen hergeben — bei drei Anlagen à
+/// 540 Minuten also 1.620 statt 540.
+///
+/// Rechnet man wie früher mit EINER Abteilungskapazität, meldet die
+/// Auswertung dauerhaft Überbuchung, obwohl real alles passt.
+///
+/// Die Spuren kommen aus derselben [_baueSpuren]-Funktion wie im Board.
+/// Damit kann die Auswertung gar nicht erst von der Planung abweichen —
+/// zwei getrennte Rechenwege wären genau die Stelle, an der so etwas
+/// wieder auseinanderläuft.
+Future<Map<String, double>> tageskapazitaetJeAbteilung(
+  AppDatabase db, {
+  required DateTime wochenStart,
+}) async {
+  final start = _montag(wochenStart);
+  final endeExkl = start.add(const Duration(days: 7));
+
+  final tasks = await _ladeBoardTasks(db, start, endeExkl);
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
+
+  // Abteilungen, in denen Aufträge ohne gültige Anlagen-Spur liegen —
+  // für sie zeigt das Board zusätzlich eine Sammelspur, die genauso
+  // mitzählt.
+  final ohneAnlage = <String>{};
+  for (final t in tasks) {
+    final mid = t.maschineId;
+    if (mid == null || !anlagenIds.contains(mid)) {
+      ohneAnlage.add(t.abteilung.dbValue);
+    }
+  }
+
+  final ergebnis = <String, double>{};
+  for (final spur in _baueSpuren(planungsAnlagen, ohneAnlage)) {
+    final key = spur.abteilung.dbValue;
+    ergebnis[key] = (ergebnis[key] ?? 0) + spur.kapazitaetMinuten;
+  }
+
+  // Sicherheitsnetz: Jede Abteilung soll einen Wert haben, auch wenn für
+  // sie ausnahmsweise keine Spur entstanden ist. Sonst käme in der
+  // Auswertung eine Division durch null heraus und die Zeile stünde
+  // kommentarlos auf 0 %.
+  for (final a in Abteilung.values) {
+    ergebnis.putIfAbsent(a.dbValue, () => kStandardKapazitaetMinuten);
+  }
+  return ergebnis;
+}
+
 /// Lädt alle Anlagen, die eine eigene Kapazitätsspur bekommen.
 Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
   return (db.select(db.machines)

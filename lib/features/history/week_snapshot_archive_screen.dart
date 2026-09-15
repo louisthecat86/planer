@@ -74,11 +74,20 @@ class _WeekSnapshotArchiveScreenState
     setState(() => _busy = true);
     try {
       final db = ref.read(databaseProvider);
-      // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h.
-      final kapazitaeten = {
-        for (final a in Abteilung.values)
-          a.dbValue: kStandardKapazitaetMinuten,
-      };
+      // Kapazität je Abteilung aus den tatsächlichen Anlagen-Spuren der
+      // Woche — dieselbe Rechnung wie im Wochenboard.
+      //
+      // Vorher stand hier für JEDE Abteilung die Regelarbeitszeit von 9 h.
+      // Das stammt aus der Zeit vor Migration v9, als die Abteilung die
+      // planbare Einheit war. Seither sind es die Anlagen: In der
+      // Verpackung laufen mehrere echt parallel, die Tageskapazität ist
+      // also ein Vielfaches von 540 Minuten. Mit dem alten Wert meldete
+      // die Auswertung dort dauerhaft Überbuchung, obwohl der Plan
+      // problemlos aufging.
+      final kapazitaeten = await tageskapazitaetJeAbteilung(
+        db,
+        wochenStart: tagDerWoche,
+      );
 
       await erstelleWochenSnapshot(
         db: db,
@@ -662,3 +671,6 @@ class _LeerHinweis extends StatelessWidget {
     );
   }
 }
+
+
+
