@@ -1,3 +1,5 @@
+import 'dart:isolate';
+
 import 'package:drift/drift.dart';
 import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
@@ -139,13 +141,21 @@ class NavisionImportService {
   /// Bewusst Bytes statt Dateipfad: Auf dem Desktop liefert der FilePicker
   /// mit Custom-Filter teils gar keinen Pfad (nur Bytes), und Bytes
   /// funktionieren auf jeder Plattform gleich.
+  ///
+  /// Ablauf in zwei sauber getrennten Hälften:
+  ///   1. Parsen auf einem eigenen Isolate ([_parseKatalog]) — das ist
+  ///      reine Rechenarbeit und blockierte bisher das Fenster, während
+  ///      gut 4.000 Zeilen durch den XML-Parser liefen.
+  ///   2. Schreiben im Hauptisolate, weil die Datenbankverbindung dort
+  ///      lebt — jetzt als EIN Batch statt 4.000 Einzel-Inserts.
   Future<NavisionImportErgebnis> importiere(Uint8List bytes) async {
     debugPrint('[NAV] Import gestartet — ${bytes.length} Bytes');
 
     // Grober Format-Check: echte .xlsx sind ZIP-Container und beginnen mit
     // der Signatur „PK" (0x50 0x4B). Ein umbenanntes altes .xls oder eine
     // als Excel getarnte HTML-Tabelle hat das nicht — dann sofort raus mit
-    // klarer Ansage statt kryptischem Parser-Crash.
+    // klarer Ansage statt kryptischem Parser-Crash. Der Check ist billig
+    // und bleibt deshalb hier, noch vor dem Isolate-Wechsel.
     if (bytes.length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
       throw Exception(
         'Das ist keine echte Excel-Datei (.xlsx). In Navision bitte über '
@@ -155,15 +165,91 @@ class NavisionImportService {
       );
     }
 
+    // Über die Isolate-Grenze gehen ausschließlich einfache Typen (Listen,
+    // Maps, Strings, Zahlen) — nichts, was an eine Isolate-Instanz
+    // gebunden wäre. Fehler aus dem Parser kommen als Exception hier an
+    // und behalten ihren Wortlaut.
+    final roh = await Isolate.run(() => _parseKatalog(bytes));
+
+    final zeilen = (roh['zeilen'] as List).cast<Map<String, Object?>>();
+    final warnungen = (roh['warnungen'] as List).cast<String>();
+    final protokoll = (roh['protokoll'] as List).cast<String>();
+    final gelesen = roh['gelesen'] as int;
+    final mitAuftrag = roh['mitAuftrag'] as int;
+
+    // Das Parser-Protokoll erst hier ausgeben: Aus einem Hintergrund-
+    // Isolate landet debugPrint in unvorhersehbarer Reihenfolge im Log.
+    for (final zeile in protokoll) {
+      debugPrint(zeile);
+    }
+
+    final jetzt = DateTime.now();
+    final eintraege = [
+      for (final z in zeilen)
+        NavisionArtikelKatalogCompanion.insert(
+          nummer: z['nummer']! as String,
+          nummer2: Value(z['nummer2'] as String?),
+          beschreibung: Value((z['beschreibung'] as String?) ?? ''),
+          beschreibung2: Value(z['beschreibung2'] as String?),
+          suchbegriff: Value(z['suchbegriff'] as String?),
+          pluCode: Value(z['pluCode'] as String?),
+          stuecklistenNr: Value(z['stuecklistenNr'] as String?),
+          basiseinheit: Value(z['basiseinheit'] as String?),
+          lagerbestand: Value(z['lagerbestand']! as double),
+          mengeInFa: Value(z['mengeInFa']! as double),
+          mengeInAuftrag: Value(z['mengeInAuftrag']! as double),
+          produktbuchungsgruppe: Value(z['produktbuchungsgruppe'] as String?),
+          artikelkategorie: Value(z['artikelkategorie'] as String?),
+          produktgruppe: Value(z['produktgruppe'] as String?),
+          importiertAm: Value(jetzt),
+        ),
+    ];
+
+    await _db.transaction(() async {
+      // Kompletter Ersatz: Der Import bildet den aktuellen NAV-Stand ab,
+      // alte Zeilen wären sonst Karteileichen mit falschen Beständen.
+      await _db.delete(_db.navisionArtikelKatalog).go();
+      if (eintraege.isNotEmpty) {
+        // Ein Batch statt eines Inserts je Zeile. Bei rund 4.000 Artikeln
+        // waren das vorher 4.000 einzelne Statements durch die
+        // Drift-Schicht — der spürbarste Teil der Wartezeit.
+        await _db.batch(
+          (b) => b.insertAllOnConflictUpdate(
+            _db.navisionArtikelKatalog,
+            eintraege,
+          ),
+        );
+      }
+    });
+
+    debugPrint(
+      '[NAV] fertig — gelesen=$gelesen · uebernommen=${eintraege.length} · '
+      'mitAuftrag=$mitAuftrag · Warnungen=${warnungen.length}',
+    );
+
+    return NavisionImportErgebnis(
+      gelesen: gelesen,
+      uebernommen: eintraege.length,
+      mitAuftrag: mitAuftrag,
+      warnungen: warnungen,
+    );
+  }
+
+  /// Parst die Arbeitsmappe zu reinen Daten — ohne jeden Datenbankzugriff.
+  ///
+  /// Läuft auf einem eigenen Isolate und darf deshalb nichts zurückgeben,
+  /// was an Instanzzustand hängt. Das Ergebnis ist bewusst eine schlichte
+  /// Map aus Listen, Maps, Strings und Zahlen.
+  static Map<String, Object?> _parseKatalog(Uint8List bytes) {
+    final warnungen = <String>[];
+    final protokoll = <String>[];
+
     final Excel excel;
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
-      debugPrint('[NAV] decodeBytes fehlgeschlagen: $e');
       throw Exception('Die Datei ließ sich nicht als Excel öffnen: $e');
     }
-
-    final warnungen = <String>[];
 
     if (excel.tables.isEmpty) {
       throw Exception('Die Datei enthält kein Tabellenblatt.');
@@ -173,9 +259,7 @@ class NavisionImportService {
     if (tabelle == null || tabelle.rows.isEmpty) {
       throw Exception('Die Datei enthält keine Daten.');
     }
-    debugPrint(
-      '[NAV] Blatt „$sheetName" · ${tabelle.rows.length} Zeilen',
-    );
+    protokoll.add('[NAV] Blatt „$sheetName" · ${tabelle.rows.length} Zeilen');
 
     // Kopfzeile suchen — nicht über feste Namen, sondern über die Zeile mit
     // den MEISTEN erkannten Spalten. Dadurch ist es egal, welche Spalten der
@@ -185,8 +269,7 @@ class NavisionImportService {
     int? kopfZeile;
     Map<String, int> spalteVon = {};
     var besteTreffer = 0;
-    final maxPruefen =
-        tabelle.rows.length < 40 ? tabelle.rows.length : 40;
+    final maxPruefen = tabelle.rows.length < 40 ? tabelle.rows.length : 40;
     for (var r = 0; r < maxPruefen; r++) {
       final zeile = tabelle.rows[r];
       final treffer = <String, int>{};
@@ -222,7 +305,7 @@ class NavisionImportService {
       );
     }
 
-    debugPrint(
+    protokoll.add(
       '[NAV] Kopfzeile in Zeile ${kopfZeile + 1} · '
       '${spalteVon.length} Spalten erkannt: ${spalteVon.keys.join(', ')}',
     );
@@ -260,59 +343,43 @@ class NavisionImportService {
       return _zahl(zeile[c]);
     }
 
-    final jetzt = DateTime.now();
+    final zeilen = <Map<String, Object?>>[];
     var gelesen = 0;
-    var uebernommen = 0;
     var mitAuftrag = 0;
 
-    await _db.transaction(() async {
-      // Kompletter Ersatz: Der Import bildet den aktuellen NAV-Stand ab,
-      // alte Zeilen wären sonst Karteileichen mit falschen Beständen.
-      await _db.delete(_db.navisionArtikelKatalog).go();
+    for (var r = kopfZeile + 1; r < tabelle.rows.length; r++) {
+      final zeile = tabelle.rows[r];
+      final nummer = feld(zeile, 'nummer');
+      if (nummer == null) continue;
+      gelesen++;
 
-      for (var r = kopfZeile! + 1; r < tabelle.rows.length; r++) {
-        final zeile = tabelle.rows[r];
-        final nummer = feld(zeile, 'nummer');
-        if (nummer == null) continue;
-        gelesen++;
+      final auftrag = zahlFeld(zeile, 'mengeInAuftrag');
+      if (auftrag > 0) mitAuftrag++;
 
-        final auftrag = zahlFeld(zeile, 'mengeInAuftrag');
-        if (auftrag > 0) mitAuftrag++;
+      zeilen.add(<String, Object?>{
+        'nummer': nummer,
+        'nummer2': feld(zeile, 'nummer2'),
+        'beschreibung': feld(zeile, 'beschreibung') ?? '',
+        'beschreibung2': feld(zeile, 'beschreibung2'),
+        'suchbegriff': feld(zeile, 'suchbegriff'),
+        'pluCode': feld(zeile, 'pluCode'),
+        'stuecklistenNr': feld(zeile, 'stuecklistenNr'),
+        'basiseinheit': feld(zeile, 'basiseinheit'),
+        'lagerbestand': zahlFeld(zeile, 'lagerbestand'),
+        'mengeInFa': zahlFeld(zeile, 'mengeInFa'),
+        'mengeInAuftrag': auftrag,
+        'produktbuchungsgruppe': feld(zeile, 'produktbuchungsgruppe'),
+        'artikelkategorie': feld(zeile, 'artikelkategorie'),
+        'produktgruppe': feld(zeile, 'produktgruppe'),
+      });
+    }
 
-        await _db.into(_db.navisionArtikelKatalog).insertOnConflictUpdate(
-              NavisionArtikelKatalogCompanion.insert(
-                nummer: nummer,
-                nummer2: Value(feld(zeile, 'nummer2')),
-                beschreibung: Value(feld(zeile, 'beschreibung') ?? ''),
-                beschreibung2: Value(feld(zeile, 'beschreibung2')),
-                suchbegriff: Value(feld(zeile, 'suchbegriff')),
-                pluCode: Value(feld(zeile, 'pluCode')),
-                stuecklistenNr: Value(feld(zeile, 'stuecklistenNr')),
-                basiseinheit: Value(feld(zeile, 'basiseinheit')),
-                lagerbestand: Value(zahlFeld(zeile, 'lagerbestand')),
-                mengeInFa: Value(zahlFeld(zeile, 'mengeInFa')),
-                mengeInAuftrag: Value(auftrag),
-                produktbuchungsgruppe:
-                    Value(feld(zeile, 'produktbuchungsgruppe')),
-                artikelkategorie: Value(feld(zeile, 'artikelkategorie')),
-                produktgruppe: Value(feld(zeile, 'produktgruppe')),
-                importiertAm: Value(jetzt),
-              ),
-            );
-        uebernommen++;
-      }
-    });
-
-    debugPrint(
-      '[NAV] fertig — gelesen=$gelesen · uebernommen=$uebernommen · '
-      'mitAuftrag=$mitAuftrag · Warnungen=${warnungen.length}',
-    );
-
-    return NavisionImportErgebnis(
-      gelesen: gelesen,
-      uebernommen: uebernommen,
-      mitAuftrag: mitAuftrag,
-      warnungen: warnungen,
-    );
+    return <String, Object?>{
+      'zeilen': zeilen,
+      'warnungen': warnungen,
+      'protokoll': protokoll,
+      'gelesen': gelesen,
+      'mitAuftrag': mitAuftrag,
+    };
   }
 }
