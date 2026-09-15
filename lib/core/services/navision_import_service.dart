@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:isolate';
 
 import 'package:drift/drift.dart';
@@ -5,6 +6,48 @@ import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 
 import '../database/database.dart';
+
+/// Abschnitt, in dem der Import gerade steckt.
+enum NavisionPhase {
+  /// Die Arbeitsmappe wird geöffnet. Dieser Abschnitt lässt sich nicht
+  /// unterteilen — das Excel-Paket liest die Datei am Stück ein und meldet
+  /// dabei nichts nach außen.
+  datei,
+
+  /// Die Datenzeilen werden ausgewertet. Hier gibt es echte Zwischenstände.
+  zeilen,
+
+  /// Der Katalog wird in die Datenbank geschrieben.
+  speichern,
+}
+
+/// Zwischenstand eines laufenden Imports.
+class NavisionFortschritt {
+  const NavisionFortschritt({
+    required this.phase,
+    this.aktuell = 0,
+    this.gesamt = 0,
+  });
+
+  final NavisionPhase phase;
+  final int aktuell;
+  final int gesamt;
+
+  /// Anteil 0..1, oder null wenn der Abschnitt keine Zwischenstände liefert
+  /// (dann gehört ein unbestimmter Balken hin, kein Prozentwert).
+  double? get anteil {
+    if (gesamt <= 0) return null;
+    return (aktuell / gesamt).clamp(0.0, 1.0);
+  }
+
+  String get beschriftung => switch (phase) {
+        NavisionPhase.datei => 'Datei wird geöffnet …',
+        NavisionPhase.zeilen => gesamt > 0
+            ? 'Artikel werden gelesen … $aktuell von $gesamt'
+            : 'Artikel werden gelesen …',
+        NavisionPhase.speichern => 'Wird gespeichert …',
+      };
+}
 
 /// Ergebnis eines Navision-Imports.
 class NavisionImportErgebnis {
@@ -148,7 +191,10 @@ class NavisionImportService {
   ///      gut 4.000 Zeilen durch den XML-Parser liefen.
   ///   2. Schreiben im Hauptisolate, weil die Datenbankverbindung dort
   ///      lebt — jetzt als EIN Batch statt 4.000 Einzel-Inserts.
-  Future<NavisionImportErgebnis> importiere(Uint8List bytes) async {
+  Future<NavisionImportErgebnis> importiere(
+    Uint8List bytes, {
+    void Function(NavisionFortschritt)? onFortschritt,
+  }) async {
     debugPrint('[NAV] Import gestartet — ${bytes.length} Bytes');
 
     // Grober Format-Check: echte .xlsx sind ZIP-Container und beginnen mit
@@ -169,7 +215,44 @@ class NavisionImportService {
     // Maps, Strings, Zahlen). Fehler aus dem Parser kommen als Exception
     // hier an und behalten ihren Wortlaut.
     final uhrGesamt = Stopwatch()..start();
-    final roh = await _parseImIsolate(bytes);
+
+    // Fortschritt aus dem Isolate: Ein SendPort ist übertragbar, deshalb
+    // kann das Parse-Isolate Zwischenstände zurückmelden, ohne dass wir
+    // Isolate.run gegen eine eigene Isolate.spawn-Verdrahtung tauschen
+    // müssten.
+    onFortschritt?.call(
+      const NavisionFortschritt(phase: NavisionPhase.datei),
+    );
+
+    ReceivePort? port;
+    StreamSubscription<dynamic>? lauscher;
+    if (onFortschritt != null) {
+      port = ReceivePort();
+      lauscher = port.listen((dynamic nachricht) {
+        if (nachricht is! List || nachricht.length != 3) return;
+        final index = nachricht[0];
+        if (index is! int ||
+            index < 0 ||
+            index >= NavisionPhase.values.length) {
+          return;
+        }
+        onFortschritt(
+          NavisionFortschritt(
+            phase: NavisionPhase.values[index],
+            aktuell: nachricht[1] as int,
+            gesamt: nachricht[2] as int,
+          ),
+        );
+      });
+    }
+
+    final Map<String, Object?> roh;
+    try {
+      roh = await _parseImIsolate(bytes, port?.sendPort);
+    } finally {
+      await lauscher?.cancel();
+      port?.close();
+    }
     final msParsen = uhrGesamt.elapsedMilliseconds;
 
     final zeilen = (roh['zeilen'] as List).cast<Map<String, Object?>>();
@@ -207,6 +290,10 @@ class NavisionImportService {
     ];
 
     final msAufbereiten = uhrGesamt.elapsedMilliseconds - msParsen;
+
+    onFortschritt?.call(
+      const NavisionFortschritt(phase: NavisionPhase.speichern),
+    );
 
     await _db.transaction(() async {
       // Kompletter Ersatz: Der Import bildet den aktuellen NAV-Stand ab,
@@ -259,8 +346,11 @@ class NavisionImportService {
   ///
   /// In einer statischen Methode gibt es kein `this` — übertragen wird
   /// nur [bytes].
-  static Future<Map<String, Object?>> _parseImIsolate(Uint8List bytes) {
-    return Isolate.run(() => _parseKatalog(bytes));
+  static Future<Map<String, Object?>> _parseImIsolate(
+    Uint8List bytes,
+    SendPort? fortschritt,
+  ) {
+    return Isolate.run(() => _parseKatalog(bytes, fortschritt));
   }
 
   /// Parst die Arbeitsmappe zu reinen Daten — ohne jeden Datenbankzugriff.
@@ -268,7 +358,10 @@ class NavisionImportService {
   /// Läuft auf einem eigenen Isolate und darf deshalb nichts zurückgeben,
   /// was an Instanzzustand hängt. Das Ergebnis ist bewusst eine schlichte
   /// Map aus Listen, Maps, Strings und Zahlen.
-  static Map<String, Object?> _parseKatalog(Uint8List bytes) {
+  static Map<String, Object?> _parseKatalog(
+    Uint8List bytes,
+    SendPort? fortschritt,
+  ) {
     final warnungen = <String>[];
     final protokoll = <String>[];
 
@@ -378,7 +471,22 @@ class NavisionImportService {
     var gelesen = 0;
     var mitAuftrag = 0;
 
-    for (var r = kopfZeile + 1; r < tabelle.rows.length; r++) {
+    final ersteDatenZeile = kopfZeile + 1;
+    final gesamtZeilen = tabelle.rows.length - ersteDatenZeile;
+    void melde(int fertig) {
+      fortschritt?.send(<Object?>[
+        NavisionPhase.zeilen.index,
+        fertig,
+        gesamtZeilen,
+      ]);
+    }
+
+    melde(0);
+
+    for (var r = ersteDatenZeile; r < tabelle.rows.length; r++) {
+      // Alle 200 Zeilen melden — oft genug für einen flüssigen Balken,
+      // selten genug, dass das Verschicken nicht selbst ins Gewicht fällt.
+      if ((r - ersteDatenZeile) % 200 == 0) melde(r - ersteDatenZeile);
       final zeile = tabelle.rows[r];
       final nummer = feld(zeile, 'nummer');
       if (nummer == null) continue;
@@ -404,6 +512,8 @@ class NavisionImportService {
         'produktgruppe': feld(zeile, 'produktgruppe'),
       });
     }
+
+    melde(gesamtZeilen);
 
     protokoll.add(
       '[NAV] Zeiten — Excel.decodeBytes: $msDecode ms · '

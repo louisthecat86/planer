@@ -99,6 +99,9 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   bool _nurBestand = false;
   _NavSort _sort = _NavSort.bedarfAbst;
   bool _busy = false;
+
+  /// Zwischenstand eines laufenden Navision-Imports (null = keiner läuft).
+  NavisionFortschritt? _fortschritt;
   final Set<String> _markiert = {};
 
   @override
@@ -242,10 +245,19 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     }
 
     debugPrint('[NAV] Datei gewählt: ${datei?.name} · ${bytes.length} Bytes');
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _fortschritt = const NavisionFortschritt(phase: NavisionPhase.datei);
+    });
     try {
       final service = NavisionImportService(ref.read(databaseProvider));
-      final res = await service.importiere(bytes);
+      final res = await service.importiere(
+        bytes,
+        onFortschritt: (stand) {
+          if (!mounted) return;
+          setState(() => _fortschritt = stand);
+        },
+      );
       ref.invalidate(navisionKatalogProvider);
       ref
           .read(autoBackupTriggerProvider)
@@ -275,7 +287,12 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         ),
       );
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _fortschritt = null;
+        });
+      }
     }
   }
 
@@ -453,6 +470,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     final faktoren = ref.watch(umrechnungsFaktorenProvider).valueOrNull ??
         const <String, double>{};
 
+    final fortschritt = _fortschritt;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Navision-Import'),
@@ -465,41 +484,119 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: katalog.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
-        data: (alle) {
-          if (alle.isEmpty) return _leerHinweis(context);
-          final liste = _gefiltert(alle, imBedarfKg, faktoren);
-          final markierte =
-              liste.where((a) => _markiert.contains(a.nummer)).toList();
-          final fehlendeMitBedarf = alle
-              .where(
-                (a) => offenerBedarf(a) > 0 && !appNummern.contains(a.nummer),
-              )
-              .toList();
+      body: Stack(
+        children: [
+          _inhalt(context, katalog, appNummern, imBedarfKg, faktoren),
+          if (fortschritt != null) _fortschrittsSchleier(context, fortschritt),
+        ],
+      ),
+    );
+  }
 
-          return Column(
-            children: [
-              _filterLeiste(context, alle, liste.length),
-              if (fehlendeMitBedarf.isNotEmpty)
-                _fehlendeBanner(context, fehlendeMitBedarf),
-              const Divider(height: 1),
-              Expanded(
-                child: _tabelle(
-                  context,
-                  liste,
-                  appNummern,
-                  imBedarfKg,
-                  faktoren,
+  /// Halbtransparenter Schleier mit Ladebalken über der Liste.
+  ///
+  /// Bewusst kein Dialog: Der Schleier sperrt die Bedienung, ohne den
+  /// Navigations-Stack anzufassen — und wenn der Import scheitert, gibt es
+  /// keinen offenen Dialog, der aus Versehen stehen bleibt.
+  Widget _fortschrittsSchleier(
+    BuildContext context,
+    NavisionFortschritt stand,
+  ) {
+    final theme = Theme.of(context);
+    return Positioned.fill(
+      child: ColoredBox(
+        color: theme.colorScheme.surface.withValues(alpha: 0.85),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 360),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Artikelübersicht einlesen',
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 18),
+                    // anteil == null → unbestimmter Balken. Genau das ist
+                    // beim Öffnen der Datei richtig: Das Excel-Paket liest
+                    // am Stück und meldet unterwegs nichts. Ein Prozentwert
+                    // wäre dort frei erfunden.
+                    LinearProgressIndicator(
+                      value: stand.anteil,
+                      minHeight: 8,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      stand.beschriftung,
+                      style: theme.textTheme.bodyMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Das kann bei großen Dateien eine Weile dauern.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
-              if (markierte.isNotEmpty)
-                _aktionsLeiste(context, markierte),
-            ],
-          );
-        },
+            ),
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _inhalt(
+    BuildContext context,
+    AsyncValue<List<NavisionArtikel>> katalog,
+    Set<String> appNummern,
+    Map<String, double> imBedarfKg,
+    Map<String, double> faktoren,
+  ) {
+    return katalog.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Fehler: $e')),
+      data: (alle) {
+        if (alle.isEmpty) return _leerHinweis(context);
+        final liste = _gefiltert(alle, imBedarfKg, faktoren);
+        final markierte =
+            liste.where((a) => _markiert.contains(a.nummer)).toList();
+        final fehlendeMitBedarf = alle
+            .where(
+              (a) => offenerBedarf(a) > 0 && !appNummern.contains(a.nummer),
+            )
+            .toList();
+
+        return Column(
+          children: [
+            _filterLeiste(context, alle, liste.length),
+            if (fehlendeMitBedarf.isNotEmpty)
+              _fehlendeBanner(context, fehlendeMitBedarf),
+            const Divider(height: 1),
+            Expanded(
+              child: _tabelle(
+                context,
+                liste,
+                appNummern,
+                imBedarfKg,
+                faktoren,
+              ),
+            ),
+            if (markierte.isNotEmpty)
+              _aktionsLeiste(context, markierte),
+          ],
+        );
+      },
     );
   }
 
@@ -1207,3 +1304,6 @@ class _UmrechnungDialogState extends State<_UmrechnungDialog> {
     );
   }
 }
+
+
+
