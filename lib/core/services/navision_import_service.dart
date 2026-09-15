@@ -168,7 +168,9 @@ class NavisionImportService {
     // Über die Isolate-Grenze gehen ausschließlich einfache Typen (Listen,
     // Maps, Strings, Zahlen). Fehler aus dem Parser kommen als Exception
     // hier an und behalten ihren Wortlaut.
+    final uhrGesamt = Stopwatch()..start();
     final roh = await _parseImIsolate(bytes);
+    final msParsen = uhrGesamt.elapsedMilliseconds;
 
     final zeilen = (roh['zeilen'] as List).cast<Map<String, Object?>>();
     final warnungen = (roh['warnungen'] as List).cast<String>();
@@ -204,6 +206,8 @@ class NavisionImportService {
         ),
     ];
 
+    final msAufbereiten = uhrGesamt.elapsedMilliseconds - msParsen;
+
     await _db.transaction(() async {
       // Kompletter Ersatz: Der Import bildet den aktuellen NAV-Stand ab,
       // alte Zeilen wären sonst Karteileichen mit falschen Beständen.
@@ -224,6 +228,14 @@ class NavisionImportService {
     debugPrint(
       '[NAV] fertig — gelesen=$gelesen · uebernommen=${eintraege.length} · '
       'mitAuftrag=$mitAuftrag · Warnungen=${warnungen.length}',
+    );
+    // Vorübergehende Messung: zeigt, wo die Wartezeit wirklich entsteht.
+    debugPrint(
+      '[NAV] Zeiten — Parsen (Isolate): $msParsen ms · '
+      'Companions bauen: $msAufbereiten ms · '
+      'Datenbank schreiben: '
+      '${uhrGesamt.elapsedMilliseconds - msParsen - msAufbereiten} ms · '
+      'GESAMT: ${uhrGesamt.elapsedMilliseconds} ms',
     );
 
     return NavisionImportErgebnis(
@@ -260,12 +272,15 @@ class NavisionImportService {
     final warnungen = <String>[];
     final protokoll = <String>[];
 
+    final uhr = Stopwatch()..start();
+
     final Excel excel;
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
       throw Exception('Die Datei ließ sich nicht als Excel öffnen: $e');
     }
+    final msDecode = uhr.elapsedMilliseconds;
 
     if (excel.tables.isEmpty) {
       throw Exception('Die Datei enthält kein Tabellenblatt.');
@@ -389,6 +404,11 @@ class NavisionImportService {
         'produktgruppe': feld(zeile, 'produktgruppe'),
       });
     }
+
+    protokoll.add(
+      '[NAV] Zeiten — Excel.decodeBytes: $msDecode ms · '
+      'Zeilen auswerten: ${uhr.elapsedMilliseconds - msDecode} ms',
+    );
 
     return <String, Object?>{
       'zeilen': zeilen,
