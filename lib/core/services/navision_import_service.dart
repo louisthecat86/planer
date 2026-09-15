@@ -166,10 +166,9 @@ class NavisionImportService {
     }
 
     // Über die Isolate-Grenze gehen ausschließlich einfache Typen (Listen,
-    // Maps, Strings, Zahlen) — nichts, was an eine Isolate-Instanz
-    // gebunden wäre. Fehler aus dem Parser kommen als Exception hier an
-    // und behalten ihren Wortlaut.
-    final roh = await Isolate.run(() => _parseKatalog(bytes));
+    // Maps, Strings, Zahlen). Fehler aus dem Parser kommen als Exception
+    // hier an und behalten ihren Wortlaut.
+    final roh = await _parseImIsolate(bytes);
 
     final zeilen = (roh['zeilen'] as List).cast<Map<String, Object?>>();
     final warnungen = (roh['warnungen'] as List).cast<String>();
@@ -233,6 +232,23 @@ class NavisionImportService {
       mitAuftrag: mitAuftrag,
       warnungen: warnungen,
     );
+  }
+
+  /// Startet [_parseKatalog] auf einem eigenen Isolate.
+  ///
+  /// Diese Methode MUSS statisch bleiben. Eine Closure übernimmt beim
+  /// Erzeugen ihren umgebenden Kontext — in einer Instanzmethode gehört
+  /// `this` dazu, und damit hinge die ganze Kette `NavisionImportService`
+  /// → `AppDatabase` → `DatabaseConnection` mit dran. Eine offene
+  /// Datenbankverbindung ist nicht zwischen Isolaten übertragbar, der
+  /// Import scheiterte dann mit „object is unsendable". Dass
+  /// [_parseKatalog] statisch ist und `this` nie benutzt, genügt nicht:
+  /// Der Kontext wird als Block erfasst, nicht je Variable.
+  ///
+  /// In einer statischen Methode gibt es kein `this` — übertragen wird
+  /// nur [bytes].
+  static Future<Map<String, Object?>> _parseImIsolate(Uint8List bytes) {
+    return Isolate.run(() => _parseKatalog(bytes));
   }
 
   /// Parst die Arbeitsmappe zu reinen Daten — ohne jeden Datenbankzugriff.
