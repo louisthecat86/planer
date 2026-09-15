@@ -1,0 +1,171 @@
+name: Desktop Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyse & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+
+      - name: Flutter version
+        run: flutter --version
+
+      # Die Tests legen eine SQLite-Datenbank im Arbeitsspeicher an. Die
+      # Bibliothek kommt dabei NICHT aus sqlite3_flutter_libs — das ist ein
+      # Flutter-Plugin und steht im Test-Prozess nicht zur Verfügung —,
+      # sondern vom System.
+      - name: SQLite bereitstellen
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Code generation (drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Analyse
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+  build-linux:
+    name: Build Linux Release
+    runs-on: ubuntu-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Code generation (drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libblkid-dev liblzma-dev
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Build Linux release
+        run: flutter build linux --release
+
+      - name: Package Linux bundle
+        run: zip -r planer-linux.zip build/linux/x64/release/bundle
+
+      - name: Upload Linux bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: planer-linux-bundle
+          path: planer-linux.zip
+
+  build-windows:
+    name: Build Windows Release
+    runs-on: windows-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: true
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Code generation (drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Package Windows bundle
+        run: powershell -Command "Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath planer-windows.zip"
+
+      - name: Upload Windows bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: planer-windows-bundle
+          path: planer-windows.zip
+
+  build-macos:
+    name: Build macOS Release
+    runs-on: macos-latest
+    needs: analyze
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bewusst OHNE Cache.
+      #
+      # Der macOS-Job ist mit einem Bus-Error (BUS_ADRALN) in der Dart-VM
+      # abgestürzt, und zwar beim JIT-Kompilieren von flutter_tools selbst —
+      # also noch bevor eine Zeile Projektcode angefasst wurde. Das ist das
+      # typische Bild eines beschädigten SDK aus dem Runner-Cache. Der
+      # frische Download kostet ein bis zwei Minuten und nimmt diese
+      # Fehlerquelle heraus.
+      #
+      # Läuft es damit über längere Zeit stabil, kann `cache: true` wieder
+      # versucht werden.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.41.6'
+          cache: false
+
+      - name: Flutter version
+        run: flutter --version
+
+      # Lädt die macOS-Artefakte vorab. Schlägt hier etwas fehl, steht es
+      # in einer verständlichen Meldung statt in einem VM-Stacktrace.
+      - name: Precache macOS artifacts
+        run: flutter precache --macos
+
+      - name: Pub get
+        run: flutter pub get
+
+      - name: Code generation (drift)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Enable macOS desktop
+        run: flutter config --enable-macos-desktop
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Package macOS bundle
+        run: |
+          cd build/macos/Build/Products/Release
+          zip -r "$GITHUB_WORKSPACE/planer-macos.zip" *.app
+
+      - name: Upload macOS bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: planer-macos-bundle
+          path: planer-macos.zip
