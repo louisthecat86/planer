@@ -1,0 +1,36 @@
+# Einheitliche Zeilenenden, unabhängig davon, an welchem Rechner gearbeitet
+# wird. Das Projekt entsteht abwechselnd auf einem Windows-PC und einem Mac —
+# ohne diese Datei landen je nach Rechner CRLF oder LF im Repo, und Diffs
+# zeigen dann ganze Dateien als geändert, obwohl nur die Zeilenenden anders
+# sind.
+#
+# Im Arbeitsverzeichnis darf Windows gern CRLF verwenden; im Repository steht
+# immer LF.
+* text=auto eol=lf
+
+# Quelltext und Konfiguration explizit — Dart-Werkzeuge erwarten UTF-8 mit LF.
+*.dart   text eol=lf
+*.yaml   text eol=lf
+*.yml    text eol=lf
+*.json   text eol=lf
+*.md     text eol=lf
+*.sql    text eol=lf
+*.cmake  text eol=lf
+*.gradle text eol=lf
+
+# Windows-Build-Dateien behalten CRLF, sonst stolpert das Visual-Studio-Setup.
+*.sln    text eol=crlf
+*.vcxproj text eol=crlf
+*.rc     text eol=crlf
+
+# Binärdateien nie anfassen.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.ttf  binary
+*.otf  binary
+*.xlsx binary
+*.pdf  binary
+*.keystore binary
+*.jks  binary
