@@ -56,38 +56,12 @@ class NavisionImportErgebnis {
     required this.uebernommen,
     required this.mitAuftrag,
     required this.warnungen,
-    this.msOeffnen = 0,
-    this.msLesen = 0,
-    this.msSpeichern = 0,
-    this.msGesamt = 0,
   });
 
   final int gelesen;
   final int uebernommen;
   final int mitAuftrag;
   final List<String> warnungen;
-
-  /// Millisekunden für `Excel.decodeBytes` — das Öffnen der Arbeitsmappe.
-  final int msOeffnen;
-
-  /// Millisekunden für das Auswerten der Datenzeilen.
-  final int msLesen;
-
-  /// Millisekunden für Aufbereiten und Schreiben in die Datenbank.
-  final int msSpeichern;
-
-  /// Gesamtdauer des Imports.
-  final int msGesamt;
-
-  /// Kurzfassung der Zeiten für die Rückmeldung an den Nutzer.
-  ///
-  /// Vorübergehend: Sie soll zeigen, wo die Wartezeit entsteht, damit sich
-  /// entscheiden lässt, ob ein eigener xlsx-Leser den Aufwand lohnt.
-  String get zeitenText =>
-      'Öffnen ${_sek(msOeffnen)} · Lesen ${_sek(msLesen)} · '
-      'Speichern ${_sek(msSpeichern)} · gesamt ${_sek(msGesamt)}';
-
-  static String _sek(int ms) => '${(ms / 1000).toStringAsFixed(1)} s';
 }
 
 /// Liest die Navision-Artikelübersicht (Excel-Export aus NAV) ein.
@@ -240,8 +214,6 @@ class NavisionImportService {
     // Über die Isolate-Grenze gehen ausschließlich einfache Typen (Listen,
     // Maps, Strings, Zahlen). Fehler aus dem Parser kommen als Exception
     // hier an und behalten ihren Wortlaut.
-    final uhrGesamt = Stopwatch()..start();
-
     // Fortschritt aus dem Isolate: Ein SendPort ist übertragbar, deshalb
     // kann das Parse-Isolate Zwischenstände zurückmelden, ohne dass wir
     // Isolate.run gegen eine eigene Isolate.spawn-Verdrahtung tauschen
@@ -279,15 +251,12 @@ class NavisionImportService {
       await lauscher?.cancel();
       port?.close();
     }
-    final msParsen = uhrGesamt.elapsedMilliseconds;
 
     final zeilen = (roh['zeilen'] as List).cast<Map<String, Object?>>();
     final warnungen = (roh['warnungen'] as List).cast<String>();
     final protokoll = (roh['protokoll'] as List).cast<String>();
     final gelesen = roh['gelesen'] as int;
     final mitAuftrag = roh['mitAuftrag'] as int;
-    final msOeffnen = roh['msDecode'] as int? ?? 0;
-    final msLesen = roh['msZeilen'] as int? ?? 0;
 
     // Das Parser-Protokoll erst hier ausgeben: Aus einem Hintergrund-
     // Isolate landet debugPrint in unvorhersehbarer Reihenfolge im Log.
@@ -317,8 +286,6 @@ class NavisionImportService {
         ),
     ];
 
-    final msAufbereiten = uhrGesamt.elapsedMilliseconds - msParsen;
-
     onFortschritt?.call(
       const NavisionFortschritt(phase: NavisionPhase.speichern),
     );
@@ -344,26 +311,12 @@ class NavisionImportService {
       '[NAV] fertig — gelesen=$gelesen · uebernommen=${eintraege.length} · '
       'mitAuftrag=$mitAuftrag · Warnungen=${warnungen.length}',
     );
-    // Vorübergehende Messung: zeigt, wo die Wartezeit wirklich entsteht.
-    debugPrint(
-      '[NAV] Zeiten — Parsen (Isolate): $msParsen ms · '
-      'Companions bauen: $msAufbereiten ms · '
-      'Datenbank schreiben: '
-      '${uhrGesamt.elapsedMilliseconds - msParsen - msAufbereiten} ms · '
-      'GESAMT: ${uhrGesamt.elapsedMilliseconds} ms',
-    );
 
     return NavisionImportErgebnis(
       gelesen: gelesen,
       uebernommen: eintraege.length,
       mitAuftrag: mitAuftrag,
       warnungen: warnungen,
-      msOeffnen: msOeffnen,
-      msLesen: msLesen,
-      // Aufbereiten und Schreiben gehören für den Nutzer zusammen — beides
-      // passiert, nachdem die Datei gelesen ist.
-      msSpeichern: uhrGesamt.elapsedMilliseconds - msParsen,
-      msGesamt: uhrGesamt.elapsedMilliseconds,
     );
   }
 
@@ -399,15 +352,12 @@ class NavisionImportService {
     final warnungen = <String>[];
     final protokoll = <String>[];
 
-    final uhr = Stopwatch()..start();
-
     final Excel excel;
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
       throw Exception('Die Datei ließ sich nicht als Excel öffnen: $e');
     }
-    final msDecode = uhr.elapsedMilliseconds;
 
     if (excel.tables.isEmpty) {
       throw Exception('Die Datei enthält kein Tabellenblatt.');
@@ -561,19 +511,12 @@ class NavisionImportService {
 
     melde(gesamtZeilen);
 
-    protokoll.add(
-      '[NAV] Zeiten — Excel.decodeBytes: $msDecode ms · '
-      'Zeilen auswerten: ${uhr.elapsedMilliseconds - msDecode} ms',
-    );
-
     return <String, Object?>{
       'zeilen': zeilen,
       'warnungen': warnungen,
       'protokoll': protokoll,
       'gelesen': gelesen,
       'mitAuftrag': mitAuftrag,
-      'msDecode': msDecode,
-      'msZeilen': uhr.elapsedMilliseconds - msDecode,
     };
   }
 }

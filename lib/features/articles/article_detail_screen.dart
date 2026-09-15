@@ -895,7 +895,7 @@ class _StepsList extends ConsumerWidget {
     final theme = Theme.of(context);
 
     // Aufeinanderfolgende Schritte derselben Abteilung zu EINER Karte bündeln
-    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → eine Karte).
+    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel ? eine Karte).
     final gruppen = <List<({ProductStep step, int nummer})>>[];
     for (var i = 0; i < steps.length; i++) {
       final eintrag = (step: steps[i], nummer: i + 1);
@@ -1203,7 +1203,7 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(ctrl.dispose);
     if (name == null || name.isEmpty) return;
 
     final db = ref.read(databaseProvider);
@@ -1548,7 +1548,7 @@ class _KartenAnsichtState extends State<_KartenAnsicht> {
   @override
   void initState() {
     super.initState();
-    // Wenige Abteilungen → gleich offen, viele → zugeklappt starten.
+    // Wenige Abteilungen ? gleich offen, viele ? zugeklappt starten.
     _offen = widget.gruppen.length <= 3
         ? widget.gruppen.map(_schluessel).toSet()
         : <String>{};
@@ -1697,7 +1697,7 @@ class _AbteilungsPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ── Kopf: klickbar zum Auf-/Zuklappen ──────────────────
+              // -- Kopf: klickbar zum Auf-/Zuklappen ------------------
               InkWell(
                 onTap: onToggle,
                 child: Container(
@@ -1804,7 +1804,7 @@ class _AbteilungsPanel extends StatelessWidget {
                 ),
               ),
 
-              // ── Inhalt: Maschinen als Kacheln nebeneinander ────────
+              // -- Inhalt: Maschinen als Kacheln nebeneinander --------
               if (offen)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 14),
@@ -2147,7 +2147,7 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
         ],
       ),
-    );
+    ).whenComplete(ctrl.dispose);
     if (res == null) return;
     final zahl = double.tryParse(res.replaceAll(',', '.')) ?? 0.0;
     final db = ref.read(databaseProvider);
@@ -3385,7 +3385,7 @@ class _KennzahlenCard extends StatelessWidget {
             if (hatMengen) ...[
               const SizedBox(height: 14),
               Text(
-                'Gesamt: ${_fmtKg(summeRoh)} kg Rohware → '
+                'Gesamt: ${_fmtKg(summeRoh)} kg Rohware ? '
                 '${_fmtKg(summeFertig)} kg Fertigware',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
@@ -4351,7 +4351,7 @@ class _MaschinenNotizFeld extends ConsumerWidget {
           ),
         ],
       ),
-    );
+    ).whenComplete(ctrl.dispose);
     if (neu == null) return;
 
     final db = ref.read(databaseProvider);

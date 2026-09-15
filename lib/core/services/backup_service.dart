@@ -1100,6 +1100,20 @@ class BackupInfo {
   /// Zeitstempel im deutschen Format.
   String get formattedTimestamp =>
       DateFormat('dd.MM.yyyy HH:mm').format(timestamp);
+
+  /// Stammt das Backup aus einer Version VOR 1.4?
+  ///
+  /// Solche Sicherungen enthalten weder Bedarfsliste noch Produktions-
+  /// historie noch Wochen-Snapshots — diese Tabellen wurden damals nicht
+  /// mitgeschrieben. Beim Wiederherstellen sind sie danach leer, ohne dass
+  /// irgendetwas kaputt wäre. Genau das sollte man vorher wissen.
+  bool get istAeltereVersion => version != BackupService._currentVersion;
+
+  /// Was in einem älteren Backup fehlt — null bei aktueller Version.
+  String? get versionsHinweis => istAeltereVersion
+      ? 'Älteres Format: Bedarf, Historie und Wochen-Snapshots fehlen '
+          'möglicherweise.'
+      : null;
 }
 
 

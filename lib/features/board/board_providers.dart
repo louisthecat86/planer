@@ -291,6 +291,28 @@ class DayBoard {
 // Provider
 // ---------------------------------------------------------------------------
 
+/// Höchstzahl an IDs, die in EINE `IN (...)`-Abfrage gepackt werden.
+///
+/// SQLite begrenzt die Anzahl der Platzhalter je Statement. Drift setzt für
+/// jede ID einen eigenen Platzhalter, und `_ladeKettenNachbarn` fragt die
+/// Liste sogar zweimal ab (`id IN (...) OR parent_task_id IN (...)`) — die
+/// Platzhalter zählen also doppelt. Bei einer vollen Woche mit vielen
+/// Auftragsketten lief das auf das Limit zu; dann wirft nicht die Abfrage
+/// eine hübsche Meldung, sondern das Wochenboard lädt gar nicht mehr.
+///
+/// 400 ist bewusst konservativ: klein genug für jede SQLite-Version, die
+/// diese App antrifft, groß genug, dass im Alltag ein einziger Block reicht.
+const int _kIdBlockGroesse = 400;
+
+/// Zerlegt eine ID-Menge in Blöcke von höchstens [_kIdBlockGroesse].
+Iterable<List<String>> _idBloecke(Iterable<String> ids) sync* {
+  final liste = ids.toList();
+  for (var i = 0; i < liste.length; i += _kIdBlockGroesse) {
+    final ende = i + _kIdBlockGroesse;
+    yield liste.sublist(i, ende > liste.length ? liste.length : ende);
+  }
+}
+
 /// Tagesschlüssel für die Zuordnung von Nebenzeiten (ohne Uhrzeit).
 String _tagKey(DateTime d) => DateTime(d.year, d.month, d.day)
     .toIso8601String();
@@ -467,10 +489,13 @@ Future<List<BoardTask>> _ladeBoardTasks(
       .get();
   if (rows.isEmpty) return const [];
 
-  final productIds = rows.map((t) => t.productId).toSet().toList();
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.id.isIn(productIds)))
-      .get();
+  final productIds = rows.map((t) => t.productId).toSet();
+  final produkte = <Product>[];
+  for (final block in _idBloecke(productIds)) {
+    produkte.addAll(
+      await (db.select(db.products)..where((p) => p.id.isIn(block))).get(),
+    );
+  }
   final nameById = {
     for (final p in produkte) p.id: p.artikelbezeichnung,
   };
@@ -596,13 +621,25 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
 }) async {
   if (kettenIds.isEmpty) return const {};
 
-  final rows = await (db.select(db.productionTasks)
-        ..where((t) => t.deletedAt.isNull())
-        ..where((t) => t.status.isNotIn(const ['storniert']))
-        ..where(
-          (t) => t.id.isIn(kettenIds) | t.parentTaskId.isIn(kettenIds),
-        ))
-      .get();
+  // Blockweise abfragen und über die Task-ID zusammenführen: Ein Auftrag
+  // kann in zwei Blöcken auftauchen (einmal über seine eigene ID, einmal
+  // über parent_task_id). Für die Vor-/Folgestufen ist das zwar unschädlich
+  // — es wird ohnehin nur das früheste bzw. späteste Datum gesucht — aber
+  // doppelte Zeilen sind ein Stolperstein für jede spätere Erweiterung.
+  final jeId = <String, ProductionTask>{};
+  for (final block in _idBloecke(kettenIds)) {
+    final teil = await (db.select(db.productionTasks)
+          ..where((t) => t.deletedAt.isNull())
+          ..where((t) => t.status.isNotIn(const ['storniert']))
+          ..where(
+            (t) => t.id.isIn(block) | t.parentTaskId.isIn(block),
+          ))
+        .get();
+    for (final t in teil) {
+      jeId[t.id] = t;
+    }
+  }
+  final rows = jeId.values;
 
   final vorher = <String, ({Abteilung abteilung, DateTime datum})>{};
   final nachher = <String, ({Abteilung abteilung, DateTime datum})>{};
@@ -748,3 +785,6 @@ Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
         ..where((m) => m.istPlanungsressource.equals(true)))
       .get();
 }
+
+
+

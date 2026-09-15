@@ -123,7 +123,15 @@ class BackupManagementScreen extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
-            Text('${backup.formattedTimestamp} • ${backup.formattedSize}'),
+            Text(
+              '${backup.formattedTimestamp} • ${backup.formattedSize} • '
+              'Version ${backup.version}',
+            ),
+            if (backup.versionsHinweis != null)
+              Text(
+                backup.versionsHinweis!,
+                style: const TextStyle(fontSize: 11),
+              ),
           ],
         ),
         trailing: PopupMenuButton<String>(
@@ -377,3 +385,6 @@ class BackupManagementScreen extends ConsumerWidget {
     );
   }
 }
+
+
+

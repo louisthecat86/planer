@@ -1222,12 +1222,40 @@ class _BackupListenEintrag extends StatelessWidget {
                 ),
                 Text(
                   '$relativeZeit · ${info.formattedSize} · '
-                  '${info.isAuto ? "Auto" : "Manuell"}',
+                  '${info.isAuto ? "Auto" : "Manuell"} · '
+                  'Version ${info.version}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color:
                         theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
                 ),
+                // Ältere Formate enthalten Bedarf, Historie und
+                // Wochen-Snapshots nicht. Das sieht man einem Backup sonst
+                // erst an, wenn es eingespielt ist und die Listen leer sind.
+                if (info.versionsHinweis != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 13,
+                          color: theme.colorScheme.tertiary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            info.versionsHinweis!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              fontSize: 11,
+                              color: theme.colorScheme.tertiary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
@@ -1313,3 +1341,6 @@ class _StatusBanner extends StatelessWidget {
     );
   }
 }
+
+
+

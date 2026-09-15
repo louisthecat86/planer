@@ -21,7 +21,7 @@ class ExcelImportScreen extends ConsumerStatefulWidget {
 }
 
 class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
-  // ── Import-State ────────────────────────────────────────────────────
+  // -- Import-State ----------------------------------------------------
   String? _filePath;
   String? _fileName;
   UnifiedImportPreview? _preview;
@@ -29,7 +29,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
   bool _isLoading = false;
   String? _error;
 
-  // ── Export-State ────────────────────────────────────────────────────
+  // -- Export-State ----------------------------------------------------
   bool _isExporting = false;
   ExportResultV3? _exportResult;
   String? _exportError;
@@ -208,7 +208,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ═════ Info-Text ═══════════════════════════════════════════════
+          // ----- Info-Text -----------------------------------------------
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -221,9 +221,9 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Arbeitsweise: Morgens aktuelle Excel importieren → '
+                    'Arbeitsweise: Morgens aktuelle Excel importieren ? '
                     'tagsüber in der App oder Excel arbeiten (nicht beides '
-                    'parallel) → abends aktualisierte Excel exportieren.',
+                    'parallel) ? abends aktualisierte Excel exportieren.',
                     style: TextStyle(
                       fontSize: 13,
                       color: colors.onPrimaryContainer,
@@ -235,7 +235,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
           ),
           const SizedBox(height: 24),
 
-          // ═════ Sektion: Import ═════════════════════════════════════════
+          // ----- Sektion: Import -----------------------------------------
           const _SectionHeader(
             icon: Icons.upload_file,
             title: 'Import',
@@ -300,7 +300,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
           const Divider(),
           const SizedBox(height: 24),
 
-          // ═════ Sektion: Export ═════════════════════════════════════════
+          // ----- Sektion: Export -----------------------------------------
           const _SectionHeader(
             icon: Icons.download,
             title: 'Export',
@@ -432,7 +432,6 @@ class _PreviewCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final isV3 = preview.version == VorlagenVersion.v3;
 
     return Card(
       child: Padding(
@@ -458,19 +457,15 @@ class _PreviewCard extends StatelessWidget {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: isV3
-                        ? Colors.green.withValues(alpha: 0.15)
-                        : Colors.blueGrey.withValues(alpha: 0.15),
+                    color: Colors.green.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    isV3 ? 'Format: v3' : 'Format: Legacy',
+                    'Vorlage erkannt',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: isV3
-                          ? Colors.green.shade700
-                          : Colors.blueGrey.shade700,
+                      color: Colors.green.shade700,
                     ),
                   ),
                 ),
@@ -480,13 +475,8 @@ class _PreviewCard extends StatelessWidget {
             _countRow('Neue Artikel', preview.artikelNeu),
             _countRow('Aktualisierte Artikel', preview.artikelAktualisiert),
             _countRow('Produktions-Schritte', preview.schritte),
-            if (isV3) ...[
-              _countRow('Anlagen (Katalog)', preview.maschinen),
-              _countRow('Schritt-Parameter', preview.parameter),
-            ] else ...[
-              _countRow('Rezeptur-Einträge', preview.rezepturen),
-              _countRow('Rohwaren', preview.rohwaren),
-            ],
+            _countRow('Anlagen (Katalog)', preview.maschinen),
+            _countRow('Schritt-Parameter', preview.parameter),
             _countRow('Historische Messwerte', preview.historien),
 
             if (preview.warnungen.isNotEmpty) ...[
@@ -576,7 +566,6 @@ class _ResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final success = !result.hatFehler;
-    final isV3 = result.version == VorlagenVersion.v3;
 
     return Card(
       color: success ? Colors.green.shade50 : Colors.red.shade50,
@@ -608,13 +597,8 @@ class _ResultCard extends StatelessWidget {
             _countRow('Neue Artikel', result.artikelNeu),
             _countRow('Aktualisierte Artikel', result.artikelAktualisiert),
             _countRow('Schritte', result.schritteImportiert),
-            if (isV3) ...[
-              _countRow('Anlagen importiert', result.maschinenImportiert),
-              _countRow('Schritt-Parameter', result.parameterImportiert),
-            ] else ...[
-              _countRow('Rezepturen', result.rezepturenImportiert),
-              _countRow('Rohwaren', result.rohwarenImportiert),
-            ],
+            _countRow('Anlagen importiert', result.maschinenImportiert),
+            _countRow('Schritt-Parameter', result.parameterImportiert),
             _countRow('Historische Messwerte', result.historienVerarbeitet),
 
             if (result.warnungen.isNotEmpty) ...[

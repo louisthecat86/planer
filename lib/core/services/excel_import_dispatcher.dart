@@ -4,12 +4,15 @@ import 'dart:typed_data';
 import 'package:excel/excel.dart';
 
 import '../database/database.dart';
-import 'excel_import_service.dart' as legacy;
 import 'excel_import_service_v3.dart';
 
+/// Erkanntes Format einer Import-Datei.
+///
+/// Historisch gab es hier noch `legacy` für Vorlagen aus der Zeit vor dem
+/// Anlagen-Katalog. Diese Vorlagen hat nie jemand produktiv genutzt, der
+/// zugehörige Importer ist entfallen.
 enum VorlagenVersion {
   v3,
-  legacy,
   unbekannt,
 }
 
@@ -21,8 +24,6 @@ class UnifiedImportPreview {
     this.schritte = 0,
     this.parameter = 0,
     this.maschinen = 0,
-    this.rezepturen = 0,
-    this.rohwaren = 0,
     this.historien = 0,
     this.warnungen = const [],
     this.fehler = const [],
@@ -34,8 +35,6 @@ class UnifiedImportPreview {
   final int schritte;
   final int parameter;
   final int maschinen;
-  final int rezepturen;
-  final int rohwaren;
   final int historien;
   final List<String> warnungen;
   final List<String> fehler;
@@ -47,8 +46,6 @@ class UnifiedImportPreview {
       schritte == 0 &&
       parameter == 0 &&
       maschinen == 0 &&
-      rezepturen == 0 &&
-      rohwaren == 0 &&
       historien == 0;
 }
 
@@ -60,8 +57,6 @@ class UnifiedImportResult {
     this.schritteImportiert = 0,
     this.parameterImportiert = 0,
     this.maschinenImportiert = 0,
-    this.rezepturenImportiert = 0,
-    this.rohwarenImportiert = 0,
     this.historienVerarbeitet = 0,
     this.warnungen = const [],
     this.fehler = const [],
@@ -73,8 +68,6 @@ class UnifiedImportResult {
   final int schritteImportiert;
   final int parameterImportiert;
   final int maschinenImportiert;
-  final int rezepturenImportiert;
-  final int rohwarenImportiert;
   final int historienVerarbeitet;
   final List<String> warnungen;
   final List<String> fehler;
@@ -93,18 +86,26 @@ class ExcelImportDispatcher {
     return _erkenneVersionFromBytes(bytes);
   }
 
+  /// Sammelt die Blattnamen der Mappe.
+  ///
+  /// Zwei Wege, weil je nach Version des excel-Pakets mal `tables`, mal
+  /// `sheets` gefüllt ist. Fehlt einer davon, liefert er einfach nichts.
   Set<String> _collectSheetNames(Excel excel) {
     final names = <String>{};
     try {
       names.addAll(excel.tables.keys);
-    } catch (_) {}
+    } catch (_) {
+      // Kein Zugriff auf tables — dann bleibt der zweite Weg.
+    }
     try {
       // ignore: avoid_dynamic_calls
       final dyn = (excel as dynamic).sheets;
       if (dyn is Map) {
         names.addAll(dyn.keys.map((k) => k.toString()));
       }
-    } catch (_) {}
+    } catch (_) {
+      // sheets nicht verfügbar — tables hat dann hoffentlich gereicht.
+    }
     return names;
   }
 
@@ -113,22 +114,6 @@ class ExcelImportDispatcher {
       final excel = Excel.decodeBytes(bytes);
       if (ExcelImportServiceV3.istV3Format(excel)) {
         return VorlagenVersion.v3;
-      }
-      final sheetNames = _collectSheetNames(excel);
-      if (sheetNames.contains('Übersicht') &&
-          !sheetNames.contains('Anlagen-Katalog')) {
-        return VorlagenVersion.legacy;
-      }
-      for (final sheet in excel.tables.values) {
-        for (final row in sheet.rows.take(50)) {
-          for (final cell in row.take(5)) {
-            final v = cell?.value;
-            if (v is TextCellValue) {
-              final text = v.value.text ?? '';
-              if (text.contains('STAMMDATEN')) return VorlagenVersion.legacy;
-            }
-          }
-        }
       }
       return VorlagenVersion.unbekannt;
     } catch (_) {
@@ -163,150 +148,81 @@ class ExcelImportDispatcher {
     try {
       excel = Excel.decodeBytes(bytes);
       out.add('DIAGNOSE: Excel.decodeBytes erfolgreich');
-    } catch (e, st) {
+    } catch (e) {
       out.add('DIAGNOSE: ❌ Excel.decodeBytes wirft: $e');
-      out.add('DIAGNOSE: Stack (erste 500 Zeichen): '
-          '${st.toString().substring(0, st.toString().length > 500 ? 500 : st.toString().length)}');
       return out;
     }
 
-    final tablesKeys = <String>[];
     try {
-      tablesKeys.addAll(excel.tables.keys);
-      out.add('DIAGNOSE: excel.tables.keys hat ${tablesKeys.length} Einträge: '
-          '${tablesKeys.map((s) => '"$s"').join(", ")}');
-    } catch (e) {
-      out.add('DIAGNOSE: ❌ excel.tables wirft: $e');
-    }
-
-    try {
-      // ignore: avoid_dynamic_calls
-      final dyn = (excel as dynamic).sheets;
-      if (dyn is Map) {
-        final names = dyn.keys.map((k) => k.toString()).toList();
-        out.add('DIAGNOSE: excel.sheets hat ${names.length} Einträge: '
-            '${names.map((s) => '"$s"').join(", ")}');
-      } else {
-        out.add('DIAGNOSE: excel.sheets ist keine Map (Typ: ${dyn.runtimeType})');
-      }
-    } catch (e) {
-      out.add('DIAGNOSE: excel.sheets nicht verfügbar: $e');
-    }
-
-    // Zusätzlich: warum schlägt die v3-Erkennung fehl? Prüfe gezielt auf
-    // das Schlüssel-Sheet "Anlagen-Katalog" (case-insensitive + getrimmt).
-    try {
-      final alle = _collectSheetNames(excel);
-      final hatKatalog = alle.any(
+      final namen = _collectSheetNames(excel);
+      out.add('DIAGNOSE: ${namen.length} Blätter gefunden: '
+          '${namen.map((s) => '"$s"').join(", ")}');
+      final hatKatalog = namen.any(
         (s) => s.trim().toLowerCase() == 'anlagen-katalog',
       );
-      out.add('DIAGNOSE: Sheet "Anlagen-Katalog" vorhanden: $hatKatalog');
+      out.add('DIAGNOSE: Blatt "Anlagen-Katalog" vorhanden: $hatKatalog');
       out.add('DIAGNOSE: istV3Format() => '
           '${ExcelImportServiceV3.istV3Format(excel)}');
     } catch (e) {
-      out.add('DIAGNOSE: v3-Prüfung nicht möglich: $e');
+      out.add('DIAGNOSE: Blätter nicht auslesbar: $e');
     }
 
     return out;
   }
 
+  /// Fehlermeldung, wenn das Format nicht erkannt wurde.
+  List<String> _unbekanntFehler(Uint8List bytes, String filePath) => [
+        'Das Format der Datei konnte nicht erkannt werden. Erwartet wird '
+            'eine Vorlage mit den Blättern "Übersicht" und '
+            '"Anlagen-Katalog" — genau das erzeugt der Excel-Export der '
+            'App. Bitte dort eine frische Vorlage ziehen.',
+        ..._diagnose(bytes, filePath),
+      ];
+
   Future<UnifiedImportPreview> preview(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
-    final version = _erkenneVersionFromBytes(bytes);
 
-    if (version == VorlagenVersion.unbekannt) {
+    if (_erkenneVersionFromBytes(bytes) != VorlagenVersion.v3) {
       return UnifiedImportPreview(
         version: VorlagenVersion.unbekannt,
-        fehler: [
-          'Das Format der Datei konnte nicht erkannt werden. '
-              'Erwartet wird entweder die v3-Vorlage (mit Sheet "Anlagen-Katalog") '
-              'oder die alte Phase-B-Vorlage (mit "== STAMMDATEN ==" Markern).',
-          ..._diagnose(bytes, filePath),
-        ],
+        fehler: _unbekanntFehler(bytes, filePath),
       );
     }
 
-    if (version == VorlagenVersion.v3) {
-      final svc = ExcelImportServiceV3(_db);
-      final p = await svc.preview(File(filePath));
-      return UnifiedImportPreview(
-        version: VorlagenVersion.v3,
-        artikelNeu: p.artikelNeu,
-        artikelAktualisiert: p.artikelAktualisiert,
-        schritte: p.schritte,
-        parameter: p.parameter,
-        maschinen: p.maschinen,
-        historien: p.historien,
-        warnungen: p.warnungen,
-        fehler: p.fehler,
-      );
-    }
-
-    // Legacy
-    final svc = legacy.ExcelImportService(_db);
-    final p = await svc.preview(filePath);
-    final fehler = List<String>.from(p.fehler);
-    if (p.artikelNeu == 0 && p.artikelAktualisiert == 0) {
-      fehler.addAll(_diagnose(bytes, filePath));
-      fehler.add(
-        'HINWEIS: Falls dies eine v3-Vorlage sein soll, prüfe ob das Sheet '
-        '"Anlagen-Katalog" in der Diagnose oben auftaucht.',
-      );
-    }
+    final svc = ExcelImportServiceV3(_db);
+    final p = await svc.preview(File(filePath));
     return UnifiedImportPreview(
-      version: VorlagenVersion.legacy,
+      version: VorlagenVersion.v3,
       artikelNeu: p.artikelNeu,
       artikelAktualisiert: p.artikelAktualisiert,
       schritte: p.schritte,
-      rezepturen: p.rezepturen,
-      rohwaren: p.rohwaren,
+      parameter: p.parameter,
+      maschinen: p.maschinen,
       historien: p.historien,
       warnungen: p.warnungen,
-      fehler: fehler,
+      fehler: p.fehler,
     );
   }
 
   Future<UnifiedImportResult> importFile(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
-    final version = _erkenneVersionFromBytes(bytes);
 
-    if (version == VorlagenVersion.unbekannt) {
-      // Diagnose anhängen, damit in der Detailanzeige sichtbar wird, WARUM
-      // die Erkennung scheitert (decode-Fehler, fehlendes Sheet, kein ZIP …).
+    if (_erkenneVersionFromBytes(bytes) != VorlagenVersion.v3) {
       return UnifiedImportResult(
         version: VorlagenVersion.unbekannt,
-        fehler: [
-          'Dateiformat nicht erkannt.',
-          ..._diagnose(bytes, filePath),
-        ],
+        fehler: _unbekanntFehler(bytes, filePath),
       );
     }
 
-    if (version == VorlagenVersion.v3) {
-      final svc = ExcelImportServiceV3(_db);
-      final r = await svc.import(File(filePath));
-      return UnifiedImportResult(
-        version: VorlagenVersion.v3,
-        artikelNeu: r.artikelNeu,
-        artikelAktualisiert: r.artikelAktualisiert,
-        schritteImportiert: r.schritteImportiert,
-        parameterImportiert: r.parameterImportiert,
-        maschinenImportiert: r.maschinenImportiert,
-        historienVerarbeitet: r.historienVerarbeitet,
-        warnungen: r.warnungen,
-        fehler: r.fehler,
-      );
-    }
-
-    final svc = legacy.ExcelImportService(_db);
-    final r = await svc.importFile(filePath);
+    final svc = ExcelImportServiceV3(_db);
+    final r = await svc.import(File(filePath));
     return UnifiedImportResult(
-      version: VorlagenVersion.legacy,
+      version: VorlagenVersion.v3,
       artikelNeu: r.artikelNeu,
       artikelAktualisiert: r.artikelAktualisiert,
       schritteImportiert: r.schritteImportiert,
-      rezepturenImportiert: r.rezepturenImportiert,
-      rohwarenImportiert: r.rohwarenImportiert,
+      parameterImportiert: r.parameterImportiert,
+      maschinenImportiert: r.maschinenImportiert,
       historienVerarbeitet: r.historienVerarbeitet,
       warnungen: r.warnungen,
       fehler: r.fehler,
