@@ -59,8 +59,14 @@ part 'database.g.dart';
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
-  AppDatabase.forTesting(super.executor);
+  /// Nur für Tests: Datenbank auf einem frei wählbaren Executor.
+  ///
+  /// Der normale Konstruktor legt die SQLite-Datei im Anwendungsordner an —
+  /// in einem Test wäre das ein gemeinsamer Zustand zwischen Testläufen und
+  /// bräuchte ein Dateisystem. Mit `NativeDatabase.memory()` bekommt jeder
+  /// Test eine frische, leere Datenbank im Arbeitsspeicher, auf die
+  /// `onCreate` dasselbe Schema anlegt wie in der echten App.
+  AppDatabase.forTesting(QueryExecutor executor) : super(executor);
 
   @override
   int get schemaVersion => 17;
@@ -428,3 +434,6 @@ class AppDatabase extends _$AppDatabase {
 QueryExecutor _openConnection() {
   return driftDatabase(name: 'produktion_planer');
 }
+
+
+

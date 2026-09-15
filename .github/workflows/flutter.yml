@@ -17,9 +17,15 @@ jobs:
           cache: true
       - name: Flutter version
         run: flutter --version
+      # Die Tests legen eine SQLite-Datenbank im Arbeitsspeicher an. Anders
+      # als in der App kommt die Bibliothek dabei nicht aus
+      # sqlite3_flutter_libs (das ist ein Flutter-Plugin und steht im
+      # Test-Prozess nicht zur Verfügung), sondern vom System.
+      - name: SQLite bereitstellen
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
       - name: Pub get
         run: flutter pub get
-      - name: Code-Generierung (drift, riverpod)
+      - name: Code-Generierung (drift)
         run: dart run build_runner build --delete-conflicting-outputs
       - name: Analyse
         run: flutter analyze
