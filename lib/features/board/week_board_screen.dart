@@ -1537,7 +1537,7 @@ class _KettenMarker extends StatelessWidget {
           if (v != null)
             _chip(
               context,
-              '◀ Vorstufe · KW${v.kw}',
+              '? Vorstufe · KW${v.kw}',
               'Vorstufe: ${v.abteilung.anzeigeName} in KW${v.kw} '
                   '(${v.datum.day}.${v.datum.month}.) — antippen zum Springen',
               () => onSprung(v.datum),
@@ -1545,7 +1545,7 @@ class _KettenMarker extends StatelessWidget {
           if (n != null)
             _chip(
               context,
-              'Folgestufe · KW${n.kw} ▶',
+              'Folgestufe · KW${n.kw} ?',
               'Folgestufe: ${n.abteilung.anzeigeName} in KW${n.kw} '
                   '(${n.datum.day}.${n.datum.month}.) — antippen zum Springen',
               () => onSprung(n.datum),
@@ -1871,7 +1871,7 @@ class _ZusatzzeitDialogState extends State<_ZusatzzeitDialog> {
               controller: _notiz,
               decoration: const InputDecoration(
                 labelText: 'Notiz (optional)',
-                hintText: 'z.B. Wechsel hell → dunkel',
+                hintText: 'z.B. Wechsel hell ? dunkel',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -2103,7 +2103,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     if (mounted) setState(() => _histVerlust = v);
   }
 
-  // ── Zeitmodell: Minuten = Fixanteil + Faktor × Menge ─────────────────
+  // -- Zeitmodell: Minuten = Fixanteil + Faktor × Menge -----------------
   // Die Schrittdauer ist „Fixzeit + Zeit × (Menge / Referenzmenge)", also
   // linear in der Menge — die Rechnung lässt sich damit umkehren.
   //
@@ -2261,7 +2261,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   }
 
   /// Informative Rohwaren-Vorschau bei Fertigware-Eingabe:
-  /// Rohware ≈ Fertig / (1 − Verlust). null, wenn kein Verlust bekannt ist.
+  /// Rohware ˜ Fertig / (1 - Verlust). null, wenn kein Verlust bekannt ist.
   /// Beeinflusst die eigentliche Planung NICHT — die läuft über die
   /// Ausbeute-Faktoren.
   double? get _rohwareVorschau {
@@ -2303,12 +2303,29 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     // bei Stunden-Eingabe über das Zeitmodell — siehe [_planMenge].
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
-    final plan = await berechneSchrittPlan(
-      db: db,
-      productId: produkt.id,
-      mengeKg: menge,
-      startTag: _startTag,
-    );
+
+    final GeplanterPlan plan;
+    try {
+      plan = await berechneSchrittPlan(
+        db: db,
+        productId: produkt.id,
+        mengeKg: menge,
+        startTag: _startTag,
+      );
+    } catch (e) {
+      // Ohne diesen Zweig bliebe _busy auf true stehen: Das Sheet hinge
+      // im Spinner fest, ohne dass der Nutzer erfährt, was schiefging.
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Plan konnte nicht berechnet werden: $e'),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+      return;
+    }
+
     if (!mounted) return;
     if (plan.schritte.isEmpty) {
       setState(() => _busy = false);
@@ -2348,13 +2365,32 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       _MengenEinheit.stunden => _fertigAusStunden ?? 0.0,
       _MengenEinheit.rohware => 0.0,
     };
-    await erstelleTasksAusPlan(
-      db: db,
-      productId: produkt.id,
-      schritte: _plan,
-      bedarfId: _bedarf?.bedarf.id,
-      fertigMengeKg: fertigMenge,
-    );
+    try {
+      await erstelleTasksAusPlan(
+        db: db,
+        productId: produkt.id,
+        schritte: _plan,
+        bedarfId: _bedarf?.bedarf.id,
+        fertigMengeKg: fertigMenge,
+      );
+    } catch (e) {
+      // Die Kette wird transaktional angelegt — ein Fehler bedeutet also,
+      // dass NICHTS geschrieben wurde. Genau das muss der Nutzer erfahren,
+      // sonst glaubt er, die Planung stünde, und sie fehlt still.
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Einplanen fehlgeschlagen — es wurde nichts gespeichert. '
+            'Bitte erneut versuchen. ($e)',
+          ),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+      return;
+    }
+
     ref
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Produkt geplant');
@@ -2642,8 +2678,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               const SizedBox(height: 10),
               if (_mengeAusStunden != null) ...[
                 _RohwareHinweis(
-                  text: 'Schaffbar: ≈ ${_mengeAusStunden!.round()} kg Rohware'
-                      '${_fertigAusStunden != null ? '  →  ergibt ≈ '
+                  text: 'Schaffbar: ˜ ${_mengeAusStunden!.round()} kg Rohware'
+                      '${_fertigAusStunden != null ? '  ?  ergibt ˜ '
                           '${_fertigAusStunden!.round()} kg Fertigware' : ''}',
                 ),
                 // Ehrlicher Hinweis, wenn eine andere Abteilung dafür über
@@ -2681,7 +2717,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               _RohwareHinweis(
                 text: 'Ø Verlust aus Historie: '
                     '${(_histVerlust! * 100).toStringAsFixed(1)} %'
-                    '${_rohwareVorschau != null ? '  →  es werden ≈ '
+                    '${_rohwareVorschau != null ? '  ?  es werden ˜ '
                         '${_rohwareVorschau!.round()} kg Rohware verplant'
                         : ''}',
               )
@@ -2700,7 +2736,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               if (_rohwareVorschau != null) ...[
                 const SizedBox(height: 8),
                 _RohwareHinweis(
-                  text: 'Es werden ≈ ${_rohwareVorschau!.round()} kg '
+                  text: 'Es werden ˜ ${_rohwareVorschau!.round()} kg '
                       'Rohware verplant',
                 ),
               ],

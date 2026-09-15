@@ -285,13 +285,25 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
       final db = ref.read(databaseProvider);
       // Foreign Keys AUSSERHALB der Transaktion abschalten, damit die
       // Löschreihenfolge egal ist (sonst FOREIGN KEY constraint failed).
+      //
+      // Das Wiedereinschalten MUSS in ein finally: Bricht das Löschen ab
+      // (Datei gesperrt, Platte voll, Absturz mittendrin), liefe die App
+      // sonst bis zum Neustart OHNE referenzielle Integrität weiter. Alles,
+      // was danach geschrieben wird, könnte verwaisen — und das fällt erst
+      // Wochen später auf, wenn Aufträge auf gelöschte Artikel zeigen.
       await db.customStatement('PRAGMA foreign_keys = OFF');
-      await db.transaction(() async {
-        for (final tabelle in db.allTables) {
-          await db.delete(tabelle).go();
-        }
-      });
-      await db.customStatement('PRAGMA foreign_keys = ON');
+      try {
+        await db.transaction(() async {
+          for (final tabelle in db.allTables) {
+            await db.delete(tabelle).go();
+          }
+        });
+      } finally {
+        // Bewusst ohne try/catch: Schlägt sogar das PRAGMA fehl, ist die
+        // Verbindung ohnehin defekt — dann soll der Fehler sichtbar sein
+        // und nicht durch ein stilles catch verdeckt werden.
+        await db.customStatement('PRAGMA foreign_keys = ON');
+      }
 
       if (!mounted) return;
       await showDialog<void>(
@@ -665,3 +677,6 @@ class _AnzeigeGroesse extends ConsumerWidget {
     );
   }
 }
+
+
+

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:file_picker/file_picker.dart';
@@ -18,6 +19,13 @@ class BackupService {
   static const String _backupDirName = 'backups';
   static const String _backupFilePrefix = 'planer_backup';
   static const String _autoBackupFilePrefix = 'planer_auto_backup';
+
+  /// Präfix der Sicherung, die unmittelbar VOR einem Restore geschrieben
+  /// wird. Bewusst ein eigener Name: Diese Datei zählt nicht als
+  /// Auto-Backup und wird deshalb von [cleanupOldAutoBackups] nie
+  /// wegrotiert — sie ist die letzte Rückfahrkarte, wenn jemand das
+  /// falsche Backup erwischt hat.
+  static const String _preRestoreFilePrefix = 'planer_vor_restore';
   static const String _backupFileExtension = 'planerbackup';
   /// Aktuelle Backup-Version.
   ///
@@ -165,7 +173,7 @@ class BackupService {
       // JSON in vom Nutzer gewählte Datei schreiben
       final file = File(outputPath);
       await file.writeAsString(
-        jsonEncode(backupData),
+        await _kodiereJson(backupData),
         flush: true,
       );
 
@@ -190,12 +198,48 @@ class BackupService {
       final backupData = await _buildBackupPayload(database, isAuto: true);
 
       final file = File(filepath);
-      await file.writeAsString(jsonEncode(backupData), flush: true);
+      await file.writeAsString(await _kodiereJson(backupData), flush: true);
 
       return filepath;
     } catch (e) {
       throw Exception('Auto-Backup fehlgeschlagen: $e');
     }
+  }
+
+  /// Wandelt das Backup-Payload in JSON — auf einem eigenen Isolate.
+  ///
+  /// Bei vollen Stammdaten sind das mehrere Megabyte. `jsonEncode` ist reine
+  /// CPU-Arbeit und blockiert den UI-Thread, solange es läuft: Das Fenster
+  /// friert ein, beim Beenden hakt die App sichtbar. Auf einem eigenen
+  /// Isolate merkt der Nutzer davon nichts.
+  ///
+  /// Der Fallback ist Absicht: Sollte `Isolate.run` auf einer Plattform
+  /// nicht verfügbar sein oder das Payload wider Erwarten etwas
+  /// Nicht-Sendbares enthalten, wird ganz normal im Hauptisolate kodiert.
+  /// Lieber kurz ruckeln als gar kein Backup.
+  static Future<String> _kodiereJson(Map<String, dynamic> daten) async {
+    try {
+      return await Isolate.run(() => jsonEncode(daten));
+    } catch (_) {
+      return jsonEncode(daten);
+    }
+  }
+
+  /// Schreibt den aktuellen Stand als Sicherung vor einem Restore.
+  static Future<String> _schreibeSicherungVorRestore(
+    AppDatabase database,
+  ) async {
+    final backupDir = await _getBackupDir();
+    final timeStamp = DateFormat('yyyy-MM-dd_HHmmss').format(DateTime.now());
+    final filepath = '${backupDir.path}/'
+        '${_preRestoreFilePrefix}_$timeStamp.$_backupFileExtension';
+    // isAuto: false — die Datei soll die Rotation überleben.
+    final daten = await _buildBackupPayload(database, isAuto: false);
+    await File(filepath).writeAsString(
+      await _kodiereJson(daten),
+      flush: true,
+    );
+    return filepath;
   }
 
   /// Baut das Backup-Payload zusammen. Zentrale Stelle damit
@@ -250,7 +294,10 @@ class BackupService {
     String filepath,
     AppDatabase database, {
     bool clearExisting = true,
+    bool sicherungAnlegen = true,
   }) async {
+    // ── Schritt 1: Datei lesen und prüfen (noch nichts angefasst) ─────
+    final Map<String, dynamic> data;
     try {
       final file = File(filepath);
       if (!await file.exists()) {
@@ -258,9 +305,15 @@ class BackupService {
       }
 
       final contents = await file.readAsString();
-      final backupJson = jsonDecode(contents) as Map<String, dynamic>;
+      final dekodiert = jsonDecode(contents);
+      if (dekodiert is! Map<String, dynamic>) {
+        throw Exception(
+          'Die Datei ist kein gültiges Backup (erwartet wird ein '
+          'JSON-Objekt).',
+        );
+      }
+      final backupJson = dekodiert;
 
-      // Version prüfen
       // Version prüfen — ältere Backups bleiben lesbar.
       final version = backupJson['version'] as String?;
       if (version == null || !_supportedVersions.contains(version)) {
@@ -270,13 +323,45 @@ class BackupService {
         );
       }
 
-      // In Datenbank-Transaktion importieren
+      // Früher ein harter Cast: Bei einer abgeschnittenen Datei — etwa
+      // nach einem abgebrochenen USB-Transfer — kam ein unverständlicher
+      // TypeError statt einer Ansage. Backups wandern zwischen zwei
+      // Rechnern, das ist ein realistischer Fall.
+      final rohDaten = backupJson['data'];
+      if (rohDaten is! Map<String, dynamic>) {
+        throw Exception(
+          'Die Backup-Datei ist unvollständig oder beschädigt — der '
+          'Datenteil fehlt. Bitte eine andere Sicherung wählen.',
+        );
+      }
+      data = rohDaten;
+    } catch (e) {
+      throw Exception('Backup-Import fehlgeschlagen: $e');
+    }
+
+    // ── Schritt 2: Aktuellen Stand sichern ────────────────────────────
+    //
+    // Erst ab hier wird geschrieben. Die Transaktion unten schützt gegen
+    // Abbrüche — aber nicht gegen die falsch ausgewählte Datei. Genau das
+    // ist der häufigere Fehler, und ohne diese Kopie wäre er endgültig.
+    if (sicherungAnlegen) {
+      try {
+        await _schreibeSicherungVorRestore(database);
+      } catch (e) {
+        throw Exception(
+          'Der aktuelle Stand konnte nicht gesichert werden ($e). '
+          'Das Wiederherstellen wurde NICHT ausgeführt — deine Daten sind '
+          'unverändert. Bitte zuerst den Backup-Ordner prüfen.',
+        );
+      }
+    }
+
+    // ── Schritt 3: Transaktional einspielen ───────────────────────────
+    try {
       await database.transaction(() async {
         if (clearExisting) {
           await _clearDatabase(database);
         }
-
-        final data = backupJson['data'] as Map<String, dynamic>;
 
         // Reihenfolge wichtig wegen Foreign-Key-Constraints!
         await _importProducts(database, data);
@@ -313,35 +398,109 @@ class BackupService {
   static Future<List<BackupInfo>> listBackups() async {
     try {
       final backupDir = await _getBackupDir();
-      final files = backupDir
-          .listSync()
-          .whereType<File>()
+      final dateien = await backupDir
+          .list()
+          .where((e) => e is File)
+          .cast<File>()
           .where(
             (f) =>
                 f.path.endsWith('.$_backupFileExtension') ||
                 f.path.endsWith('.json'),
           )
-          .toList()
-        ..sort((a, b) => b.statSync().modified.compareTo(a.statSync().modified));
+          .toList();
 
       final backups = <BackupInfo>[];
-      for (final file in files) {
+      for (final file in dateien) {
         try {
-          final info = await _readBackupInfo(file);
-          backups.add(info);
+          backups.add(await _readBackupInfo(file));
         } catch (_) {
           // Ungültige Backup-Datei überspringen
         }
       }
 
+      // Nach dem Backup-Zeitpunkt sortieren, neuestes zuerst. Früher lief
+      // das über die Datei-Änderungszeit — die verschiebt sich aber beim
+      // Kopieren auf einen anderen Rechner und hätte die Reihenfolge dort
+      // durcheinandergebracht.
+      backups.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return backups;
     } catch (e) {
       throw Exception('Backup-List auslesen fehlgeschlagen: $e');
     }
   }
 
+  /// Zeitstempel im Dateinamen: `..._2026-09-15_143022.planerbackup`
+  static final RegExp _zeitstempelMuster =
+      RegExp(r'(\d{4})-(\d{2})-(\d{2})_(\d{2})(\d{2})(\d{2})');
+
+  /// Version im JSON-Kopf — steht als erster Schlüssel in der Datei.
+  static final RegExp _versionMuster =
+      RegExp(r'"version"\s*:\s*"([^"]{1,16})"');
+
+  static DateTime? _zeitAusDateiname(String filename) {
+    final m = _zeitstempelMuster.firstMatch(filename);
+    if (m == null) return null;
+    try {
+      return DateTime(
+        int.parse(m.group(1)!),
+        int.parse(m.group(2)!),
+        int.parse(m.group(3)!),
+        int.parse(m.group(4)!),
+        int.parse(m.group(5)!),
+        int.parse(m.group(6)!),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Liest nur die ersten Bytes der Datei und zieht die Version heraus.
+  static Future<String?> _versionAusKopf(File file, int laenge) async {
+    try {
+      final ende = laenge < 2048 ? laenge : 2048;
+      if (ende <= 0) return null;
+      final bytes =
+          await file.openRead(0, ende).expand((teil) => teil).toList();
+      final kopf = utf8.decode(bytes, allowMalformed: true);
+      return _versionMuster.firstMatch(kopf)?.group(1);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Liest Metainformationen einer Backup-Datei.
+  ///
+  /// Der schnelle Weg kommt ohne vollständiges Parsen aus: Zeitpunkt und
+  /// Typ stecken im Dateinamen, die Version in den ersten 2 KB. Das ist
+  /// der entscheidende Unterschied — [listBackups] läuft nach JEDEM
+  /// Auto-Backup (über [cleanupOldAutoBackups]), und bei fünf Sicherungen
+  /// à mehreren Megabyte wurde vorher jedes Mal der komplette Bestand
+  /// eingelesen und durch `jsonDecode` geschickt, nur um Datum und
+  /// Version zu erfahren.
+  ///
+  /// Für Dateien mit abweichendem Namen — etwa ein manueller Export, den
+  /// jemand umbenannt hat — greift weiterhin der vollständige Weg.
   static Future<BackupInfo> _readBackupInfo(File file) async {
+    final filename = file.path.split(Platform.pathSeparator).last;
+    final zeit = _zeitAusDateiname(filename);
+
+    if (zeit != null) {
+      final groesse = await file.length();
+      return BackupInfo(
+        filename: filename,
+        filepath: file.path,
+        timestamp: zeit,
+        version: (await _versionAusKopf(file, groesse)) ?? _currentVersion,
+        sizeBytes: groesse,
+        isAuto: filename.startsWith(_autoBackupFilePrefix),
+      );
+    }
+
+    return _readBackupInfoVollstaendig(file);
+  }
+
+  /// Fallback: Datei komplett lesen und parsen.
+  static Future<BackupInfo> _readBackupInfoVollstaendig(File file) async {
     final contents = await file.readAsString();
     final json = jsonDecode(contents) as Map<String, dynamic>;
 
@@ -350,7 +509,7 @@ class BackupService {
       filepath: file.path,
       timestamp: DateTime.parse(json['timestamp'] as String),
       version: json['version'] as String,
-      sizeBytes: file.lengthSync(),
+      sizeBytes: await file.length(),
       isAuto: (json['type'] as String?) == 'auto',
     );
   }
@@ -557,12 +716,26 @@ class BackupService {
   // PRIVATE IMPORT-METHODEN
   // ============================================================================
 
+  /// Holt eine Tabellen-Liste aus dem Backup-Payload. Fehlt der Schlüssel
+  /// (ältere Backup-Version), ist das Ergebnis leer — es wird dann nichts
+  /// importiert, statt den ganzen Restore scheitern zu lassen.
+  static List<Map<String, dynamic>> _zeilen(
+    Map<String, dynamic> data,
+    String key,
+  ) =>
+      (data[key] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+
   static Future<void> _importProducts(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final products =
-        (data['products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final products = _zeilen(data, 'products');
+    // Bewusst Zeile für Zeile statt Batch: Diese Tabelle braucht beim
+    // Zusammenführen (clearExisting == false) eine eigene Konflikt-Regel,
+    // die nur Bezeichnung, Beschreibung und Notizen auffrischt und die
+    // mühsam gepflegten Prozessdaten in Ruhe lässt. Bei einem vollen
+    // Restore ist die Tabelle ohnehin leer, und mit ein paar hundert
+    // Artikeln fällt der Unterschied nicht ins Gewicht.
     for (final p in products) {
       // Abwärtskompatibel: Backups, die vor der Spalte istEingepflegt
       // erstellt wurden, kennen den Schlüssel nicht. Fehlt er (oder ist
@@ -588,8 +761,8 @@ class BackupService {
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final materials =
-        (data['raw_materials'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final materials = _zeilen(data, 'raw_materials');
+    // Gleiche Begründung wie bei _importProducts: eigene Konflikt-Regel.
     for (final m in materials) {
       final material = RawMaterial.fromJson(m);
       await db.into(db.rawMaterials).insert(
@@ -608,104 +781,99 @@ class BackupService {
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final steps =
-        (data['product_steps'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final s in steps) {
-      final step = ProductStep.fromJson(s);
-      await db.into(db.productSteps).insertOnConflictUpdate(
-            step.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'product_steps');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductStep.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productSteps, eintraege),
+    );
   }
 
   static Future<void> _importProductRawMaterials(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['product_raw_materials'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final p in list) {
-      final entry = ProductRawMaterial.fromJson(p);
-      await db.into(db.productRawMaterials).insertOnConflictUpdate(
-            entry.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'product_raw_materials');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductRawMaterial.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productRawMaterials, eintraege),
+    );
   }
 
+  /// DataClass von RawMaterialBatches heißt automatisch RawMaterialBatche.
   static Future<void> _importRawMaterialBatches(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['raw_material_batches'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final b in list) {
-      // DataClass von RawMaterialBatches heißt automatisch RawMaterialBatche
-      final batch = RawMaterialBatche.fromJson(b);
-      await db.into(db.rawMaterialBatches).insertOnConflictUpdate(
-            batch.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'raw_material_batches');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => RawMaterialBatche.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.rawMaterialBatches, eintraege),
+    );
   }
 
   static Future<void> _importProductionTasks(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['production_tasks'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final t in list) {
-      final task = ProductionTask.fromJson(t);
-      await db.into(db.productionTasks).insertOnConflictUpdate(
-            task.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'production_tasks');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductionTask.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productionTasks, eintraege),
+    );
   }
 
   static Future<void> _importProductionRuns(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['production_runs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final r in list) {
-      final run = ProductionRun.fromJson(r);
-      await db.into(db.productionRuns).insertOnConflictUpdate(
-            run.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'production_runs');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductionRun.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productionRuns, eintraege),
+    );
   }
 
   static Future<void> _importTaskDependencies(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['task_dependencies'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final d in list) {
-      final dep = TaskDependency.fromJson(d);
-      await db.into(db.taskDependencies).insertOnConflictUpdate(
-            dep.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'task_dependencies');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => TaskDependency.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.taskDependencies, eintraege),
+    );
   }
 
   static Future<void> _importOrderListItems(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['order_list_items'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final o in list) {
-      final item = OrderListItem.fromJson(o);
-      await db.into(db.orderListItems).insertOnConflictUpdate(
-            item.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'order_list_items');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => OrderListItem.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.orderListItems, eintraege),
+    );
   }
 
   // ── v3-Tabellen ────────────────────────────────────────────────────
@@ -714,44 +882,42 @@ class BackupService {
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['machines'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final m in list) {
-      final machine = Machine.fromJson(m);
-      await db.into(db.machines).insertOnConflictUpdate(
-            machine.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'machines');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => Machine.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.machines, eintraege),
+    );
   }
 
   static Future<void> _importProductStepParameters(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['product_step_parameters'] as List?)
-                ?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final p in list) {
-      final param = ProductStepParameter.fromJson(p);
-      await db.into(db.productStepParameters).insertOnConflictUpdate(
-            param.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'product_step_parameters');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductStepParameter.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productStepParameters, eintraege),
+    );
   }
 
   static Future<void> _importAppSettings(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['app_settings'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final s in list) {
-      final setting = AppSetting.fromJson(s);
-      await db.into(db.appSettings).insertOnConflictUpdate(
-            setting.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'app_settings');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => AppSetting.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.appSettings, eintraege),
+    );
   }
 
   // ── Backup-Version 1.1: Steckbriefe + Grenzen ──────────────────────
@@ -762,106 +928,100 @@ class BackupService {
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list = (data['machine_parameter_defs'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    for (final d in list) {
-      final def = MachineParameterDef.fromJson(d);
-      await db.into(db.machineParameterDefs).insertOnConflictUpdate(
-            def.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'machine_parameter_defs');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => MachineParameterDef.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.machineParameterDefs, eintraege),
+    );
   }
 
   static Future<void> _importNavisionUmrechnungen(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list = (data['navision_umrechnungen'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    for (final u in list) {
-      final eintrag = NavisionUmrechnung.fromJson(u);
-      await db.into(db.navisionUmrechnungen).insertOnConflictUpdate(
-            eintrag.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'navision_umrechnungen');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => NavisionUmrechnung.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.navisionUmrechnungen, eintraege),
+    );
   }
 
   static Future<void> _importZusatzzeiten(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['zusatzzeiten'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final z in list) {
-      final eintrag = Zusatzzeit.fromJson(z);
-      await db.into(db.zusatzzeiten).insertOnConflictUpdate(
-            eintrag.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'zusatzzeiten');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => Zusatzzeit.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.zusatzzeiten, eintraege),
+    );
   }
 
   static Future<void> _importParameterGrenzen(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['parameter_grenzen'] as List?)?.cast<Map<String, dynamic>>() ??
-            [];
-    for (final g in list) {
-      final grenze = ParameterGrenzenData.fromJson(g);
-      await db.into(db.parameterGrenzen).insertOnConflictUpdate(
-            grenze.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'parameter_grenzen');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ParameterGrenzenData.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.parameterGrenzen, eintraege),
+    );
   }
 
   // ── Backup-Version 1.4: Bedarf, Historie, Wochen-Snapshots ─────────
-  // Ältere Backups haben diese Schlüssel nicht — dann bleibt die Liste
-  // leer und es wird nichts importiert.
 
   static Future<void> _importDemands(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['demands'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final d in list) {
-      final demand = Demand.fromJson(d);
-      await db.into(db.demands).insertOnConflictUpdate(
-            demand.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'demands');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => Demand.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.demands, eintraege),
+    );
   }
 
   static Future<void> _importProductionHistory(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list = (data['production_history'] as List?)
-            ?.cast<Map<String, dynamic>>() ??
-        [];
-    for (final h in list) {
-      final eintrag = ProductionHistoryData.fromJson(h);
-      await db.into(db.productionHistory).insertOnConflictUpdate(
-            eintrag.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'production_history');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => ProductionHistoryData.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.productionHistory, eintraege),
+    );
   }
 
   static Future<void> _importWeekSnapshots(
     AppDatabase db,
     Map<String, dynamic> data,
   ) async {
-    final list =
-        (data['week_snapshots'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final s in list) {
-      final snapshot = WeekSnapshot.fromJson(s);
-      await db.into(db.weekSnapshots).insertOnConflictUpdate(
-            snapshot.toCompanion(true),
-          );
-    }
+    final zeilen = _zeilen(data, 'week_snapshots');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => WeekSnapshot.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.weekSnapshots, eintraege),
+    );
   }
 
   // ============================================================================
@@ -941,4 +1101,7 @@ class BackupInfo {
   String get formattedTimestamp =>
       DateFormat('dd.MM.yyyy HH:mm').format(timestamp);
 }
+
+
+
 

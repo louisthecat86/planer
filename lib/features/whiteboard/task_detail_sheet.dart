@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
@@ -226,36 +227,61 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       final task = widget.wbTask.task;
       final teilMenge = gesamtMenge / tage;
       final jetzt = DateTime.now();
+      const uuid = Uuid();
 
-      // Tag 1: bestehenden Auftrag auf Teilmenge reduzieren
-      await (db.update(db.productionTasks)
-            ..where((t) => t.id.equals(task.id)))
-          .write(
-        ProductionTasksCompanion(
-          mengeKg: Value(teilMenge),
-          geplanteDauerMinuten: Value(dauerJeTag),
-          updatedAt: Value(jetzt),
-        ),
-      );
+      // Die Teile gehören zur selben Kette wie das Original. Ist das
+      // Original selbst eine Wurzel (parentTaskId == null), wird es zur
+      // Wurzel seiner Teile — sonst hängen sie am selben Vorgänger.
+      // Ohne das bekäme jedes Teilstück eine eigene kettenId: andere
+      // Akzentfarbe auf dem Board, keine Kettenmarker, kein erkennbarer
+      // Zusammenhang mehr zwischen den Tagen.
+      final kettenAnker = task.parentTaskId ?? task.id;
 
-      // Tag 2..n: neue Teil-Aufträge an den Folgetagen
-      for (var i = 1; i < tage; i++) {
-        await db.into(db.productionTasks).insert(
-              ProductionTasksCompanion(
-                id: Value('${task.id}-t${i + 1}-${jetzt.millisecondsSinceEpoch}'),
-                productId: Value(task.productId),
-                mengeKg: Value(teilMenge),
-                datum: Value(task.datum.add(Duration(days: i))),
-                abteilung: Value(task.abteilung),
-                startZeit: Value(task.startZeit),
-                geplanteDauerMinuten: Value(dauerJeTag),
-                geplanteMitarbeiter: Value(task.geplanteMitarbeiter),
-                sortierung: Value(task.sortierung),
-                parentTaskId: Value(task.parentTaskId),
-                notizen: Value(task.notizen),
-              ),
-            );
-      }
+      // Alles in EINER Transaktion: Zuerst wird das Original auf die
+      // Teilmenge reduziert, dann entstehen die Folgetage. Bräche es
+      // dazwischen ab, stünde nur noch ein Bruchteil der Menge im Plan —
+      // der Rest wäre ersatzlos verschwunden, ohne jede Meldung.
+      await db.transaction(() async {
+        // Tag 1: bestehenden Auftrag auf Teilmenge reduzieren
+        await (db.update(db.productionTasks)
+              ..where((t) => t.id.equals(task.id)))
+            .write(
+          ProductionTasksCompanion(
+            mengeKg: Value(teilMenge),
+            geplanteDauerMinuten: Value(dauerJeTag),
+            updatedAt: Value(jetzt),
+          ),
+        );
+
+        // Tag 2..n: neue Teil-Aufträge an den Folgetagen
+        for (var i = 1; i < tage; i++) {
+          await db.into(db.productionTasks).insert(
+                ProductionTasksCompanion(
+                  // uuid.v4() wie überall sonst in der App. Der frühere
+                  // Bastel-Schlüssel aus Original-ID + Zähler + Zeitstempel
+                  // wuchs bei jedem erneuten Aufteilen weiter und konnte
+                  // beim zweiten Aufteilen in derselben Millisekunde
+                  // kollidieren.
+                  id: Value(uuid.v4()),
+                  productId: Value(task.productId),
+                  mengeKg: Value(teilMenge),
+                  datum: Value(task.datum.add(Duration(days: i))),
+                  abteilung: Value(task.abteilung),
+                  // Ohne die Anlage landen die Folgetage in der Sammelspur
+                  // der Abteilung statt auf der Maschine — die Auslastung
+                  // der Anlage wäre dann zu niedrig, die der Sammelspur
+                  // zu hoch.
+                  maschineId: Value(task.maschineId),
+                  startZeit: Value(task.startZeit),
+                  geplanteDauerMinuten: Value(dauerJeTag),
+                  geplanteMitarbeiter: Value(task.geplanteMitarbeiter),
+                  sortierung: Value(task.sortierung),
+                  parentTaskId: Value(kettenAnker),
+                  notizen: Value(task.notizen),
+                ),
+              );
+        }
+      });
 
       ref.read(autoBackupTriggerProvider).fireDebounced(
             reason: 'Auftrag auf $tage Tage verteilt',
@@ -277,7 +303,13 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       if (mounted) {
         setState(() => _isSaving = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Verteilen: $e')),
+          SnackBar(
+            content: Text(
+              'Verteilen fehlgeschlagen — der Auftrag ist unverändert '
+              'geblieben. ($e)',
+            ),
+            duration: const Duration(seconds: 8),
+          ),
         );
       }
     }
@@ -827,3 +859,6 @@ class _DauerAnzeige extends StatelessWidget {
     );
   }
 }
+
+
+

@@ -413,6 +413,13 @@ Future<double?> durchschnittsVerlust(
 /// zugewiesenen [GeplanterSchritt.tag] an und verkettet sie über
 /// [parentTaskId] (in Reihenfolge). Es werden **keine** festen Uhrzeiten
 /// gesetzt — die Reihenfolge innerhalb eines Tages wird im Board geregelt.
+///
+/// Läuft komplett in EINER Transaktion: Eine Auftragskette ist nur als
+/// Ganzes sinnvoll. Bräche das Anlegen in der Mitte ab, stünde eine halbe
+/// Produktion in der Planung — Zerlegung und Wurstküche eingeplant,
+/// Bratstraße und Verpackung fehlen. Schlimmer noch: Die Wurzel trägt
+/// `bedarfId` und `fertigMengeKg`, der Bedarf gälte also als vollständig
+/// eingeplant, obwohl die Kette hinten abbricht. Entweder alles oder nichts.
 Future<void> erstelleTasksAusPlan({
   required AppDatabase db,
   required String productId,
@@ -423,34 +430,37 @@ Future<void> erstelleTasksAusPlan({
   const uuid = Uuid();
   final sortiert = [...schritte]
     ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
+  if (sortiert.isEmpty) return;
 
-  String? previousTaskId;
-  for (final s in sortiert) {
-    final taskId = uuid.v4();
-    final tag = DateTime(s.tag.year, s.tag.month, s.tag.day);
-    // Der Bedarf hängt an der WURZEL der Kette. Nur dort steht die
-    // Fertigmenge — sonst würde sie bei jedem Abteilungsschritt erneut
-    // gegen den Bedarf gerechnet und die Liste wäre sofort „gedeckt".
-    final istWurzel = previousTaskId == null;
+  await db.transaction(() async {
+    String? previousTaskId;
+    for (final s in sortiert) {
+      final taskId = uuid.v4();
+      final tag = DateTime(s.tag.year, s.tag.month, s.tag.day);
+      // Der Bedarf hängt an der WURZEL der Kette. Nur dort steht die
+      // Fertigmenge — sonst würde sie bei jedem Abteilungsschritt erneut
+      // gegen den Bedarf gerechnet und die Liste wäre sofort „gedeckt".
+      final istWurzel = previousTaskId == null;
 
-    await db.into(db.productionTasks).insert(
-          ProductionTasksCompanion.insert(
-            id: taskId,
-            productId: productId,
-            mengeKg: s.mengeKg,
-            datum: tag,
-            abteilung: s.abteilungDbValue,
-            maschineId: Value(s.maschineId),
-            bedarfId: Value(istWurzel ? bedarfId : null),
-            fertigMengeKg: Value(istWurzel ? fertigMengeKg : null),
-            geplanteDauerMinuten: s.dauerMinuten,
-            geplanteMitarbeiter: s.mitarbeiter,
-            parentTaskId: Value(previousTaskId),
-            notizen: Value(s.notizen),
-          ),
-        );
-    previousTaskId = taskId;
-  }
+      await db.into(db.productionTasks).insert(
+            ProductionTasksCompanion.insert(
+              id: taskId,
+              productId: productId,
+              mengeKg: s.mengeKg,
+              datum: tag,
+              abteilung: s.abteilungDbValue,
+              maschineId: Value(s.maschineId),
+              bedarfId: Value(istWurzel ? bedarfId : null),
+              fertigMengeKg: Value(istWurzel ? fertigMengeKg : null),
+              geplanteDauerMinuten: s.dauerMinuten,
+              geplanteMitarbeiter: s.mitarbeiter,
+              parentTaskId: Value(previousTaskId),
+              notizen: Value(s.notizen),
+            ),
+          );
+      previousTaskId = taskId;
+    }
+  });
 }
 
 /// Komfort-Funktion: berechnet den Plan und legt alle Schritte auf [datum] an.
@@ -480,3 +490,6 @@ Future<double> createTasksFromProduct({
   );
   return plan.rohwareKg;
 }
+
+
+
