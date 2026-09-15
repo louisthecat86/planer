@@ -339,20 +339,30 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         builder: (_) => _UmrechnungDialog(artikel: offeneUmrechnung),
       );
       if (eingaben == null) return; // abgebrochen
+
+      final jetzt = DateTime.now();
+      final faktorZeilen = <NavisionUmrechnungenCompanion>[];
       for (final e in eingaben.entries) {
         faktorVon[e.key] = e.value;
-        await db.into(db.navisionUmrechnungen).insertOnConflictUpdate(
-              NavisionUmrechnungenCompanion.insert(
-                nummer: e.key,
-                einheit: offen
-                        .firstWhere((a) => a.nummer == e.key)
-                        .basiseinheit ??
-                    '',
-                kgJeEinheit: e.value,
-                updatedAt: Value(DateTime.now()),
-              ),
-            );
+        faktorZeilen.add(
+          NavisionUmrechnungenCompanion.insert(
+            nummer: e.key,
+            einheit:
+                offen.firstWhere((a) => a.nummer == e.key).basiseinheit ?? '',
+            kgJeEinheit: e.value,
+            updatedAt: Value(jetzt),
+          ),
+        );
       }
+      // Alle Faktoren auf einmal — ein Batch läuft in einer Transaktion.
+      // Entweder sind alle gemerkt oder keiner; halb gespeicherte Faktoren
+      // wären besonders tückisch, weil die App danach nicht mehr nachfragt.
+      await db.batch(
+        (b) => b.insertAllOnConflictUpdate(
+          db.navisionUmrechnungen,
+          faktorZeilen,
+        ),
+      );
     }
 
     final vorhandene = await (db.select(db.products)
@@ -377,6 +387,17 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     var uebersprungen = 0;
     var bereitsGedeckt = 0;
 
+    // Die Schleife RECHNET nur und sammelt ein — geschrieben wird erst
+    // danach, in einer einzigen Transaktion.
+    //
+    // Vorher entstanden Artikelmaske und Bedarfseintrag Position für
+    // Position direkt in der Datenbank. Bricht das bei Position 40 von 120
+    // ab, stehen 39 Bedarfe da, der Rest fehlt — und niemand kann sehen, wo
+    // die Liste abgerissen ist. Genau in dieser Liste steht aber, was
+    // produziert werden muss.
+    final neueProdukte = <ProductsCompanion>[];
+    final neueBedarfe = <DemandsCompanion>[];
+
     for (final a in offen) {
       final menge = offenerBedarf(a);
       final double kg;
@@ -394,16 +415,18 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
       var productId = idVonNummer[a.nummer];
       if (productId == null) {
         productId = const Uuid().v4();
-        await db.into(db.products).insert(
-              ProductsCompanion.insert(
-                id: productId,
-                artikelnummer: a.nummer,
-                artikelbezeichnung:
-                    a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
-                beschreibung: Value(a.beschreibung2),
-                istEingepflegt: const Value(false),
-              ),
-            );
+        neueProdukte.add(
+          ProductsCompanion.insert(
+            id: productId,
+            artikelnummer: a.nummer,
+            artikelbezeichnung:
+                a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
+            beschreibung: Value(a.beschreibung2),
+            istEingepflegt: const Value(false),
+          ),
+        );
+        // Sofort merken: Steht dieselbe Artikelnummer weiter unten noch
+        // einmal in der Liste, darf die Maske kein zweites Mal entstehen.
         idVonNummer[a.nummer] = productId;
         angelegt++;
       }
@@ -424,17 +447,43 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           : 'Aus Navision · ${_fmt(menge)} ${a.basiseinheit} '
               '× ${_fmt(faktorVon[a.nummer] ?? 0)} kg$abzug';
 
-      await db.into(db.demands).insert(
-            DemandsCompanion.insert(
-              id: const Uuid().v4(),
-              productId: productId,
-              mengeKgFertig: delta,
-              quelle: const Value('bestellung'),
-              notizen: Value(herkunft),
-            ),
-          );
+      neueBedarfe.add(
+        DemandsCompanion.insert(
+          id: const Uuid().v4(),
+          productId: productId,
+          mengeKgFertig: delta,
+          quelle: const Value('bestellung'),
+          notizen: Value(herkunft),
+        ),
+      );
       bereitsKgVon[productId] = bereits + delta;
       uebernommen++;
+    }
+
+    try {
+      await db.transaction(() async {
+        // Artikelmasken zuerst: Ohne sie zeigen die Bedarfszeilen auf
+        // nichts, was die Planung anzeigen könnte.
+        if (neueProdukte.isNotEmpty) {
+          await db.batch((b) => b.insertAll(db.products, neueProdukte));
+        }
+        if (neueBedarfe.isNotEmpty) {
+          await db.batch((b) => b.insertAll(db.demands, neueBedarfe));
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Übernahme fehlgeschlagen — es wurde nichts gespeichert. '
+            'Die Markierung bleibt erhalten, du kannst es erneut '
+            'versuchen. ($e)',
+          ),
+        ),
+      );
+      return;
     }
 
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf aus NAV');
@@ -1304,6 +1353,9 @@ class _UmrechnungDialogState extends State<_UmrechnungDialog> {
     );
   }
 }
+
+
+
 
 
 
