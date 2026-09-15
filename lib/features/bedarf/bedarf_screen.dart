@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -25,6 +27,7 @@ class BedarfInfo {
     required this.artikelNummer,
     required this.geplantKg,
     required this.produziertKg,
+    required this.heute,
   });
 
   final Demand bedarf;
@@ -39,6 +42,13 @@ class BedarfInfo {
   /// nicht mehr verschoben wurde, gilt als gelaufen — der Bedarf ist dann
   /// automatisch gedeckt, ohne dass man ihn von Hand abhaken muss.
   final double produziertKg;
+
+  /// Der Kalendertag, gegen den gerechnet wurde — auf 00:00 normiert.
+  ///
+  /// Wird hereingereicht statt hier aus `DateTime.now()` gezogen: So
+  /// rechnen alle Einträge einer Liste gegen denselben Tag, und die Liste
+  /// kann sich um Mitternacht gezielt erneuern (siehe [heuteProvider]).
+  final DateTime heute;
 
   /// Noch nicht eingeplante Menge (für die Planung relevant).
   double get offenKg =>
@@ -68,15 +78,45 @@ class BedarfInfo {
   bool get ueberfaellig {
     final t = bedarf.termin;
     if (t == null || erledigt) return false;
-    final heute = DateTime.now();
-    return t.isBefore(DateTime(heute.year, heute.month, heute.day));
+    return t.isBefore(heute);
   }
 }
+
+/// Der aktuelle Kalendertag (auf 00:00 normiert), der sich um Mitternacht
+/// selbst erneuert.
+///
+/// Der Bedarfs-Screen bewertet zwei Dinge gegen „heute": ob ein Termin
+/// überschritten ist, und ob ein Produktionstag schon vorbei ist. Ohne
+/// diesen Provider las das jeder Aufruf frisch aus `DateTime.now()` — die
+/// Liste selbst wurde aber nie neu berechnet. Eine App, die über Nacht
+/// offen bleibt (Schichtbetrieb), zeigte deshalb morgens noch den Stand
+/// vom Vortag: Gestern geplante Produktionen galten weiter als „in
+/// Planung" statt als gelaufen.
+///
+/// Der Timer feuert eine Sekunde nach Mitternacht und invalidiert den
+/// Provider; alles, was ihn beobachtet, rechnet dann neu.
+final heuteProvider = Provider<DateTime>((ref) {
+  final jetzt = DateTime.now();
+  final heute = DateTime(jetzt.year, jetzt.month, jetzt.day);
+  // Bewusst über die Tageszahl statt per Duration: Bei Zeitumstellung hat
+  // ein Tag 23 oder 25 Stunden, `add(Duration(days: 1))` läge dann daneben.
+  final naechsteMitternacht = DateTime(heute.year, heute.month, heute.day + 1);
+
+  final timer = Timer(
+    naechsteMitternacht.difference(jetzt) + const Duration(seconds: 1),
+    ref.invalidateSelf,
+  );
+  ref.onDispose(timer.cancel);
+
+  return heute;
+});
 
 /// Alle offenen und erledigten Bedarfe, sortiert: überfällig → Termin →
 /// Priorität.
 final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Um Mitternacht erneuert sich der Tag — und damit diese Liste.
+  final heuteNorm = ref.watch(heuteProvider);
 
   final bedarfe = await (db.select(db.demands)
         ..where((b) => b.deletedAt.isNull()))
@@ -94,8 +134,6 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
         ..where((t) => t.deletedAt.isNull())
         ..where((t) => t.bedarfId.isNotNull()))
       .get();
-  final heute = DateTime.now();
-  final heuteNorm = DateTime(heute.year, heute.month, heute.day);
   final geplantJeBedarf = <String, double>{};
   final produziertJeBedarf = <String, double>{};
   for (final t in tasks) {
@@ -118,6 +156,7 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
         artikelNummer: nameById[b.productId]?.artikelnummer ?? '—',
         geplantKg: geplantJeBedarf[b.id] ?? 0,
         produziertKg: produziertJeBedarf[b.id] ?? 0,
+        heute: heuteNorm,
       ),
   ];
 
@@ -852,3 +891,6 @@ final _produkteProvider = FutureProvider<List<Product>>((ref) async {
         ..orderBy([(p) => OrderingTerm.asc(p.artikelbezeichnung)]))
       .get();
 });
+
+
+
