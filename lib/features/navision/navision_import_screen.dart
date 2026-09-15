@@ -267,13 +267,27 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           res.warnungen.isEmpty ? '' : ' · ${res.warnungen.length} Hinweis(e)';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 5),
-          content: Text(
-            res.uebernommen == 0
-                ? 'Keine Artikel eingelesen (${res.gelesen} Datenzeilen '
-                    'geprüft). Details siehe Log-Ausgabe.'
-                : '${res.uebernommen} Artikel übernommen · '
-                    '${res.mitAuftrag} mit offenen Aufträgen$warnHinweis',
+          duration: const Duration(seconds: 12),
+          content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                res.uebernommen == 0
+                    ? 'Keine Artikel eingelesen (${res.gelesen} Datenzeilen '
+                        'geprüft). Details siehe Log-Ausgabe.'
+                    : '${res.uebernommen} Artikel übernommen · '
+                        '${res.mitAuftrag} mit offenen Aufträgen$warnHinweis',
+              ),
+              const SizedBox(height: 4),
+              // Vorübergehende Messanzeige: zeigt, welcher Abschnitt die
+              // Wartezeit verursacht. Fliegt wieder raus, sobald die Frage
+              // „eigener xlsx-Leser oder nicht" entschieden ist.
+              Text(
+                res.zeitenText,
+                style: const TextStyle(fontSize: 11.5),
+              ),
+            ],
           ),
         ),
       );

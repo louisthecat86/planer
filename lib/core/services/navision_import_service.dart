@@ -56,12 +56,38 @@ class NavisionImportErgebnis {
     required this.uebernommen,
     required this.mitAuftrag,
     required this.warnungen,
+    this.msOeffnen = 0,
+    this.msLesen = 0,
+    this.msSpeichern = 0,
+    this.msGesamt = 0,
   });
 
   final int gelesen;
   final int uebernommen;
   final int mitAuftrag;
   final List<String> warnungen;
+
+  /// Millisekunden für `Excel.decodeBytes` — das Öffnen der Arbeitsmappe.
+  final int msOeffnen;
+
+  /// Millisekunden für das Auswerten der Datenzeilen.
+  final int msLesen;
+
+  /// Millisekunden für Aufbereiten und Schreiben in die Datenbank.
+  final int msSpeichern;
+
+  /// Gesamtdauer des Imports.
+  final int msGesamt;
+
+  /// Kurzfassung der Zeiten für die Rückmeldung an den Nutzer.
+  ///
+  /// Vorübergehend: Sie soll zeigen, wo die Wartezeit entsteht, damit sich
+  /// entscheiden lässt, ob ein eigener xlsx-Leser den Aufwand lohnt.
+  String get zeitenText =>
+      'Öffnen ${_sek(msOeffnen)} · Lesen ${_sek(msLesen)} · '
+      'Speichern ${_sek(msSpeichern)} · gesamt ${_sek(msGesamt)}';
+
+  static String _sek(int ms) => '${(ms / 1000).toStringAsFixed(1)} s';
 }
 
 /// Liest die Navision-Artikelübersicht (Excel-Export aus NAV) ein.
@@ -260,6 +286,8 @@ class NavisionImportService {
     final protokoll = (roh['protokoll'] as List).cast<String>();
     final gelesen = roh['gelesen'] as int;
     final mitAuftrag = roh['mitAuftrag'] as int;
+    final msOeffnen = roh['msDecode'] as int? ?? 0;
+    final msLesen = roh['msZeilen'] as int? ?? 0;
 
     // Das Parser-Protokoll erst hier ausgeben: Aus einem Hintergrund-
     // Isolate landet debugPrint in unvorhersehbarer Reihenfolge im Log.
@@ -330,6 +358,12 @@ class NavisionImportService {
       uebernommen: eintraege.length,
       mitAuftrag: mitAuftrag,
       warnungen: warnungen,
+      msOeffnen: msOeffnen,
+      msLesen: msLesen,
+      // Aufbereiten und Schreiben gehören für den Nutzer zusammen — beides
+      // passiert, nachdem die Datei gelesen ist.
+      msSpeichern: uhrGesamt.elapsedMilliseconds - msParsen,
+      msGesamt: uhrGesamt.elapsedMilliseconds,
     );
   }
 
@@ -526,6 +560,8 @@ class NavisionImportService {
       'protokoll': protokoll,
       'gelesen': gelesen,
       'mitAuftrag': mitAuftrag,
+      'msDecode': msDecode,
+      'msZeilen': uhr.elapsedMilliseconds - msDecode,
     };
   }
 }
