@@ -727,7 +727,7 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
                 child: _WertFeld(
                   label: 'Fixe Zeit',
                   wert: (s.fixZeitMinuten ?? 0) > 0
-                      ? _fmtDauer(s.fixZeitMinuten!)
+                      ? fmtDauer(s.fixZeitMinuten!)
                       : '–',
                   onTap: () => _editNumber(
                     titel: 'Fixe Zeit / Durchlauf (min)',

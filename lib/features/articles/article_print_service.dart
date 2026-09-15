@@ -17,7 +17,7 @@ import 'package:printing/printing.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
-import 'article_detail_screen.dart';
+import 'article_detail_providers.dart';
 import 'bratstrasse_schema.dart';
 
 /// Auswahl des Druck-Dialogs: welche Abteilungen, und ob jede Abteilung
@@ -763,3 +763,6 @@ class ArticlePrintService {
     return v.toStringAsFixed(1).replaceAll('.', ',');
   }
 }
+
+
+

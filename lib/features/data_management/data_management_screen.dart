@@ -12,7 +12,7 @@ import '../../core/services/backup_service.dart';
 import '../../core/services/excel_export_service_v4.dart';
 import '../../core/services/excel_import_dispatcher.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
-import '../articles/article_detail_screen.dart';
+import '../articles/article_detail_providers.dart';
 import '../articles/article_list_screen.dart';
 
 /// Zentraler „Daten verwalten"-Screen.

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/produktion_erfassen_service.dart';
-import '../articles/article_detail_screen.dart';
+import '../articles/article_detail_providers.dart';
 
 class ProduktionErfassenSheet extends ConsumerStatefulWidget {
   const ProduktionErfassenSheet({
@@ -319,3 +319,6 @@ class _ErfassenKennzahlZeile extends StatelessWidget {
     );
   }
 }
+
+
+

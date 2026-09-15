@@ -347,7 +347,7 @@ class _ParameterListe extends ConsumerWidget {
     ProductStepParameter param,
   ) async {
     final db = ref.read(databaseProvider);
-    final neuerWert = await _wertDialogMitPruefung(
+    final neuerWert = await wertDialogMitPruefung(
       context,
       db: db,
       titel: param.parameterName,
@@ -382,7 +382,7 @@ class _ParameterListe extends ConsumerWidget {
     ProductStepParameter? vorhanden,
   ) async {
     final db = ref.read(databaseProvider);
-    final neuerWert = await _wertDialogMitPruefung(
+    final neuerWert = await wertDialogMitPruefung(
       context,
       db: db,
       titel: def.parameterName,
@@ -479,7 +479,7 @@ class _ParameterListe extends ConsumerWidget {
         // Steckbrief-Felder der Maschine (falls eine zugeordnet ist).
         final defsAsync = maschineId == null
             ? const AsyncValue<List<MachineParameterDef>>.data([])
-            : ref.watch(_steckbriefDefsProvider(maschineId!));
+            : ref.watch(steckbriefDefsProvider(maschineId!));
         final defs = defsAsync.valueOrNull ?? const <MachineParameterDef>[];
         final defNamen =
             defs.map((d) => d.parameterName.trim().toLowerCase()).toSet();

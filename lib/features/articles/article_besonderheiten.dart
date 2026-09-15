@@ -335,7 +335,7 @@ class _InlineHinweis extends ConsumerWidget {
     var hatBratstrasse = false;
     for (final st in steps) {
       final m = st.maschine ?? '';
-      if (_istBratstrasseMaschine(m)) {
+      if (istBratstrasseMaschine(m)) {
         hatBratstrasse = true;
         break;
       }

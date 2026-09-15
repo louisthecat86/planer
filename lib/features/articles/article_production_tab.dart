@@ -133,18 +133,18 @@ class _KennzahlenCard extends StatelessWidget {
                 ),
                 if (ausbeute != null)
                   _Kennzahl(
-                    value: _fmtProzent(ausbeute),
+                    value: fmtProzent(ausbeute),
                     label: 'Ø Ausbeute',
                   ),
                 if (garverlust != null)
                   _Kennzahl(
-                    value: _fmtProzent(garverlust),
+                    value: fmtProzent(garverlust),
                     label: 'Ø Garverlust',
                     valueColor: const Color(0xFFFF8A65),
                   ),
                 if (avgKgH != null)
                   _Kennzahl(
-                    value: '${_fmtKg(avgKgH)} kg/h',
+                    value: '${fmtKg(avgKgH)} kg/h',
                     label: 'Ø Durchsatz roh',
                   ),
               ],
@@ -152,8 +152,8 @@ class _KennzahlenCard extends StatelessWidget {
             if (hatMengen) ...[
               const SizedBox(height: 14),
               Text(
-                'Gesamt: ${_fmtKg(summeRoh)} kg Rohware ? '
-                '${_fmtKg(summeFertig)} kg Fertigware',
+                'Gesamt: ${fmtKg(summeRoh)} kg Rohware ? '
+                '${fmtKg(summeFertig)} kg Fertigware',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
             ],
@@ -241,7 +241,7 @@ class _HistorieCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  _fmtDatum(eintrag.datum),
+                  fmtDatum(eintrag.datum),
                   style: theme.textTheme.titleSmall?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -275,26 +275,26 @@ class _HistorieCard extends StatelessWidget {
               children: [
                 _HistWert(
                   label: 'Rohware',
-                  value: '${_fmtKg(eintrag.kgRohware)} kg',
+                  value: '${fmtKg(eintrag.kgRohware)} kg',
                 ),
                 _HistWert(
                   label: 'Fertigware',
-                  value: '${_fmtKg(eintrag.kgFertigware)} kg',
+                  value: '${fmtKg(eintrag.kgFertigware)} kg',
                 ),
                 if (verlust != null)
                   _HistWert(
                     label: 'Garverlust',
-                    value: _fmtProzent(verlust),
+                    value: fmtProzent(verlust),
                   ),
                 if (eintrag.produktionszeitMinuten != null)
                   _HistWert(
                     label: 'Dauer',
-                    value: _fmtDauer(eintrag.produktionszeitMinuten),
+                    value: fmtDauer(eintrag.produktionszeitMinuten),
                   ),
                 if (eintrag.kgProStundeRoh != null)
                   _HistWert(
                     label: 'kg/h roh',
-                    value: _fmtKg(eintrag.kgProStundeRoh),
+                    value: fmtKg(eintrag.kgProStundeRoh),
                   ),
               ],
             ),
