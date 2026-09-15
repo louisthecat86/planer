@@ -195,8 +195,15 @@ class MaschinenKatalogExcelService {
 
     // -- Anlagen ---------------------------------------------------------
     final aSpalten = _spaltenIndex(blattAnlagen, _kopfAnlagen);
-    for (var r = 1; r < blattAnlagen.rows.length; r++) {
-      final zeile = blattAnlagen.rows[r];
+    // `Sheet.rows` ist im excel-Paket ein berechneter Getter: Jeder Zugriff
+    // baut die komplette Zeilenliste neu aus der internen Zellstruktur auf.
+    // In der Schleifenbedingung UND beim Zugriff stand er bisher je
+    // Durchlauf zweimal. Bei einem Katalog mit ein paar Dutzend Anlagen
+    // fällt das kaum auf — beim Navision-Import mit 4.000 Zeilen hat
+    // genau dieses Muster 43 von 57 Sekunden gekostet. Einmal auslesen.
+    final anlagenZeilen = blattAnlagen.rows;
+    for (var r = 1; r < anlagenZeilen.length; r++) {
+      final zeile = anlagenZeilen[r];
       final name = _text(zeile, aSpalten['Name']);
       if (name == null || name.isEmpty) continue;
 
@@ -274,8 +281,9 @@ class MaschinenKatalogExcelService {
         for (final d in defs) schluessel(d.maschineId, d.parameterName): d.id,
       };
 
-      for (var r = 1; r < blattParameter.rows.length; r++) {
-        final zeile = blattParameter.rows[r];
+      final parameterZeilen = blattParameter.rows;
+      for (var r = 1; r < parameterZeilen.length; r++) {
+        final zeile = parameterZeilen[r];
         final anlage = _text(zeile, pSpalten['Anlage']);
         final pname = _text(zeile, pSpalten['Parameter']);
         if (anlage == null || anlage.isEmpty) continue;
@@ -356,8 +364,9 @@ class MaschinenKatalogExcelService {
   /// verschieben oder zusätzliche einfügen, ohne den Import zu brechen.
   static Map<String, int> _spaltenIndex(Sheet blatt, List<String> erwartet) {
     final index = <String, int>{};
-    if (blatt.rows.isEmpty) return index;
-    final kopf = blatt.rows.first;
+    final zeilen = blatt.rows;
+    if (zeilen.isEmpty) return index;
+    final kopf = zeilen.first;
     for (var c = 0; c < kopf.length; c++) {
       final t = _zellText(kopf[c])?.trim().toLowerCase();
       if (t == null || t.isEmpty) continue;
@@ -432,3 +441,6 @@ class MaschinenKatalogExcelService {
     return null;
   }
 }
+
+
+

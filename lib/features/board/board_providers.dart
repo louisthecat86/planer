@@ -343,8 +343,17 @@ Future<Map<String, List<Zusatzzeit>>> _ladeZusatzzeiten(
 /// Provider). Nach Task-Mutationen (verschieben, anlegen, löschen) muss der
 /// Provider invalidiert werden:
 /// `ref.invalidate(weekBoardProvider(anyDayInWeek))`.
-final weekBoardProvider =
-    FutureProvider.family<WeekBoard, DateTime>((ref, anyDayInWeek) async {
+///
+/// `autoDispose`, weil der Schlüssel der Montag der jeweiligen Woche ist:
+/// Ohne das bliebe jede einmal geöffnete Woche für die restliche Laufzeit
+/// der App im Speicher. Beim Durchblättern eines Jahres kommen so über 50
+/// vollständige Wochenboards samt Aufträgen und Spuren zusammen.
+///
+/// Verlassen und Zurückkehren lädt die Woche neu — das ist hier sogar
+/// erwünscht: So sieht man immer den aktuellen Stand und nicht das, was
+/// beim ersten Besuch galt.
+final weekBoardProvider = FutureProvider.autoDispose
+    .family<WeekBoard, DateTime>((ref, anyDayInWeek) async {
   final db = ref.watch(databaseProvider);
 
   final wochenStart = _montag(anyDayInWeek);
@@ -423,8 +432,11 @@ final weekBoardProvider =
 
 /// Tagesübersicht für [datum] — eine Spur pro Abteilung, Tasks nach Startzeit
 /// sortiert. Funktioniert für jeden Wochentag (nicht auf Mo–Fr beschränkt).
-final dayBoardProvider =
-    FutureProvider.family<DayBoard, DateTime>((ref, datum) async {
+///
+/// `autoDispose` aus demselben Grund wie beim Wochenboard — hier sogar
+/// dringlicher, weil je aufgerufenem Tag ein eigener Eintrag entsteht.
+final dayBoardProvider = FutureProvider.autoDispose
+    .family<DayBoard, DateTime>((ref, datum) async {
   final db = ref.watch(databaseProvider);
 
   final tag = DateTime(datum.year, datum.month, datum.day);
@@ -838,6 +850,9 @@ Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
         ..where((m) => m.istPlanungsressource.equals(true)))
       .get();
 }
+
+
+
 
 
 
