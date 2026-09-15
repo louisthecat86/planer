@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/bedarf_uebernahme_service.dart';
 import '../../core/services/navision_import_service.dart';
 import '../bedarf/bedarf_screen.dart';
 
@@ -108,43 +109,6 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   void dispose() {
     _suche.dispose();
     super.dispose();
-  }
-
-  /// Offener Bedarf = bestellte Menge minus Lagerbestand.
-  ///
-  /// „Menge in FA" wird bewusst NICHT abgezogen: Sie steht in Navision
-  /// nicht für eine geplante Produktionsmenge, sondern für eine erste
-  /// Anfrage (z.B. pro Kutter), aus der erst manuell hochgerechnet wird.
-  /// Sie abzuziehen würde den Bedarf systematisch zu klein rechnen.
-  ///
-  /// Achtung: Das Ergebnis trägt die Navision-Basiseinheit — nicht
-  /// zwingend Kilogramm. Die Umrechnung passiert erst bei der Übernahme.
-  static double offenerBedarf(NavisionArtikel a) {
-    final rest = a.mengeInAuftrag - a.lagerbestand;
-    return rest > 0 ? rest : 0;
-  }
-
-  static bool istKg(NavisionArtikel a) =>
-      (a.basiseinheit ?? '').toUpperCase() == 'KG';
-
-  /// Netto noch offener Bedarf in kg: Navision-Bedarf (in kg) minus die
-  /// bereits offen im Bedarf liegende Menge. null, wenn die kg-Menge mangels
-  /// Umrechnungsfaktor (noch) nicht bestimmbar ist.
-  static double? nettoOffenKg(
-    NavisionArtikel a,
-    Map<String, double> imBedarfKg,
-    Map<String, double> faktoren,
-  ) {
-    final double? navKg;
-    if (istKg(a)) {
-      navKg = offenerBedarf(a);
-    } else {
-      final f = faktoren[a.nummer];
-      navKg = (f != null && f > 0) ? offenerBedarf(a) * f : null;
-    }
-    if (navKg == null) return null;
-    final netto = navKg - (imBedarfKg[a.nummer] ?? 0);
-    return netto > 0 ? netto : 0;
   }
 
   List<NavisionArtikel> _gefiltert(
@@ -298,11 +262,10 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 
   /// Überträgt die markierten Positionen als Bedarf.
   ///
-  /// Zwei Dinge müssen dabei stimmen: Der Bedarf wird in KILOGRAMM
-  /// gespeichert (so rechnet die ganze Planung), und ein Artikel muss in
-  /// der App existieren. Für Positionen in Beutel, Pack oder Stück fragt
-  /// die App vorher nach dem Umrechnungsfaktor — und merkt ihn sich für
-  /// das nächste Mal.
+  /// Der Screen macht hier nur noch drei Dinge: nach fehlenden
+  /// Umrechnungsfaktoren fragen, den Service anstoßen und das Ergebnis
+  /// melden. Gerechnet und geschrieben wird in
+  /// [BedarfUebernahmeService] — dort ist es ohne Widget prüfbar.
   Future<void> _inBedarf(List<NavisionArtikel> kandidaten) async {
     final offen = kandidaten.where((a) => offenerBedarf(a) > 0).toList();
     if (offen.isEmpty) {
@@ -312,165 +275,38 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
       return;
     }
 
-    final db = ref.read(databaseProvider);
+    final service = BedarfUebernahmeService(ref.read(databaseProvider));
+    final bekannt = await service.ladeUmrechnungen();
+    final faktorVon = {...bekannt.faktoren};
 
-    // Bekannte Faktoren laden — nur die, die noch zur aktuellen Einheit
-    // passen (Navision kann die Basiseinheit ändern).
-    final gespeichert = await db.select(db.navisionUmrechnungen).get();
-    final faktorVon = <String, double>{};
-    for (final u in gespeichert) {
-      faktorVon[u.nummer] = u.kgJeEinheit;
-    }
-    final einheitVon = {for (final u in gespeichert) u.nummer: u.einheit};
-
-    final offeneUmrechnung = offen
-        .where(
-          (a) =>
-              !istKg(a) &&
-              (faktorVon[a.nummer] == null ||
-                  einheitVon[a.nummer] != (a.basiseinheit ?? '')),
-        )
-        .toList();
-
-    if (offeneUmrechnung.isNotEmpty) {
+    // Für Positionen in Beutel, Pack oder Stück braucht es kg — sonst lässt
+    // sich daraus keine Produktionsmenge ableiten.
+    final fehlende = service.fehlendeUmrechnungen(offen, bekannt);
+    if (fehlende.isNotEmpty) {
       if (!mounted) return;
       final eingaben = await showDialog<Map<String, double>>(
         context: context,
-        builder: (_) => _UmrechnungDialog(artikel: offeneUmrechnung),
+        builder: (_) => _UmrechnungDialog(artikel: fehlende),
       );
       if (eingaben == null) return; // abgebrochen
 
-      final jetzt = DateTime.now();
-      final faktorZeilen = <NavisionUmrechnungenCompanion>[];
-      for (final e in eingaben.entries) {
-        faktorVon[e.key] = e.value;
-        faktorZeilen.add(
-          NavisionUmrechnungenCompanion.insert(
-            nummer: e.key,
-            einheit:
-                offen.firstWhere((a) => a.nummer == e.key).basiseinheit ?? '',
-            kgJeEinheit: e.value,
-            updatedAt: Value(jetzt),
-          ),
-        );
-      }
-      // Alle Faktoren auf einmal — ein Batch läuft in einer Transaktion.
-      // Entweder sind alle gemerkt oder keiner; halb gespeicherte Faktoren
-      // wären besonders tückisch, weil die App danach nicht mehr nachfragt.
-      await db.batch(
-        (b) => b.insertAllOnConflictUpdate(
-          db.navisionUmrechnungen,
-          faktorZeilen,
-        ),
+      faktorVon.addAll(eingaben);
+      await service.merkeFaktoren(
+        eingaben,
+        {
+          for (final e in eingaben.entries)
+            e.key: offen.firstWhere((a) => a.nummer == e.key).basiseinheit ??
+                '',
+        },
       );
     }
 
-    final vorhandene = await (db.select(db.products)
-          ..where((p) => p.deletedAt.isNull()))
-        .get();
-    final idVonNummer = {for (final p in vorhandene) p.artikelnummer: p.id};
-
-    // Was liegt je Produkt bereits OFFEN im Bedarf? Nur die Differenz zu
-    // Navision wird neu angelegt — so entstehen über Tage keine Doppelungen.
-    final offeneDemands = await (db.select(db.demands)
-          ..where((d) => d.deletedAt.isNull())
-          ..where((d) => d.manuellErledigt.equals(false)))
-        .get();
-    final bereitsKgVon = <String, double>{};
-    for (final d in offeneDemands) {
-      bereitsKgVon[d.productId] =
-          (bereitsKgVon[d.productId] ?? 0) + d.mengeKgFertig;
-    }
-
-    var angelegt = 0;
-    var uebernommen = 0;
-    var uebersprungen = 0;
-    var bereitsGedeckt = 0;
-
-    // Die Schleife RECHNET nur und sammelt ein — geschrieben wird erst
-    // danach, in einer einzigen Transaktion.
-    //
-    // Vorher entstanden Artikelmaske und Bedarfseintrag Position für
-    // Position direkt in der Datenbank. Bricht das bei Position 40 von 120
-    // ab, stehen 39 Bedarfe da, der Rest fehlt — und niemand kann sehen, wo
-    // die Liste abgerissen ist. Genau in dieser Liste steht aber, was
-    // produziert werden muss.
-    final neueProdukte = <ProductsCompanion>[];
-    final neueBedarfe = <DemandsCompanion>[];
-
-    for (final a in offen) {
-      final menge = offenerBedarf(a);
-      final double kg;
-      if (istKg(a)) {
-        kg = menge;
-      } else {
-        final f = faktorVon[a.nummer];
-        if (f == null || f <= 0) {
-          uebersprungen++;
-          continue; // ohne Faktor keine belastbare kg-Menge
-        }
-        kg = menge * f;
-      }
-
-      var productId = idVonNummer[a.nummer];
-      if (productId == null) {
-        productId = const Uuid().v4();
-        neueProdukte.add(
-          ProductsCompanion.insert(
-            id: productId,
-            artikelnummer: a.nummer,
-            artikelbezeichnung:
-                a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
-            beschreibung: Value(a.beschreibung2),
-            istEingepflegt: const Value(false),
-          ),
-        );
-        // Sofort merken: Steht dieselbe Artikelnummer weiter unten noch
-        // einmal in der Liste, darf die Maske kein zweites Mal entstehen.
-        idVonNummer[a.nummer] = productId;
-        angelegt++;
-      }
-
-      // Delta: nur der noch nicht gedeckte Teil des Navision-Bedarfs.
-      final bereits = bereitsKgVon[productId] ?? 0;
-      final delta = kg - bereits;
-      if (delta < 0.5) {
-        bereitsGedeckt++;
-        continue; // schon vollständig im Bedarf → nichts Doppeltes anlegen
-      }
-
-      final abzug =
-          bereits > 0 ? ' · abzügl. ${_fmt(bereits)} kg im Bedarf' : '';
-      final herkunft = istKg(a)
-          ? 'Aus Navision · Auftrag ${_fmt(a.mengeInAuftrag)} kg · '
-              'Bestand ${_fmt(a.lagerbestand)} kg$abzug'
-          : 'Aus Navision · ${_fmt(menge)} ${a.basiseinheit} '
-              '× ${_fmt(faktorVon[a.nummer] ?? 0)} kg$abzug';
-
-      neueBedarfe.add(
-        DemandsCompanion.insert(
-          id: const Uuid().v4(),
-          productId: productId,
-          mengeKgFertig: delta,
-          quelle: const Value('bestellung'),
-          notizen: Value(herkunft),
-        ),
-      );
-      bereitsKgVon[productId] = bereits + delta;
-      uebernommen++;
-    }
-
+    final BedarfUebernahmeErgebnis res;
     try {
-      await db.transaction(() async {
-        // Artikelmasken zuerst: Ohne sie zeigen die Bedarfszeilen auf
-        // nichts, was die Planung anzeigen könnte.
-        if (neueProdukte.isNotEmpty) {
-          await db.batch((b) => b.insertAll(db.products, neueProdukte));
-        }
-        if (neueBedarfe.isNotEmpty) {
-          await db.batch((b) => b.insertAll(db.demands, neueBedarfe));
-        }
-      });
+      res = await service.uebernehmen(
+        kandidaten: offen,
+        faktorVon: faktorVon,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -496,18 +332,20 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '$uebernommen Bedarfspositionen angelegt'
-          '${angelegt > 0 ? ' · $angelegt Artikel neu erstellt' : ''}'
-          '${bereitsGedeckt > 0 ? ' · $bereitsGedeckt bereits gedeckt' : ''}'
-          '${uebersprungen > 0 ? ' · $uebersprungen ohne Umrechnung '
-              'übersprungen' : ''}',
+          '${res.uebernommen} Bedarfspositionen angelegt'
+          '${res.angelegt > 0 ? ' · ${res.angelegt} Artikel neu erstellt' : ''}'
+          '${res.bereitsGedeckt > 0 ? ' · ${res.bereitsGedeckt} bereits '
+              'gedeckt' : ''}'
+          '${res.uebersprungen > 0 ? ' · ${res.uebersprungen} ohne '
+              'Umrechnung übersprungen' : ''}',
         ),
       ),
     );
   }
 
-  static String _fmt(double v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+  /// Liegt im Service, damit Meldungstexte und Bedarfsnotizen dieselbe
+  /// Formatierung benutzen.
+  static String _fmt(double v) => formatMenge(v);
 
   @override
   Widget build(BuildContext context) {

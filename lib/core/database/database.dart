@@ -66,7 +66,9 @@ class AppDatabase extends _$AppDatabase {
   /// bräuchte ein Dateisystem. Mit `NativeDatabase.memory()` bekommt jeder
   /// Test eine frische, leere Datenbank im Arbeitsspeicher, auf die
   /// `onCreate` dasselbe Schema anlegt wie in der echten App.
-  AppDatabase.forTesting(QueryExecutor executor) : super(executor);
+  AppDatabase.forTesting(super.executor);
+
+  /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
   int get schemaVersion => 17;
