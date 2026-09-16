@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/database_provider.dart';
 
-/// AusgewÃ¤hltes Datum. Wird von anderen Screens (Board) genutzt und bleibt
+/// Ausgewähltes Datum. Wird von anderen Screens (Board) genutzt und bleibt
 /// daher als gemeinsamer Zustand erhalten, auch wenn das Home es selbst
 /// nicht mehr anzeigt.
 final selectedDateProvider = StateProvider<DateTime>((ref) {
@@ -12,7 +12,7 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
   return DateTime(now.year, now.month, now.day);
 });
 
-/// Anzahl aktiver Artikel (fÃ¼r die Kennzahl im Kopfbereich).
+/// Anzahl aktiver Artikel (für die Kennzahl im Kopfbereich).
 final _artikelAnzahlProvider = FutureProvider<int>((ref) async {
   final db = ref.watch(databaseProvider);
   final rows = await (db.select(db.products)
@@ -22,9 +22,9 @@ final _artikelAnzahlProvider = FutureProvider<int>((ref) async {
 });
 
 /// Startbildschirm:
-/// Kopf mit Datum + Kennzahlen, darunter zwei Ebenen â€” oben der tÃ¤gliche
-/// Arbeitsablauf (Bedarf â†’ Planung â†’ Erfassung â†’ Historie) als groÃŸe
-/// farbige Kacheln, darunter â€žStammdaten und Verwaltung" (Artikel,
+/// Kopf mit Datum + Kennzahlen, darunter zwei Ebenen — oben der tägliche
+/// Arbeitsablauf (Bedarf → Planung → Erfassung → Historie) als große
+/// farbige Kacheln, darunter „Stammdaten und Verwaltung" (Artikel,
 /// Einstellungen) als kleinere, ruhigere Kacheln.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -51,16 +51,16 @@ class HomeScreen extends ConsumerWidget {
         const spacing = 12.0;
 
         // Umbruch NICHT an einer festen Pixelgrenze festmachen (das bricht
-        // beim Skalieren), sondern Ã¼ber eine Mindestbreite je Kachel: passen
-        // vier nebeneinander, gibt es vier Spalten â€” sonst zwei, sonst eine.
+        // beim Skalieren), sondern über eine Mindestbreite je Kachel: passen
+        // vier nebeneinander, gibt es vier Spalten — sonst zwei, sonst eine.
         // So klappt der Umbruch bei jeder Zoomstufe sauber.
         const minAblauf = 200.0;
         const anzahlAblauf = 6; // inkl. Navision-Import
         int ablaufSpalten = (gesamt / (minAblauf + spacing)).floor();
         ablaufSpalten = ablaufSpalten.clamp(1, anzahlAblauf);
-        // Eine einzelne Kachel in der letzten Zeile sieht abgehÃ¤ngt aus.
-        // Lieber eine Spalte weniger und dafÃ¼r zwei ausgewogene Reihen
-        // (bei fÃ¼nf Kacheln also 3 + 2 statt 4 + 1).
+        // Eine einzelne Kachel in der letzten Zeile sieht abgehängt aus.
+        // Lieber eine Spalte weniger und dafür zwei ausgewogene Reihen
+        // (bei fünf Kacheln also 3 + 2 statt 4 + 1).
         while (ablaufSpalten > 2 && anzahlAblauf % ablaufSpalten == 1) {
           ablaufSpalten--;
         }
@@ -68,8 +68,8 @@ class HomeScreen extends ConsumerWidget {
             (gesamt - spacing * (ablaufSpalten - 1)) / ablaufSpalten;
         final breit = ablaufSpalten >= 3;
 
-        // â”€â”€ Arbeitsablauf: die tÃ¤glich benutzten Bereiche, in der
-        //    Reihenfolge des Arbeitstages. GroÃŸ und farbig. â”€â”€
+        // ── Arbeitsablauf: die täglich benutzten Bereiche, in der
+        //    Reihenfolge des Arbeitstages. Groß und farbig. ──
         final ablauf = [
           _NavigationTile(
             icon: Icons.playlist_add_check_rounded,
@@ -99,20 +99,20 @@ class HomeScreen extends ConsumerWidget {
           _NavigationTile(
             icon: Icons.history_rounded,
             label: 'Wochen-Historie',
-            subtitle: 'RÃ¼ckblick und Kennzahlen',
+            subtitle: 'Rückblick und Kennzahlen',
             onTap: () => context.pushNamed('wochenHistorie'),
           ),
-          // Artikel gehÃ¶rt zum tÃ¤glichen Arbeiten, nicht in die Verwaltung â€”
+          // Artikel gehört zum täglichen Arbeiten, nicht in die Verwaltung —
           // die Stammdaten sind die Grundlage jeder Planung.
           _NavigationTile(
             icon: Icons.inventory_2_rounded,
             label: 'Artikel',
-            subtitle: 'AblÃ¤ufe, Maschinen, Zeiten',
+            subtitle: 'Abläufe, Maschinen, Zeiten',
             onTap: () => context.pushNamed('articles'),
           ),
         ];
 
-        // â”€â”€ Verwaltung: seltener gebraucht, bewusst kleiner und ruhiger. â”€â”€
+        // ── Verwaltung: seltener gebraucht, bewusst kleiner und ruhiger. ──
         final verwaltung = [
           _KompakteKachel(
             icon: Icons.settings_rounded,
@@ -185,7 +185,7 @@ const _kWochentage = [
 const _kMonate = [
   'Januar',
   'Februar',
-  'MÃ¤rz',
+  'März',
   'April',
   'Mai',
   'Juni',
@@ -260,8 +260,8 @@ class _KopfBereich extends ConsumerWidget {
                   const Expanded(
                     child: Text(
                       'Noch keine Artikel vorhanden. Importiere eine '
-                      'Excel-Stammdaten-Vorlage unter Einstellungen â†’ '
-                      'Stammdaten, um die App zu fÃ¼llen.',
+                      'Excel-Stammdaten-Vorlage unter Einstellungen → '
+                      'Stammdaten, um die App zu füllen.',
                     ),
                   ),
                 ],
@@ -278,10 +278,10 @@ class _KopfBereich extends ConsumerWidget {
 // Navigation tile
 // ---------------------------------------------------------------------------
 
-/// GroÃŸe Kachel im Navision-Stil: kantig, flach, eine Akzentfarbe.
+/// Große Kachel im Navision-Stil: kantig, flach, eine Akzentfarbe.
 ///
-/// Vorher waren es bunte FarbverlÃ¤ufe mit runden Ecken. NAV arbeitet
-/// stattdessen mit ruhigen FlÃ¤chen, dÃ¼nnen Kanten und einem einzigen Blau â€”
+/// Vorher waren es bunte Farbverläufe mit runden Ecken. NAV arbeitet
+/// stattdessen mit ruhigen Flächen, dünnen Kanten und einem einzigen Blau —
 /// die Unterscheidung leisten Symbol und Beschriftung, nicht die Farbe.
 class _NavigationTile extends StatelessWidget {
   const _NavigationTile({
@@ -310,7 +310,7 @@ class _NavigationTile extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(3),
             border: Border.all(color: theme.dividerColor),
-            // Schmale Akzentkante links â€” das NAV-Muster fÃ¼r aktive Bereiche.
+            // Schmale Akzentkante links — das NAV-Muster für aktive Bereiche.
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
@@ -319,12 +319,12 @@ class _NavigationTile extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-          // Stack mit dem Inhalt als UNPOSITIONIERTEM Kind â€” nur so behÃ¤lt
-          // die Kachel ihre HÃ¶he; das Wasserzeichen liegt dahinter.
+          // Stack mit dem Inhalt als UNPOSITIONIERTEM Kind — nur so behält
+          // die Kachel ihre Höhe; das Wasserzeichen liegt dahinter.
           child: Stack(
             children: [
-              // Sehr dezente Untermalung: dasselbe Symbol groÃŸ und blass
-              // in der Ecke. Gibt der FlÃ¤che Charakter, ohne vom Text
+              // Sehr dezente Untermalung: dasselbe Symbol groß und blass
+              // in der Ecke. Gibt der Fläche Charakter, ohne vom Text
               // abzulenken.
               Positioned(
                 right: -12,
@@ -385,7 +385,7 @@ class _NavigationTile extends StatelessWidget {
   }
 }
 
-/// Kleine Abschnitts-Ãœberschrift, die die Kachel-Ebenen sichtbar trennt.
+/// Kleine Abschnitts-Überschrift, die die Kachel-Ebenen sichtbar trennt.
 class _AbschnittTitel extends StatelessWidget {
   const _AbschnittTitel(this.text);
 
@@ -405,10 +405,10 @@ class _AbschnittTitel extends StatelessWidget {
   }
 }
 
-/// Kompakte, ruhige Kachel fÃ¼r die Verwaltung â€” bewusst kleiner und
-/// dezenter als die farbigen Ablauf-Kacheln: dunkle FlÃ¤che, Icon links,
-/// eine Zeile Text daneben. So entsteht die Hierarchie zwischen â€žhier wird
-/// gearbeitet" und â€žhier wird eingerichtet".
+/// Kompakte, ruhige Kachel für die Verwaltung — bewusst kleiner und
+/// dezenter als die farbigen Ablauf-Kacheln: dunkle Fläche, Icon links,
+/// eine Zeile Text daneben. So entsteht die Hierarchie zwischen „hier wird
+/// gearbeitet" und „hier wird eingerichtet".
 class _KompakteKachel extends StatelessWidget {
   const _KompakteKachel({
     required this.icon,
