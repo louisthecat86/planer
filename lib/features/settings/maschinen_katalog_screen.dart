@@ -185,44 +185,83 @@ class MaschinenKatalogScreen extends ConsumerWidget {
     if (ok != true) return;
 
     final db = ref.read(databaseProvider);
-    final vorhandene = await (db.select(db.machines)
-          ..where((m) => m.deletedAt.isNull()))
-        .get();
+    // Soft-gelöschte bewusst mitprüfen: Die Unique-Bedingung auf dem Namen
+    // gilt auch für sie, ein erneutes Anlegen liefe sonst auf einen Fehler.
+    final vorhandene = await db.select(db.machines).get();
     final vorhandeneNamen =
         vorhandene.map((m) => m.name.toLowerCase()).toSet();
 
-    var neueMaschinen = 0;
-    var neueParams = 0;
+    // Erst sammeln, dann in EINER Transaktion schreiben.
+    //
+    // Vorher entstanden Anlage und Steckbrief-Parameter nacheinander direkt
+    // in der Datenbank. Brach das dazwischen ab, stand eine Maschine ohne
+    // ihre Parameterfelder da — in der Liste unauffällig, aber unbrauchbar.
+    // Und weil der Abgleich über den Namen läuft, hätte ein zweiter Klick
+    // auf „Ergänzen" sie übersprungen: Der Fehler wäre dauerhaft geblieben.
+    final neueAnlagen = <MachinesCompanion>[];
+    final neueDefs = <MachineParameterDefsCompanion>[];
+
     for (final seed in kSeedMaschinen) {
       if (vorhandeneNamen.contains(seed.name.toLowerCase())) continue;
       final maschineId = const Uuid().v4();
-      await db.into(db.machines).insert(
-            MachinesCompanion.insert(
-              id: maschineId,
-              name: seed.name,
-              abteilung: seed.abteilung,
-            ),
-          );
-      neueMaschinen++;
+      neueAnlagen.add(
+        MachinesCompanion.insert(
+          id: maschineId,
+          name: seed.name,
+          abteilung: seed.abteilung,
+        ),
+      );
+      // Sofort vormerken, falls derselbe Name im Seed doppelt vorkommt.
+      vorhandeneNamen.add(seed.name.toLowerCase());
+
       for (var i = 0; i < seed.params.length; i++) {
         final p = seed.params[i];
-        await db.into(db.machineParameterDefs).insert(
-              MachineParameterDefsCompanion.insert(
-                id: const Uuid().v4(),
-                maschineId: maschineId,
-                parameterName: p.name,
-                einheit: Value(p.einheit),
-                sortierung: Value(i),
-              ),
-            );
-        neueParams++;
+        neueDefs.add(
+          MachineParameterDefsCompanion.insert(
+            id: const Uuid().v4(),
+            maschineId: maschineId,
+            parameterName: p.name,
+            einheit: Value(p.einheit),
+            sortierung: Value(i),
+          ),
+        );
       }
     }
 
-    ref
-        .read(autoBackupTriggerProvider)
-        .fireDebounced(reason: 'Standard-Maschinen ergänzt');
-    ref.invalidate(maschinenKatalogProvider);
+    final neueMaschinen = neueAnlagen.length;
+    final neueParams = neueDefs.length;
+
+    if (neueMaschinen > 0) {
+      try {
+        await db.transaction(() async {
+          // Anlagen zuerst: Die Steckbriefe verweisen per Fremdschlüssel
+          // auf sie.
+          await db.batch((b) => b.insertAll(db.machines, neueAnlagen));
+          if (neueDefs.isNotEmpty) {
+            await db.batch(
+              (b) => b.insertAll(db.machineParameterDefs, neueDefs),
+            );
+          }
+        });
+      } catch (e) {
+        if (!context.mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            content: Text(
+              'Ergänzen fehlgeschlagen — es wurde nichts angelegt. '
+              'Du kannst es erneut versuchen. ($e)',
+            ),
+          ),
+        );
+        return;
+      }
+
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Standard-Maschinen ergänzt');
+      ref.invalidate(maschinenKatalogProvider);
+    }
 
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -897,3 +936,6 @@ class _ParameterDialogState extends State<_ParameterDialog> {
     );
   }
 }
+
+
+
