@@ -2144,10 +2144,69 @@ class ExcelExportServiceV3 {
       // Ein Sheet mit echten Historie-Daten liefert die Zahlenformate für
       // Datum/Uhrzeit. Leere Blaupausen haben dort keine Stile — die
       // nehmen wir nur als Notlösung.
-      if (ergebnis.histVollstaendig) return ergebnis.stile;
+      if (ergebnis.histVollstaendig) {
+        return _abgesichert(archive, ergebnis.stile);
+      }
       bester ??= ergebnis.stile;
     }
-    return bester ?? standard;
+    return _abgesichert(archive, bester ?? standard);
+  }
+
+  /// Anzahl der Zellformate in `xl/styles.xml` — also die Obergrenze für
+  /// jedes `s="…"` in einem Arbeitsblatt.
+  ///
+  /// Gezählt werden die `<xf>`-Elemente innerhalb von `<cellXfs>`; das
+  /// `count`-Attribut daneben ist nur eine Angabe und kann falsch sein.
+  /// Kommt kein `styles.xml` vor oder lässt es sich nicht lesen, liefert
+  /// die Funktion 0 — dann bleibt nur Stil 0 gültig, was immer geht.
+  static int _anzahlZellformate(Archive archive) {
+    try {
+      final datei = archive.files.firstWhere(
+        (f) => f.name == 'xl/styles.xml',
+        orElse: () => ArchiveFile('', 0, <int>[]),
+      );
+      if (datei.name.isEmpty) return 0;
+      final doc = XmlDocument.parse(
+        utf8.decode(datei.content as List<int>),
+      );
+      final cellXfs = doc.findAllElements('cellXfs');
+      if (cellXfs.isEmpty) return 0;
+      return cellXfs.first.findElements('xf').length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// Ersetzt Stil-Nummern, die es in dieser Mappe nicht gibt, durch 0.
+  ///
+  /// Hintergrund: Die Standardwerte in [GenStile] sind feste Nummern aus
+  /// einer von Hand formatierten Ursprungsvorlage (54, 35, 39 …). Wird in
+  /// eine Mappe geschrieben, die so viele Zellformate gar nicht besitzt,
+  /// verweisen die erzeugten Blätter ins Leere — Excel kann sie nicht
+  /// auflösen und verwirft beim Öffnen die kompletten Zellinformationen
+  /// des Blattes. Das Ergebnis ist der Reparatur-Dialog und ein leeres
+  /// Blatt.
+  ///
+  /// Lieber unformatiert und gültig als formatiert und kaputt. Stil 0 ist
+  /// in jeder Arbeitsmappe vorhanden.
+  static GenStile _abgesichert(Archive archive, GenStile stile) {
+    // Ist die Obergrenze -1 (kein styles.xml lesbar), trifft die Prüfung
+    // unten auf jede Nummer zu und alles fällt auf 0 — genau richtig.
+    final max = _anzahlZellformate(archive) - 1;
+    int ok(int i) => (i >= 0 && i <= max) ? i : 0;
+    return GenStile(
+      kategorie: ok(stile.kategorie),
+      kopfLabel: ok(stile.kopfLabel),
+      kopf: ok(stile.kopf),
+      prozessHeader: ok(stile.prozessHeader),
+      blockHeader: ok(stile.blockHeader),
+      hinweis: ok(stile.hinweis),
+      labelGelb: ok(stile.labelGelb),
+      labelGrau: ok(stile.labelGrau),
+      wert: ok(stile.wert),
+      histHeader: ok(stile.histHeader),
+      histDaten: stile.histDaten.map(ok).toList(),
+    );
   }
 
   /// Erntet die Stile aus EINEM Sheet. `histVollstaendig` sagt, ob die
