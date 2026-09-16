@@ -3,6 +3,7 @@ import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 
 import '../constants/abteilungen.dart';
+import '../constants/product_groups.dart';
 import '../database/database.dart';
 
 /// Ergebnis eines Exports.
@@ -59,21 +60,6 @@ class ExcelExportServiceV4 {
   /// Maximale Anzahl Schritt-Spalten (B..U). Muss mit dem Limit im
   /// Schritt-Editor und der Spaltengrenze des Imports übereinstimmen.
   static const int _maxSchritte = 20;
-
-  static const Map<String, String> _produktgruppeLabels = {
-    'bruehwurst': 'Brühwurst',
-    'rohwurst': 'Rohwurst',
-    'kochpoekelware': 'Kochpökelware',
-    'rohpoekelware': 'Rohpökelware',
-    'aufschnitt': 'Aufschnitt',
-    'bratstrasse_natur': 'Bratstraßenartikel Natur',
-    'bratstrasse_paniert': 'Bratstraßenartikel paniert',
-    'hackprodukt_gegart': 'Hackprodukte gegart',
-    'hackprodukt_roh': 'Hackprodukte roh',
-    'braten': 'Braten',
-    'sous_vide': 'Sous Vide gegarte Produkte',
-    'angebratene_bruehwurst': 'Angebratene Brühwürste',
-  };
 
   // ══════════════════════════════════════════════════════════════════
   // Stile
@@ -279,7 +265,7 @@ class ExcelExportServiceV4 {
         s,
         2,
         row,
-        _produktgruppeLabels[a.produktgruppe] ?? (a.produktgruppe ?? ''),
+        produktgruppeLabels[a.produktgruppe] ?? (a.produktgruppe ?? ''),
       );
       _setzZahl(
         s,
@@ -394,7 +380,7 @@ class ExcelExportServiceV4 {
       s,
       0,
       1,
-      _produktgruppeLabels[artikel.produktgruppe] ??
+      produktgruppeLabels[artikel.produktgruppe] ??
           (artikel.produktgruppe ?? 'Artikel'),
       _titel,
     );
@@ -690,3 +676,6 @@ class ExcelExportServiceV4 {
     }
   }
 }
+
+
+

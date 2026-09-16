@@ -20,12 +20,12 @@ enum ProductGroup {
   ),
   kochpoekelware(
     dbValue: 'kochpoekelware',
-    label: 'Kochpökelwaren',
+    label: 'Kochpökelware',
     beschreibung: 'Kochschinken, Kasseler, Bierschinken',
   ),
   rohpoekelware(
     dbValue: 'rohpoekelware',
-    label: 'Rohpökelwaren',
+    label: 'Rohpökelware',
     beschreibung: 'Schinkenspeck, Lachsschinken, Bündnerfleisch',
   ),
   aufschnitt(
@@ -116,3 +116,22 @@ enum ProductGroup {
     return null;
   }
 }
+
+/// dbValue → Anzeigename, abgeleitet aus [ProductGroup].
+///
+/// Diese Zuordnung stand bis dahin VIERMAL im Projekt: hier als Enum-Label,
+/// in der Artikel-Detailansicht und in beiden Excel-Export-Diensten. Zwei
+/// der vier waren bereits auseinandergelaufen — „Kochpökelwaren" statt
+/// „Kochpökelware" —, wodurch der v3-Export das Kategorieblatt der Vorlage
+/// nicht mehr gefunden und einen falschen Kategorienamen geschrieben hat.
+///
+/// Maßgeblich ist der Blattname in der Excel-Vorlage. Wer ihn ändert, ändert
+/// ihn hier — und nur hier.
+final Map<String, String> produktgruppeLabels = {
+  for (final g in ProductGroup.values) g.dbValue: g.label,
+};
+
+/// Anzeigename einer Produktgruppe. Fällt auf den dbValue zurück, damit im
+/// Zweifel etwas Lesbares dasteht statt einer leeren Zelle.
+String produktgruppeLabel(String? dbValue) =>
+    dbValue == null ? '' : (produktgruppeLabels[dbValue] ?? dbValue);

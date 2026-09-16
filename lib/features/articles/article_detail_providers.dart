@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/parameter_namen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -34,8 +35,6 @@ const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 /// Name der Parameterzeile für das freie Notizfeld je Maschine.
 /// Ersetzt starre Einzelparameter (Takte, Volumen …) — die Einstellungen
 /// sind so individuell, dass ein Freitextfeld praktischer ist.
-const String kMaschinenNotizParam = 'Maschineneinstellungen';
-const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
 
 /// Nur diese Maschinen haben ein festes Plattenraster
 /// (Bratstraße 10+10, Dampftunnel 12). „Heißluftofen" ist dieselbe
@@ -330,21 +329,6 @@ final productionHistoryProvider =
 // Anzeige-Helfer
 // ---------------------------------------------------------------------------
 
-const produktgruppeLabels = <String, String>{
-  'bruehwurst': 'Brühwurst',
-  'rohwurst': 'Rohwurst',
-  'kochpoekelware': 'Kochpökelware',
-  'rohpoekelware': 'Rohpökelware',
-  'aufschnitt': 'Aufschnitt',
-  'bratstrasse_natur': 'Bratstraßenartikel Natur',
-  'bratstrasse_paniert': 'Bratstraßenartikel paniert',
-  'hackprodukt_gegart': 'Hackprodukte gegart',
-  'hackprodukt_roh': 'Hackprodukte roh',
-  'braten': 'Braten',
-  'sous_vide': 'Sous Vide gegarte Produkte',
-  'angebratene_bruehwurst': 'Angebratene Brühwürste',
-};
-
 String _pad(int n) => n.toString().padLeft(2, '0');
 
 String fmtDatum(DateTime d) => '${_pad(d.day)}.${_pad(d.month)}.${d.year}';
@@ -540,3 +524,6 @@ Future<void> bereinigeDoppelteParameter(
     ),
   );
 }
+
+
+

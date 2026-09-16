@@ -16,6 +16,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/constants/parameter_namen.dart';
 import '../../core/database/database.dart';
 import 'article_detail_providers.dart';
 import 'bratstrasse_schema.dart';
@@ -763,6 +764,9 @@ class ArticlePrintService {
     return v.toStringAsFixed(1).replaceAll('.', ',');
   }
 }
+
+
+
 
 
 

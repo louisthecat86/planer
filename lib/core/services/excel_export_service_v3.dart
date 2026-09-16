@@ -5,22 +5,16 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:xml/xml.dart';
 
 import '../constants/abteilungen.dart';
+import '../constants/parameter_namen.dart';
+import '../constants/product_groups.dart';
 import '../database/database.dart';
 import 'artikel_sheet_generator.dart';
 import 'excel_import_service_v3.dart';
 
-/// Name der Notiz-Parameterzeile (identisch zur App-Konstante in
-/// article_detail_screen.dart) — hier lokal, um keine Flutter-Abhängigkeit
-/// in den Export zu ziehen.
-const String kMaschinenNotizParam = 'Maschineneinstellungen';
 
-/// Parametergruppe der Maschinen-Steckbrief-Werte (identisch zur
-/// App-Konstante kMaschinenNotizGruppe in article_detail_screen.dart).
-const String kMaschinenSteckbriefGruppe = 'MASCHINENEINSTELLUNGEN';
-
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // Ergebnis-Klasse
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 class ExportResultV3 {
   const ExportResultV3({
@@ -63,9 +57,9 @@ class ExportResultV3 {
   bool get hatFehler => fehler.isNotEmpty;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // ExcelExportServiceV3
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 /// Exportiert den aktuellen DB-Stand in die zuletzt importierte
 /// Excel-Datei, unter Erhalt aller Formatierung.
@@ -88,6 +82,25 @@ class ExcelExportServiceV3 {
   /// Marker-Text in Spalte A, der das Ende des Parameter-Bereichs
   /// markiert (alles danach gehört zur Historie).
   static const _historieMarker = 'HISTORISCHE DATEN';
+
+  // ── Feste Zeilenlagen der Excel-Vorlage ──────────────────────────────
+  //
+  // Diese Zahlen beschreiben den Aufbau der Vorlagendatei, nicht irgendein
+  // Rechenergebnis. Wer in der Vorlage oben eine Zeile einfügt, verschiebt
+  // alles darunter — dann stimmen sie nicht mehr, und der Export schreibt
+  // still an die falsche Stelle. Deshalb stehen sie hier benannt an einem
+  // Ort statt verstreut als nackte Zahlen im Code.
+
+  /// Erste Datenzeile im Blatt „Übersicht" (darüber Kopf und Legende).
+  static const int _uebersichtErsteZeile = 15;
+
+  /// Erste beschreibbare Zeile im Blatt „Anlagen-Katalog".
+  static const int _katalogErsteZeile = 13;
+
+  /// Letzte beschreibbare Zeile im Blatt „Anlagen-Katalog". Darunter
+  /// beginnt in der Vorlage ein anderer Bereich — wird hier weitergeschrieben,
+  /// überschreibt der Export fremde Inhalte.
+  static const int _katalogLetzteZeile = 88;
 
   Future<bool> hasImportedFile() async {
     final row = await (_db.select(_db.appSettings)
@@ -300,7 +313,24 @@ class ExcelExportServiceV3 {
     sharedStrings.writeBackIfDirty(archive);
 
     final encoder = ZipEncoder();
-    final neuesBytes = Uint8List.fromList(encoder.encode(archive)!);
+    // ZipEncoder.encode gibt List<int>? zurück. Ein `!` hätte hier mit
+    // einem nichtssagenden Null-Fehler abgebrochen — und zwar nachdem die
+    // gesamte Arbeit bereits erledigt war. Lieber eine Meldung, die sagt,
+    // was passiert ist.
+    final gepackt = encoder.encode(archive);
+    if (gepackt == null) {
+      return ExportResultV3(
+        bytes: Uint8List(0),
+        vorschlagDateiname: _generiereExportDateiname(dateiname),
+        warnungen: warnungen,
+        fehler: const [
+          'Die Excel-Datei konnte nicht gepackt werden. Bitte den Export '
+              'erneut versuchen; bleibt es dabei, ist die zuletzt '
+              'importierte Vorlage vermutlich beschädigt.',
+        ],
+      );
+    }
+    final neuesBytes = Uint8List.fromList(gepackt);
 
     return ExportResultV3(
       bytes: neuesBytes,
@@ -327,23 +357,6 @@ class ExcelExportServiceV3 {
   }
 
   static String _pad(int n) => n.toString().padLeft(2, '0');
-
-  /// Kategorie-Titel der Blueprint-Sheets je Produktgruppe (Umkehrung des
-  /// Import-Mappings) — bestimmt, welches Blueprint geklont wird.
-  static const Map<String, String> _produktgruppeZuKategorie = {
-    'bruehwurst': 'Brühwurst',
-    'rohwurst': 'Rohwurst',
-    'kochpoekelware': 'Kochpökelwaren',
-    'rohpoekelware': 'Rohpökelwaren',
-    'aufschnitt': 'Aufschnitt',
-    'bratstrasse_natur': 'Bratstraßenartikel Natur',
-    'bratstrasse_paniert': 'Bratstraßenartikel paniert',
-    'hackprodukt_gegart': 'Hackprodukte gegart',
-    'hackprodukt_roh': 'Hackprodukte roh',
-    'braten': 'Braten',
-    'sous_vide': 'Sous Vide gegarte Produkte',
-    'angebratene_bruehwurst': 'Angebratene Brühwürste',
-  };
 
   /// Reiterfarbe (ARGB-Hex) je Produktgruppe — identisch zu den Farben der
   /// vorhandenen Kategorie-Sheets, damit App-generierte Sheets farblich in
@@ -425,12 +438,13 @@ class ExcelExportServiceV3 {
       final sheetData = doc.findAllElements('sheetData').firstOrNull;
       if (sheetData == null) return;
 
-      // Vorhandene Artikelnummern (Spalte A ab Zeile 15) + letzte Zeile.
+      // Vorhandene Artikelnummern (Spalte A ab der ersten Datenzeile)
+      // und die letzte belegte Zeile.
       final vorhandene = <String>{};
-      var letzteZeile = 14;
+      var letzteZeile = _uebersichtErsteZeile - 1;
       for (final row in sheetData.findElements('row')) {
         final r = int.tryParse(row.getAttribute('r') ?? '');
-        if (r == null || r < 15) continue;
+        if (r == null || r < _uebersichtErsteZeile) continue;
         final a = _leseZelleA(row, sharedStrings)?.trim();
         if (a == null || a.isEmpty) continue;
         // Zahlwerte können als "10010" oder "10010.0" ankommen.
@@ -485,7 +499,7 @@ class ExcelExportServiceV3 {
           colLetter: 'C',
           wert: art.produktgruppe == null
               ? ''
-              : (_produktgruppeZuKategorie[art.produktgruppe] ?? ''),
+              : (produktgruppeLabels[art.produktgruppe] ?? ''),
         );
         _setzeZelleInlineStr(
           sheetData,
@@ -503,7 +517,7 @@ class ExcelExportServiceV3 {
           sheetData,
           row: letzteZeile,
           colLetter: 'F',
-          wert: '→ Öffnen',
+          wert: '? Öffnen',
         );
 
         final hl = XmlElement(XmlName('hyperlink'));
@@ -684,7 +698,7 @@ class ExcelExportServiceV3 {
     sheetInfo[sheetName] = neuerPfad;
   }
 
-  /// Minuten (double) zu „h:mm"-Text (z.B. 125.0 → „2:05").
+  /// Minuten (double) zu „h:mm"-Text (z.B. 125.0 ? „2:05").
   static String _minutenZuHmm(double min) {
     final gesamt = min.round();
     final h = gesamt ~/ 60;
@@ -797,7 +811,7 @@ class ExcelExportServiceV3 {
       'Anlagen-Katalog',
       'Maschinen-Steckbriefe',
     };
-    final kategorien = _produktgruppeZuKategorie.values.toSet();
+    final kategorien = produktgruppeLabels.values.toSet();
     final kandidaten = <String>[];
     for (final e in sheetInfo.entries) {
       if (metaSheets.contains(e.key) || kategorien.contains(e.key)) continue;
@@ -856,7 +870,7 @@ class ExcelExportServiceV3 {
 
         final kategorie = art.produktgruppe == null
             ? ''
-            : (_produktgruppeZuKategorie[art.produktgruppe] ?? '');
+            : (produktgruppeLabels[art.produktgruppe] ?? '');
         final reiterFarbe = art.produktgruppe == null
             ? null
             : _produktgruppeZuFarbe[art.produktgruppe];
@@ -966,12 +980,14 @@ class ExcelExportServiceV3 {
       final sheetData = doc.findAllElements('sheetData').firstOrNull;
       if (sheetData == null) return 0;
 
-      // Belegte Zeilen (13..88) und vorhandene Namen einsammeln.
+      // Belegte Zeilen des Katalogbereichs und vorhandene Namen einsammeln.
       final belegt = <int>{};
       final vorhanden = <String>{};
       for (final row in sheetData.findElements('row')) {
         final r = int.tryParse(row.getAttribute('r') ?? '');
-        if (r == null || r < 13 || r > 88) continue;
+        if (r == null || r < _katalogErsteZeile || r > _katalogLetzteZeile) {
+          continue;
+        }
         final t = _leseZelleA(row, sharedStrings)?.trim();
         if (t != null && t.isNotEmpty) {
           belegt.add(r);
@@ -991,14 +1007,14 @@ class ExcelExportServiceV3 {
       if (fehlend.isEmpty) return 0;
 
       var geschrieben = 0;
-      var zeile = 13;
+      var zeile = _katalogErsteZeile;
       for (final m in fehlend) {
-        while (zeile <= 88 && belegt.contains(zeile)) {
+        while (zeile <= _katalogLetzteZeile && belegt.contains(zeile)) {
           zeile++;
         }
-        if (zeile > 88) {
+        if (zeile > _katalogLetzteZeile) {
           warnungen.add(
-            'Anlagen-Katalog voll (Zeile 88 erreicht) — '
+            'Anlagen-Katalog voll (Zeile $_katalogLetzteZeile erreicht) — '
             '"${m.name}" und weitere nicht eingetragen.',
           );
           break;
@@ -1034,7 +1050,7 @@ class ExcelExportServiceV3 {
   /// Zeile direkt unter dem Marker „Sonstige Informationen", Spalte B.
   ///
   /// Genau dort liest der Import sie wieder ein — der Roundtrip
-  /// App ⇄ Excel bleibt damit verlustfrei. Ein leerer Text löscht den
+  /// App ? Excel bleibt damit verlustfrei. Ein leerer Text löscht den
   /// Eintrag (das Feld wurde in der App geleert).
   void _schreibeSonstigeInfos(
     XmlDocument doc,
@@ -1061,7 +1077,7 @@ class ExcelExportServiceV3 {
     // sie mit Zeilenumbruch zusammen. Schrieb der Export nur in EINE Zelle,
     // blieben Reste aus älteren Vorlagen daneben stehen — und wurden beim
     // nächsten Import zusätzlich übernommen. Der Text wuchs dadurch mit
-    // jedem Durchlauf App → Excel → App weiter an.
+    // jedem Durchlauf App ? Excel ? App weiter an.
     int? historieZeile;
     for (final row in sheetData.findElements('row')) {
       final r = int.tryParse(row.getAttribute('r') ?? '');
@@ -1261,22 +1277,22 @@ class ExcelExportServiceV3 {
     int customGeschrieben = 0;
     int customUebersprungen = 0;
 
-    // ── Custom-Parameter-Slots aus dem ZUSÄTZLICHE-Block der Vorlage ──
+    // -- Custom-Parameter-Slots aus dem ZUSÄTZLICHE-Block der Vorlage --
     final customSlots = _findeCustomParameterSlots(doc, sharedStrings);
 
-    // ── Schritt-Bereich komplett leeren (Spalten B..K) ────────────────
+    // -- Schritt-Bereich komplett leeren (Spalten B..K) ----------------
     // Der Export war bisher rein additiv: Felder ohne Wert wurden
     // übersprungen, wodurch nach Umsortierungen alte „Geister-Werte"
     // in den Spalten stehen blieben (z.B. Bratstraßen-Parameter unter
     // einem Verpackungs-Schritt). Deshalb: erst leeren, dann schreiben.
     _leereSchrittSpalten(sheetData, sharedStrings, labelRows, customSlots);
 
-    // ── Besonderheiten in den Block „Sonstige Informationen" ──────────
+    // -- Besonderheiten in den Block „Sonstige Informationen" ----------
     // Muss NACH dem Leeren passieren (der Bereich liegt in den Spalten
     // B..K und würde sonst gleich wieder geleert).
     _schreibeSonstigeInfos(doc, sheetData, sharedStrings, artikel.beschreibung);
 
-    // ── Historische Produktionsdaten ZUERST schreiben ────────────────
+    // -- Historische Produktionsdaten ZUERST schreiben ----------------
     // _schreibeHistorie entfernt alles unterhalb der Datum-Kopfzeile —
     // auch einen evtl. Überlauf-Parameter-Block aus einem früheren
     // Export. Deshalb: erst Historie, dann die Slot-Zeilen (der Überlauf
@@ -1288,7 +1304,7 @@ class ExcelExportServiceV3 {
       historie: historie,
     );
 
-    // ── Namens-Pool für die Slot-Zeilen ───────────────────────────────
+    // -- Namens-Pool für die Slot-Zeilen -------------------------------
     // Ein Parametername = genau EINE Zeile; die Werte der Schritte stehen
     // nebeneinander in den Schritt-Spalten (wie bei Standard-Parametern).
     // Vorher wurden die Slots je Schritt ab Position 0 vergeben — die
@@ -1339,7 +1355,7 @@ class ExcelExportServiceV3 {
       }
     }
 
-    // Zuordnung Name → Zeile: erst bereits beschriftete Slot-Zeilen
+    // Zuordnung Name ? Zeile: erst bereits beschriftete Slot-Zeilen
     // wiederverwenden (Re-Export), dann leere Slots, dann Überlauf.
     final slotFuerName = <String, int>{};
     final freieSlots = <int>[];
@@ -1352,7 +1368,7 @@ class ExcelExportServiceV3 {
       if (poolGesehen.contains(lbl.toLowerCase())) {
         slotFuerName[lbl.toLowerCase()] = slot;
       } else {
-        // Alter, nicht mehr benötigter Name → Zeile ist überschreibbar.
+        // Alter, nicht mehr benötigter Name ? Zeile ist überschreibbar.
         freieSlots.add(slot);
       }
     }
@@ -1408,11 +1424,11 @@ class ExcelExportServiceV3 {
       // eines Schritts können Lücken in der Nummerierung bleiben (2,3,4).
       // Direkt als Spalte genommen bliebe „Schritt 1" leer und alles
       // stünde eine Spalte zu weit rechts.
-      final col = ++schrittIndex; // 1..10 → Spalte B..K
+      final col = ++schrittIndex; // 1..10 ? Spalte B..K
       if (col < 1 || col > 10) continue;
       final colLetter = _spaltenBuchstabe(col + 1);
 
-      // ── Standard-Schritt-Werte ─────────────────────────────────────
+      // -- Standard-Schritt-Werte -------------------------------------
       if (labelRows.abteilungRow != null) {
         _setzeZelleInlineStr(
           sheetData,
@@ -1487,8 +1503,8 @@ class ExcelExportServiceV3 {
       }
       schritteAktualisiert++;
 
-      // ── Standard-Parameter aktualisieren (nur wenn das Label in
-      //    der Vorlage existiert — sonst überspringen) ────────────────
+      // -- Standard-Parameter aktualisieren (nur wenn das Label in
+      //    der Vorlage existiert — sonst überspringen) ----------------
       final stepParams = paramsByStep[step.id] ?? [];
       final standardParams = stepParams.where((p) => !p.istCustom);
       // Steckbrief-Parameter ohne eigene Labelzeile werden weiter unten
@@ -1508,7 +1524,7 @@ class ExcelExportServiceV3 {
         // Heißluftofens, die früher fälschlich unter BRATSTRASSE landeten)
         // würden sonst erneut in den falschen Block geschrieben.
         final pGruppe = gruppeFuerBlockKopf(param.parameterGruppe);
-        if (pGruppe != kMaschinenSteckbriefGruppe &&
+        if (pGruppe != kMaschinenNotizGruppe &&
             pGruppe != eigeneAnlagenGruppe &&
             _istAnlagenGruppe(pGruppe)) {
           continue;
@@ -1549,7 +1565,7 @@ class ExcelExportServiceV3 {
         parameterAktualisiert++;
       }
 
-      // ── Custom- und Steckbrief-Parameter über den Namens-Pool ─────
+      // -- Custom- und Steckbrief-Parameter über den Namens-Pool -----
       // Jeder Name hat genau eine Zeile; hier landen Label (idempotent)
       // und der Wert dieses Schritts in seiner Spalte.
       for (final p in stepParams) {
@@ -1643,7 +1659,7 @@ class ExcelExportServiceV3 {
     return slots;
   }
 
-  // ─── Historie zurückschreiben ─────────────────────────────────────────
+  // --- Historie zurückschreiben -----------------------------------------
 
   /// Schreibt alle [historie]-Zeilen in den HISTORISCHE-DATEN-Block.
   /// Bestehende Datenzeilen unterhalb der „Datum"-Kopfzeile werden ersetzt.
@@ -1750,7 +1766,7 @@ class ExcelExportServiceV3 {
         );
       }
 
-      // G — Produktionszeit: Minuten → Tagesbruchteil.
+      // G — Produktionszeit: Minuten ? Tagesbruchteil.
       if (h.produktionszeitMinuten != null) {
         _schreibeZelle(
           sheetData,
@@ -1877,7 +1893,7 @@ class ExcelExportServiceV3 {
     return tag.difference(epoch).inDays;
   }
 
-  /// "HH:MM" → Tagesbruchteil (z. B. "06:35" → 0.27430…).
+  /// "HH:MM" ? Tagesbruchteil (z. B. "06:35" ? 0.27430…).
   double? _zeitBruchteil(String? hhmm) {
     if (hhmm == null || hhmm.isEmpty) return null;
     final p = hhmm.trim().split(':');
@@ -1921,7 +1937,7 @@ class ExcelExportServiceV3 {
     return '${_pad(h)}:${_pad(m)}';
   }
 
-  // ─── Zeilen-Lokalisierung ─────────────────────────────────────────────
+  // --- Zeilen-Lokalisierung ---------------------------------------------
 
   String? _leseZelleA(XmlElement rowElement, _SharedStrings sharedStrings) {
     for (final cell in rowElement.findElements('c')) {
@@ -2042,7 +2058,7 @@ class ExcelExportServiceV3 {
       var startIdx = -1;
       final gNorm = gruppeFuerBlockKopf(g);
       for (var i = 0; i < eintraege.length; i++) {
-        // Blocküberschrift → Parametergruppe normalisieren: der Block
+        // Blocküberschrift ? Parametergruppe normalisieren: der Block
         // „HEISSLUFTOFEN" gehört zur Gruppe „DAMPFTUNNEL", „BRATSTRAßE"
         // und „BRATSTRASSE" sind dieselbe Gruppe. Ohne das fiel die Suche
         // auf den globalen Ersttreffer zurück — die Plattenwerte des
@@ -2055,10 +2071,10 @@ class ExcelExportServiceV3 {
       if (startIdx >= 0) {
         for (var i = startIdx + 1; i < eintraege.length; i++) {
           final e = eintraege[i];
-          if (_istBlockHeader(e.label)) break; // nächster Block → Ende
+          if (_istBlockHeader(e.label)) break; // nächster Block ? Ende
           if (passt(e.label)) return e.rNum;
         }
-        // Im Block nicht gefunden → unten globaler Fallback.
+        // Im Block nicht gefunden ? unten globaler Fallback.
       }
     }
 
@@ -2115,7 +2131,7 @@ class ExcelExportServiceV3 {
     if (sheetData == null) return null;
     final shared = _SharedStrings.fromArchive(archive);
 
-    // Zeilen einsammeln: Nummer → (A-Label, Stil je Spaltenbuchstabe)
+    // Zeilen einsammeln: Nummer ? (A-Label, Stil je Spaltenbuchstabe)
     final zeilen = <int, ({String label, Map<String, int> stile})>{};
     for (final row in sheetData.findElements('row')) {
       final rNum = int.tryParse(row.getAttribute('r') ?? '');
@@ -2147,7 +2163,7 @@ class ExcelExportServiceV3 {
     final zProzess = zeileMit('PROZESSSCHRITTE');
     final zAbteilung = zeileMit('Abteilung');
     final zAnlagen = zeileMit('Anlagen');
-    final zMasch = zeileMit(kMaschinenSteckbriefGruppe);
+    final zMasch = zeileMit(kMaschinenNotizGruppe);
     final zDatum = zeileMit('Datum');
 
     // Historie-Datenzeile: die Zeile direkt unter „Datum" trägt die
@@ -2211,7 +2227,7 @@ class ExcelExportServiceV3 {
   /// Ordnet eine Blocküberschrift bzw. einen Gruppennamen der
   /// kanonischen Parametergruppe der App zu. Anlagen mit festem Raster
   /// haben in der App feste Gruppennamen, die nicht dem Maschinennamen
-  /// entsprechen (Heißluftofen → DAMPFTUNNEL). Zusätzlich wird das ß
+  /// entsprechen (Heißluftofen ? DAMPFTUNNEL). Zusätzlich wird das ß
   /// aufgelöst, damit „BRATSTRAßE" und „BRATSTRASSE" zusammenfallen.
   static String gruppeFuerBlockKopf(String kopfOderGruppe) {
     final roh = kopfOderGruppe.trim();
@@ -2222,11 +2238,11 @@ class ExcelExportServiceV3 {
         n.contains('kombiofen')) {
       return 'DAMPFTUNNEL';
     }
-    return roh.replaceAll('ß', 'ss').replaceAll('ẞ', 'SS').toUpperCase();
+    return roh.replaceAll('ß', 'ss').replaceAll('?', 'SS').toUpperCase();
   }
 
   /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:
-  /// „Lochgröße (mm)" → „Lochgröße". Wird beidseitig beim Vergleich
+  /// „Lochgröße (mm)" ? „Lochgröße". Wird beidseitig beim Vergleich
   /// von Sheet-Labels und gespeicherten Parameternamen benutzt.
   static String _basisLabel(String label) {
     final l = label.trim();
@@ -2247,7 +2263,7 @@ class ExcelExportServiceV3 {
     return buchstaben == buchstaben.toUpperCase();
   }
 
-  // ─── Zellen-Manipulation ──────────────────────────────────────────────
+  // --- Zellen-Manipulation ----------------------------------------------
 
   void _setzeZelleInlineStr(
     XmlElement sheetData, {
@@ -2434,9 +2450,9 @@ class ExcelExportServiceV3 {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // Hilfsklassen
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 class _AktualisierungsStats {
   _AktualisierungsStats(

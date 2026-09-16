@@ -5,6 +5,8 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/utils/zeit.dart';
+import '../../core/constants/parameter_namen.dart';
+import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -530,3 +532,6 @@ class _StepsList extends ConsumerWidget {
 
   /// Karten-Bereich: leerer Hinweis, einspaltig oder zweispaltig verteilt.
 }
+
+
+
