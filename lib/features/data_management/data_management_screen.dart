@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
-import '../../core/services/excel_export_service_v4.dart';
+import '../../core/services/excel_export_service_v3.dart';
 import '../../core/services/excel_import_dispatcher.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../articles/article_detail_providers.dart';
@@ -34,23 +34,23 @@ class DataManagementScreen extends ConsumerStatefulWidget {
 
 class _DataManagementScreenState
     extends ConsumerState<DataManagementScreen> {
-  // ── Allgemeine Status ──────────────────────────────────────────────
+  // -- Allgemeine Status ----------------------------------------------
   bool _busy = false;
   String? _statusMessage;
   Color _statusColor = Colors.green;
 
-  // ── Import-Detailmeldungen (Fehler + Hinweise des letzten Imports) ──
+  // -- Import-Detailmeldungen (Fehler + Hinweise des letzten Imports) --
   List<String> _importFehler = [];
   List<String> _importWarnungen = [];
 
-  // ── Speicherort-Pfade (nur Anzeige) ────────────────────────────────
+  // -- Speicherort-Pfade (nur Anzeige) --------------------------------
   String? _datenbankPfad;
   String? _backupPfad;
 
   /// Selbst gewählter Backup-Ordner (null = Standard).
   String? _eigenerOrdner;
 
-  // ── Backup-Liste ───────────────────────────────────────────────────
+  // -- Backup-Liste ---------------------------------------------------
   List<BackupInfo> _backups = [];
   bool _backupsGeladen = false;
 
@@ -111,9 +111,9 @@ class _DataManagementScreenState
     ref.invalidate(productionHistoryProvider);
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // EXCEL-IMPORT
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
   Future<void> _excelImport() async {
     try {
@@ -169,11 +169,11 @@ class _DataManagementScreenState
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // EXCEL-EXPORT
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
-  // ── Backup-Ordner festlegen ────────────────────────────────────────
+  // -- Backup-Ordner festlegen ----------------------------------------
 
   Future<void> _backupOrdnerWaehlen() async {
     final ordner = await FilePicker.getDirectoryPath(
@@ -196,7 +196,7 @@ class _DataManagementScreenState
     _setBusy(false, msg: 'Standard-Ordner wieder aktiv.');
   }
 
-  // ── Maschinen-Katalog als eigene Excel ─────────────────────────────
+  // -- Maschinen-Katalog als eigene Excel -----------------------------
 
   Future<void> _katalogExport() async {
     try {
@@ -263,12 +263,28 @@ class _DataManagementScreenState
     }
   }
 
+  /// Stammdaten-Export.
+  ///
+  /// Nutzt seit der Umstellung [ExcelExportServiceV3]: Der schreibt in die
+  /// zuletzt importierte Excel-Datei hinein, statt die Mappe neu zu bauen.
+  /// Formatierung, Dropdowns, Reiterfarben und alles, was du in Excel
+  /// selbst geändert hast, bleiben dadurch erhalten — Voraussetzung für
+  /// einen echten Rundlauf App ⇄ Excel.
+  ///
+  /// Preis dafür: Es muss einmal eine Vorlage importiert worden sein. Ohne
+  /// sie meldet der Dienst das mit einer eigenen Fehlermeldung.
   Future<void> _excelExport() async {
     try {
       _setBusy(true, msg: 'Excel wird erstellt …');
 
-      final svc = ExcelExportServiceV4(ref.read(databaseProvider));
+      final svc = ExcelExportServiceV3(ref.read(databaseProvider));
       final result = await svc.export();
+
+      if (result.hatFehler) {
+        _setBusy(false, msg: result.fehler.first, color: Colors.red);
+        if (mounted) setState(() => _importFehler = result.fehler);
+        return;
+      }
 
       final zielPfad = await FilePicker.saveFile(
         dialogTitle: 'Excel-Export speichern',
@@ -284,25 +300,45 @@ class _DataManagementScreenState
 
       await File(zielPfad).writeAsBytes(result.bytes);
 
+      // Messanzeige: `customParameterUebersprungen` zählt Parameter, für
+      // die im Artikelblatt kein Platz mehr war — das Blaupausen-Problem,
+      // wegen dem es überhaupt einen zweiten Exporter gab. Steht hier 0,
+      // erübrigt sich die Neu-Erzeugung einzelner Blätter.
       _setBusy(
         false,
-        msg: 'Excel exportiert: ${result.anzahlArtikel} Artikel · '
-            '${result.anzahlSchritte} Schritte · '
-            '${result.anzahlParameter} Parameter',
+        msg: '${result.artikelAktualisiert} Artikel · '
+            '${result.schritteGeschrieben} Schritte · '
+            '${result.parameterGeschrieben} Parameter · '
+            '${result.customParameterGeschrieben} Zusatzparameter · '
+            '${result.historienGeschrieben} Historienzeilen'
+            '${result.artikelSheetsAngelegt > 0 ? ' · '
+                '${result.artikelSheetsAngelegt} Blätter neu' : ''}'
+            '${result.maschinenInKatalog > 0 ? ' · '
+                '${result.maschinenInKatalog} Anlagen ergänzt' : ''}'
+            ' · ÜBERSPRUNGEN: ${result.customParameterUebersprungen}',
+        color: result.customParameterUebersprungen > 0
+            ? Colors.orange
+            : Colors.green,
       );
 
-      // Export-Hinweise (z.B. Katalog voll) ebenfalls anzeigen.
-      if (mounted && result.warnungen.isNotEmpty) {
-        setState(() => _importWarnungen = result.warnungen);
+      if (!mounted) return;
+      final hinweise = <String>[
+        ...result.warnungen,
+        if (result.artikelNichtInVorlage.isNotEmpty)
+          'Nicht in der Vorlage enthalten: '
+              '${result.artikelNichtInVorlage.join(', ')}',
+      ];
+      if (hinweise.isNotEmpty) {
+        setState(() => _importWarnungen = hinweise);
       }
     } catch (e) {
       _setBusy(false, msg: 'Export-Fehler: $e', color: Colors.red);
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // BACKUP ERSTELLEN
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
   Future<void> _backupErstellenAuto() async {
     try {
@@ -339,9 +375,9 @@ class _DataManagementScreenState
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // BACKUP WIEDERHERSTELLEN
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
   Future<void> _backupWiederherstellen(BackupInfo info) async {
     final bestaetigt = await _frageBestaetigung(
@@ -426,9 +462,9 @@ class _DataManagementScreenState
     }
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // HELPER
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
   Future<bool> _frageBestaetigung({
     required String titel,
@@ -470,9 +506,9 @@ class _DataManagementScreenState
     );
   }
 
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
   // BUILD
-  // ──────────────────────────────────────────────────────────────────────
+  // ----------------------------------------------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -483,7 +519,7 @@ class _DataManagementScreenState
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          // ── Status-Banner ────────────────────────────────────────────
+          // -- Status-Banner --------------------------------------------
           if (_busy || _statusMessage != null)
             _StatusBanner(
               busy: _busy,
@@ -492,7 +528,7 @@ class _DataManagementScreenState
             ),
           if (_busy || _statusMessage != null) const SizedBox(height: 20),
 
-          // ── Import-Detailmeldungen (aufklappbar) ─────────────────────
+          // -- Import-Detailmeldungen (aufklappbar) ---------------------
           if (_importFehler.isNotEmpty || _importWarnungen.isNotEmpty) ...[
             _ImportDetails(
               fehler: _importFehler,
@@ -501,7 +537,7 @@ class _DataManagementScreenState
             const SizedBox(height: 20),
           ],
 
-          // ── Kategorien: je Bereich eine Kachel mit Import/Export ────
+          // -- Kategorien: je Bereich eine Kachel mit Import/Export ----
           _KategorieGrid(
             children: [
               _KategorieKachel(
@@ -539,7 +575,7 @@ class _DataManagementScreenState
           ),
           const SizedBox(height: 20),
 
-          // ── Vorhandene Backups ───────────────────────────────────────
+          // -- Vorhandene Backups ---------------------------------------
           _Sektion(
             icon: Icons.restore,
             titel: 'Vorhandene Backups',
@@ -653,9 +689,9 @@ class _DataManagementScreenState
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Import-Detailmeldungen (aufklappbare Liste der Fehler + Hinweise)
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 class _ImportDetails extends StatelessWidget {
   const _ImportDetails({
@@ -779,9 +815,9 @@ class _MeldungsZeile extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Sektions-Karte
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 class _Sektion extends StatelessWidget {
   const _Sektion({
@@ -838,9 +874,9 @@ class _Sektion extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Aktion-Button
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 /// Raster der Kategorie-Kacheln (1–3 Spalten je nach Breite).
 class _KategorieGrid extends StatelessWidget {
@@ -1112,9 +1148,9 @@ class _ActionKachel extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Pfad-Zeile mit Kopier-Button
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 class _PfadZeile extends StatelessWidget {
   const _PfadZeile({
@@ -1174,9 +1210,9 @@ class _PfadZeile extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Einzelner Backup-Listen-Eintrag
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 class _BackupListenEintrag extends StatelessWidget {
   const _BackupListenEintrag({
@@ -1286,9 +1322,9 @@ class _BackupListenEintrag extends StatelessWidget {
   }
 }
 
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 // Status-Banner (oben auf dem Screen während Aktionen)
-// ──────────────────────────────────────────────────────────────────────────
+// --------------------------------------------------------------------------
 
 class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
