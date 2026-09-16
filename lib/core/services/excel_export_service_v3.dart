@@ -92,6 +92,10 @@ class ExcelExportServiceV3 {
   // still an die falsche Stelle. Deshalb stehen sie hier benannt an einem
   // Ort statt verstreut als nackte Zahlen im Code.
 
+  /// Anzahl vorbereiteter Leerzeilen unter der Historie — mit Formeln,
+  /// aber ohne Inhalt, zum Nachtragen von Hand.
+  static const int _historieLeerzeilen = 20;
+
   /// Erste Datenzeile im Blatt „Übersicht" (darüber Kopf und Legende).
   static const int _uebersichtErsteZeile = 15;
 
@@ -1774,15 +1778,9 @@ class ExcelExportServiceV3 {
           zahl: h.kgFertigware,
         );
       }
-      if (h.verlustAnteil != null) {
-        _schreibeZelle(
-          sheetData,
-          row: r,
-          colLetter: 'D',
-          stil: stilByCol['D'],
-          zahl: h.verlustAnteil,
-        );
-      }
+      // D, G, H und I werden NICHT als Wert geschrieben, sondern als
+      // Formel — siehe die Schleife am Ende dieser Methode. Trägst du in
+      // Excel eine Charge nach, rechnet die Tabelle selbst.
 
       // E/F — Start/Ende: Tagesbruchteil + Zeit-Style, sonst "HH:MM"-Text.
       final bsStart = _zeitBruchteil(h.startzeit);
@@ -1808,36 +1806,6 @@ class ExcelExportServiceV3 {
         );
       }
 
-      // G — Produktionszeit: Minuten ? Tagesbruchteil.
-      if (h.produktionszeitMinuten != null) {
-        _schreibeZelle(
-          sheetData,
-          row: r,
-          colLetter: 'G',
-          stil: stilByCol['G'],
-          zahl: h.produktionszeitMinuten! / 1440,
-          textFallback: _hhmmVonMinuten(h.produktionszeitMinuten!),
-        );
-      }
-
-      if (h.kgProStundeRoh != null) {
-        _schreibeZelle(
-          sheetData,
-          row: r,
-          colLetter: 'H',
-          stil: stilByCol['H'],
-          zahl: h.kgProStundeRoh,
-        );
-      }
-      if (h.kgProStundeGegart != null) {
-        _schreibeZelle(
-          sheetData,
-          row: r,
-          colLetter: 'I',
-          stil: stilByCol['I'],
-          zahl: h.kgProStundeGegart,
-        );
-      }
       final notiz = h.notizen;
       if (notiz != null && notiz.isNotEmpty) {
         _schreibeZelle(
@@ -1850,6 +1818,44 @@ class ExcelExportServiceV3 {
       }
       count++;
     }
+
+    // Formeln in die geschriebenen Zeilen …
+    for (var z = headerRow + 1; z <= r; z++) {
+      _historieFormeln(z).forEach((spalte, formel) {
+        _setzeZelleFormel(
+          sheetData,
+          row: z,
+          colLetter: spalte,
+          formel: formel,
+          stil: stilByCol[spalte],
+        );
+      });
+    }
+
+    // … und in vorbereitete Leerzeilen darunter.
+    //
+    // Damit lässt sich in Excel eine Charge nachtragen: Datum, Rohgewicht,
+    // Fertiggewicht, Start- und Endzeit eintippen — Verlust,
+    // Produktionszeit und beide kg/h-Werte rechnet die Tabelle selbst.
+    // Beim nächsten Import liest die App diese Zeilen ein; die berechneten
+    // Spalten ermittelt sie ohnehin neu aus B, C, E und F.
+    for (var k = 1; k <= _historieLeerzeilen; k++) {
+      final z = r + k;
+      for (final spalte in const ['A', 'B', 'C', 'E', 'F', 'J']) {
+        final stil = stilByCol[spalte];
+        if (stil != null) _setzeMitStil(sheetData, z, spalte, stil);
+      }
+      _historieFormeln(z).forEach((spalte, formel) {
+        _setzeZelleFormel(
+          sheetData,
+          row: z,
+          colLetter: spalte,
+          formel: formel,
+          stil: stilByCol[spalte],
+        );
+      });
+    }
+
     return count;
   }
 
@@ -1972,12 +1978,6 @@ class ExcelExportServiceV3 {
   static String _isoDatum(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${_pad(d.month)}-${_pad(d.day)}';
 
-  static String _hhmmVonMinuten(double minuten) {
-    final t = minuten.round();
-    final h = t ~/ 60;
-    final m = t % 60;
-    return '${_pad(h)}:${_pad(m)}';
-  }
 
   // --- Zeilen-Lokalisierung ---------------------------------------------
 
@@ -2561,6 +2561,47 @@ class ExcelExportServiceV3 {
     t.children.add(XmlText(wert));
     is_.children.add(t);
     cell.children.add(is_);
+  }
+
+  /// Die vier berechneten Historie-Spalten als Excel-Formeln.
+  ///
+  /// [zeile] ist die 1-basierte Zeilennummer. Die Formeln liefern einen
+  /// leeren String, solange die Eingabespalten leer sind — so bleiben
+  /// vorbereitete Leerzeilen optisch leer statt voller Nullen und
+  /// Division-durch-Null-Fehler.
+  ///
+  /// Spalte G ist ein Tagesbruchteil (Excel-Zeitwert). `B/(G*24)` ergibt
+  /// deshalb Kilogramm je Stunde.
+  static Map<String, String> _historieFormeln(int zeile) => {
+        'D': 'IF(OR(B$zeile="",C$zeile=""),"",1-C$zeile/B$zeile)',
+        'G': 'IF(OR(E$zeile="",F$zeile=""),"",F$zeile-E$zeile)',
+        'H': 'IF(OR(B$zeile="",G$zeile=""),"",B$zeile/(G$zeile*24))',
+        'I': 'IF(OR(C$zeile="",G$zeile=""),"",C$zeile/(G$zeile*24))',
+      };
+
+  /// Schreibt eine Formelzelle (ohne zwischengespeicherten Wert — Excel
+  /// rechnet beim Öffnen).
+  static void _setzeZelleFormel(
+    XmlElement sheetData, {
+    required int row,
+    required String colLetter,
+    required String formel,
+    String? stil,
+  }) {
+    if (stil != null) _setzeMitStil(sheetData, row, colLetter, stil);
+    final cellRef = '$colLetter$row';
+    final rowElement = _findeOderLegeRowAn(sheetData, row);
+    final cell = _findeOderLegeCellAn(rowElement, cellRef);
+    final styleAttr = cell.getAttribute('s');
+
+    cell.attributes.clear();
+    cell.children.clear();
+    cell.setAttribute('r', cellRef);
+    if (styleAttr != null) cell.setAttribute('s', styleAttr);
+
+    final f = XmlElement(XmlName('f'));
+    f.children.add(XmlText(formel));
+    cell.children.add(f);
   }
 
   static void _setzeZelleZahl(
