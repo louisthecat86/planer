@@ -8,9 +8,9 @@ import 'package:uuid/uuid.dart';
 import '../constants/abteilungen.dart';
 import '../database/database.dart';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // Ergebnis-Klassen
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 class ImportResultV3 {
   const ImportResultV3({
@@ -85,9 +85,9 @@ class _ValidationError {
   String toString() => 'Sheet "$sheet" ($artikelnr): Feld "$feld" — $grund';
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // Parsed-Data-Klassen
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 class _ParsedMachine {
   _ParsedMachine({
@@ -201,9 +201,9 @@ class _ParsedProduct {
   List<_ParsedHistorie> historie;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // Schlüssel für die app_settings-Tabelle (beim Export wieder ausgelesen)
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 /// Key-Konstanten für die app_settings-Tabelle.
 /// Werden sowohl vom Import-Service (Schreiben) als auch vom Export-Service
@@ -212,9 +212,9 @@ const String kAppSettingLastImportExcelBytes = 'last_import_excel_bytes';
 const String kAppSettingLastImportExcelFilename = 'last_import_excel_filename';
 const String kAppSettingLastImportDatum = 'last_import_datum';
 
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 // ExcelImportServiceV3
-// ═══════════════════════════════════════════════════════════════════════════
+// ---------------------------------------------------------------------------
 
 class ExcelImportServiceV3 {
   ExcelImportServiceV3(this._db);
@@ -321,12 +321,19 @@ class ExcelImportServiceV3 {
     return blaupausen.any(sheetNames.contains);
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
   // Preview
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
 
-  Future<ImportPreviewV3> preview(File file) async {
-    final excel = Excel.decodeBytes(await file.readAsBytes());
+  /// Vorschau des Imports.
+  ///
+  /// [mappe] kann eine bereits dekodierte Arbeitsmappe sein. Der Dispatcher
+  /// muss die Datei ohnehin öffnen, um das Format zu erkennen — reicht er
+  /// das Ergebnis hier weiter, entfällt ein kompletter zweiter Aufbau des
+  /// Zellmodells. `Excel.decodeBytes` ist die mit Abstand teuerste
+  /// Operation im ganzen Import und läuft im UI-Isolate.
+  Future<ImportPreviewV3> preview(File file, {Excel? mappe}) async {
+    final excel = mappe ?? Excel.decodeBytes(await file.readAsBytes());
 
     if (!istV3Format(excel)) {
       return const ImportPreviewV3(
@@ -390,15 +397,23 @@ class ExcelImportServiceV3 {
     );
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
   // Import
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
 
-  Future<ImportResultV3> import(File file) async {
-    // Datei-Bytes einmal lesen — werden sowohl geparst als auch für den
-    // späteren Excel-Export in der DB abgelegt.
-    final bytes = await file.readAsBytes();
-    final excel = Excel.decodeBytes(bytes);
+  /// Führt den Import durch.
+  ///
+  /// [mappe] und [rohBytes] können vom Aufrufer mitgegeben werden, wenn die
+  /// Datei dort bereits gelesen und dekodiert wurde (siehe [preview]). Die
+  /// Bytes werden zusätzlich zum Parsen gebraucht: Die Originaldatei wird
+  /// für den späteren Excel-Export in der Datenbank abgelegt.
+  Future<ImportResultV3> import(
+    File file, {
+    Excel? mappe,
+    List<int>? rohBytes,
+  }) async {
+    final bytes = rohBytes ?? await file.readAsBytes();
+    final excel = mappe ?? Excel.decodeBytes(bytes);
 
     if (!istV3Format(excel)) {
       return const ImportResultV3(
@@ -484,7 +499,7 @@ class ExcelImportServiceV3 {
         }
       }
 
-      // ── Maschinen-Steckbriefe (Parameterdefinitionen) einlesen ────────
+      // -- Maschinen-Steckbriefe (Parameterdefinitionen) einlesen --------
       // Sheet „Maschinen-Steckbriefe": Maschine | Parameter | Einheit |
       // Reihenfolge. Fehlt das Sheet (ältere Excel), bleibt der Bestand
       // in der App unverändert.
@@ -499,7 +514,7 @@ class ExcelImportServiceV3 {
 
         String productId;
         // Bestehende fixe Zeiten je Reihenfolge merken, falls die Excel
-        // (alte Vorlage ohne Zeile) keinen Wert liefert → kein Datenverlust.
+        // (alte Vorlage ohne Zeile) keinen Wert liefert ? kein Datenverlust.
         final altFixZeit = <int, double?>{};
         if (existing == null) {
           productId = _uuid.v4();
@@ -633,7 +648,7 @@ class ExcelImportServiceV3 {
           }
         }
 
-        // ── Historische Produktionsdaten in production_history ──────────
+        // -- Historische Produktionsdaten in production_history ----------
         // Re-Import: vorhandene Import-Zeilen dieses Artikels ersetzen.
         // In der App erfasste Zeilen (quelle='app') bleiben erhalten.
         await (_db.delete(_db.productionHistory)
@@ -663,7 +678,7 @@ class ExcelImportServiceV3 {
         }
       }
 
-      // ── Excel-Bytes + Dateiname in app_settings ablegen ───────────────
+      // -- Excel-Bytes + Dateiname in app_settings ablegen ---------------
       // Dient als Basis für den späteren Export (Formatierung, Farben,
       // Dropdowns und Anlagen-Katalog bleiben so 1:1 erhalten).
       await _speichereImportierteDatei(file, bytes);
@@ -723,9 +738,9 @@ class ExcelImportServiceV3 {
     }
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
   // Parsing-Helpers
-  // ═════════════════════════════════════════════════════════════════════════
+  // -------------------------------------------------------------------------
 
   List<_ParsedMachine> _parseMaschinenKatalog(
     Sheet sheet,
@@ -1076,7 +1091,7 @@ class ExcelImportServiceV3 {
     // Der Block wird zellweise eingesammelt; standen dort Reste aus einer
     // älteren Vorlage neben dem aktuellen Text, landete derselbe Satz
     // mehrfach in der Beschreibung — und wuchs mit jedem Durchlauf
-    // App → Excel → App weiter. Doppelte Teile werden deshalb übersprungen,
+    // App ? Excel ? App weiter. Doppelte Teile werden deshalb übersprungen,
     // ebenso Teile, die bereits wörtlich in einem vorherigen enthalten sind.
     final eindeutig = <String>[];
     for (final teil in teile) {
@@ -1139,7 +1154,7 @@ class ExcelImportServiceV3 {
       if (nachHistorie) continue;
 
       if (_istGruppenHeader(label, rows[r], maxSchritt)) {
-        // Blocküberschrift → kanonische Parametergruppe der App.
+        // Blocküberschrift ? kanonische Parametergruppe der App.
         // „HEISSLUFTOFEN" gehört zur Gruppe „DAMPFTUNNEL", „BRATSTRAßE"
         // und „BRATSTRASSE" fallen zusammen. Ohne das kamen die
         // Plattenwerte unter einem Gruppennamen zurück, den die
@@ -1147,7 +1162,7 @@ class ExcelImportServiceV3 {
         aktuelleGruppe = _gruppeFuerBlockKopf(label);
         inCustomBlock = false;
         // Schritte dieser Anlage ermitteln. Findet sich keiner, ist es ein
-        // generischer Block → keine Einschränkung (altes Verhalten).
+        // generischer Block ? keine Einschränkung (altes Verhalten).
         final passende = schritte
             .where(
               (st) =>
@@ -1193,11 +1208,11 @@ class ExcelImportServiceV3 {
         n.contains('kombiofen')) {
       return 'DAMPFTUNNEL';
     }
-    return roh.replaceAll('ß', 'ss').replaceAll('ẞ', 'SS').toUpperCase();
+    return roh.replaceAll('ß', 'ss').replaceAll('?', 'SS').toUpperCase();
   }
 
   /// Entfernt einen abschließenden Einheiten-Zusatz in Klammern:
-  /// „Lochgröße (mm)" → „Lochgröße". Gegenstück zur gleichnamigen
+  /// „Lochgröße (mm)" ? „Lochgröße". Gegenstück zur gleichnamigen
   /// Normalisierung im Export, damit der Roundtrip namensstabil bleibt.
   static String _basisLabel(String label) {
     final l = label.trim();

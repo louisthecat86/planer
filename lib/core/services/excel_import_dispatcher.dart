@@ -109,16 +109,28 @@ class ExcelImportDispatcher {
     return names;
   }
 
-  VorlagenVersion _erkenneVersionFromBytes(Uint8List bytes) {
+  /// Öffnet die Arbeitsmappe. null, wenn die Datei kein lesbares xlsx ist.
+  ///
+  /// Bewusst getrennt von der Formaterkennung: `Excel.decodeBytes` baut das
+  /// komplette Zellmodell auf und ist die teuerste Operation des gesamten
+  /// Imports. Vorher wurde es je Durchgang zweimal aufgerufen — einmal hier
+  /// zur Formaterkennung, einmal gleich darauf im Import-Service. Ein
+  /// Vorschau-plus-Import-Zyklus las die Datei also viermal ein und baute
+  /// viermal dasselbe Modell auf, alles im UI-Isolate.
+  Excel? _oeffne(Uint8List bytes) {
     try {
-      final excel = Excel.decodeBytes(bytes);
-      if (ExcelImportServiceV3.istV3Format(excel)) {
-        return VorlagenVersion.v3;
-      }
-      return VorlagenVersion.unbekannt;
+      return Excel.decodeBytes(bytes);
     } catch (_) {
-      return VorlagenVersion.unbekannt;
+      return null;
     }
+  }
+
+  VorlagenVersion _erkenneVersionFromBytes(Uint8List bytes) {
+    final excel = _oeffne(bytes);
+    if (excel == null) return VorlagenVersion.unbekannt;
+    return ExcelImportServiceV3.istV3Format(excel)
+        ? VorlagenVersion.v3
+        : VorlagenVersion.unbekannt;
   }
 
   /// Diagnose: Versucht die Datei zu öffnen und liefert detaillierte
@@ -181,16 +193,18 @@ class ExcelImportDispatcher {
 
   Future<UnifiedImportPreview> preview(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
+    final mappe = _oeffne(bytes);
 
-    if (_erkenneVersionFromBytes(bytes) != VorlagenVersion.v3) {
+    if (mappe == null || !ExcelImportServiceV3.istV3Format(mappe)) {
       return UnifiedImportPreview(
         version: VorlagenVersion.unbekannt,
         fehler: _unbekanntFehler(bytes, filePath),
       );
     }
 
+    // Die geöffnete Mappe weiterreichen statt sie erneut aufzubauen.
     final svc = ExcelImportServiceV3(_db);
-    final p = await svc.preview(File(filePath));
+    final p = await svc.preview(File(filePath), mappe: mappe);
     return UnifiedImportPreview(
       version: VorlagenVersion.v3,
       artikelNeu: p.artikelNeu,
@@ -206,16 +220,19 @@ class ExcelImportDispatcher {
 
   Future<UnifiedImportResult> importFile(String filePath) async {
     final bytes = await File(filePath).readAsBytes();
+    final mappe = _oeffne(bytes);
 
-    if (_erkenneVersionFromBytes(bytes) != VorlagenVersion.v3) {
+    if (mappe == null || !ExcelImportServiceV3.istV3Format(mappe)) {
       return UnifiedImportResult(
         version: VorlagenVersion.unbekannt,
         fehler: _unbekanntFehler(bytes, filePath),
       );
     }
 
+    // Mappe UND Bytes weiterreichen: Die Bytes braucht der Service, um die
+    // Originaldatei für den späteren Excel-Export abzulegen.
     final svc = ExcelImportServiceV3(_db);
-    final r = await svc.import(File(filePath));
+    final r = await svc.import(File(filePath), mappe: mappe, rohBytes: bytes);
     return UnifiedImportResult(
       version: VorlagenVersion.v3,
       artikelNeu: r.artikelNeu,
@@ -229,3 +246,6 @@ class ExcelImportDispatcher {
     );
   }
 }
+
+
+
