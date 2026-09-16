@@ -856,7 +856,14 @@ class ExcelExportServiceV3 {
       final p = sheetInfo[kat];
       if (p != null) kandidaten.add(p);
     }
-    final stile = _ernteStile(archive, kandidaten);
+    final geerntet = _ernteStile(archive, kandidaten);
+    // Bringt die Vorlage keine brauchbaren Zellformate mit — etwa weil sie
+    // selbst einmal maschinell erzeugt wurde und nur die zwei
+    // Standardformate kennt —, legen wir die benötigten Formate selbst an.
+    // Sonst entstünden völlig kahle Blätter.
+    final stile = _istOhneFormat(geerntet)
+        ? (_erzeugeStile(archive) ?? geerntet)
+        : geerntet;
 
     for (final art in fehlende) {
       try {
@@ -2150,6 +2157,162 @@ class ExcelExportServiceV3 {
       bester ??= ergebnis.stile;
     }
     return _abgesichert(archive, bester ?? standard);
+  }
+
+  /// Sind alle Stil-Nummern 0? Dann hat das Ernten nichts gefunden oder
+  /// die Absicherung hat alles verworfen — die Vorlage bringt also keine
+  /// Formatierung mit.
+  static bool _istOhneFormat(GenStile s) =>
+      s.kategorie == 0 &&
+      s.kopfLabel == 0 &&
+      s.kopf == 0 &&
+      s.prozessHeader == 0 &&
+      s.blockHeader == 0 &&
+      s.hinweis == 0 &&
+      s.labelGelb == 0 &&
+      s.labelGrau == 0 &&
+      s.wert == 0 &&
+      s.histHeader == 0 &&
+      s.histDaten.every((i) => i == 0);
+
+  /// Legt die Zellformate, die der Sheet-Generator braucht, in
+  /// `xl/styles.xml` an und liefert ihre Nummern zurück.
+  ///
+  /// Die Formate werden **angehängt**, nie verändert oder umsortiert. Alle
+  /// bestehenden Nummern behalten dadurch ihre Bedeutung, und die Blätter
+  /// der Vorlage bleiben unberührt.
+  ///
+  /// Damit hängt das Aussehen neuer Blätter nicht mehr davon ab, was in der
+  /// gespeicherten Vorlage zufällig an Formaten vorhanden ist. Genau daran
+  /// ist es vorher gescheitert: Die Vorlage war irgendwann durch einen
+  /// maschinell erzeugten Export ersetzt worden und kannte nur noch zwei
+  /// Formate — die fest verdrahteten Nummern des Generators zeigten ins
+  /// Leere.
+  ///
+  /// Gibt null zurück, wenn `styles.xml` fehlt oder nicht lesbar ist; der
+  /// Aufrufer bleibt dann bei den geernteten (abgesicherten) Nummern.
+  static GenStile? _erzeugeStile(Archive archive) {
+    try {
+      final datei = archive.files.firstWhere(
+        (f) => f.name == 'xl/styles.xml',
+        orElse: () => ArchiveFile('', 0, <int>[]),
+      );
+      if (datei.name.isEmpty) return null;
+
+      final doc = XmlDocument.parse(
+        utf8.decode(datei.content as List<int>),
+      );
+      final root = doc.rootElement;
+
+      /// Hängt ein Element an einen Bereich an, aktualisiert dessen
+      /// `count` und gibt den Index des neuen Eintrags zurück.
+      int anhaengen(String bereich, String xml) {
+        final treffer = root.findElements(bereich);
+        if (treffer.isEmpty) throw StateError('$bereich fehlt');
+        final ziel = treffer.first;
+        ziel.children.add(XmlDocument.parse(xml).rootElement.copy());
+        final anzahl = ziel.childElements.length;
+        ziel.setAttribute('count', '$anzahl');
+        return anzahl - 1;
+      }
+
+      // ── Schriften ────────────────────────────────────────────────────
+      final fArial = anhaengen(
+        'fonts',
+        '<font><sz val="10"/><name val="Arial"/></font>',
+      );
+      final fFett = anhaengen(
+        'fonts',
+        '<font><b/><sz val="10"/><name val="Arial"/></font>',
+      );
+      final fWeiss = anhaengen(
+        'fonts',
+        '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/>'
+            '<name val="Arial"/></font>',
+      );
+      final fHinweis = anhaengen(
+        'fonts',
+        '<font><i/><sz val="9"/><color rgb="FF808080"/>'
+            '<name val="Arial"/></font>',
+      );
+
+      // ── Füllungen ────────────────────────────────────────────────────
+      String fuellung(String argb) =>
+          '<fill><patternFill patternType="solid">'
+          '<fgColor rgb="$argb"/><bgColor indexed="64"/>'
+          '</patternFill></fill>';
+      final flKategorie = anhaengen('fills', fuellung('FF1F6F6F'));
+      final flDunkel = anhaengen('fills', fuellung('FF404040'));
+      final flGelb = anhaengen('fills', fuellung('FFFFF2CC'));
+      final flGrau = anhaengen('fills', fuellung('FFD9D9D9'));
+
+      // ── Rahmen ───────────────────────────────────────────────────────
+      const kante = '<color indexed="64"/>';
+      final brDuenn = anhaengen(
+        'borders',
+        '<border><left style="thin">$kante</left>'
+            '<right style="thin">$kante</right>'
+            '<top style="thin">$kante</top>'
+            '<bottom style="thin">$kante</bottom><diagonal/></border>',
+      );
+
+      // ── Zellformate ──────────────────────────────────────────────────
+      // numFmtId 14 ist das eingebaute Datumsformat (in deutschem Excel
+      // TT.MM.JJJJ), 20 das eingebaute `hh:mm`. Eingebaute Formate sind
+      // sprachabhängig und damit robuster als eigene Formatzeichenketten.
+      int format(
+        int schrift,
+        int fuellung,
+        int rahmen, {
+        int zahlFormat = 0,
+        bool umbruch = false,
+      }) =>
+          anhaengen(
+            'cellXfs',
+            '<xf numFmtId="$zahlFormat" fontId="$schrift" '
+                'fillId="$fuellung" borderId="$rahmen" xfId="0" '
+                'applyFont="1" applyFill="1" applyBorder="1" '
+                'applyNumberFormat="1" applyAlignment="1">'
+                '<alignment vertical="center"'
+                '${umbruch ? ' wrapText="1"' : ''}/></xf>',
+          );
+
+      final sKategorie = format(fWeiss, flKategorie, 0);
+      final sKopfLabel = format(fFett, flGrau, brDuenn);
+      final sKopf = format(fFett, 0, brDuenn);
+      final sHeader = format(fWeiss, flDunkel, 0);
+      final sHinweis = format(fHinweis, 0, 0);
+      final sGelb = format(fFett, flGelb, brDuenn);
+      final sGrau = format(fFett, flGrau, brDuenn);
+      final sWert = format(fArial, 0, brDuenn, umbruch: true);
+      final sHistKopf = format(fFett, flGrau, brDuenn);
+      final sDatum = format(fArial, 0, brDuenn, zahlFormat: 14);
+      final sZeit = format(fArial, 0, brDuenn, zahlFormat: 20);
+
+      final bytes = utf8.encode(doc.toXmlString(pretty: false));
+      archive.addFile(ArchiveFile('xl/styles.xml', bytes.length, bytes));
+
+      return GenStile(
+        kategorie: sKategorie,
+        kopfLabel: sKopfLabel,
+        kopf: sKopf,
+        prozessHeader: sHeader,
+        blockHeader: sHeader,
+        hinweis: sHinweis,
+        labelGelb: sGelb,
+        labelGrau: sGrau,
+        wert: sWert,
+        histHeader: sHistKopf,
+        // Spalten A…J der Historie: Datum, kg roh, kg fertig, Verlust %,
+        // Start, Ende, Dauer, kg/h roh, kg/h gegart, Notizen.
+        histDaten: <int>[
+          sDatum, sWert, sWert, sWert, sZeit,
+          sZeit, sZeit, sWert, sWert, sWert,
+        ],
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Anzahl der Zellformate in `xl/styles.xml` — also die Obergrenze für
