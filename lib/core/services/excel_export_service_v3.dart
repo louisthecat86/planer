@@ -233,6 +233,7 @@ class ExcelExportServiceV3 {
       alleParameter: alleParameter,
       alleMaschinen: alleMaschinen,
       alleSteckbriefe: alleSteckbriefe,
+      sharedStrings: sharedStrings,
       warnungen: warnungen,
     );
 
@@ -745,6 +746,74 @@ class ExcelExportServiceV3 {
     return '$h:${m.toString().padLeft(2, '0')}';
   }
 
+  /// Fehlen im Blatt eines Artikels Maschinenblöcke, die er inzwischen
+  /// bräuchte?
+  ///
+  /// Verglichen werden die Blockköpfe in Spalte A mit den Anlagen, die den
+  /// Schritten des Artikels zugeordnet sind. Berücksichtigt werden nur
+  /// Anlagen, für die es einen Steckbrief gibt — ohne Parameterzeilen
+  /// brächte ein Block nichts.
+  ///
+  /// Die Blockköpfe stehen in Großbuchstaben mit aufgelöstem ß
+  /// („Bratstraße" → „BRATSTRASSE"); dieselbe Umwandlung liefert
+  /// [ArtikelSheetGenerator.blockKopfName].
+  static bool _bloeckeFehlen({
+    required Archive archive,
+    required String sheetXmlPfad,
+    required Product artikel,
+    required List<ProductStep> alleSchritte,
+    required List<Machine> alleMaschinen,
+    required List<MachineParameterDef> alleSteckbriefe,
+    required _SharedStrings sharedStrings,
+  }) {
+    try {
+      final nameById = <String, String>{
+        for (final m in alleMaschinen)
+          if (m.deletedAt == null) m.id: m.name,
+      };
+      final mitSteckbrief = <String>{
+        for (final d in alleSteckbriefe)
+          if (d.deletedAt == null && nameById[d.maschineId] != null)
+            nameById[d.maschineId]!,
+      };
+
+      final erwartet = <String>{};
+      for (final schritt in alleSchritte) {
+        if (schritt.productId != artikel.id || schritt.deletedAt != null) {
+          continue;
+        }
+        final anlage = schritt.maschineId == null
+            ? schritt.maschine
+            : nameById[schritt.maschineId];
+        if (anlage == null || anlage.isEmpty) continue;
+        if (!mitSteckbrief.contains(anlage)) continue;
+        erwartet.add(ArtikelSheetGenerator.blockKopfName(anlage));
+      }
+      if (erwartet.isEmpty) return false;
+
+      final datei = archive.findFile(sheetXmlPfad);
+      if (datei == null) return false;
+      final doc = XmlDocument.parse(
+        utf8.decode(datei.content as List<int>),
+      );
+      final sheetData = doc.findAllElements('sheetData').firstOrNull;
+      if (sheetData == null) return false;
+
+      final vorhanden = <String>{};
+      for (final row in sheetData.findElements('row')) {
+        final text = _leseZelleA(row, sharedStrings);
+        if (text != null && text.isNotEmpty) {
+          vorhanden.add(text.trim().toUpperCase());
+        }
+      }
+      return erwartet.any((b) => !vorhanden.contains(b));
+    } catch (_) {
+      // Im Zweifel nichts neu stanzen — ein bestehendes Blatt zu
+      // überschreiben ist der eingreifendere Weg.
+      return false;
+    }
+  }
+
   static int _legeFehlendeArtikelSheetsAn({
     required Archive archive,
     required Map<String, String> sheetInfo,
@@ -753,16 +822,45 @@ class ExcelExportServiceV3 {
     required List<ProductStepParameter> alleParameter,
     required List<Machine> alleMaschinen,
     required List<MachineParameterDef> alleSteckbriefe,
+    required _SharedStrings sharedStrings,
     required List<String> warnungen,
   }) {
-    final fehlende = artikel
-        .where(
-          (a) =>
-              a.deletedAt == null &&
-              !sheetInfo.containsKey(a.artikelnummer),
-        )
+    final aktiv = artikel.where((a) => a.deletedAt == null).toList();
+
+    // (1) Artikel ganz ohne Blatt.
+    final fehlende = aktiv
+        .where((a) => !sheetInfo.containsKey(a.artikelnummer))
         .toList();
-    if (fehlende.isEmpty) return 0;
+
+    // (2) Artikel, deren Blatt nicht mehr zu ihren Anlagen passt.
+    //
+    // Das passiert, sobald einem Schritt eine Anlage zugeordnet wird, für
+    // die das Blatt keinen Parameterblock besitzt — etwa weil es aus einer
+    // Kategorie-Blaupause stammt, die diese Anlage nicht kannte. Der
+    // Updater füllt nur vorhandene Beschriftungszeilen; er legt keine
+    // neuen Blöcke an. Werte für die fehlenden Parameter hätten dann
+    // nirgends Platz und landeten im Überlauf oder fielen weg.
+    //
+    // Für diese Artikel wird das Blatt neu gestanzt — mit allen
+    // Parameterzeilen aus dem Maschinen-Steckbrief.
+    final neuZuStanzen = <Product>[];
+    for (final a in aktiv) {
+      final pfad = sheetInfo[a.artikelnummer];
+      if (pfad == null) continue;
+      if (_bloeckeFehlen(
+        archive: archive,
+        sheetXmlPfad: pfad,
+        artikel: a,
+        alleSchritte: alleSchritte,
+        alleMaschinen: alleMaschinen,
+        alleSteckbriefe: alleSteckbriefe,
+        sharedStrings: sharedStrings,
+      )) {
+        neuZuStanzen.add(a);
+      }
+    }
+
+    if (fehlende.isEmpty && neuZuStanzen.isEmpty) return 0;
 
     final workbookFile = archive.findFile('xl/workbook.xml');
     final relsFile = archive.findFile('xl/_rels/workbook.xml.rels');
@@ -869,31 +967,29 @@ class ExcelExportServiceV3 {
         ? (_erzeugeStile(archive) ?? geerntet)
         : geerntet;
 
-    for (final art in fehlende) {
-      try {
-        // Schritte dieses Artikels in Reihenfolge.
-        final schritte = alleSchritte
-            .where((s) => s.productId == art.id && s.deletedAt == null)
-            .toList()
-          ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
+    /// Baut die Generator-Eingabe für einen Artikel.
+    GenArtikel genEingabe(Product art) {
+      final schritte = alleSchritte
+          .where((s) => s.productId == art.id && s.deletedAt == null)
+          .toList()
+        ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
 
-        // Parameter je Schritt-Id.
-        final paramsByStep = <String, List<ProductStepParameter>>{};
-        for (final p in alleParameter) {
-          if (p.deletedAt != null) continue;
-          paramsByStep.putIfAbsent(p.stepId, () => []).add(p);
-        }
+      final paramsByStep = <String, List<ProductStepParameter>>{};
+      for (final p in alleParameter) {
+        if (p.deletedAt != null) continue;
+        paramsByStep.putIfAbsent(p.stepId, () => []).add(p);
+      }
 
-        // GenSchritt-Liste + Werte je Schritt-Nr aufbauen.
-        final genSchritte = <GenSchritt>[];
-        final werteJeSchritt = <int, List<GenWert>>{};
-        for (var i = 0; i < schritte.length; i++) {
-          final s = schritte[i];
-          final nr = i + 1;
-          final abt = Abteilung.fromDbValue(s.abteilung);
-          final maschinenName =
-              s.maschineId == null ? null : maschineNameById[s.maschineId];
-          genSchritte.add(GenSchritt(
+      final genSchritte = <GenSchritt>[];
+      final werteJeSchritt = <int, List<GenWert>>{};
+      for (var i = 0; i < schritte.length; i++) {
+        final s = schritte[i];
+        final nr = i + 1;
+        final abt = Abteilung.fromDbValue(s.abteilung);
+        final maschinenName =
+            s.maschineId == null ? null : maschineNameById[s.maschineId];
+        genSchritte.add(
+          GenSchritt(
             nr: nr,
             abteilung: abt.anzeigeName,
             prozessschritt: s.prozessschritt,
@@ -904,31 +1000,64 @@ class ExcelExportServiceV3 {
                 ? _minutenZuHmm(s.basisDauerMinuten)
                 : null,
             fixZeitMin: s.fixZeitMinuten,
-          ),);
-          // Werte dieses Schritts (alle Parameter mit Wert).
-          final werte = <GenWert>[];
-          for (final p
-              in paramsByStep[s.id] ?? const <ProductStepParameter>[]) {
-            werte.add(GenWert(p.parameterName, p.wert));
-          }
-          werteJeSchritt[nr] = werte;
-        }
-
-        final kategorie = art.produktgruppe == null
-            ? ''
-            : (produktgruppeLabels[art.produktgruppe] ?? '');
-        final reiterFarbe = art.produktgruppe == null
-            ? null
-            : _produktgruppeZuFarbe[art.produktgruppe];
-
-        final genInput = GenArtikel(
-          artikelnummer: art.artikelnummer,
-          bezeichnung: art.artikelbezeichnung,
-          kategorieName: kategorie,
-          schritte: genSchritte,
-          werteJeSchritt: werteJeSchritt,
-          steckbriefJeAnlage: steckbriefJeMaschine,
+          ),
         );
+        final werte = <GenWert>[];
+        for (final p in paramsByStep[s.id] ?? const <ProductStepParameter>[]) {
+          werte.add(GenWert(p.parameterName, p.wert));
+        }
+        werteJeSchritt[nr] = werte;
+      }
+
+      return GenArtikel(
+        artikelnummer: art.artikelnummer,
+        bezeichnung: art.artikelbezeichnung,
+        kategorieName: art.produktgruppe == null
+            ? ''
+            : (produktgruppeLabels[art.produktgruppe] ?? ''),
+        schritte: genSchritte,
+        werteJeSchritt: werteJeSchritt,
+        steckbriefJeAnlage: steckbriefJeMaschine,
+      );
+    }
+
+    String? reiterFarbeVon(Product art) => art.produktgruppe == null
+        ? null
+        : _produktgruppeZuFarbe[art.produktgruppe];
+
+    // ── (2) Blätter neu stanzen, deren Blöcke nicht mehr passen ────────
+    for (final art in neuZuStanzen) {
+      final pfad = sheetInfo[art.artikelnummer];
+      if (pfad == null) continue;
+      try {
+        final xml = generator.generiere(
+          genEingabe(art),
+          reiterFarbe: reiterFarbeVon(art),
+          stile: stile,
+        );
+        final bytes = utf8.encode(xml);
+        archive.addFile(ArchiveFile(pfad, bytes.length, bytes));
+        angelegt++;
+      } catch (e) {
+        warnungen.add(
+          'Artikel ${art.artikelnummer}: Blatt konnte nicht neu aufgebaut '
+          'werden ($e) — die neuen Anlagen-Parameter fehlen darin.',
+        );
+      }
+    }
+    if (neuZuStanzen.isNotEmpty) {
+      warnungen.add(
+        'Neu aufgebaut, weil Anlagen dazugekommen sind: '
+        '${neuZuStanzen.map((a) => a.artikelnummer).join(', ')}. '
+        'Eigene Formatierungen in diesen Blättern gingen dabei verloren.',
+      );
+    }
+
+    // ── (1) Blätter für Artikel anlegen, die noch keines haben ────────
+    for (final art in fehlende) {
+      try {
+        final genInput = genEingabe(art);
+        final reiterFarbe = reiterFarbeVon(art);
         final sheetXml = generator.generiere(
           genInput,
           reiterFarbe: reiterFarbe,
