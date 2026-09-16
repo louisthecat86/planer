@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 
 import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' hide Column;
@@ -157,7 +158,18 @@ class ExcelExportServiceV3 {
       alleHistorie: await _db.select(_db.productionHistory).get(),
     );
 
-    return _baueArbeitsmappe(daten);
+    // Auf ein eigenes Isolate: Entpacken, XML-Bearbeitung je Artikelblatt
+    // und erneutes Packen sind reine Rechenarbeit und mit Abstand die
+    // teuerste Operation der App — bis hierher stand dabei das Fenster.
+    //
+    // `_baueArbeitsmappe` ist statisch, die Closure fängt also kein `this`
+    // ein. Andernfalls hinge die Datenbankverbindung mit an der Kette und
+    // der Aufruf scheiterte mit „object is unsendable".
+    //
+    // Bewusst ohne Fallback auf den Hauptthread: Ein Fehler soll hier
+    // sichtbar werden. Ihn abzufangen hieße, die gesamte teure Arbeit ein
+    // zweites Mal zu machen — und die Ursache zu verdecken.
+    return Isolate.run(() => _baueArbeitsmappe(daten));
   }
 
   /// Erzeugt die fertige Arbeitsmappe aus [daten] — ohne Datenbankzugriff.
