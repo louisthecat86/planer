@@ -118,6 +118,14 @@ class ExcelExportServiceV3 {
     return row?.value ?? 'stammdaten_export.xlsx';
   }
 
+  /// Baut die Export-Datei.
+  ///
+  /// Hier passieren nur noch die Datenbankabfragen; die eigentliche Arbeit
+  /// steckt in [_baueArbeitsmappe] und kommt ohne Datenbankzugriff aus.
+  /// Diese Trennung ist die Voraussetzung dafür, das Packen und die
+  /// XML-Bearbeitung auf ein eigenes Isolate zu verlagern — sie sind mit
+  /// Abstand die teuerste Operation der App und blockieren bis dahin die
+  /// Oberfläche.
   Future<ExportResultV3> export() async {
     final bytesRow = await (_db.select(_db.appSettings)
           ..where((t) => t.key.equals(kAppSettingLastImportExcelBytes))
@@ -134,8 +142,35 @@ class ExcelExportServiceV3 {
       );
     }
 
-    final vorlageBytes = base64Decode(bytesRow.value);
-    final dateiname = await letzterDateiname();
+    final daten = _ExportDaten(
+      vorlageBytes: base64Decode(bytesRow.value),
+      dateiname: await letzterDateiname(),
+      alleArtikel: await _db.select(_db.products).get(),
+      alleSchritte: await _db.select(_db.productSteps).get(),
+      alleParameter: await _db.select(_db.productStepParameters).get(),
+      alleMaschinen: await _db.select(_db.machines).get(),
+      // Steckbriefe nach sortierung — der Sheet-Generator übernimmt diese
+      // Reihenfolge in die Blöcke.
+      alleSteckbriefe: await (_db.select(_db.machineParameterDefs)
+            ..orderBy([(d) => OrderingTerm.asc(d.sortierung)]))
+          .get(),
+      alleHistorie: await _db.select(_db.productionHistory).get(),
+    );
+
+    return _baueArbeitsmappe(daten);
+  }
+
+  /// Erzeugt die fertige Arbeitsmappe aus [daten] — ohne Datenbankzugriff.
+  static ExportResultV3 _baueArbeitsmappe(_ExportDaten daten) {
+    final vorlageBytes = daten.vorlageBytes;
+    final dateiname = daten.dateiname;
+    final alleArtikel = daten.alleArtikel;
+    final alleSchritte = daten.alleSchritte;
+    final alleParameter = daten.alleParameter;
+    final alleMaschinen = daten.alleMaschinen;
+    final alleSteckbriefe = daten.alleSteckbriefe;
+    final alleHistorie = daten.alleHistorie;
+
     final archive = ZipDecoder().decodeBytes(vorlageBytes);
 
     final sheetInfo = _ermittleSheetXmlPfade(archive);
@@ -150,21 +185,9 @@ class ExcelExportServiceV3 {
     }
 
     final sharedStrings = _SharedStrings.fromArchive(archive);
-
-    final alleArtikel = await _db.select(_db.products).get();
-    final alleSchritte = await _db.select(_db.productSteps).get();
-    final alleParameter = await _db.select(_db.productStepParameters).get();
-    final alleMaschinen = await _db.select(_db.machines).get();
     final maschinenById = {for (final m in alleMaschinen) m.id: m};
 
-    // Maschinen-Steckbriefe (Parameterdefinitionen), nach sortierung —
-    // der Sheet-Generator übernimmt diese Reihenfolge in die Blöcke.
-    final alleSteckbriefe = await (_db.select(_db.machineParameterDefs)
-          ..orderBy([(d) => OrderingTerm.asc(d.sortierung)]))
-        .get();
-
     // Historie je Artikel (importierte + in der App erfasste Zeilen).
-    final alleHistorie = await _db.select(_db.productionHistory).get();
     final historieByProduct = <String, List<ProductionHistoryData>>{};
     for (final h in alleHistorie) {
       if (h.deletedAt != null) continue;
@@ -348,7 +371,7 @@ class ExcelExportServiceV3 {
     );
   }
 
-  String _generiereExportDateiname(String originalname) {
+  static String _generiereExportDateiname(String originalname) {
     final jetzt = DateTime.now();
     final ts = '${jetzt.year}${_pad(jetzt.month)}${_pad(jetzt.day)}_'
         '${_pad(jetzt.hour)}${_pad(jetzt.minute)}';
@@ -379,7 +402,7 @@ class ExcelExportServiceV3 {
   /// Setzt die Reiterfarbe eines Artikel-Sheets nach seiner Produktgruppe.
   /// Ändert nur die Farbe, sonst nichts. `<sheetPr>` muss laut OOXML das
   /// erste Kind von `<worksheet>` sein; fehlt es, wird es dort angelegt.
-  void _setzeReiterfarbe(XmlDocument doc, String? produktgruppe) {
+  static void _setzeReiterfarbe(XmlDocument doc, String? produktgruppe) {
     if (produktgruppe == null) return;
     final farbe = _produktgruppeZuFarbe[produktgruppe];
     if (farbe == null) return;
@@ -419,7 +442,7 @@ class ExcelExportServiceV3 {
   /// Ergänzt in der „Übersicht" fehlende Artikel: eine Zeile in der
   /// Katalog-Tabelle (Artikelnr | Bezeichnung | Kategorie | Status |
   /// Datum | Link) plus interner „Öffnen"-Hyperlink auf das Artikel-Sheet.
-  void _ergaenzeUebersicht({
+  static void _ergaenzeUebersicht({
     required Archive archive,
     required Map<String, String> sheetInfo,
     required _SharedStrings sharedStrings,
@@ -533,7 +556,7 @@ class ExcelExportServiceV3 {
     }
   }
 
-  void _schreibeSteckbriefSheet({
+  static void _schreibeSteckbriefSheet({
     required Archive archive,
     required Map<String, String> sheetInfo,
     required List<MachineParameterDef> defs,
@@ -706,7 +729,7 @@ class ExcelExportServiceV3 {
     return '$h:${m.toString().padLeft(2, '0')}';
   }
 
-  int _legeFehlendeArtikelSheetsAn({
+  static int _legeFehlendeArtikelSheetsAn({
     required Archive archive,
     required Map<String, String> sheetInfo,
     required List<Product> artikel,
@@ -956,7 +979,7 @@ class ExcelExportServiceV3 {
   /// Trägt in der App angelegte Maschinen in den Anlagen-Katalog der
   /// Vorlage ein (Spalte A = Name, Spalte B = Abteilung; Zeilen 13–88,
   /// passend zum benannten Bereich "Anlagen_Liste").
-  int _ergaenzeAnlagenKatalog({
+  static int _ergaenzeAnlagenKatalog({
     required Archive archive,
     required Map<String, String> sheetInfo,
     required _SharedStrings sharedStrings,
@@ -1052,7 +1075,7 @@ class ExcelExportServiceV3 {
   /// Genau dort liest der Import sie wieder ein — der Roundtrip
   /// App ? Excel bleibt damit verlustfrei. Ein leerer Text löscht den
   /// Eintrag (das Feld wurde in der App geleert).
-  void _schreibeSonstigeInfos(
+  static void _schreibeSonstigeInfos(
     XmlDocument doc,
     XmlElement sheetData,
     _SharedStrings sharedStrings,
@@ -1116,7 +1139,7 @@ class ExcelExportServiceV3 {
   /// (von der ersten Schritt-Label-Zeile bis vor den HISTORISCHE-DATEN-
   /// Block). Spalte A (Labels) und die Historie bleiben unangetastet;
   /// Zell-Styles bleiben erhalten, nur Werte werden entfernt.
-  void _leereSchrittSpalten(
+  static void _leereSchrittSpalten(
     XmlElement sheetData,
     _SharedStrings sharedStrings,
     _SchrittLabelZeilen labelRows,
@@ -1171,7 +1194,7 @@ class ExcelExportServiceV3 {
   /// ("NR — Bezeichnung"). Damit findet der Export einen Artikel auch
   /// dann, wenn das Sheet nicht exakt nach der Artikelnummer benannt
   /// ist — und legt kein Duplikat-Sheet an.
-  void _ergaenzeArtikelnummernAusA6(
+  static void _ergaenzeArtikelnummernAusA6(
     Archive archive,
     Map<String, String> sheetInfo,
     _SharedStrings sharedStrings,
@@ -1218,7 +1241,7 @@ class ExcelExportServiceV3 {
     sheetInfo.addAll(zusatz);
   }
 
-  Map<String, String> _ermittleSheetXmlPfade(Archive archive) {
+  static Map<String, String> _ermittleSheetXmlPfade(Archive archive) {
     final result = <String, String>{};
 
     final workbookFile = archive.findFile('xl/workbook.xml');
@@ -1256,7 +1279,7 @@ class ExcelExportServiceV3 {
     return result;
   }
 
-  _AktualisierungsStats _aktualisiereSheetXml({
+  static _AktualisierungsStats _aktualisiereSheetXml({
     required XmlDocument doc,
     required Product artikel,
     required List<ProductStep> schritte,
@@ -1620,7 +1643,7 @@ class ExcelExportServiceV3 {
   /// Ein Slot ist eine Zeile in der die Spalte A entweder leer ist
   /// oder schon einen Custom-Parameter-Namen enthält. Der Block endet
   /// bei „HISTORISCHE DATEN" oder am Ende des Sheets.
-  List<int> _findeCustomParameterSlots(
+  static List<int> _findeCustomParameterSlots(
     XmlDocument doc,
     _SharedStrings sharedStrings,
   ) {
@@ -1671,7 +1694,7 @@ class ExcelExportServiceV3 {
   /// Ohne erfassbaren Style wird auf Text zurückgefallen (re-import-sicher).
   /// Spalten: A Datum, B Roh, C Fertig, D Verlust, E Start, F Ende,
   /// G Produktionszeit, H kg/h roh, I kg/h gegart, J Notizen.
-  int _schreibeHistorie({
+  static int _schreibeHistorie({
     required XmlElement sheetData,
     required XmlDocument doc,
     required _SharedStrings sharedStrings,
@@ -1813,7 +1836,7 @@ class ExcelExportServiceV3 {
 
   /// Erfasst die Style-IDs (`s`-Attribut) je Spalte aus der ersten Datenzeile
   /// (headerRow + 1) des Historie-Blocks.
-  Map<String, String> _erfasseHistorieStile(
+  static Map<String, String> _erfasseHistorieStile(
     XmlElement sheetData,
     int headerRow,
   ) {
@@ -1836,7 +1859,7 @@ class ExcelExportServiceV3 {
   /// vorgegebenem Style. Bei [zahl] ohne Style wird – falls vorhanden –
   /// auf [textFallback] zurückgegriffen, damit das Format (Datum/Zeit)
   /// nicht verloren geht.
-  void _schreibeZelle(
+  static void _schreibeZelle(
     XmlElement sheetData, {
     required int row,
     required String colLetter,
@@ -1874,7 +1897,7 @@ class ExcelExportServiceV3 {
   /// Legt die Zelle an (falls nötig) und setzt das `s`-Attribut, sofern noch
   /// keines vorhanden ist. Die anschließenden Schreib-Helfer erhalten den
   /// Style.
-  void _setzeMitStil(
+  static void _setzeMitStil(
     XmlElement sheetData,
     int row,
     String colLetter,
@@ -1887,14 +1910,14 @@ class ExcelExportServiceV3 {
   }
 
   /// Excel-Datums-Seriennummer (Tage seit 1899-12-30, UTC-sicher).
-  int _excelDatumSerial(DateTime d) {
+  static int _excelDatumSerial(DateTime d) {
     final tag = DateTime.utc(d.year, d.month, d.day);
     final epoch = DateTime.utc(1899, 12, 30);
     return tag.difference(epoch).inDays;
   }
 
   /// "HH:MM" ? Tagesbruchteil (z. B. "06:35" ? 0.27430…).
-  double? _zeitBruchteil(String? hhmm) {
+  static double? _zeitBruchteil(String? hhmm) {
     if (hhmm == null || hhmm.isEmpty) return null;
     final p = hhmm.trim().split(':');
     if (p.length < 2) return null;
@@ -1906,7 +1929,7 @@ class ExcelExportServiceV3 {
 
   /// Findet die „Datum"-Kopfzeile innerhalb/unterhalb des
   /// HISTORISCHE-DATEN-Markers.
-  int? _findeHistorieHeaderZeile(
+  static int? _findeHistorieHeaderZeile(
     XmlDocument doc,
     _SharedStrings sharedStrings,
   ) {
@@ -1927,10 +1950,10 @@ class ExcelExportServiceV3 {
     return null;
   }
 
-  String _isoDatum(DateTime d) =>
+  static String _isoDatum(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${_pad(d.month)}-${_pad(d.day)}';
 
-  String _hhmmVonMinuten(double minuten) {
+  static String _hhmmVonMinuten(double minuten) {
     final t = minuten.round();
     final h = t ~/ 60;
     final m = t % 60;
@@ -1939,7 +1962,10 @@ class ExcelExportServiceV3 {
 
   // --- Zeilen-Lokalisierung ---------------------------------------------
 
-  String? _leseZelleA(XmlElement rowElement, _SharedStrings sharedStrings) {
+  static String? _leseZelleA(
+    XmlElement rowElement,
+    _SharedStrings sharedStrings,
+  ) {
     for (final cell in rowElement.findElements('c')) {
       final ref = cell.getAttribute('r') ?? '';
       if (!ref.startsWith('A')) continue;
@@ -1948,7 +1974,7 @@ class ExcelExportServiceV3 {
     return null;
   }
 
-  String? _leseZellwertAlsString(
+  static String? _leseZellwertAlsString(
     XmlElement cell,
     _SharedStrings sharedStrings,
   ) {
@@ -1969,7 +1995,7 @@ class ExcelExportServiceV3 {
     return null;
   }
 
-  _SchrittLabelZeilen _findeSchrittLabelZeilen(
+  static _SchrittLabelZeilen _findeSchrittLabelZeilen(
     XmlDocument doc,
     _SharedStrings sharedStrings,
   ) {
@@ -2024,7 +2050,7 @@ class ExcelExportServiceV3 {
   /// gemischt ("Platte Unten 1", "Eingang (°C)"). Wird der Block oder das
   /// Label darin nicht gefunden, greift der globale Erst-Treffer (altes
   /// Verhalten — für Parameter ohne Mehrdeutigkeit unverändert korrekt).
-  int? _findeZeileMitLabelInA(
+  static int? _findeZeileMitLabelInA(
     XmlDocument doc,
     _SharedStrings sharedStrings,
     String gesuchtesLabel, {
@@ -2040,7 +2066,8 @@ class ExcelExportServiceV3 {
     // Suche z.B. „Lochgröße" nicht in der Zeile „Lochgröße (mm)" — der
     // Wert landete dann im Slot-Bereich statt im Maschinenblock.
     bool passt(String label) =>
-        label == ziel || _basisLabel(label).toLowerCase() == zielBasis.toLowerCase();
+        label == ziel ||
+        _basisLabel(label).toLowerCase() == zielBasis.toLowerCase();
 
     // Zeilen in Dokumentreihenfolge mit ihrem A-Label sammeln.
     final eintraege = <({int rNum, String label})>[];
@@ -2096,7 +2123,7 @@ class ExcelExportServiceV3 {
   /// [referenzSheetPfad] sollte ein vollständiges Artikel- oder
   /// Kategorie-Sheet sein. Findet sich ein Anker nicht, bleibt der
   /// jeweilige Standardwert stehen.
-  GenStile _ernteStile(Archive archive, List<String> kandidaten) {
+  static GenStile _ernteStile(Archive archive, List<String> kandidaten) {
     const standard = GenStile();
     GenStile? bester;
     for (final pfad in kandidaten) {
@@ -2113,7 +2140,7 @@ class ExcelExportServiceV3 {
 
   /// Erntet die Stile aus EINEM Sheet. `histVollstaendig` sagt, ob die
   /// Historie-Datenzeile echte Zahlenformat-Stile trug.
-  ({GenStile stile, bool histVollstaendig})? _ernteStileAus(
+  static ({GenStile stile, bool histVollstaendig})? _ernteStileAus(
     Archive archive,
     String referenzSheetPfad,
   ) {
@@ -2255,7 +2282,7 @@ class ExcelExportServiceV3 {
   /// Block-Header-Erkennung: Label enthält Buchstaben und diese sind
   /// vollständig groß geschrieben (BRATSTRASSE, DAMPFTUNNEL …). Parameter-
   /// Label ("Platte Unten 1") sind gemischt und damit kein Header.
-  bool _istBlockHeader(String label) {
+  static bool _istBlockHeader(String label) {
     final l = label.trim();
     if (l.isEmpty) return false;
     final buchstaben = l.replaceAll(RegExp(r'[^A-Za-zÄÖÜäöüß]'), '');
@@ -2265,7 +2292,7 @@ class ExcelExportServiceV3 {
 
   // --- Zellen-Manipulation ----------------------------------------------
 
-  void _setzeZelleInlineStr(
+  static void _setzeZelleInlineStr(
     XmlElement sheetData, {
     required int row,
     required String colLetter,
@@ -2302,7 +2329,7 @@ class ExcelExportServiceV3 {
     cell.children.add(is_);
   }
 
-  void _setzeZelleZahl(
+  static void _setzeZelleZahl(
     XmlElement sheetData, {
     required int row,
     required String colLetter,
@@ -2339,7 +2366,7 @@ class ExcelExportServiceV3 {
   /// Setzt die Höhe einer Zeile auf mindestens [mindestHoehe] Punkte, damit
   /// umbrochener Text (z.B. lange Maschineneinstellungen) vollständig sichtbar
   /// ist. Bestehende größere Höhen bleiben erhalten.
-  void _setzeZeilenHoehe(
+  static void _setzeZeilenHoehe(
     XmlElement sheetData, {
     required int row,
     required double mindestHoehe,
@@ -2351,7 +2378,7 @@ class ExcelExportServiceV3 {
     rowEl.setAttribute('customHeight', '1');
   }
 
-  XmlElement _findeOderLegeRowAn(XmlElement sheetData, int rowNum) {
+  static XmlElement _findeOderLegeRowAn(XmlElement sheetData, int rowNum) {
     for (final row in sheetData.findElements('row')) {
       final r = int.tryParse(row.getAttribute('r') ?? '');
       if (r == rowNum) return row;
@@ -2377,7 +2404,10 @@ class ExcelExportServiceV3 {
     return neu;
   }
 
-  XmlElement _findeOderLegeCellAn(XmlElement rowElement, String cellRef) {
+  static XmlElement _findeOderLegeCellAn(
+    XmlElement rowElement,
+    String cellRef,
+  ) {
     for (final cell in rowElement.findElements('c')) {
       if (cell.getAttribute('r') == cellRef) return cell;
     }
@@ -2403,7 +2433,7 @@ class ExcelExportServiceV3 {
     return neu;
   }
 
-  String _spaltenBuchstabe(int index) {
+  static String _spaltenBuchstabe(int index) {
     if (index < 1) return 'A';
     var n = index;
     final result = StringBuffer();
@@ -2415,7 +2445,7 @@ class ExcelExportServiceV3 {
     return result.toString().split('').reversed.join();
   }
 
-  int _spaltenIndex(String cellRef) {
+  static int _spaltenIndex(String cellRef) {
     final match = RegExp(r'^([A-Z]+)').firstMatch(cellRef);
     if (match == null) return 0;
     final letters = match.group(1)!;
@@ -2426,7 +2456,7 @@ class ExcelExportServiceV3 {
     return result;
   }
 
-  String _abteilungLabel(String dbValue) {
+  static String _abteilungLabel(String dbValue) {
     switch (dbValue) {
       case 'zerlegung':
         return 'Zerlegung';
@@ -2453,6 +2483,30 @@ class ExcelExportServiceV3 {
 // ---------------------------------------------------------------------------
 // Hilfsklassen
 // ---------------------------------------------------------------------------
+
+/// Alles, was [ExcelExportServiceV3._baueArbeitsmappe] braucht — reine
+/// Daten, kein Datenbankbezug.
+class _ExportDaten {
+  const _ExportDaten({
+    required this.vorlageBytes,
+    required this.dateiname,
+    required this.alleArtikel,
+    required this.alleSchritte,
+    required this.alleParameter,
+    required this.alleMaschinen,
+    required this.alleSteckbriefe,
+    required this.alleHistorie,
+  });
+
+  final Uint8List vorlageBytes;
+  final String dateiname;
+  final List<Product> alleArtikel;
+  final List<ProductStep> alleSchritte;
+  final List<ProductStepParameter> alleParameter;
+  final List<Machine> alleMaschinen;
+  final List<MachineParameterDef> alleSteckbriefe;
+  final List<ProductionHistoryData> alleHistorie;
+}
 
 class _AktualisierungsStats {
   _AktualisierungsStats(
