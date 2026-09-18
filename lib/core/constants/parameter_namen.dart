@@ -35,5 +35,14 @@ const String kPlattenSchemaParam = 'Plattenschema';
 const String kPlattenGruppeBrat = 'BRATSTRASSE';
 const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 
-/// Namen der Plattenparameter: `Platte Oben 1` … `Platte Unten 12`.
-final RegExp kPlattenParamMuster = RegExp(r'^Platte (Oben|Unten) \d+$');
+/// Namen der Plattenparameter.
+///
+/// Gültig ist `Platte Oben 1` … `Platte Unten 12`. Zusätzlich erkannt
+/// werden die Schreibweisen aus einem früheren Import —
+/// `Plattentemperatur Oben 1 (°C)` für die Bratstraße und
+/// `Plattentemperatur 1 (°C)` für den Kombiofen —, damit solche Zeilen
+/// nicht in der Parameterliste auftauchen, falls die Migration sie
+/// irgendwo übersehen hat. Die Plattenleiste verwaltet sie.
+final RegExp kPlattenParamMuster = RegExp(
+  r'^(Platte|Plattentemperatur)\s+(Oben|Unten)?\s*\d+(\s*\(°C\))?$',
+);
