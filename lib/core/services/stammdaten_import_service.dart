@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:excel/excel.dart';
 import 'package:uuid/uuid.dart';
 
+import '../constants/abteilungen.dart';
 import '../database/database.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -350,8 +351,8 @@ class StammdatenImportService {
           'datum': datum.toIso8601String(),
           'kgRoh': _zahl(zelle(r + 1, 1)),
           'kgFertig': _zahl(zelle(r + 1, 2)),
-          'start': zelle(r + 1, 4),
-          'ende': zelle(r + 1, 5),
+          'start': _hhmm(zelle(r + 1, 4)),
+          'ende': _hhmm(zelle(r + 1, 5)),
           'notizen': zelle(r + 1, 9),
         });
         continue;
@@ -411,17 +412,50 @@ class StammdatenImportService {
     return h * 60 + min.toDouble();
   }
 
+  /// Datum aus einer Zelle — tolerant gegenüber allen Schreibweisen.
+  ///
+  /// Die excel-Bibliothek liefert Datumszellen nicht als Text, sondern als
+  /// eigene Typen. Deren `toString()` ist je nach Version unterschiedlich:
+  /// `2026-07-14`, `2026-07-14 00:00:00.000` oder
+  /// `DateCellValue(year: 2026, month: 7, day: 14)`. Deshalb wird nicht auf
+  /// ein Format geprüft, sondern nach Jahr, Monat und Tag gesucht.
   static DateTime? _datum(String? s) {
     if (s == null) return null;
-    final iso = DateTime.tryParse(s);
-    if (iso != null) return DateTime(iso.year, iso.month, iso.day);
-    final m = RegExp(r'^(\d{1,2})\.(\d{1,2})\.(\d{4})').firstMatch(s.trim());
-    if (m == null) return null;
-    return DateTime(
-      int.parse(m.group(3)!),
-      int.parse(m.group(2)!),
-      int.parse(m.group(1)!),
-    );
+    final t = s.trim();
+
+    // 2026-07-14 (auch mit Uhrzeit dahinter)
+    final iso = RegExp(r'(\d{4})-(\d{1,2})-(\d{1,2})').firstMatch(t);
+    if (iso != null) {
+      return _bau(iso.group(1)!, iso.group(2)!, iso.group(3)!);
+    }
+    // DateCellValue(year: 2026, month: 7, day: 14)
+    final benannt = RegExp(
+      r'year:\s*(\d{4}).*?month:\s*(\d{1,2}).*?day:\s*(\d{1,2})',
+      dotAll: true,
+    ).firstMatch(t);
+    if (benannt != null) {
+      return _bau(benannt.group(1)!, benannt.group(2)!, benannt.group(3)!);
+    }
+    // 14.07.2026
+    final de = RegExp(r'(\d{1,2})\.(\d{1,2})\.(\d{4})').firstMatch(t);
+    if (de != null) {
+      return _bau(de.group(3)!, de.group(2)!, de.group(1)!);
+    }
+    // Reine Zahl: Excel-Tageswert seit dem 30.12.1899.
+    final zahl = double.tryParse(t.replaceAll(',', '.'));
+    if (zahl != null && zahl > 20000 && zahl < 80000) {
+      return DateTime(1899, 12, 30).add(Duration(days: zahl.floor()));
+    }
+    return null;
+  }
+
+  static DateTime? _bau(String j, String m, String t) {
+    final jahr = int.tryParse(j);
+    final monat = int.tryParse(m);
+    final tag = int.tryParse(t);
+    if (jahr == null || monat == null || tag == null) return null;
+    if (monat < 1 || monat > 12 || tag < 1 || tag > 31) return null;
+    return DateTime(jahr, monat, tag);
   }
 
   // ═════════════════════════════════════════════════════════════════════
@@ -430,7 +464,9 @@ class StammdatenImportService {
 
   Future<StammdatenImportErgebnis> _speichere(Map<String, Object?> roh) async {
     const uuid = Uuid();
-    final warnungen = (roh['warnungen'] as List).cast<String>();
+    // Eigene Liste: Die aus dem Isolate ist nur eine Sicht darauf, und
+    // hier kommen beim Abbilden der Abteilungen noch Hinweise dazu.
+    final warnungen = <String>[...(roh['warnungen'] as List).cast<String>()];
     final anlagen = (roh['anlagen'] as List).cast<Map<String, Object?>>();
     final steckbriefe = (roh['steckbriefe'] as Map).map(
       (k, v) => MapEntry(k as String, (v as List).cast<Map<String, Object?>>()),
@@ -574,7 +610,10 @@ class StammdatenImportService {
               id: stepId,
               productId: pid,
               reihenfolge: i + 1,
-              abteilung: s['abteilung'] as String? ?? 'zerlegung',
+              abteilung: _abteilungDbWert(
+                s['abteilung'] as String?,
+                warnungen,
+              ),
               prozessschritt: Value(s['prozessschritt'] as String?),
               maschine: Value(anlage),
               maschineId: Value(
@@ -677,6 +716,52 @@ class StammdatenImportService {
     );
   }
 
+  /// Abteilungsname aus der Mappe → Datenbankwert des Enums.
+  ///
+  /// In der Mappe stehen Anzeigenamen („Bratstraße"), in der Datenbank
+  /// Schlüssel („bratstrasse"). `Abteilung.fromDbValue` wirft bei
+  /// unbekannten Werten eine Ausnahme — landet also ein Anzeigename in der
+  /// Spalte, stürzt später jede Ansicht ab, die den Schritt darstellt.
+  ///
+  /// Erkannt wird in dieser Reihenfolge: Datenbankwert, Anzeigename,
+  /// entschärfte Schreibweise (Umlaute aufgelöst, Leerzeichen entfernt),
+  /// bekannte Sonderfälle. Bleibt alles ohne Treffer, greift die Zerlegung
+  /// als Anfang der Produktionskette — mit Hinweis.
+  static String _abteilungDbWert(String? name, List<String> warnungen) {
+    if (name == null || name.trim().isEmpty) return Abteilung.zerlegung.dbValue;
+    final roh = name.trim();
+
+    String entschaerft(String v) => v
+        .toLowerCase()
+        .replaceAll('ä', 'ae')
+        .replaceAll('ö', 'oe')
+        .replaceAll('ü', 'ue')
+        .replaceAll('ß', 'ss')
+        .replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    final gesucht = entschaerft(roh);
+    for (final a in Abteilung.values) {
+      if (a.dbValue == roh) return a.dbValue;
+      if (entschaerft(a.anzeigeName) == gesucht) return a.dbValue;
+      if (entschaerft(a.dbValue) == gesucht) return a.dbValue;
+    }
+
+    const sonderfaelle = <String, String>{
+      'verpackungsabteilung': 'verpackung',
+      'tef1': 'verpackung_tef1',
+      'tef2': 'verpackung_tef2',
+      'poekelraum': 'wurstkueche',
+      'mobil': 'verpackung',
+    };
+    final treffer = sonderfaelle[gesucht];
+    if (treffer != null) return treffer;
+
+    final hinweis = 'Abteilung „$roh" ist unbekannt — als Zerlegung '
+        'übernommen. Bitte in der App richtigstellen.';
+    if (!warnungen.contains(hinweis)) warnungen.add(hinweis);
+    return Abteilung.zerlegung.dbValue;
+  }
+
   /// Minuten zwischen zwei Uhrzeiten, über Mitternacht hinweg.
   static double? _dauerMinuten(String? start, String? ende) {
     final a = _uhrzeit(start);
@@ -687,10 +772,43 @@ class StammdatenImportService {
     return diff.toDouble();
   }
 
+  /// Uhrzeit in der Form „HH:MM", oder null.
+  static String? _hhmm(String? s) {
+    final min = _uhrzeit(s);
+    if (min == null) return null;
+    final h = (min ~/ 60).toString().padLeft(2, '0');
+    final m = (min % 60).toString().padLeft(2, '0');
+    return '$h:$m';
+  }
+
+  /// Uhrzeit als Minuten seit Mitternacht — ebenfalls tolerant.
+  ///
+  /// Mögliche Schreibweisen: `07:25`, `7:25:00.000`,
+  /// `TimeCellValue(hour: 7, minute: 25, second: 0)` oder der
+  /// Excel-Tagesbruchteil `0.309`.
   static int? _uhrzeit(String? s) {
     if (s == null) return null;
-    final m = RegExp(r'^(\d{1,2}):(\d{2})').firstMatch(s.trim());
-    if (m == null) return null;
-    return int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!);
+    final t = s.trim();
+
+    final uhr = RegExp(r'(\d{1,2}):(\d{2})').firstMatch(t);
+    if (uhr != null) {
+      final h = int.parse(uhr.group(1)!);
+      final m = int.parse(uhr.group(2)!);
+      if (h < 24 && m < 60) return h * 60 + m;
+    }
+    final benannt = RegExp(
+      r'hour:\s*(\d{1,2}).*?minute:\s*(\d{1,2})',
+      dotAll: true,
+    ).firstMatch(t);
+    if (benannt != null) {
+      return int.parse(benannt.group(1)!) * 60 +
+          int.parse(benannt.group(2)!);
+    }
+    // Tagesbruchteil: 0.309 -> 07:25
+    final bruch = double.tryParse(t.replaceAll(',', '.'));
+    if (bruch != null && bruch >= 0 && bruch < 1) {
+      return (bruch * 24 * 60).round();
+    }
+    return null;
   }
 }
