@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -358,6 +358,10 @@ class AppDatabase extends _$AppDatabase {
               'INTEGER NOT NULL DEFAULT 1',
             );
           }
+
+          if (from < 18) {
+            await _migration18Kombiofen();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -419,6 +423,100 @@ class AppDatabase extends _$AppDatabase {
 
   /// Fügt eine Spalte nur hinzu, wenn sie noch nicht existiert.
   /// Verhindert Fehler bei wiederholter Migration.
+  /// v18 — Kombiofen als einziger Name, Platten gehören der Leiste.
+  ///
+  /// Zwei Altlasten werden hier bereinigt:
+  ///
+  /// **Drei Namen für eine Anlage.** Der Ofen hieß „Dampftunnel",
+  /// „Heißluftofen" und „Kombiofen". Es ist dieselbe Maschine — sie kann
+  /// Heißluft und Dampf. Ab jetzt heißt sie überall Kombiofen. Gibt es
+  /// mehrere Einträge, überlebt einer; die Schritte der anderen werden auf
+  /// ihn umgehängt, bevor die Dubletten verschwinden.
+  ///
+  /// **Plattentemperaturen als Steckbrief-Zeilen.** Ein Import hat sie als
+  /// `Plattentemperatur Oben 1 (°C)` angelegt. Die App verwaltet die
+  /// Platten aber über die Leiste, die Parameter mit den Namen
+  /// `Platte Oben N` / `Platte Unten N` liest und sie aus der normalen
+  /// Parameterliste ausblendet. Die falsch benannten Zeilen erschienen
+  /// deshalb doppelt: einmal in der Leiste, einmal in der Liste.
+  Future<void> _migration18Kombiofen() async {
+    // ── 1. Anlagen zusammenführen ─────────────────────────────────────
+    final oefen = await customSelect(
+      "SELECT id, name FROM machines WHERE deleted_at IS NULL AND ("
+      "LOWER(name) LIKE '%kombiofen%' OR LOWER(name) LIKE '%dampftunnel%' "
+      "OR LOWER(name) LIKE '%heißluft%' OR LOWER(name) LIKE '%heissluft%')",
+    ).get();
+
+    if (oefen.isNotEmpty) {
+      // Einen behalten — bevorzugt den, der schon Kombiofen heißt.
+      final bleibt = oefen.firstWhere(
+        (r) => r.read<String>('name').toLowerCase().contains('kombiofen'),
+        orElse: () => oefen.first,
+      );
+      final bleibtId = bleibt.read<String>('id');
+
+      for (final r in oefen) {
+        final id = r.read<String>('id');
+        if (id == bleibtId) continue;
+        // Schritte umhängen, Steckbrief-Zeilen der Dublette entfernen.
+        await customStatement(
+          'UPDATE product_steps SET maschine_id = ?, maschine = ? '
+          'WHERE maschine_id = ?',
+          [bleibtId, 'Kombiofen', id],
+        );
+        await customStatement(
+          'DELETE FROM machine_parameter_defs WHERE maschine_id = ?',
+          [id],
+        );
+        await customStatement('DELETE FROM machines WHERE id = ?', [id]);
+      }
+
+      await customStatement(
+        "UPDATE machines SET name = 'Kombiofen' WHERE id = ?",
+        [bleibtId],
+      );
+      await customStatement(
+        "UPDATE product_steps SET maschine = 'Kombiofen' "
+        'WHERE maschine_id = ?',
+        [bleibtId],
+      );
+    }
+
+    // ── 2. Plattenzeilen aus den Steckbriefen entfernen ───────────────
+    await customStatement(
+      "DELETE FROM machine_parameter_defs "
+      "WHERE parameter_name LIKE 'Platte Oben %' "
+      "OR parameter_name LIKE 'Platte Unten %' "
+      "OR parameter_name LIKE 'Plattentemperatur %'",
+    );
+
+    // ── 3. Falsch benannte Werte auf die Leiste umbiegen ──────────────
+    //
+    // `Plattentemperatur Oben 7 (°C)` → `Platte Oben 7`.
+    // Beim Kombiofen gibt es nur untere Platten; dort stand die Zahl ohne
+    // Seitenangabe, also `Plattentemperatur 7 (°C)` → `Platte Unten 7`.
+    for (var i = 1; i <= 12; i++) {
+      await customStatement(
+        "UPDATE product_step_parameters SET parameter_name = ?, "
+        "parameter_gruppe = 'BRATSTRASSE' "
+        'WHERE parameter_name = ?',
+        ['Platte Oben $i', 'Plattentemperatur Oben $i (°C)'],
+      );
+      await customStatement(
+        "UPDATE product_step_parameters SET parameter_name = ?, "
+        "parameter_gruppe = 'BRATSTRASSE' "
+        'WHERE parameter_name = ?',
+        ['Platte Unten $i', 'Plattentemperatur Unten $i (°C)'],
+      );
+      await customStatement(
+        "UPDATE product_step_parameters SET parameter_name = ?, "
+        "parameter_gruppe = 'DAMPFTUNNEL' "
+        'WHERE parameter_name = ?',
+        ['Platte Unten $i', 'Plattentemperatur $i (°C)'],
+      );
+    }
+  }
+
   Future<void> _addColumnIfNotExists(
     String table,
     String column,
@@ -436,6 +534,9 @@ class AppDatabase extends _$AppDatabase {
 QueryExecutor _openConnection() {
   return driftDatabase(name: 'produktion_planer');
 }
+
+
+
 
 
 

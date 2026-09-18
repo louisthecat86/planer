@@ -32,25 +32,25 @@ const String kPlattenSchemaParam = 'Plattenschema';
 const String kPlattenGruppeBrat = 'BRATSTRASSE';
 const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 
-/// Name der Parameterzeile für das freie Notizfeld je Maschine.
-/// Ersetzt starre Einzelparameter (Takte, Volumen …) — die Einstellungen
-/// sind so individuell, dass ein Freitextfeld praktischer ist.
 
 /// Nur diese Maschinen haben ein festes Plattenraster
-/// (Bratstraße 10+10, Dampftunnel 12). „Heißluftofen" ist dieselbe
-/// Anlage wie der Dampftunnel — beide Namen führen zum 12er-Raster.
-/// Alle anderen bekommen das freie Notizfeld „Maschineneinstellungen".
+/// (Bratstraße 10 oben + 10 unten, Kombiofen 12 unten). Alle anderen
+/// bekommen das freie Notizfeld „Maschineneinstellungen".
+///
+/// Der Kombiofen hieß über die Jahre auch „Dampftunnel" und
+/// „Heißluftofen" — es ist dieselbe Anlage, die sowohl Heißluft als auch
+/// Dampf fahren kann. Alle drei Schreibweisen führen deshalb zum
+/// 12er-Raster, damit ältere Datenstände weiter funktionieren. Der
+/// gültige Name ist **Kombiofen**.
 bool istPlattenMaschine(String maschineName) {
   final n = maschineName.toLowerCase();
-  return n.contains('bratstra') ||
-      n.contains('dampftunnel') ||
-      n.contains('heißluft') ||
-      n.contains('heissluft');
+  return n.contains('bratstra') || istDampftunnelMaschine(maschineName);
 }
 
 bool istDampftunnelMaschine(String maschineName) {
   final n = maschineName.toLowerCase();
-  return n.contains('dampftunnel') ||
+  return n.contains('kombiofen') ||
+      n.contains('dampftunnel') ||
       n.contains('heißluft') ||
       n.contains('heissluft');
 }
