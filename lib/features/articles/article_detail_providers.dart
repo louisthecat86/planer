@@ -24,14 +24,6 @@ import '../../core/utils/zeit.dart';
 /// dbValue der Abteilung Bratstraße (Schema nur dort anbieten).
 const String kAbteilungBratstrasseDb = 'bratstrasse';
 
-/// Marker-Parameter: welcher Schema-Typ am Schritt aktiv ist
-/// ('bratstrasse' | 'kombiofen' | leer).
-const String kPlattenSchemaParam = 'Plattenschema';
-
-/// Excel-Gruppen, in die die Zonen-Parameter geschrieben werden.
-const String kPlattenGruppeBrat = 'BRATSTRASSE';
-const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
-
 
 /// Nur diese Maschinen haben ein festes Plattenraster
 /// (Bratstraße 10 oben + 10 unten, Kombiofen 12 unten). Alle anderen
@@ -58,14 +50,12 @@ bool istDampftunnelMaschine(String maschineName) {
 bool istBratstrasseMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('bratstra');
 
-final RegExp _kZonenRegExp = RegExp(r'^Platte (Oben|Unten) \d+$');
-
 /// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
 /// normalen Parameter-Liste auftauchen sollen.
 bool istVerstecktesPlattenParam(String name) =>
     name == kPlattenSchemaParam ||
     name == kMaschinenNotizParam ||
-    _kZonenRegExp.hasMatch(name);
+    kPlattenParamMuster.hasMatch(name);
 
 // ---------------------------------------------------------------------------
 // Provider

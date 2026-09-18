@@ -482,7 +482,52 @@ class AppDatabase extends _$AppDatabase {
       );
     }
 
-    // ── 2. Plattenzeilen aus den Steckbriefen entfernen ───────────────
+    // ── 2. Abteilung der Maschinen auf Datenbankwerte bringen ─────────
+    //
+    // Ein Import hat dort Anzeigenamen abgelegt („Bratstraße" statt
+    // „bratstrasse"). Der Produktionsmittel-Katalog gruppiert nach dem
+    // Datenbankwert und schob deshalb sämtliche Anlagen unter „Weitere".
+    const abteilungen = <String, String>{
+      'zerlegung': 'zerlegung',
+      'wurstküche': 'wurstkueche',
+      'wurstkueche': 'wurstkueche',
+      'kutterabteilung': 'kutterabteilung',
+      'bratstraße': 'bratstrasse',
+      'bratstrasse': 'bratstrasse',
+      'schneideabteilung': 'schneideabteilung',
+      'verpackung': 'verpackung',
+      'verpackungsabteilung': 'verpackung',
+      'tef1': 'verpackung_tef1',
+      'verpackung tef1': 'verpackung_tef1',
+      'tef2': 'verpackung_tef2',
+      'verpackung tef2': 'verpackung_tef2',
+      'pökelraum': 'wurstkueche',
+      'mobil': 'verpackung',
+    };
+    for (final eintrag in abteilungen.entries) {
+      await customStatement(
+        'UPDATE machines SET abteilung = ? WHERE LOWER(abteilung) = ?',
+        [eintrag.value, eintrag.key],
+      );
+    }
+
+    // ── 3. Parameternamen auf die betriebsübliche Wortwahl ────────────
+    const umbenennungen = <String, String>{
+      'Zeit Eingang': 'Einlaufzeit',
+      'Zeit Ausgang': 'Auslaufzeit',
+      'Durchlaufzeit': 'Zeit',
+    };
+    for (final u in umbenennungen.entries) {
+      const tabellen = ['machine_parameter_defs', 'product_step_parameters'];
+      for (final tabelle in tabellen) {
+        await customStatement(
+          'UPDATE $tabelle SET parameter_name = ? WHERE parameter_name = ?',
+          [u.value, u.key],
+        );
+      }
+    }
+
+    // ── 4. Plattenzeilen aus den Steckbriefen entfernen ───────────────
     await customStatement(
       "DELETE FROM machine_parameter_defs "
       "WHERE parameter_name LIKE 'Platte Oben %' "
@@ -490,7 +535,7 @@ class AppDatabase extends _$AppDatabase {
       "OR parameter_name LIKE 'Plattentemperatur %'",
     );
 
-    // ── 3. Falsch benannte Werte auf die Leiste umbiegen ──────────────
+    // ── 5. Falsch benannte Werte auf die Leiste umbiegen ──────────────
     //
     // `Plattentemperatur Oben 7 (°C)` → `Platte Oben 7`.
     // Beim Kombiofen gibt es nur untere Platten; dort stand die Zahl ohne

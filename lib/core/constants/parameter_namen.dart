@@ -22,3 +22,18 @@ const String kMaschinenNotizParam = 'Maschineneinstellungen';
 /// Werte in dieser Gruppe stammen aus dem Steckbrief der zugeordneten
 /// Anlage und werden im Excel-Export in einem eigenen Block ausgegeben.
 const String kMaschinenNotizGruppe = 'MASCHINENEINSTELLUNGEN';
+
+/// Markerparameter am Schritt: welches Plattenraster aktiv ist
+/// (`bratstrasse` | `kombiofen` | leer).
+const String kPlattenSchemaParam = 'Plattenschema';
+
+/// Parametergruppen, in denen die Plattenwerte liegen.
+///
+/// Die Plattenleiste sucht ihre Werte über Name **und** Gruppe. Liegt ein
+/// `Platte Oben 3` in einer anderen Gruppe, findet sie es nicht — der Wert
+/// wäre dann zwar gespeichert, aber unsichtbar.
+const String kPlattenGruppeBrat = 'BRATSTRASSE';
+const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
+
+/// Namen der Plattenparameter: `Platte Oben 1` … `Platte Unten 12`.
+final RegExp kPlattenParamMuster = RegExp(r'^Platte (Oben|Unten) \d+$');

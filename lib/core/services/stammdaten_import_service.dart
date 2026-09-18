@@ -6,6 +6,7 @@ import 'package:excel/excel.dart';
 import 'package:uuid/uuid.dart';
 
 import '../constants/abteilungen.dart';
+import '../constants/parameter_namen.dart';
 import '../database/database.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -496,7 +497,9 @@ class StammdatenImportService {
           MachinesCompanion.insert(
             id: id,
             name: name,
-            abteilung: a['abteilung']! as String,
+            // Auch hier der Datenbankwert, nicht der Anzeigename: Der
+            // Produktionsmittel-Katalog gruppiert danach.
+            abteilung: _abteilungDbWert(a['abteilung'] as String?, warnungen),
           ),
         );
         anzAnlagen++;
@@ -627,19 +630,46 @@ class StammdatenImportService {
           );
           anzSchritte++;
 
+          // Plattenwerte gehören in ihre eigene Gruppe: Die Leiste im
+          // Artikeldetail sucht über Name UND Gruppe. Läge ein
+          // `Platte Oben 3` unter MASCHINENEINSTELLUNGEN, wäre der Wert
+          // zwar gespeichert, in der Leiste aber unsichtbar — und der
+          // Export fände ihn dort auch nicht wieder.
+          final istKombi = anlage != null && _istKombiofen(anlage);
+          final plattenGruppe =
+              istKombi ? kPlattenGruppeKombi : kPlattenGruppeBrat;
+          var hatPlatten = false;
+
           final werte = (s['werte'] as List).cast<Map<String, Object?>>();
           for (var w = 0; w < werte.length; w++) {
+            final name = werte[w]['name']! as String;
+            final istPlatte = kPlattenParamMuster.hasMatch(name);
+            if (istPlatte) hatPlatten = true;
             neueWerte.add(
               ProductStepParametersCompanion.insert(
                 id: uuid.v4(),
                 stepId: stepId,
-                parameterGruppe: _gruppeAnlage,
-                parameterName: werte[w]['name']! as String,
+                parameterGruppe: istPlatte ? plattenGruppe : _gruppeAnlage,
+                parameterName: name,
                 wert: Value(werte[w]['wert'] as String?),
                 reihenfolge: Value(w),
               ),
             );
             anzParam++;
+          }
+
+          // Markerparameter, damit die Leiste weiß, welches Raster gilt.
+          if (hatPlatten) {
+            neueWerte.add(
+              ProductStepParametersCompanion.insert(
+                id: uuid.v4(),
+                stepId: stepId,
+                parameterGruppe: plattenGruppe,
+                parameterName: kPlattenSchemaParam,
+                wert: Value(istKombi ? 'kombiofen' : 'bratstrasse'),
+                reihenfolge: const Value(0),
+              ),
+            );
           }
         }
         if (neueSchritte.isNotEmpty) {
@@ -714,6 +744,17 @@ class StammdatenImportService {
       chargen: anzChargen,
       warnungen: warnungen,
     );
+  }
+
+  /// Ist die Anlage der Kombiofen? Er trug früher auch die Namen
+  /// „Dampftunnel" und „Heißluftofen" — sein Raster hat 12 untere Platten,
+  /// die Bratstraße dagegen 10 oben und 10 unten.
+  static bool _istKombiofen(String anlage) {
+    final n = anlage.toLowerCase();
+    return n.contains('kombiofen') ||
+        n.contains('dampftunnel') ||
+        n.contains('heißluft') ||
+        n.contains('heissluft');
   }
 
   /// Abteilungsname aus der Mappe → Datenbankwert des Enums.
