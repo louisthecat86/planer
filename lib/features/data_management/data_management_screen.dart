@@ -10,7 +10,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/excel_export_service_v3.dart';
-import '../../core/services/excel_import_dispatcher.dart';
+import '../../core/services/stammdaten_import_service.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../articles/article_detail_providers.dart';
 import '../articles/article_list_screen.dart';
@@ -42,6 +42,9 @@ class _DataManagementScreenState
   // -- Import-Detailmeldungen (Fehler + Hinweise des letzten Imports) --
   List<String> _importFehler = [];
   List<String> _importWarnungen = [];
+
+  /// Zwischenstand eines laufenden Stammdaten-Imports (null = keiner läuft).
+  StammdatenFortschritt? _importFortschritt;
 
   // -- Speicherort-Pfade (nur Anzeige) --------------------------------
   String? _datenbankPfad;
@@ -115,59 +118,88 @@ class _DataManagementScreenState
   // EXCEL-IMPORT
   // ----------------------------------------------------------------------
 
+  /// Liest eine Stammdaten-Arbeitsmappe ein.
+  ///
+  /// Erwartet das aktuelle Format mit den Blättern „Anlagen",
+  /// „Steckbriefe" und je einem Blatt pro Artikel — also genau die Mappe,
+  /// die der Export erzeugt.
   Future<void> _excelImport() async {
     try {
       final picked = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['xlsx', 'xls'],
+        allowedExtensions: ['xlsx'],
       );
       if (picked == null || picked.files.isEmpty) return;
-      final filePath = picked.files.first.path;
-      if (filePath == null) return;
+      final bytes = picked.files.first.bytes ??
+          (picked.files.first.path == null
+              ? null
+              : await File(picked.files.first.path!).readAsBytes());
+      if (bytes == null) {
+        _setBusy(
+          false,
+          msg: 'Die Datei ließ sich nicht lesen.',
+          color: Colors.red,
+        );
+        return;
+      }
 
-      _setBusy(true, msg: 'Excel wird eingelesen …');
+      _setBusy(true, msg: 'Stammdaten werden eingelesen …');
+      setState(() {
+        _importFortschritt =
+            const StammdatenFortschritt(phase: StammdatenPhase.datei);
+      });
 
-      final dispatcher = ExcelImportDispatcher(ref.read(databaseProvider));
-      final result = await dispatcher.importFile(filePath);
+      final service = StammdatenImportService(ref.read(databaseProvider));
+      final result = await service.importiere(
+        bytes,
+        onFortschritt: (stand) {
+          if (!mounted) return;
+          setState(() => _importFortschritt = stand);
+        },
+      );
+
+      if (mounted) setState(() => _importFortschritt = null);
+
+      if (result.hatFehler) {
+        _setBusy(false, msg: result.fehler.first, color: Colors.red);
+        if (mounted) setState(() => _importFehler = result.fehler);
+        return;
+      }
 
       _invalidiereDatenProvider();
 
-      // Auto-Backup nach Import — die Excel hat einen großen Datenstand
-      // gebracht, der Schutzwert eines Backups ist hier am höchsten.
+      // Auto-Backup nach dem Import — hier ist der Schutzwert am höchsten,
+      // weil gerade ein großer Datenstand hereingekommen ist.
       ref.read(autoBackupTriggerProvider).fireDebounced(
-            reason: 'Excel-Import',
+            reason: 'Stammdaten-Import',
           );
-
-      final fehler = result.fehler;
-      final warnungen = result.warnungen;
 
       _setBusy(
         false,
-        msg: result.hatFehler
-            ? 'Import mit Fehlern: ${fehler.length} Problem(e) '
-                '— Details unten'
-            : warnungen.isEmpty
-                ? 'Import erfolgreich: ${result.artikelGesamt} Artikel'
-                : 'Import: ${result.artikelGesamt} Artikel, '
-                    '${warnungen.length} Hinweis(e) — Details unten',
-        color: result.hatFehler ? Colors.red : Colors.green,
+        msg: '${result.artikelNeu} Artikel neu · '
+            '${result.artikelAktualisiert} aktualisiert · '
+            '${result.schritte} Schritte · '
+            '${result.parameter} Parameter · '
+            '${result.chargen} Chargen'
+            '${result.anlagen > 0 ? ' · ${result.anlagen} Anlagen' : ''}'
+            '${result.steckbriefZeilen > 0 ? ' · '
+                '${result.steckbriefZeilen} Steckbrief-Zeilen' : ''}',
       );
 
-      // Detailmeldungen anzeigen (auch reine Hinweise ohne Fehler).
       if (mounted) {
         setState(() {
-          _importFehler = fehler;
-          _importWarnungen = warnungen;
+          _importFehler = [];
+          _importWarnungen = result.warnungen;
         });
       }
 
-      // Backup-Liste aktualisieren (das frisch erstellte Auto-Backup
-      // erscheint nach dem Debounce; wir laden mit kleiner Verzögerung)
       Future.delayed(const Duration(seconds: 5), _ladeUebersicht);
     } catch (e) {
+      if (mounted) setState(() => _importFortschritt = null);
       _setBusy(false, msg: 'Import-Fehler: $e', color: Colors.red);
     }
   }
+
 
   // ----------------------------------------------------------------------
   // EXCEL-EXPORT
@@ -526,6 +558,22 @@ class _DataManagementScreenState
               message: _statusMessage,
               color: _statusColor,
             ),
+          // Fortschritt des Stammdaten-Imports. `anteil == null` heißt:
+          // Der Abschnitt liefert keine Zwischenstände (das Öffnen der
+          // Datei), dann zeigt Flutter automatisch den laufenden Balken.
+          if (_importFortschritt != null) ...[
+            const SizedBox(height: 12),
+            LinearProgressIndicator(
+              value: _importFortschritt!.anteil,
+              minHeight: 6,
+              borderRadius: BorderRadius.circular(3),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              _importFortschritt!.beschriftung,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           if (_busy || _statusMessage != null) const SizedBox(height: 20),
 
           // -- Import-Detailmeldungen (aufklappbar) ---------------------
