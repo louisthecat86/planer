@@ -6,6 +6,10 @@ import 'package:uuid/uuid.dart';
 
 import '../database/database.dart';
 import '../providers/database_provider.dart';
+import '../utils/kalenderwoche.dart';
+
+// Früher hier definiert — jetzt zentral, hier nur weitergereicht.
+export '../utils/kalenderwoche.dart' show isoKalenderwoche;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Modell der eingefrorenen Wochendaten
@@ -251,16 +255,5 @@ DateTime montagDerWoche(DateTime d) {
   return tag.subtract(Duration(days: tag.weekday - 1));
 }
 
-/// ISO-8601-Kalenderwoche.
-int isoKalenderwoche(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
-  final dayOfYear = d.difference(DateTime(d.year, 1, 1)).inDays + 1;
-  final wday = d.weekday;
-  final wn = ((dayOfYear - wday + 10) / 7).floor();
-  if (wn < 1) return isoKalenderwoche(DateTime(d.year - 1, 12, 31));
-  if (wn > 52) {
-    final dec31 = DateTime(d.year, 12, 31);
-    if (dec31.weekday < 4) return 1;
-  }
-  return wn;
-}
+
+

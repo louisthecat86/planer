@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/kalenderwoche.dart';
 
 /// Standard-Kapazität pro Abteilung und Tag in Minuten (9 h), wenn für die
 /// Abteilung kein abweichender Wert gepflegt ist. Die Abteilungen arbeiten
@@ -684,27 +685,20 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
           : KettenSchritt(
               abteilung: v.abteilung,
               datum: v.datum,
-              kw: _isoKw(v.datum),
+              kw: isoKalenderwoche(v.datum),
             ),
       nachher: na == null
           ? null
           : KettenSchritt(
               abteilung: na.abteilung,
               datum: na.datum,
-              kw: _isoKw(na.datum),
+              kw: isoKalenderwoche(na.datum),
             ),
     );
   }
   return result;
 }
 
-/// ISO-8601-Kalenderwoche (1..53) — über den Donnerstag derselben Woche.
-int _isoKw(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
-  final donnerstag = d.add(Duration(days: 4 - d.weekday));
-  final jahresStart = DateTime(donnerstag.year, 1, 1);
-  return 1 + (donnerstag.difference(jahresStart).inDays ~/ 7);
-}
 
 /// Montag der Woche von [d], normalisiert auf 00:00 Uhr.
 DateTime _montag(DateTime d) {
@@ -850,6 +844,9 @@ Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
         ..where((m) => m.istPlanungsressource.equals(true)))
       .get();
 }
+
+
+
 
 
 

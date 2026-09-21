@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../whiteboard/produktion_erfassen_sheet.dart';
 
@@ -127,7 +128,7 @@ class _ProduktionErfassungScreenState
     final theme = Theme.of(context);
     final montag = ref.watch(erfassungWocheProvider);
     final async = ref.watch(erfassungWocheDatenProvider);
-    final kw = _kalenderwoche(montag);
+    final kw = isoKalenderwoche(montag);
 
     return Scaffold(
       appBar: AppBar(
@@ -275,13 +276,6 @@ class _ProduktionErfassungScreenState
       ref.invalidate(erfassungWocheDatenProvider);
     }
   }
-
-  int _kalenderwoche(DateTime d) {
-    // ISO-8601-Kalenderwoche.
-    final donnerstag = d.add(Duration(days: 3 - ((d.weekday + 6) % 7)));
-    final ersterJan = DateTime(donnerstag.year, 1, 1);
-    return 1 + (donnerstag.difference(ersterJan).inDays ~/ 7);
-  }
 }
 
 class _ProduktionKarte extends StatelessWidget {
@@ -339,3 +333,6 @@ class _ProduktionKarte extends StatelessWidget {
     );
   }
 }
+
+
+
