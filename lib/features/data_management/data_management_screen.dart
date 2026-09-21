@@ -283,11 +283,18 @@ class _DataManagementScreenState
         _importFehler = [];
         _importWarnungen = res.warnungen;
       });
+      final anlagenWeg = res.anlagenEntfernt > 0
+          ? ', ${res.anlagenEntfernt} entfernt'
+          : '';
+      final parameterWeg = res.parameterEntfernt > 0
+          ? ', ${res.parameterEntfernt} entfernt'
+          : '';
       _setBusy(
         false,
         msg: 'Katalog eingelesen · ${res.anlagenGesamt} Anlagen '
-            '(${res.anlagenNeu} neu) · ${res.parameterGesamt} Parameter '
-            '(${res.parameterNeu} neu)',
+            '(${res.anlagenNeu} neu$anlagenWeg) · '
+            '${res.parameterGesamt} Parameter '
+            '(${res.parameterNeu} neu$parameterWeg)',
       );
     } catch (e) {
       _setBusy(false, msg: 'Katalog-Import fehlgeschlagen: $e',

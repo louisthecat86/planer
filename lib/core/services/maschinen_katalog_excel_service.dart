@@ -15,6 +15,7 @@ class KatalogImportErgebnis {
   const KatalogImportErgebnis({
     required this.anlagenNeu,
     required this.anlagenAktualisiert,
+    this.anlagenEntfernt = 0,
     required this.parameterNeu,
     required this.parameterAktualisiert,
     this.parameterEntfernt = 0,
@@ -23,6 +24,10 @@ class KatalogImportErgebnis {
 
   final int anlagenNeu;
   final int anlagenAktualisiert;
+
+  /// Anlagen, die nicht mehr im Katalog standen und nirgends benutzt
+  /// wurden — als gelöscht markiert.
+  final int anlagenEntfernt;
   final int parameterNeu;
   final int parameterAktualisiert;
 
@@ -187,6 +192,7 @@ class MaschinenKatalogExcelService {
 
     var anlagenNeu = 0;
     var anlagenAktualisiert = 0;
+    var anlagenEntfernt = 0;
     var parameterNeu = 0;
     var parameterAktualisiert = 0;
     var parameterEntfernt = 0;
@@ -209,10 +215,12 @@ class MaschinenKatalogExcelService {
     // fällt das kaum auf — beim Navision-Import mit 4.000 Zeilen hat
     // genau dieses Muster 43 von 57 Sekunden gekostet. Einmal auslesen.
     final anlagenZeilen = blattAnlagen.rows;
+    final namenInDatei = <String>{};
     for (var r = 1; r < anlagenZeilen.length; r++) {
       final zeile = anlagenZeilen[r];
       final name = _text(zeile, aSpalten['Name']);
       if (name == null || name.isEmpty) continue;
+      namenInDatei.add(name.trim().toLowerCase());
 
       final abteilungText = _text(zeile, aSpalten['Abteilung']);
       final abteilung = _abteilungDbValue(abteilungText);
@@ -269,6 +277,63 @@ class MaschinenKatalogExcelService {
             );
         idVonName[name.trim().toLowerCase()] = id;
         anlagenNeu++;
+      }
+    }
+
+    // -- Anlagen, die in der Datei fehlen ---------------------------------
+    //
+    // Der Katalog ist maßgeblich. Bisher wurden Anlagen, die in der Datei
+    // nicht mehr vorkamen, einfach stehengelassen — alte Schreibweisen wie
+    // „Mehrkopfwaage" überlebten so neben der neuen „Mehrkopfwage".
+    //
+    // Gelöscht wird aber nur, was nirgends benutzt wird. Hängt noch ein
+    // Prozessschritt oder Produktionsauftrag daran, bleibt die Anlage
+    // stehen, und es gibt einen Hinweis — sonst verlöre der Schritt seine
+    // Anlage und damit seine Planungsspur.
+    //
+    // Die Markierung ist umkehrbar: Steht die Anlage beim nächsten Import
+    // wieder in der Datei, holt der obige Zweig sie zurück.
+    if (namenInDatei.isNotEmpty) {
+      final alleAnlagen = await (db.select(db.machines)
+            ..where((m) => m.deletedAt.isNull()))
+          .get();
+      for (final m in alleAnlagen) {
+        if (namenInDatei.contains(m.name.trim().toLowerCase())) continue;
+
+        final schritte = await (db.select(db.productSteps)
+              ..where((s) => s.maschineId.equals(m.id))
+              ..where((s) => s.deletedAt.isNull()))
+            .get();
+        final auftraege = await (db.select(db.productionTasks)
+              ..where((t) => t.maschineId.equals(m.id))
+              ..where((t) => t.deletedAt.isNull()))
+            .get();
+        if (schritte.isNotEmpty || auftraege.isNotEmpty) {
+          warnungen.add(
+            'Anlage „${m.name}" steht nicht im Katalog, wird aber noch '
+            'benutzt (${schritte.length} Schritte, ${auftraege.length} '
+            'Aufträge) — nicht entfernt. Bitte in den Artikeln auf die '
+            'richtige Anlage umstellen.',
+          );
+          continue;
+        }
+
+        await (db.update(db.machines)..where((x) => x.id.equals(m.id)))
+            .write(
+          MachinesCompanion(
+            deletedAt: Value(jetzt),
+            updatedAt: Value(jetzt),
+          ),
+        );
+        await (db.update(db.machineParameterDefs)
+              ..where((d) => d.maschineId.equals(m.id)))
+            .write(
+          MachineParameterDefsCompanion(
+            deletedAt: Value(jetzt),
+            updatedAt: Value(jetzt),
+          ),
+        );
+        anlagenEntfernt++;
       }
     }
 
@@ -383,6 +448,7 @@ class MaschinenKatalogExcelService {
     return KatalogImportErgebnis(
       anlagenNeu: anlagenNeu,
       anlagenAktualisiert: anlagenAktualisiert,
+      anlagenEntfernt: anlagenEntfernt,
       parameterNeu: parameterNeu,
       parameterAktualisiert: parameterAktualisiert,
       parameterEntfernt: parameterEntfernt,

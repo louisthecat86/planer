@@ -1,4 +1,3 @@
-
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
@@ -72,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -366,6 +365,11 @@ class AppDatabase extends _$AppDatabase {
             // so gebaut, dass ein zweiter Lauf nichts kaputtmacht.
             await _migrationKombiofenAufraeumen();
           }
+
+          if (from < 20) {
+            await _migrationAltnamenZusammenfuehren();
+          }
+
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -582,6 +586,112 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     });
+  }
+
+  /// Alte Anlagennamen auf den maßgeblichen Maschinenkatalog umstellen.
+  ///
+  /// Über die Jahre sind für dieselben Geräte mehrere Namen entstanden —
+  /// „Mehrkopfwaage" neben „Mehrkopfwage", „Füllmaschine B 1" neben
+  /// „Füllmaschine Bratstraße 1". Ein Katalog-Import legt die neuen Namen
+  /// an, lässt die alten aber stehen, weil er Anlagen, die in der Datei
+  /// fehlen, grundsätzlich nicht löscht. Beide Namen erschienen deshalb
+  /// nebeneinander.
+  ///
+  /// Für jedes Paar gilt:
+  ///   * gibt es beide, wandert alles vom alten auf den neuen Eintrag, der
+  ///     alte wird als gelöscht markiert;
+  ///   * gibt es nur den alten, wird er umbenannt.
+  ///
+  /// Umgehängt wird an allen Stellen, die auf eine Maschine verweisen:
+  /// Prozessschritte, Produktionsaufträge, Steckbrief-Zeilen und die
+  /// Nebenzeiten der Planungsspuren (deren Schlüssel die Maschinen-ID
+  /// enthält). Wiederholbar: Ein zweiter Lauf findet nichts mehr.
+  Future<void> _migrationAltnamenZusammenfuehren() async {
+    const altZuNeu = <String, String>{
+      'Mehrkopfwaage': 'Mehrkopfwage',
+      'Füllmaschine B 1': 'Füllmaschine Bratstraße 1',
+      'Füllmaschine B 2': 'Füllmaschine Bratstraße 2',
+      'Füllmaschine WK 1': 'Füllmaschine Wurstküche 1',
+      'Füllmaschine WK 2': 'Füllmaschine Wurstküche 2',
+      'Schockfroster': 'Froster Tef2',
+      'Volleimaschine': 'Volleianlage',
+      'Plattierer B': 'Plattierer 1',
+      'Plattierer': 'Plattierer 2',
+      'Multivac Anlage Neu': 'Multivac Verpackung',
+      'Multivac Neu': 'Multivac Verpackung',
+      'Verpackung Tef2': 'Multivac Tef2',
+      'Fleischwolf': 'Wolf',
+      'Scanveagt': 'Scan Veagt',
+      'Weberslicer': 'Weber Slicer',
+      'Abschneidervorrichtung': 'Abschneidevorrichtung 1',
+      'Abfließer': 'Abfließer 1',
+      'Clippanlage': 'Clipper',
+      'Gekühlte Polter 1': 'Polter groß 1',
+      'Gekühlte Polter 2': 'Polter groß 2',
+      'Hebevorrichtung': 'Hebevorrichtung 2',
+      'Rollenschneider': 'Rollenschneider 1',
+      'Treif Würfelschneider': 'Treif Würfelschneider 1',
+      'Kochkammer 1': 'Kochkammer 1-4',
+      'Kochkammer 2': 'Kochkammer 1-4',
+      'Kochkammer 3': 'Kochkammer 1-4',
+      'Kochkammer 4': 'Kochkammer 1-4',
+    };
+
+    Future<String?> idVon(String name) async {
+      final r = await customSelect(
+        'SELECT id FROM machines WHERE name = ? AND deleted_at IS NULL',
+        variables: [Variable.withString(name)],
+      ).getSingleOrNull();
+      return r?.read<String>('id');
+    }
+
+    for (final paar in altZuNeu.entries) {
+      try {
+        final altId = await idVon(paar.key);
+        if (altId == null) continue;
+        final neuId = await idVon(paar.value);
+
+        if (neuId == null) {
+          // Nur der alte Name existiert → umbenennen genügt.
+          await customStatement(
+            'UPDATE machines SET name = ? WHERE id = ?',
+            [paar.value, altId],
+          );
+          await customStatement(
+            'UPDATE product_steps SET maschine = ? WHERE maschine_id = ?',
+            [paar.value, altId],
+          );
+          continue;
+        }
+
+        // Beide existieren → alles auf den neuen Eintrag umhängen.
+        await customStatement(
+          'UPDATE product_steps SET maschine_id = ?, maschine = ? '
+          'WHERE maschine_id = ?',
+          [neuId, paar.value, altId],
+        );
+        await customStatement(
+          'UPDATE production_tasks SET maschine_id = ? WHERE maschine_id = ?',
+          [neuId, altId],
+        );
+        await customStatement(
+          "UPDATE zusatzzeiten SET spur_id = REPLACE(spur_id, ?, ?) "
+          "WHERE spur_id LIKE '%|' || ?",
+          ['|$altId', '|$neuId', altId],
+        );
+        await customStatement(
+          'DELETE FROM machine_parameter_defs WHERE maschine_id = ?',
+          [altId],
+        );
+        await customStatement(
+          'UPDATE machines SET deleted_at = ? WHERE id = ?',
+          [DateTime.now().millisecondsSinceEpoch ~/ 1000, altId],
+        );
+      } catch (e) {
+        // ignore: avoid_print
+        print('Zusammenführen „${paar.key}" übersprungen: $e');
+      }
+    }
   }
 
   Future<void> _addColumnIfNotExists(
