@@ -3,6 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/parameter_namen.dart';
+
+// Die Plattenerkennung lebt in core/, weil auch Generator und Importer sie
+// brauchen. Hier weitergereicht, damit alle bisherigen Nutzer dieser Datei
+// unverändert weiterlaufen.
+export '../../core/constants/parameter_namen.dart'
+    show istDampftunnelMaschine, istPlattenMaschine;
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -25,27 +31,6 @@ import '../../core/utils/zeit.dart';
 const String kAbteilungBratstrasseDb = 'bratstrasse';
 
 
-/// Nur diese Maschinen haben ein festes Plattenraster
-/// (Bratstraße 10 oben + 10 unten, Kombiofen 12 unten). Alle anderen
-/// bekommen das freie Notizfeld „Maschineneinstellungen".
-///
-/// Der Kombiofen hieß über die Jahre auch „Dampftunnel" und
-/// „Heißluftofen" — es ist dieselbe Anlage, die sowohl Heißluft als auch
-/// Dampf fahren kann. Alle drei Schreibweisen führen deshalb zum
-/// 12er-Raster, damit ältere Datenstände weiter funktionieren. Der
-/// gültige Name ist **Kombiofen**.
-bool istPlattenMaschine(String maschineName) {
-  final n = maschineName.toLowerCase();
-  return n.contains('bratstra') || istDampftunnelMaschine(maschineName);
-}
-
-bool istDampftunnelMaschine(String maschineName) {
-  final n = maschineName.toLowerCase();
-  return n.contains('kombiofen') ||
-      n.contains('dampftunnel') ||
-      n.contains('heißluft') ||
-      n.contains('heissluft');
-}
 
 bool istBratstrasseMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('bratstra');

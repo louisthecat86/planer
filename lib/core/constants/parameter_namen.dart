@@ -46,3 +46,46 @@ const String kPlattenGruppeKombi = 'DAMPFTUNNEL';
 final RegExp kPlattenParamMuster = RegExp(
   r'^(Platte|Plattentemperatur)\s+(Oben|Unten)?\s*\d+(\s*\(°C\))?$',
 );
+
+/// Hat die Anlage ein festes Plattenraster?
+///
+/// Bratstraße: 10 Platten oben + 10 unten. Kombiofen: 12 unten.
+/// Alle anderen haben kein Raster.
+///
+/// Die Erkennung läuft über den Namen, damit auch individuell angelegte
+/// Anlagen erfasst werden — eine zweite Bratstraße heißt zwangsläufig
+/// „Bratstraße …". Der Kombiofen trug früher auch die Namen „Dampftunnel"
+/// und „Heißluftofen"; alle drei führen zum 12er-Raster.
+///
+/// Liegt bewusst hier und nicht in der Oberfläche: Generator, Importer und
+/// Artikelansicht müssen dieselbe Regel anwenden. Zwei Fassungen davon
+/// wären genau die Doppelung, die bei den Produktgruppen schon einmal
+/// auseinandergelaufen ist.
+bool istPlattenMaschine(String maschineName) {
+  final n = maschineName.toLowerCase();
+  return n.contains('bratstra') || istDampftunnelMaschine(maschineName);
+}
+
+/// Ist die Anlage der Kombiofen (12er-Raster, nur untere Platten)?
+bool istDampftunnelMaschine(String maschineName) {
+  final n = maschineName.toLowerCase();
+  return n.contains('kombiofen') ||
+      n.contains('dampftunnel') ||
+      n.contains('heißluft') ||
+      n.contains('heissluft');
+}
+
+/// Die Plattenzeilen einer Anlage in fester Reihenfolge — leer, wenn sie
+/// kein Raster hat.
+List<String> plattenZeilenFuer(String maschineName) {
+  if (istDampftunnelMaschine(maschineName)) {
+    return [for (var i = 1; i <= 12; i++) 'Platte Unten $i'];
+  }
+  if (istPlattenMaschine(maschineName)) {
+    return [
+      for (var i = 1; i <= 10; i++) 'Platte Oben $i',
+      for (var i = 1; i <= 10; i++) 'Platte Unten $i',
+    ];
+  }
+  return const [];
+}

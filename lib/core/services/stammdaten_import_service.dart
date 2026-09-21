@@ -407,10 +407,13 @@ class StammdatenImportService {
   static double? _minuten(String? s) {
     if (s == null) return null;
     final m = RegExp(r'^(\d{1,3}):(\d{2})(?::(\d{2}))?$').firstMatch(s.trim());
-    if (m == null) return _zahl(s);
-    final h = int.parse(m.group(1)!);
-    final min = int.parse(m.group(2)!);
-    return h * 60 + min.toDouble();
+    if (m != null) {
+      return int.parse(m.group(1)!) * 60 + int.parse(m.group(2)!).toDouble();
+    }
+    // Zeitzelle statt Text: dieselbe tolerante Erkennung wie in der Historie.
+    final uhr = _uhrzeit(s);
+    if (uhr != null) return uhr.toDouble();
+    return _zahl(s);
   }
 
   /// Datum aus einer Zelle — tolerant gegenüber allen Schreibweisen.
@@ -639,14 +642,31 @@ class StammdatenImportService {
           // `Platte Oben 3` unter MASCHINENEINSTELLUNGEN, wäre der Wert
           // zwar gespeichert, in der Leiste aber unsichtbar — und der
           // Export fände ihn dort auch nicht wieder.
-          final istKombi = anlage != null && _istKombiofen(anlage);
+          final istKombi = anlage != null && istDampftunnelMaschine(anlage);
           final plattenGruppe =
               istKombi ? kPlattenGruppeKombi : kPlattenGruppeBrat;
           var hatPlatten = false;
 
+          // Die Mappe beschriftet mit Einheit — „Temperatur Eingang (°C)".
+          // Gespeichert wird aber der Name des Steckbriefs ohne Einheit,
+          // sonst ordnet die App den Wert keiner Steckbriefzeile zu.
+          final steckNamen = <String, String>{
+            for (final z in steckbriefe[typVonGeraet[anlage]] ??
+                const <Map<String, Object?>>[])
+              (z['param']! as String).trim().toLowerCase():
+                  z['param']! as String,
+          };
+          String steckbriefName(String beschriftung) {
+            final m = RegExp(r'^(.*?)\s*\(([^)]*)\)$')
+                .firstMatch(beschriftung.trim());
+            if (m == null) return beschriftung.trim();
+            return steckNamen[m.group(1)!.trim().toLowerCase()] ??
+                beschriftung.trim();
+          }
+
           final werte = (s['werte'] as List).cast<Map<String, Object?>>();
           for (var w = 0; w < werte.length; w++) {
-            final name = werte[w]['name']! as String;
+            final name = steckbriefName(werte[w]['name']! as String);
             final istPlatte = kPlattenParamMuster.hasMatch(name);
             if (istPlatte) hatPlatten = true;
             neueWerte.add(
@@ -748,17 +768,6 @@ class StammdatenImportService {
       chargen: anzChargen,
       warnungen: warnungen,
     );
-  }
-
-  /// Ist die Anlage der Kombiofen? Er trug früher auch die Namen
-  /// „Dampftunnel" und „Heißluftofen" — sein Raster hat 12 untere Platten,
-  /// die Bratstraße dagegen 10 oben und 10 unten.
-  static bool _istKombiofen(String anlage) {
-    final n = anlage.toLowerCase();
-    return n.contains('kombiofen') ||
-        n.contains('dampftunnel') ||
-        n.contains('heißluft') ||
-        n.contains('heissluft');
   }
 
   /// Abteilungsname aus der Mappe → Datenbankwert des Enums.

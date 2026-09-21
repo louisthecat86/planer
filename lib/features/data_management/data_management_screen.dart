@@ -9,7 +9,7 @@ import 'package:intl/intl.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
-import '../../core/services/excel_export_service_v3.dart';
+import '../../core/services/stammdaten_export_service.dart';
 import '../../core/services/stammdaten_import_service.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../articles/article_detail_providers.dart';
@@ -200,7 +200,6 @@ class _DataManagementScreenState
     }
   }
 
-
   // ----------------------------------------------------------------------
   // EXCEL-EXPORT
   // ----------------------------------------------------------------------
@@ -304,30 +303,22 @@ class _DataManagementScreenState
 
   /// Stammdaten-Export.
   ///
-  /// Nutzt seit der Umstellung [ExcelExportServiceV3]: Der schreibt in die
-  /// zuletzt importierte Excel-Datei hinein, statt die Mappe neu zu bauen.
-  /// Formatierung, Dropdowns, Reiterfarben und alles, was du in Excel
-  /// selbst geändert hast, bleiben dadurch erhalten — Voraussetzung für
-  /// einen echten Rundlauf App ⇄ Excel.
+  /// Baut die Mappe vollständig aus dem App-Stand — keine Vorlage nötig.
+  /// Der frühere Exporter schrieb in eine beim Import abgelegte Datei
+  /// hinein und lief deshalb nach einem Reset nicht mehr.
   ///
-  /// Preis dafür: Es muss einmal eine Vorlage importiert worden sein. Ohne
-  /// sie meldet der Dienst das mit einer eigenen Fehlermeldung.
+  /// Das Gegenstück ist „Artikel importieren": Was hier entsteht, liest
+  /// der Import wieder ein.
   Future<void> _excelExport() async {
     try {
       _setBusy(true, msg: 'Excel wird erstellt …');
 
-      final svc = ExcelExportServiceV3(ref.read(databaseProvider));
-      final result = await svc.export();
-
-      if (result.hatFehler) {
-        _setBusy(false, msg: result.fehler.first, color: Colors.red);
-        if (mounted) setState(() => _importFehler = result.fehler);
-        return;
-      }
+      final svc = StammdatenExportService(ref.read(databaseProvider));
+      final result = await svc.exportiere();
 
       final zielPfad = await FilePicker.saveFile(
-        dialogTitle: 'Excel-Export speichern',
-        fileName: result.vorschlagDateiname,
+        dialogTitle: 'Stammdaten speichern',
+        fileName: result.dateiname,
         type: FileType.custom,
         allowedExtensions: ['xlsx'],
       );
@@ -339,41 +330,21 @@ class _DataManagementScreenState
 
       await File(zielPfad).writeAsBytes(result.bytes);
 
-      // Messanzeige: `customParameterUebersprungen` zählt Parameter, für
-      // die im Artikelblatt kein Platz mehr war — das Blaupausen-Problem,
-      // wegen dem es überhaupt einen zweiten Exporter gab. Steht hier 0,
-      // erübrigt sich die Neu-Erzeugung einzelner Blätter.
       _setBusy(
         false,
-        msg: '${result.artikelAktualisiert} Artikel · '
-            '${result.schritteGeschrieben} Schritte · '
-            '${result.parameterGeschrieben} Parameter · '
-            '${result.customParameterGeschrieben} Zusatzparameter · '
-            '${result.historienGeschrieben} Historienzeilen'
-            '${result.artikelSheetsAngelegt > 0 ? ' · '
-                '${result.artikelSheetsAngelegt} Blätter neu' : ''}'
-            '${result.maschinenInKatalog > 0 ? ' · '
-                '${result.maschinenInKatalog} Anlagen ergänzt' : ''}'
-            ' · ÜBERSPRUNGEN: ${result.customParameterUebersprungen}',
-        color: result.customParameterUebersprungen > 0
-            ? Colors.orange
-            : Colors.green,
+        msg: 'Excel erstellt · ${result.artikel} Artikel · '
+            '${result.anlagen} Anlagen',
+        color: Colors.green,
       );
 
-      if (!mounted) return;
-      final hinweise = <String>[
-        ...result.warnungen,
-        if (result.artikelNichtInVorlage.isNotEmpty)
-          'Nicht in der Vorlage enthalten: '
-              '${result.artikelNichtInVorlage.join(', ')}',
-      ];
-      if (hinweise.isNotEmpty) {
-        setState(() => _importWarnungen = hinweise);
+      if (mounted && result.warnungen.isNotEmpty) {
+        setState(() => _importWarnungen = result.warnungen);
       }
     } catch (e) {
       _setBusy(false, msg: 'Export-Fehler: $e', color: Colors.red);
     }
   }
+
 
   // ----------------------------------------------------------------------
   // BACKUP ERSTELLEN
