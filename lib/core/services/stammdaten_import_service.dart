@@ -525,6 +525,10 @@ class StammdatenImportService {
         final zeilen = steckbriefe[eintrag.value] ?? const [];
         for (var i = 0; i < zeilen.length; i++) {
           final param = zeilen[i]['param']! as String;
+          // Plattentemperaturen gehören nicht in den Steckbrief — die
+          // verwaltet die Plattenleiste. Sonst tauchen sie in der
+          // Parameterliste doppelt auf.
+          if (kPlattenParamMuster.hasMatch(param)) continue;
           if (bekannt.contains('$maschineId|${param.toLowerCase()}')) continue;
           neueDefs.add(
             MachineParameterDefsCompanion.insert(

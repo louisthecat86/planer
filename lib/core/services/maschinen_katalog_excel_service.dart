@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../constants/abteilungen.dart';
+import '../constants/parameter_namen.dart';
 import '../database/database.dart';
 
 /// Ergebnis eines Katalog-Imports.
@@ -16,6 +17,7 @@ class KatalogImportErgebnis {
     required this.anlagenAktualisiert,
     required this.parameterNeu,
     required this.parameterAktualisiert,
+    this.parameterEntfernt = 0,
     required this.warnungen,
   });
 
@@ -23,6 +25,10 @@ class KatalogImportErgebnis {
   final int anlagenAktualisiert;
   final int parameterNeu;
   final int parameterAktualisiert;
+
+  /// Steckbriefzeilen, die in der Datei fehlten und deshalb als gelöscht
+  /// markiert wurden.
+  final int parameterEntfernt;
   final List<String> warnungen;
 
   int get anlagenGesamt => anlagenNeu + anlagenAktualisiert;
@@ -183,6 +189,7 @@ class MaschinenKatalogExcelService {
     var anlagenAktualisiert = 0;
     var parameterNeu = 0;
     var parameterAktualisiert = 0;
+    var parameterEntfernt = 0;
 
     // Bestehende Anlagen (auch soft-deleted: der Name ist unique und
     // bliebe sonst blockiert).
@@ -281,6 +288,10 @@ class MaschinenKatalogExcelService {
         for (final d in defs) schluessel(d.maschineId, d.parameterName): d.id,
       };
 
+      // Welche Zeilen stehen je Anlage in der Datei? Daraus ergibt sich
+      // am Ende, was in der App wegfallen muss.
+      final inDatei = <String, Set<String>>{};
+
       final parameterZeilen = blattParameter.rows;
       for (var r = 1; r < parameterZeilen.length; r++) {
         final zeile = parameterZeilen[r];
@@ -288,6 +299,9 @@ class MaschinenKatalogExcelService {
         final pname = _text(zeile, pSpalten['Parameter']);
         if (anlage == null || anlage.isEmpty) continue;
         if (pname == null || pname.isEmpty) continue;
+        // Plattentemperaturen verwaltet die Plattenleiste, nicht der
+        // Steckbrief — hier nie anlegen, sonst stehen sie doppelt da.
+        if (kPlattenParamMuster.hasMatch(pname)) continue;
 
         final mid = idVonName[anlage.trim().toLowerCase()];
         if (mid == null) {
@@ -297,6 +311,8 @@ class MaschinenKatalogExcelService {
           );
           continue;
         }
+
+        inDatei.putIfAbsent(mid, () => {}).add(pname.trim().toLowerCase());
 
         final einheit = _text(zeile, pSpalten['Einheit']);
         final sortierung =
@@ -330,12 +346,38 @@ class MaschinenKatalogExcelService {
           parameterNeu++;
         }
       }
+
+      // Die Datei ist für jede Anlage, die darin vorkommt, maßgeblich.
+      //
+      // Bisher wurde hier nur ergänzt und reaktiviert — gelöscht wurde nie.
+      // Wer eine Zeile im Katalog entfernt und neu einliest, sah sie danach
+      // trotzdem wieder. Jetzt werden Zeilen, die für eine Anlage in der
+      // Datei fehlen, als gelöscht markiert.
+      //
+      // Anlagen, die in der Datei gar nicht auftauchen, bleiben unberührt —
+      // eine Teildatei soll nicht den Rest des Katalogs leeren.
+      for (final d in defs) {
+        if (d.deletedAt != null) continue;
+        final erlaubt = inDatei[d.maschineId];
+        if (erlaubt == null) continue;
+        if (erlaubt.contains(d.parameterName.trim().toLowerCase())) continue;
+        await (db.update(db.machineParameterDefs)
+              ..where((x) => x.id.equals(d.id)))
+            .write(
+          MachineParameterDefsCompanion(
+            deletedAt: Value(jetzt),
+            updatedAt: Value(jetzt),
+          ),
+        );
+        parameterEntfernt++;
+      }
     }
 
     debugPrint(
       '[KATALOG] Import fertig — Anlagen: +$anlagenNeu / '
       '~$anlagenAktualisiert · Parameter: +$parameterNeu / '
-      '~$parameterAktualisiert · Warnungen: ${warnungen.length}',
+      '~$parameterAktualisiert / -$parameterEntfernt · '
+      'Warnungen: ${warnungen.length}',
     );
 
     return KatalogImportErgebnis(
@@ -343,6 +385,7 @@ class MaschinenKatalogExcelService {
       anlagenAktualisiert: anlagenAktualisiert,
       parameterNeu: parameterNeu,
       parameterAktualisiert: parameterAktualisiert,
+      parameterEntfernt: parameterEntfernt,
       warnungen: warnungen,
     );
   }

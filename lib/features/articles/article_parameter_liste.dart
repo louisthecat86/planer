@@ -480,7 +480,18 @@ class _ParameterListe extends ConsumerWidget {
         final defsAsync = maschineId == null
             ? const AsyncValue<List<MachineParameterDef>>.data([])
             : ref.watch(steckbriefDefsProvider(maschineId!));
-        final defs = defsAsync.valueOrNull ?? const <MachineParameterDef>[];
+        // Auch den Steckbrief filtern, nicht nur die gespeicherten Werte.
+        //
+        // Die Plattentemperaturen verwaltet die Leiste oben. Stünden sie
+        // zusätzlich im Steckbrief der Maschine, erschienen sie hier ein
+        // zweites Mal als „eintragen …"-Zeilen — und zwar unabhängig davon,
+        // wie die gespeicherten Werte heißen, denn diese Zeilen kommen aus
+        // der Maschine, nicht aus dem Schritt. Genau das war der Grund,
+        // warum alle Umbenennungen der Werte nichts an der Anzeige
+        // geändert haben.
+        final defs = (defsAsync.valueOrNull ?? const <MachineParameterDef>[])
+            .where((d) => !istVerstecktesPlattenParam(d.parameterName))
+            .toList();
         final defNamen =
             defs.map((d) => d.parameterName.trim().toLowerCase()).toSet();
 
