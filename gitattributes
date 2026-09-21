@@ -1,0 +1,16 @@
+# Zeilenenden einheitlich — Codespace (Linux) und Windows-PC arbeiten am
+# selben Repo. Ohne diese Regel mischen sich CRLF und LF, und jede Datei
+# erscheint bei jedem Wechsel als komplett geändert.
+* text=auto eol=lf
+
+# Windows-eigene Dateien behalten ihr CRLF.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binärdateien nie anfassen.
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.xlsx binary
+*.pdf  binary

@@ -19,7 +19,6 @@ import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
-import 'features/import/excel_import_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/settings/maschinen_katalog_screen.dart';
 import 'features/settings/parameter_grenzen_screen.dart';
@@ -169,13 +168,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'backup',
         pageBuilder: (context, state) => NoTransitionPage(
           child: BackupManagementScreen(database: db),
-        ),
-      ),
-      GoRoute(
-        path: '/import',
-        name: 'import',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: ExcelImportScreen(),
         ),
       ),
     ],

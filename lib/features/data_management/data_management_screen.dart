@@ -18,8 +18,8 @@ import '../articles/article_list_screen.dart';
 /// Zentraler „Daten verwalten"-Screen.
 ///
 /// Vereint alle Daten-Operationen:
-/// - Excel-Import (v3-Vorlage einlesen)
-/// - Excel-Export (aktualisierte Excel speichern)
+/// - Stammdaten-Mappe exportieren (vom Generator aus dem App-Stand gebaut)
+/// - Stammdaten-Mappe importieren (dieselbe Mappe, in Excel bearbeitet)
 /// - Backup erstellen / wiederherstellen
 /// - Speicherort der DB / Backups anzeigen
 ///
@@ -569,8 +569,8 @@ class _DataManagementScreenState
               _KategorieKachel(
                 icon: Icons.inventory_2,
                 titel: 'Artikel & Prozesse',
-                beschreibung:
-                    'Artikel, Schritte und Parameter als v3-Excel-Vorlage.',
+                beschreibung: 'Artikel, Prozesse, Anlagen und Historie als '
+                    'Excel-Mappe — in Excel bearbeiten und wieder einlesen.',
                 onExport: _busy ? null : _excelExport,
                 onImport: _busy ? null : _excelImport,
               ),
@@ -1403,6 +1403,3 @@ class _StatusBanner extends StatelessWidget {
     );
   }
 }
-
-
-

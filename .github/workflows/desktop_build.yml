@@ -23,10 +23,17 @@ jobs:
       - name: Flutter version
         run: flutter --version
 
+      # Die Tests legen eine SQLite-Datenbank im Arbeitsspeicher an. Die
+      # Bibliothek kommt dabei NICHT aus sqlite3_flutter_libs — das ist ein
+      # Flutter-Plugin und steht im Test-Prozess nicht zur Verfügung —,
+      # sondern vom System.
+      - name: SQLite bereitstellen
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-0
+
       - name: Pub get
         run: flutter pub get
 
-      - name: Code generation (drift, riverpod)
+      - name: Code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Analyse
@@ -51,7 +58,7 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: Code generation (drift, riverpod)
+      - name: Code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Install Linux dependencies
@@ -90,7 +97,7 @@ jobs:
       - name: Pub get
         run: flutter pub get
 
-      - name: Code generation (drift, riverpod)
+      - name: Code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Enable Windows desktop
@@ -115,16 +122,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Bewusst OHNE Cache.
+      #
+      # Der macOS-Job ist mit einem Bus-Error (BUS_ADRALN) in der Dart-VM
+      # abgestürzt, und zwar beim JIT-Kompilieren von flutter_tools selbst —
+      # also noch bevor eine Zeile Projektcode angefasst wurde. Das ist das
+      # typische Bild eines beschädigten SDK aus dem Runner-Cache. Der
+      # frische Download kostet ein bis zwei Minuten und nimmt diese
+      # Fehlerquelle heraus.
+      #
+      # Läuft es damit über längere Zeit stabil, kann `cache: true` wieder
+      # versucht werden.
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: '3.41.6'
-          cache: true
+          cache: false
+
+      - name: Flutter version
+        run: flutter --version
+
+      # Lädt die macOS-Artefakte vorab. Schlägt hier etwas fehl, steht es
+      # in einer verständlichen Meldung statt in einem VM-Stacktrace.
+      - name: Precache macOS artifacts
+        run: flutter precache --macos
 
       - name: Pub get
         run: flutter pub get
 
-      - name: Code generation (drift, riverpod)
+      - name: Code generation (drift)
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Enable macOS desktop

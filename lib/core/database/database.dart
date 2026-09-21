@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -368,6 +368,18 @@ class AppDatabase extends _$AppDatabase {
 
           if (from < 20) {
             await _migrationAltnamenZusammenfuehren();
+          }
+
+          if (from < 21) {
+            // Die alte Excel-Vorlage lag als Base64-Text in app_settings —
+            // mehrere Megabyte, die in jedem Backup mitgesichert wurden.
+            // Seit der Generator die Mappe selbst baut, liest sie niemand
+            // mehr.
+            await customStatement(
+              "DELETE FROM app_settings WHERE key IN ("
+              "'last_import_excel_bytes', 'last_import_excel_filename', "
+              "'last_import_datum')",
+            );
           }
 
         },
@@ -746,9 +758,3 @@ class AppDatabase extends _$AppDatabase {
 QueryExecutor _openConnection() {
   return driftDatabase(name: 'produktion_planer');
 }
-
-
-
-
-
-
