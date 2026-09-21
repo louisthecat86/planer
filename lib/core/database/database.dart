@@ -373,8 +373,43 @@ class AppDatabase extends _$AppDatabase {
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
+          await _sichereEingepflegtRegel();
         },
       );
+
+  /// Ein Artikel mit Prozessschritten gilt als eingepflegt.
+  ///
+  /// Bisher wurde das Kennzeichen nur gesetzt, wenn der Artikel eine
+  /// Produktgruppe bekam. Ein Artikel, der schon seinen ganzen Prozess
+  /// hatte, trug deshalb weiter das Schild „Noch nicht eingepflegt" — das
+  /// ist nur für die leeren Hüllen aus dem Navision-Abgleich gedacht.
+  ///
+  /// Schritte entstehen an vielen Stellen: in der Artikelansicht, beim
+  /// Excel-Import, beim Wiederherstellen eines Backups. Statt jede davon
+  /// anzufassen, übernimmt das ein Trigger in der Datenbank. Er greift bei
+  /// jedem Weg, auch bei künftigen, die heute noch niemand kennt.
+  ///
+  /// Läuft bei jedem Öffnen: `IF NOT EXISTS` macht den Trigger idempotent,
+  /// und die einmalige Nachkorrektur trifft danach keine Zeile mehr. So
+  /// gibt es auch nach einem Reset keine Lücke — die Regel steht, bevor
+  /// der erste Schritt geschrieben wird.
+  Future<void> _sichereEingepflegtRegel() async {
+    await customStatement(
+      'CREATE TRIGGER IF NOT EXISTS trg_schritt_macht_eingepflegt '
+      'AFTER INSERT ON product_steps '
+      'BEGIN '
+      'UPDATE products SET ist_eingepflegt = 1 '
+      'WHERE id = NEW.product_id AND ist_eingepflegt = 0; '
+      'END',
+    );
+    // Bestand: Artikel, die schon Schritte haben.
+    await customStatement(
+      'UPDATE products SET ist_eingepflegt = 1 '
+      'WHERE ist_eingepflegt = 0 AND id IN ('
+      'SELECT DISTINCT product_id FROM product_steps '
+      'WHERE deleted_at IS NULL)',
+    );
+  }
 
   /// Indizes für typische Query-Patterns anlegen.
   Future<void> _createIndexes() async {

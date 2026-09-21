@@ -495,14 +495,21 @@ class StammdatenExportService {
         r++;
       }
 
+      // Was hier schon als Zeile steht — damit Schritt 3 es nicht ein
+      // zweites Mal als Zusatzzeile anhängt. Verglichen wird über den
+      // Schlüssel (klein, ohne Einheit), also auch die Platten darüber und
+      // nicht über das Namensmuster: das unterscheidet Groß- und
+      // Kleinschreibung und hat die Platten deshalb nie erkannt.
+      final bekannt = <String>{};
+
       // 1. Plattenzeilen — Namen exakt wie in der Leiste der App.
       for (final platte in plattenZeilenFuer(anlage)) {
         zeile(platte, '', _S.parameter);
+        bekannt.add(_schluessel(platte));
       }
       // 2. Steckbrief des Maschinentyps.
       final steck = steckbriefJeTyp[typVon[anlage] ?? anlage] ??
           <String, String>{};
-      final bekannt = <String>{};
       for (final e in steck.entries) {
         if (e.key == 'Sonstige Informationen') continue;
         zeile(e.key, e.value, _S.parameter);
@@ -515,7 +522,6 @@ class StammdatenExportService {
         for (final k in m.keys) {
           if (bekannt.contains(k)) continue;
           if (k == _schluessel('Sonstige Informationen')) continue;
-          if (kPlattenParamMuster.hasMatch(k)) continue;
           if (k == _schluessel(kPlattenSchemaParam)) continue;
           zusatz.add(k);
         }
@@ -686,6 +692,8 @@ class StammdatenExportService {
 
   /// Notiz „Personal: 3 | Besonderheit: …" → geordnete Einträge.
   static Map<String, String> _hinweiseAus(String? notiz) {
+    // Map-Literale behalten die Einfügereihenfolge — die Zeilen erscheinen
+    // in der Reihenfolge, in der sie in der Notiz stehen.
     final aus = <String, String>{};
     if (notiz == null || notiz.trim().isEmpty) return aus;
     for (final teil in notiz.split(' | ')) {
