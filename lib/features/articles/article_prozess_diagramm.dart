@@ -489,7 +489,7 @@ void _zeigeSchrittDetail(
   required VoidCallback onUpdated,
 }) {
   final container = ProviderScope.containerOf(context);
-  showModalBottomSheet<void>(
+  showSheetOhneAnimation<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,

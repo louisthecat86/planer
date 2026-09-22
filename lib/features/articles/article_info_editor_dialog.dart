@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/utils/sheet_utils.dart';
 
 const kProduktgruppen = <({String dbValue, String label})>[
   (dbValue: 'bruehwurst', label: 'Brühwurst'),
@@ -30,7 +31,7 @@ class ArticleInfoEditorDialog extends ConsumerStatefulWidget {
   final Product product;
 
   static Future<bool> show(BuildContext context, Product product) async {
-    final result = await showModalBottomSheet<bool>(
+    final result = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

@@ -6,6 +6,7 @@ import '../../core/providers/theme_mode_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/ui_scale_provider.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/sheet_utils.dart';
 
 /// Einstellungen — Sammelpunkt für alles, was nicht zum täglichen Planen
 /// gehört: Anzeigegröße und Stammdaten (Excel-Import/-Export, Backup,
@@ -75,7 +76,7 @@ class SettingsScreen extends ConsumerWidget {
 /// verstellt — dafür lohnt kein Seitenwechsel.
 void _zeigeAnsichtSheet(BuildContext context) {
   final container = ProviderScope.containerOf(context);
-  showModalBottomSheet<void>(
+  showSheetOhneAnimation<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -677,6 +678,3 @@ class _AnzeigeGroesse extends ConsumerWidget {
     );
   }
 }
-
-
-

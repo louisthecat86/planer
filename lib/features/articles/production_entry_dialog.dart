@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/utils/sheet_utils.dart';
 
 /// Bottom-Sheet zum Erfassen **oder Bearbeiten** einer Produktion.
 ///
@@ -31,7 +32,7 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
     String productId, {
     ProductionHistoryData? existing,
   }) async {
-    final result = await showModalBottomSheet<bool>(
+    final result = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,

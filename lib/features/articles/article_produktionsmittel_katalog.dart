@@ -422,7 +422,7 @@ class _ProduktionsmittelButton extends StatelessWidget {
     return OutlinedButton.icon(
       onPressed: () {
         final container = ProviderScope.containerOf(context);
-        showModalBottomSheet<void>(
+        showSheetOhneAnimation<void>(
           context: context,
           isScrollControlled: true,
           useSafeArea: true,
