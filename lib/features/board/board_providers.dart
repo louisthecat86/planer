@@ -6,11 +6,9 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/utils/kalenderwoche.dart';
 
-/// Standard-Kapazität pro Abteilung und Tag in Minuten (9 h), wenn für die
-/// Abteilung kein abweichender Wert gepflegt ist. Die Abteilungen arbeiten
-/// regulär 9 Stunden; abweichende Zeiten lassen sich je Abteilung unter
-/// „Einstellungen → Kapazität" pflegen.
-const double kStandardKapazitaetMinuten = 540;
+/// Standard-Kapazität pro Abteilung und Tag in Minuten (10 h), wenn für die
+/// Abteilung kein abweichender Wert gepflegt ist.
+const double kStandardKapazitaetMinuten = 600;
 
 /// Auslastungs-Status einer Abteilung an einem Tag — steuert die Ampelfarbe
 /// auf dem Board.
@@ -388,7 +386,12 @@ final weekBoardProvider = FutureProvider.autoDispose
     }
   }
 
-  final spuren = _baueSpuren(planungsAnlagen, ohneAnlage);
+  final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
+  final spuren = _baueSpuren(
+    planungsAnlagen,
+    ohneAnlage,
+    abteilungskapazitaeten: abteilungskapazitaeten,
+  );
 
   // Tasks den Spuren zuordnen.
   final tasksProZelle = <String, List<BoardTask>>{};
@@ -455,7 +458,12 @@ final dayBoardProvider = FutureProvider.autoDispose
     }
   }
 
-  final spuren = _baueSpuren(planungsAnlagen, ohneAnlage);
+  final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
+  final spuren = _baueSpuren(
+    planungsAnlagen,
+    ohneAnlage,
+    abteilungskapazitaeten: abteilungskapazitaeten,
+  );
 
   final tasksProSpur = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
@@ -730,6 +738,7 @@ String _spurKeyFuerTask(BoardTask task, Set<String> anlagenSpuren) {
 List<BoardSpur> _baueSpuren(
   List<Machine> planungsAnlagen,
   Set<String> abteilungenMitTasksOhneAnlage,
+  {Map<String, double> abteilungskapazitaeten = const {},}
 ) {
   final anlagenJeAbteilung = <String, List<Machine>>{};
   for (final m in planungsAnlagen) {
@@ -745,10 +754,10 @@ List<BoardSpur> _baueSpuren(
       spuren.add(
         BoardSpur(
           abteilung: abteilung,
-          // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h. Eine
-          // Pflege je Abteilung gibt es bewusst nicht mehr — bei euch ist
-          // die Arbeitszeit überall gleich, nur das Personal variiert.
-          kapazitaetMinuten: kStandardKapazitaetMinuten,
+          // Standardkapazität für Abteilungen ohne eigene Anlagen-Spur.
+            kapazitaetMinuten:
+              abteilungskapazitaeten[abteilung.dbValue] ??
+              kStandardKapazitaetMinuten,
         ),
       );
       continue;
@@ -762,7 +771,9 @@ List<BoardSpur> _baueSpuren(
           maschineId: m.id,
           maschineName: m.name,
           eignungHinweis: m.eignungHinweis,
-          kapazitaetMinuten: m.kapazitaetMinutenProTag,
+            kapazitaetMinuten:
+              abteilungskapazitaeten[abteilung.dbValue] ??
+              m.kapazitaetMinutenProTag,
         ),
       );
     }
@@ -773,10 +784,10 @@ List<BoardSpur> _baueSpuren(
       spuren.add(
         BoardSpur(
           abteilung: abteilung,
-          // Einheitliche Regelarbeitszeit: alle Abteilungen 9 h. Eine
-          // Pflege je Abteilung gibt es bewusst nicht mehr — bei euch ist
-          // die Arbeitszeit überall gleich, nur das Personal variiert.
-          kapazitaetMinuten: kStandardKapazitaetMinuten,
+          // Standardkapazität für Aufträge ohne gültige Anlagen-Zuordnung.
+            kapazitaetMinuten:
+              abteilungskapazitaeten[abteilung.dbValue] ??
+              kStandardKapazitaetMinuten,
         ),
       );
     }
@@ -808,6 +819,7 @@ Future<Map<String, double>> tageskapazitaetJeAbteilung(
 
   final tasks = await _ladeBoardTasks(db, start, endeExkl);
   final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
   final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
   // Abteilungen, in denen Aufträge ohne gültige Anlagen-Spur liegen —
@@ -822,7 +834,11 @@ Future<Map<String, double>> tageskapazitaetJeAbteilung(
   }
 
   final ergebnis = <String, double>{};
-  for (final spur in _baueSpuren(planungsAnlagen, ohneAnlage)) {
+  for (final spur in _baueSpuren(
+    planungsAnlagen,
+    ohneAnlage,
+    abteilungskapazitaeten: abteilungskapazitaeten,
+  )) {
     final key = spur.abteilung.dbValue;
     ergebnis[key] = (ergebnis[key] ?? 0) + spur.kapazitaetMinuten;
   }
@@ -835,6 +851,36 @@ Future<Map<String, double>> tageskapazitaetJeAbteilung(
     ergebnis.putIfAbsent(a.dbValue, () => kStandardKapazitaetMinuten);
   }
   return ergebnis;
+}
+
+const _kapazitaetKeyPrefix = 'kapazitaet_abteilung_';
+
+/// Liefert die gepflegten Kapazitäten der Sammelspuren je Abteilung.
+Future<Map<String, double>> ladeAbteilungskapazitaeten(AppDatabase db) async {
+  final rows = await (db.select(db.appSettings)
+        ..where((s) => s.key.like('$_kapazitaetKeyPrefix%')))
+      .get();
+  return {
+    for (final row in rows)
+      row.key.substring(_kapazitaetKeyPrefix.length):
+          double.tryParse(row.value.replaceAll(',', '.')) ??
+              kStandardKapazitaetMinuten,
+  };
+}
+
+/// Speichert eine Abteilungskapazität in Minuten.
+Future<void> speichereAbteilungskapazitaet(
+  AppDatabase db,
+  String abteilung,
+  double minuten,
+) async {
+  final key = '$_kapazitaetKeyPrefix$abteilung';
+  await db.into(db.appSettings).insertOnConflictUpdate(
+        AppSettingsCompanion.insert(
+          key: key,
+          value: minuten.toString(),
+        ),
+      );
 }
 
 /// Lädt alle Anlagen, die eine eigene Kapazitätsspur bekommen.

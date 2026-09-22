@@ -209,6 +209,7 @@ class MaschinenKatalogScreen extends ConsumerWidget {
           id: maschineId,
           name: seed.name,
           abteilung: seed.abteilung,
+          kapazitaetMinutenProTag: const Value(600),
         ),
       );
       // Sofort vormerken, falls derselbe Name im Seed doppelt vorkommt.
@@ -330,7 +331,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     _planungsressource = m?.istPlanungsressource ?? false;
     _kapazitaetStunden = TextEditingController(
       text: m == null
-          ? '9'
+          ? '10'
           : (m.kapazitaetMinutenProTag / 60)
               .toStringAsFixed(1)
               .replaceAll('.0', ''),

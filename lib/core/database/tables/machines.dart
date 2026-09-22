@@ -41,10 +41,10 @@ class Machines extends Table {
   BoolColumn get istPlanungsressource =>
       boolean().withDefault(const Constant(false))();
 
-  /// Tageskapazität dieser Anlage in Minuten (Standard: 9 h).
+  /// Tageskapazität dieser Anlage in Minuten (Standard: 10 h).
   /// Nur relevant, wenn [istPlanungsressource] gesetzt ist.
   RealColumn get kapazitaetMinutenProTag =>
-      real().withDefault(const Constant(540))();
+      real().withDefault(const Constant(600))();
 
   /// Kurzer Eignungs-Hinweis für die Planung, z.B.
   /// „nur Aufschnitt / Weberslicer" oder „Ausweichanlage für Multivac".

@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/constants/abteilungen.dart';
 import '../../core/providers/theme_mode_provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/providers/ui_scale_provider.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../board/board_providers.dart';
 
 /// Einstellungen — Sammelpunkt für alles, was nicht zum täglichen Planen
-/// gehört: Anzeigegröße und Stammdaten (Excel-Import/-Export, Backup,
-/// Wiederherstellung). Die Arbeitszeit ist fix 9 h je Abteilung und wird
-/// nicht mehr einzeln gepflegt.
+/// gehört: Anzeigegröße, Kapazitäten und Stammdaten.
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
@@ -48,6 +49,13 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: 'Anlagen, Parameter-Steckbriefe und Grenzwerte',
                 onTap: () => context.pushNamed('maschinen'),
               ),
+              _Kachel(
+                icon: Icons.schedule_rounded,
+                color: const Color(0xFFEF6C00),
+                title: 'Abteilungskapazität',
+                subtitle: 'Tagesstunden je Abteilung festlegen und übersteuern',
+                onTap: () => _zeigeKapazitaetSheet(context),
+              ),
             ],
           ),
           const SizedBox(height: 20),
@@ -66,6 +74,147 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+void _zeigeKapazitaetSheet(BuildContext context) {
+  showSheetOhneAnimation<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    showDragHandle: true,
+    builder: (_) => const _AbteilungskapazitaetenSheet(),
+  );
+}
+
+class _AbteilungskapazitaetenSheet extends ConsumerStatefulWidget {
+  const _AbteilungskapazitaetenSheet();
+
+  @override
+  ConsumerState<_AbteilungskapazitaetenSheet> createState() =>
+      _AbteilungskapazitaetenSheetState();
+}
+
+class _AbteilungskapazitaetenSheetState
+    extends ConsumerState<_AbteilungskapazitaetenSheet> {
+  final _stunden = <String, TextEditingController>{};
+  bool _laden = true;
+  bool _speichern = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lade();
+  }
+
+  Future<void> _lade() async {
+    final werte = await ladeAbteilungskapazitaeten(
+      ref.read(databaseProvider),
+    );
+    for (final a in Abteilung.values) {
+      final minuten = werte[a.dbValue] ?? kStandardKapazitaetMinuten;
+      _stunden[a.dbValue] = TextEditingController(
+        text: (minuten / 60).toStringAsFixed(1).replaceAll('.0', ''),
+      );
+    }
+    if (mounted) setState(() => _laden = false);
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _stunden.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _speichere() async {
+    final werte = <String, double>{};
+    for (final a in Abteilung.values) {
+      final stunden = double.tryParse(
+        _stunden[a.dbValue]!.text.replaceAll(',', '.'),
+      );
+      if (stunden == null || stunden <= 0 || stunden > 24) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${a.anzeigeName}: 0 bis 24 Stunden')),
+        );
+        return;
+      }
+      werte[a.dbValue] = stunden * 60;
+    }
+
+    setState(() => _speichern = true);
+    final db = ref.read(databaseProvider);
+    for (final eintrag in werte.entries) {
+      await speichereAbteilungskapazitaet(db, eintrag.key, eintrag.value);
+    }
+    ref.read(autoBackupTriggerProvider).fireDebounced(
+          reason: 'Abteilungskapazität geändert',
+        );
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        16,
+        0,
+        16,
+        24 + MediaQuery.of(context).viewInsets.bottom,
+      ),
+      child: _laden
+          ? const SizedBox(
+              height: 180,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                Text(
+                  'Abteilungskapazität',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                const Text('Tageskapazität in Stunden. Standard: 10 h.'),
+                const SizedBox(height: 12),
+                for (final a in Abteilung.values)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: TextField(
+                      controller: _stunden[a.dbValue],
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: a.anzeigeName,
+                        suffixText: 'h / Tag',
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                FilledButton.icon(
+                  onPressed: _speichern ? null : _speichere,
+                  icon: _speichern
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save_outlined),
+                  label: const Text('Kapazitäten speichern'),
+                ),
+                ],
+              ),
+            ),
     );
   }
 }

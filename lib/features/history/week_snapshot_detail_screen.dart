@@ -116,7 +116,7 @@ class _WeekSnapshotDetailScreenState
         Text(
           '${_d(snap.wochenStart)}–${_d(ende)}${snap.jahr} · '
           '${daten.anzahlAuftraege} Aufträge · '
-          '${Zeit.kurz(daten.gesamtBelegtMinuten)} gesamt',
+          '${Zeit.kurz(daten.gesamtBelegtMinuten)} belegt gesamt',
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
         const SizedBox(height: 20),
@@ -238,6 +238,7 @@ class _AuslastungsBalken extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final belegt = daten.belegtMinutenJeAbteilung[abteilung.dbValue] ?? 0;
+    final zusatz = daten.zusatzMinutenJeAbteilung[abteilung.dbValue] ?? 0;
     final kg = daten.kgJeAbteilung[abteilung.dbValue] ?? 0;
     final anzahl = daten.auftraegeJeAbteilung[abteilung.dbValue] ?? 0;
     final tagesKap = daten.kapazitaeten[abteilung.dbValue] ?? 0;
@@ -300,7 +301,8 @@ class _AuslastungsBalken extends StatelessWidget {
           ),
           const SizedBox(height: 3),
           Text(
-            '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge',
+            '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge'
+            '${zusatz > 0 ? ' · davon ${Zeit.kurz(zusatz)} Zusatzzeit' : ''}',
             style: TextStyle(fontSize: 11, color: colors.onSurfaceVariant),
           ),
         ],

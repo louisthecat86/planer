@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -386,6 +386,10 @@ class AppDatabase extends _$AppDatabase {
             await _migrationMultivacTef2NachVerpackung();
           }
 
+          if (from < 23) {
+            await _migrationStandardKapazitaetAuf10Stunden();
+          }
+
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -661,6 +665,15 @@ class AppDatabase extends _$AppDatabase {
       "UPDATE production_tasks SET abteilung = 'verpackung_tef2' "
       'WHERE maschine_id = ?',
       [maschineId],
+    );
+  }
+
+  /// Hebt unveränderte Planungsspuren vom alten Standard 9 h auf 10 h.
+  /// Individuell gepflegte Kapazitäten bleiben unangetastet.
+  Future<void> _migrationStandardKapazitaetAuf10Stunden() async {
+    await customStatement(
+      'UPDATE machines SET kapazitaet_minuten_pro_tag = 600 '
+      'WHERE ist_planungsressource = 1 AND kapazitaet_minuten_pro_tag = 540',
     );
   }
 

@@ -66,11 +66,46 @@ class SnapshotTask {
       );
 }
 
+/// Eine eingefrorene Rüst-, Reinigungs- oder sonstige Nebenzeit.
+class SnapshotZusatzzeit {
+  const SnapshotZusatzzeit({
+    required this.datum,
+    required this.spurId,
+    required this.art,
+    required this.minuten,
+    this.notiz,
+  });
+
+  final DateTime datum;
+  final String spurId;
+  final String art;
+  final double minuten;
+  final String? notiz;
+
+  Map<String, dynamic> toJson() => {
+        'datum': datum.toIso8601String(),
+        'spurId': spurId,
+        'art': art,
+        'minuten': minuten,
+        if (notiz != null) 'notiz': notiz,
+      };
+
+  factory SnapshotZusatzzeit.fromJson(Map<String, dynamic> j) =>
+      SnapshotZusatzzeit(
+        datum: DateTime.parse(j['datum'] as String),
+        spurId: j['spurId'] as String? ?? '',
+        art: j['art'] as String? ?? 'sonstiges',
+        minuten: (j['minuten'] as num?)?.toDouble() ?? 0,
+        notiz: j['notiz'] as String?,
+      );
+}
+
 /// Die dekodierten Inhalte eines Wochen-Snapshots inkl. einfacher Kennzahlen.
 class WochenSnapshotDaten {
   const WochenSnapshotDaten({
     required this.tasks,
     required this.kapazitaeten,
+    this.zusatzzeiten = const [],
   });
 
   final List<SnapshotTask> tasks;
@@ -78,15 +113,18 @@ class WochenSnapshotDaten {
   /// Tageskapazität je Abteilung (dbValue → Minuten), wie sie zum Zeitpunkt
   /// des Einfrierens galt.
   final Map<String, double> kapazitaeten;
+  final List<SnapshotZusatzzeit> zusatzzeiten;
 
   Map<String, dynamic> toJson() => {
         'tasks': [for (final t in tasks) t.toJson()],
         'kapazitaeten': kapazitaeten,
+        'zusatzzeiten': [for (final z in zusatzzeiten) z.toJson()],
       };
 
   factory WochenSnapshotDaten.fromJson(Map<String, dynamic> j) {
     final rawTasks = (j['tasks'] as List<dynamic>? ?? const []);
     final rawKap = (j['kapazitaeten'] as Map<String, dynamic>? ?? const {});
+    final rawZusatz = (j['zusatzzeiten'] as List<dynamic>? ?? const []);
     return WochenSnapshotDaten(
       tasks: [
         for (final t in rawTasks)
@@ -95,6 +133,10 @@ class WochenSnapshotDaten {
       kapazitaeten: {
         for (final e in rawKap.entries) e.key: (e.value as num).toDouble(),
       },
+      zusatzzeiten: [
+        for (final z in rawZusatz)
+          SnapshotZusatzzeit.fromJson(z as Map<String, dynamic>),
+      ],
     );
   }
 
@@ -105,6 +147,19 @@ class WochenSnapshotDaten {
     final m = <String, double>{};
     for (final t in tasks) {
       m[t.abteilung] = (m[t.abteilung] ?? 0) + t.dauerMinuten;
+    }
+    for (final z in zusatzzeiten) {
+      final abteilung = z.spurId.split('|').first;
+      m[abteilung] = (m[abteilung] ?? 0) + z.minuten;
+    }
+    return m;
+  }
+
+  Map<String, double> get zusatzMinutenJeAbteilung {
+    final m = <String, double>{};
+    for (final z in zusatzzeiten) {
+      final abteilung = z.spurId.split('|').first;
+      m[abteilung] = (m[abteilung] ?? 0) + z.minuten;
     }
     return m;
   }
@@ -128,7 +183,8 @@ class WochenSnapshotDaten {
   }
 
   double get gesamtBelegtMinuten =>
-      tasks.fold(0, (summe, t) => summe + t.dauerMinuten);
+      tasks.fold(0, (summe, t) => summe + t.dauerMinuten) +
+      zusatzzeiten.fold(0, (summe, z) => summe + z.minuten);
 
   int get anzahlAuftraege => tasks.length;
 }
@@ -179,7 +235,27 @@ Future<void> erstelleWochenSnapshot({
       ),
   ];
 
-  final daten = WochenSnapshotDaten(tasks: tasks, kapazitaeten: kapazitaeten);
+  final zusatzRows = await (db.select(db.zusatzzeiten)
+        ..where((z) => z.deletedAt.isNull())
+        ..where((z) => z.datum.isBiggerOrEqualValue(start))
+        ..where((z) => z.datum.isSmallerThanValue(endeExkl)))
+      .get();
+  final zusatzzeiten = [
+    for (final z in zusatzRows)
+      SnapshotZusatzzeit(
+        datum: DateTime(z.datum.year, z.datum.month, z.datum.day),
+        spurId: z.spurId,
+        art: z.art,
+        minuten: z.minuten,
+        notiz: z.notiz,
+      ),
+  ];
+
+  final daten = WochenSnapshotDaten(
+    tasks: tasks,
+    kapazitaeten: kapazitaeten,
+    zusatzzeiten: zusatzzeiten,
+  );
 
   await db.into(db.weekSnapshots).insert(
         WeekSnapshotsCompanion.insert(
