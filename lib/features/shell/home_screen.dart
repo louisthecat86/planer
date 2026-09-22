@@ -12,6 +12,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
 import '../../core/utils/kalenderwoche.dart';
+import '../../core/utils/vollbild.dart';
 import '../../core/utils/zeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
@@ -318,6 +319,25 @@ class HomeScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh_rounded),
             onPressed: () => _neuLaden(ref),
           ),
+          // Im Vollbild gibt es keine Titelleiste — also auch kein ✕ und
+          // kein Minimieren. Deshalb beides hier.
+          ValueListenableBuilder<bool>(
+            valueListenable: Vollbild.aktiv,
+            builder: (context, vollbild, _) => IconButton(
+              tooltip: vollbild ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
+              icon: Icon(
+                vollbild
+                    ? Icons.fullscreen_exit_rounded
+                    : Icons.fullscreen_rounded,
+              ),
+              onPressed: Vollbild.umschalten,
+            ),
+          ),
+          IconButton(
+            tooltip: 'App beenden',
+            icon: const Icon(Icons.power_settings_new_rounded),
+            onPressed: () => _beendenFragen(context),
+          ),
           const SizedBox(width: 4),
         ],
       ),
@@ -362,6 +382,30 @@ void _neuLaden(WidgetRef ref) {
   ref
     ..invalidate(bedarfProvider)
     ..invalidate(_uebersichtProvider);
+}
+
+/// Nachfrage vor dem Beenden — der Knopf sitzt neben „Aktualisieren", und
+/// ein versehentlicher Klick soll nicht die App schließen.
+Future<void> _beendenFragen(BuildContext context) async {
+  final ja = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('App beenden?'),
+      content: const Text('Beim Beenden wird automatisch ein Backup '
+          'geschrieben.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Beenden'),
+        ),
+      ],
+    ),
+  );
+  if (ja == true) await Vollbild.beenden();
 }
 
 /// Öffnet einen Fachscreen und lädt die Übersicht nach der Rückkehr neu —
@@ -689,11 +733,13 @@ class _AuftragZeile extends StatelessWidget {
       ),
       child: Row(
         children: [
+          // Gefüllt wie im Board: Als Schrift auf blassem Grund war das
+          // Braun der Bratstraße im dunklen Modus kaum zu erkennen.
           Container(
             width: 30,
             padding: const EdgeInsets.symmetric(vertical: 2),
             decoration: BoxDecoration(
-              color: farbe.withValues(alpha: .18),
+              color: farbe,
               borderRadius: BorderRadius.circular(4),
             ),
             alignment: Alignment.center,
@@ -701,7 +747,7 @@ class _AuftragZeile extends StatelessWidget {
               a.abteilung?.kurzcode ?? '?',
               style: theme.textTheme.labelSmall?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: farbe,
+                color: Colors.white,
               ),
             ),
           ),
@@ -892,9 +938,13 @@ class _Navigation extends StatelessWidget {
 
   final bool breit;
 
-  static const _gruppen = <(String, List<_Ziel>)>[
+  // Jede Gruppe hat ihre eigene Farbe — so erkennt man sie auf einen
+  // Blick, noch bevor man die Überschrift liest.
+  static const _gruppen = <(String, IconData, Color, List<_Ziel>)>[
     (
       'Planen',
+      Icons.edit_calendar_outlined,
+      Color(0xFF1E88E5),
       [
         _Ziel(Icons.playlist_add_check_rounded, 'Bedarf',
             'Was produziert werden muss', 'bedarf',),
@@ -906,6 +956,8 @@ class _Navigation extends StatelessWidget {
     ),
     (
       'Auswerten',
+      Icons.insights_rounded,
+      Color(0xFF26A69A),
       [
         _Ziel(Icons.fact_check_outlined, 'Produktionserfassung',
             'Ist-Daten der Woche', 'erfassung',),
@@ -915,6 +967,8 @@ class _Navigation extends StatelessWidget {
     ),
     (
       'Stammdaten',
+      Icons.folder_open_rounded,
+      Color(0xFF9575CD),
       [
         _Ziel(Icons.inventory_2_outlined, 'Artikel',
             'Abläufe, Maschinen, Zeiten', 'articles',),
@@ -929,8 +983,8 @@ class _Navigation extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final karten = [
-      for (final (titel, ziele) in _gruppen)
-        _NavGruppe(titel: titel, ziele: ziele),
+      for (final (titel, icon, farbe, ziele) in _gruppen)
+        _NavGruppe(titel: titel, icon: icon, farbe: farbe, ziele: ziele),
     ];
     if (!breit) {
       return Column(
@@ -954,32 +1008,46 @@ class _Navigation extends StatelessWidget {
 }
 
 class _NavGruppe extends ConsumerWidget {
-  const _NavGruppe({required this.titel, required this.ziele});
+  const _NavGruppe({
+    required this.titel,
+    required this.icon,
+    required this.farbe,
+    required this.ziele,
+  });
 
   final String titel;
+  final IconData icon;
+  final Color farbe;
   final List<_Ziel> ziele;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+      padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.dividerColor),
+        // Ein Hauch der Gruppenfarbe — erkennbar, aber nicht bunt.
+        color: farbe.withValues(alpha: .06),
+        border: Border.all(color: farbe.withValues(alpha: .28)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-            child: Text(
-              titel.toUpperCase(),
-              style: theme.textTheme.labelSmall?.copyWith(
-                letterSpacing: .8,
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+            child: Row(
+              children: [
+                Icon(icon, size: 20, color: farbe),
+                const SizedBox(width: 8),
+                Text(
+                  titel,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: farbe,
+                  ),
+                ),
+              ],
             ),
           ),
           for (final z in ziele)
@@ -993,7 +1061,7 @@ class _NavGruppe extends ConsumerWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(z.icon, size: 22, color: theme.colorScheme.primary),
+                    Icon(z.icon, size: 22, color: farbe),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(
