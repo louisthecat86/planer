@@ -63,6 +63,9 @@ final RegExp kPlattenParamMuster = RegExp(
 /// auseinandergelaufen ist.
 bool istPlattenMaschine(String maschineName) {
   final n = maschineName.toLowerCase();
+  if (n.contains('füllmaschine') || n.contains('fuellmaschine')) {
+    return false;
+  }
   return n.contains('bratstra') || istDampftunnelMaschine(maschineName);
 }
 
