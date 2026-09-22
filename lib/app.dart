@@ -9,6 +9,7 @@ import 'core/providers/ui_scale_provider.dart';
 import 'core/providers/database_provider.dart';
 import 'core/services/backup_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
 import 'features/backup/backup_management_screen.dart';
@@ -221,6 +222,10 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     } catch (_) {
       // Auch hier: das Beenden darf nicht hängen bleiben.
     }
+    // Nicht den regulären Engine-Shutdown laufen lassen (crasht auf manchen
+    // Windows-Rechnern, siehe Vollbild.beenden) — stattdessen selbst hart
+    // beenden. Der Rückgabewert wird dadurch faktisch nicht mehr erreicht.
+    await Vollbild.beenden();
     return AppExitResponse.exit;
   }
 

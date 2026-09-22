@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi' as ffi;
 import 'dart:io';
 // AppExitType liegt in dart:ui und wird von services.dart nicht
 // weitergereicht — app.dart holt sich AppExitResponse genauso.
@@ -7,6 +8,11 @@ import 'dart:ui' show AppExitType;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
+
+// Windows-API-Signatur für den harten Prozessabbruch, siehe [Vollbild.beenden].
+typedef _TerminateProcessNative = ffi.Int32 Function(
+    ffi.IntPtr hProcess, ffi.Uint32 uExitCode,);
+typedef _TerminateProcessDart = int Function(int hProcess, int uExitCode);
 
 /// Vollbild für die Desktop-App — ohne Titelleiste und ohne Taskleiste.
 ///
@@ -147,13 +153,23 @@ abstract final class Vollbild {
 
   /// Beendet die App.
   ///
-  /// `required`, weil der manuelle Knopf das Backup schon selbst geschrieben
-  /// hat (siehe `_beendenFragen`) — ein zusätzlicher, parallel laufender
-  /// Exit-Versuch über den Lebenszyklus (`cancelable`) plus ein harter
-  /// `exit(0)`-Notausstieg haben sich in der Praxis überschnitten und die
-  /// App zum Absturz gebracht (Windows-Fehlerdialog). Deshalb genau ein
-  /// Ausstiegsweg.
+  /// Aufrufer müssen vorher selbst aufräumen (Backup, `db.close()`) — hier
+  /// kommt danach kein Dart-Code mehr zur Ausführung.
+  ///
+  /// Auf Windows crasht der reguläre Engine-Shutdown
+  /// (`ServicesBinding.exitApplication`, egal ob `required` oder
+  /// `cancelable`) auf manchen Rechnern mit einer Zugriffsverletzung in
+  /// `flutter_windows.dll` (beobachtet auf einem Remote-Desktop-Server,
+  /// vermutlich ein Grafik-Teardown-Problem unter RDP). `TerminateProcess`
+  /// beendet den Prozess sofort und umgeht diesen kaputten Pfad komplett.
   static Future<void> beenden() async {
+    if (Platform.isWindows) {
+      final kernel32 = ffi.DynamicLibrary.open('kernel32.dll');
+      final terminateProcess = kernel32.lookupFunction<
+          _TerminateProcessNative, _TerminateProcessDart>('TerminateProcess');
+      terminateProcess(-1, 0);
+      return;
+    }
     await ServicesBinding.instance.exitApplication(AppExitType.required);
   }
 }
