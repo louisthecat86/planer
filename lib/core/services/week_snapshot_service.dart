@@ -184,7 +184,7 @@ class WochenSnapshotDaten {
 
   double get gesamtBelegtMinuten =>
       tasks.fold(0, (summe, t) => summe + t.dauerMinuten) +
-      zusatzzeiten.fold(0, (summe, z) => summe + z.minuten);
+      zusatzzeiten.fold<double>(0, (summe, z) => summe + z.minuten);
 
   int get anzahlAuftraege => tasks.length;
 }
