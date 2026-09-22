@@ -373,7 +373,7 @@ class HomeScreen extends ConsumerWidget {
           IconButton(
             tooltip: 'App beenden',
             icon: const Icon(Icons.power_settings_new_rounded),
-            onPressed: () => _beendenFragen(context),
+            onPressed: () => _beendenFragen(context, ref),
           ),
           const SizedBox(width: 4),
         ],
@@ -423,7 +423,7 @@ void _neuLaden(WidgetRef ref) {
 
 /// Nachfrage vor dem Beenden — der Knopf sitzt neben „Aktualisieren", und
 /// ein versehentlicher Klick soll nicht die App schließen.
-Future<void> _beendenFragen(BuildContext context) async {
+Future<void> _beendenFragen(BuildContext context, WidgetRef ref) async {
   final ja = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
@@ -442,7 +442,20 @@ Future<void> _beendenFragen(BuildContext context) async {
       ],
     ),
   );
-  if (ja == true) await Vollbild.beenden();
+  if (ja != true) return;
+  // Backup hier — vor dem Exit — schreiben, statt über den Lebenszyklus
+  // des Fensters: So läuft nur ein einziger, klar begrenzter Ausstiegsweg
+  // (siehe Vollbild.beenden).
+  try {
+    final db = ref.read(databaseProvider);
+    await BackupService.createAutoBackup(db)
+        .timeout(const Duration(seconds: 10));
+    await BackupService.cleanupOldAutoBackups()
+        .timeout(const Duration(seconds: 5));
+  } catch (_) {
+    // Das Beenden darf nie blockieren — im Zweifel ohne frisches Backup.
+  }
+  await Vollbild.beenden();
 }
 
 /// Öffnet einen Fachscreen und lädt die Übersicht nach der Rückkehr neu —

@@ -145,17 +145,16 @@ abstract final class Vollbild {
     });
   }
 
-  /// Beendet die App auf demselben Weg wie das ✕ der Titelleiste.
+  /// Beendet die App.
   ///
-  /// `cancelable` läuft durch denselben Lebenszyklus wie das Schließen des
-  /// Fensters — nur so schreibt `app.dart` beim Beenden noch ein Backup.
-  /// Reagiert die Plattform darauf nicht (Fenstermanager hängt, Engine
-  /// antwortet nicht), bliebe der Knopf sonst wirkungslos: Ein harter
-  /// Not-Ausstieg nach kurzer Wartezeit erzwingt das Schließen trotzdem.
+  /// `required`, weil der manuelle Knopf das Backup schon selbst geschrieben
+  /// hat (siehe `_beendenFragen`) — ein zusätzlicher, parallel laufender
+  /// Exit-Versuch über den Lebenszyklus (`cancelable`) plus ein harter
+  /// `exit(0)`-Notausstieg haben sich in der Praxis überschnitten und die
+  /// App zum Absturz gebracht (Windows-Fehlerdialog). Deshalb genau ein
+  /// Ausstiegsweg.
   static Future<void> beenden() async {
-    final notAusstieg = Timer(const Duration(seconds: 3), () => exit(0));
-    await ServicesBinding.instance.exitApplication(AppExitType.cancelable);
-    notAusstieg.cancel();
+    await ServicesBinding.instance.exitApplication(AppExitType.required);
   }
 }
 
