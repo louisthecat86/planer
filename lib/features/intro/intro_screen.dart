@@ -184,7 +184,7 @@ class _IntroInhalt extends StatelessWidget {
         Text(
           // Gleiche Schreibweise wie in der Titelleiste und den
           // Einstellungen — vorher stand hier „Produktions Planer".
-          'Produktion Planer',
+          'Produktions Planer',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 42,
