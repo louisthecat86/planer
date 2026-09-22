@@ -5,8 +5,7 @@ import 'package:go_router/go_router.dart';
 
 /// Intro-Screen im Navision-Design.
 ///
-/// Eine Logo-Kachel (Zahnrad auf Primär-Verlauf, wie die Home-Kacheln)
-/// und der Schriftzug "Produktion Planer" entwickeln sich aus einem
+/// Der Schriftzug "Produktion Planer" entwickelt sich aus einem
 /// unscharfen Schatten zu einem scharfen, hellen Erscheinungsbild:
 ///   - Start: klein (scale 0.4), stark unscharf (blur 20), fast unsichtbar
 ///   - Ende: voll skaliert (leichter Overshoot), scharf, voll sichtbar
@@ -171,9 +170,8 @@ class _IntroScreenState extends State<IntroScreen>
   }
 }
 
-/// Schriftzug mit gezeichnetem Steak — bewusst reduziert im Stil von
-/// Microsoft Dynamics NAV: eine Akzentfarbe, kantige Formen, kein Verlauf,
-/// kein Untertitel.
+/// Schriftzug — bewusst reduziert im Stil von Microsoft Dynamics NAV:
+/// eine Akzentfarbe, kantige Formen, kein Verlauf, keine Grafik.
 class _IntroInhalt extends StatelessWidget {
   const _IntroInhalt();
 
@@ -183,21 +181,10 @@ class _IntroInhalt extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Nutze das saubere Steak-PNG mit transparentem Hintergrund statt der
-        // selbst gezeichneten Platzhalter-Version. Das Bild passt farblich zum
-        // blauen Navision-Theme der App.
-        SizedBox(
-          width: 200,
-          height: 120,
-          child: Image.asset(
-            'assets/intro/steak_blue.png',
-            fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
-          ),
-        ),
-        const SizedBox(height: 18),
         Text(
-          'Produktions Planer',
+          // Gleiche Schreibweise wie in der Titelleiste und den
+          // Einstellungen — vorher stand hier „Produktions Planer".
+          'Produktion Planer',
           textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 42,
