@@ -320,7 +320,13 @@ class HomeScreen extends ConsumerWidget {
             onPressed: () => _neuLaden(ref),
           ),
           // Im Vollbild gibt es keine Titelleiste — also auch kein ✕ und
-          // kein Minimieren. Deshalb beides hier.
+          // kein Minimieren. Deshalb alle drei hier, in der Reihenfolge der
+          // Fensterknöpfe von Windows.
+          const IconButton(
+            tooltip: 'Minimieren',
+            icon: Icon(Icons.minimize_rounded),
+            onPressed: Vollbild.minimieren,
+          ),
           ValueListenableBuilder<bool>(
             valueListenable: Vollbild.aktiv,
             builder: (context, vollbild, _) => IconButton(

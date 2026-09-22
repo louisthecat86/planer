@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 // AppExitType liegt in dart:ui und wird von services.dart nicht
 // weitergereicht — app.dart holt sich AppExitResponse genauso.
@@ -23,7 +24,29 @@ import 'package:window_manager/window_manager.dart';
 /// beim Start abzustürzen.
 abstract final class Vollbild {
   /// Ob gerade Vollbild aktiv ist — für das passende Symbol im Knopf.
+  ///
+  /// Das ist der Zustand, den der Nutzer **will**, nicht unbedingt der, in
+  /// dem das Fenster gerade steht. Beim Minimieren verlässt Windows das
+  /// Vollbild von sich aus. Beim Zurückholen stellt [_FensterBeobachter] es
+  /// anhand dieses Werts wieder her.
   static final ValueNotifier<bool> aktiv = ValueNotifier(false);
+
+  /// Solange wir selbst umschalten, lösen die Fensterereignisse dabei
+  /// keine weitere Umschaltung aus — sonst entstünde eine Schleife.
+  static bool _schaltetGerade = false;
+
+  static Future<void> _setze(bool vollbild) async {
+    _schaltetGerade = true;
+    try {
+      await windowManager.setFullScreen(vollbild);
+      aktiv.value = vollbild;
+    } finally {
+      // Das Fenster meldet seine Änderungen verzögert. Kurz warten, damit
+      // diese Meldungen noch als „selbst ausgelöst“ gelten.
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      _schaltetGerade = false;
+    }
+  }
 
   static bool get _desktop =>
       !kIsWeb && (Platform.isWindows || Platform.isMacOS || Platform.isLinux);
@@ -33,11 +56,11 @@ abstract final class Vollbild {
     if (!_desktop) return;
     try {
       await windowManager.ensureInitialized();
+      windowManager.addListener(_FensterBeobachter());
       await windowManager.waitUntilReadyToShow(null, () async {
-        await windowManager.setFullScreen(true);
+        await _setze(true);
         await windowManager.show();
         await windowManager.focus();
-        aktiv.value = true;
       });
     } catch (_) {
       // Ohne Fenstersteuerung startet die App im normalen Fenster.
@@ -60,9 +83,18 @@ abstract final class Vollbild {
   static Future<void> umschalten() async {
     if (!_desktop) return;
     try {
-      final neu = !await windowManager.isFullScreen();
-      await windowManager.setFullScreen(neu);
-      aktiv.value = neu;
+      await _setze(!aktiv.value);
+    } catch (_) {
+      // Fenster nicht erreichbar — nichts zu tun.
+    }
+  }
+
+  /// Minimiert die App. Nötig, weil im Vollbild die Titelleiste mit ihrem
+  /// Minimieren-Knopf fehlt.
+  static Future<void> minimieren() async {
+    if (!_desktop) return;
+    try {
+      await windowManager.minimize();
     } catch (_) {
       // Fenster nicht erreichbar — nichts zu tun.
     }
@@ -75,5 +107,42 @@ abstract final class Vollbild {
   /// das Schließen des Fensters, das Backup findet also statt.
   static Future<void> beenden() async {
     await ServicesBinding.instance.exitApplication(AppExitType.cancelable);
+  }
+}
+
+/// Hält das Vollbild bei den Knöpfen der Titelleiste und beim Minimieren.
+///
+/// Ohne diesen Beobachter gab es zwei Lücken:
+///   * Der Maximieren-Knopf □ der Titelleiste machte das Fenster nur
+///     maximiert — Titelleiste und Taskleiste blieben sichtbar.
+///   * Wer im Vollbild minimierte und die App über die Taskleiste
+///     zurückholte, bekam ein normales Fenster. Windows verlässt beim
+///     Minimieren das Vollbild von sich aus.
+class _FensterBeobachter with WindowListener {
+  @override
+  void onWindowMaximize() {
+    if (Vollbild._schaltetGerade) return;
+    // □ bedeutet hier: so groß wie möglich — also Vollbild.
+    unawaited(Vollbild._setze(true));
+  }
+
+  @override
+  void onWindowRestore() {
+    if (Vollbild._schaltetGerade) return;
+    if (Vollbild.aktiv.value) unawaited(Vollbild._setze(true));
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    if (Vollbild._schaltetGerade) return;
+    // Nicht selbst ausgelöst, etwa per Tastenkombination des Systems. Dann
+    // gilt das als Wunsch des Nutzers, und das Symbol soll ihn zeigen.
+    // Beim Minimieren kommt diese Meldung ebenfalls — dort darf sie den
+    // Wunsch nicht löschen, sonst käme das Vollbild nicht zurück.
+    unawaited(
+      windowManager.isMinimized().then((minimiert) {
+        if (!minimiert) Vollbild.aktiv.value = false;
+      }),
+    );
   }
 }
