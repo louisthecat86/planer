@@ -52,13 +52,26 @@ class _Auftrag {
 }
 
 class _Auslastung {
-  const _Auslastung(this.abteilung, this.geplant, this.kapazitaet);
+  const _Auslastung(
+    this.abteilung, {
+    required this.produktion,
+    required this.nebenzeit,
+    required this.kapazitaet,
+  });
 
   final Abteilung abteilung;
-  final double geplant;
+
+  /// Geplante Produktionszeit der Aufträge.
+  final double produktion;
+
+  /// Rüst-, Reinigungs- und sonstige Nebenzeiten. Sie blockieren dieselbe
+  /// Anlage wie die Produktion — so rechnet auch das Board.
+  final double nebenzeit;
+
   final double kapazitaet;
 
-  double get anteil => kapazitaet <= 0 ? 0 : geplant / kapazitaet;
+  double get belegt => produktion + nebenzeit;
+  double get anteil => kapazitaet <= 0 ? 0 : belegt / kapazitaet;
 }
 
 enum _Art { warnung, info, gut }
@@ -98,7 +111,7 @@ class _Uebersicht {
   final List<_Hinweis> hinweise;
 
   _Auslastung? get hoechste {
-    final belegt = auslastung.where((a) => a.geplant > 0).toList()
+    final belegt = auslastung.where((a) => a.belegt > 0).toList()
       ..sort((a, b) => b.anteil.compareTo(a.anteil));
     return belegt.isEmpty ? null : belegt.first;
   }
@@ -185,19 +198,37 @@ final _uebersichtProvider =
   // ── Auslastung ────────────────────────────────────────────────────
   final kapazitaet =
       await tageskapazitaetJeAbteilung(db, wochenStart: montag);
-  final geplant = <String, double>{};
+  final produktion = <String, double>{};
   for (final t in heuteTasks) {
-    geplant[t.abteilung] =
-        (geplant[t.abteilung] ?? 0) + t.geplanteDauerMinuten;
+    produktion[t.abteilung] =
+        (produktion[t.abteilung] ?? 0) + t.geplanteDauerMinuten;
   }
+
+  // Rüst- und Reinigungszeiten. Sie hängen an einer Planungsspur, deren
+  // Kennung mit der Abteilung beginnt („bratstrasse|<Anlage>"). Das Board
+  // zählt sie voll in die Belegung, die Startseite deshalb auch — sonst
+  // zeigte sie eine Abteilung als frei, die in Wahrheit voll ist.
+  final nebenzeiten = await (db.select(db.zusatzzeiten)
+        ..where((z) => z.deletedAt.isNull())
+        ..where((z) => z.datum.isBiggerOrEqualValue(heute))
+        ..where((z) => z.datum.isSmallerThanValue(morgen)))
+      .get();
+  final neben = <String, double>{};
+  for (final z in nebenzeiten) {
+    final abteilung = z.spurId.split('|').first;
+    neben[abteilung] = (neben[abteilung] ?? 0) + z.minuten;
+  }
+
   final auslastung = [
     for (final a in Abteilung.values)
       if ((kapazitaet[a.dbValue] ?? 0) > 0 ||
-          (geplant[a.dbValue] ?? 0) > 0)
+          (produktion[a.dbValue] ?? 0) > 0 ||
+          (neben[a.dbValue] ?? 0) > 0)
         _Auslastung(
           a,
-          geplant[a.dbValue] ?? 0,
-          kapazitaet[a.dbValue] ?? 0,
+          produktion: produktion[a.dbValue] ?? 0,
+          nebenzeit: neben[a.dbValue] ?? 0,
+          kapazitaet: kapazitaet[a.dbValue] ?? 0,
         ),
   ];
 
@@ -494,7 +525,7 @@ class _Tagesbereich extends StatelessWidget {
         zusatz: hoch == null
             ? 'heute nichts belegt'
             : '${hoch.abteilung.anzeigeName} · '
-                '${Zeit.kurz(hoch.geplant)} / ${Zeit.kurz(hoch.kapazitaet)}',
+                '${Zeit.kurz(hoch.belegt)} / ${Zeit.kurz(hoch.kapazitaet)}',
         warnung: hoch != null && hoch.anteil > 1,
       ),
       _Kennzahl(
@@ -807,58 +838,106 @@ class _AuslastungKarte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return _Karte(
       titel: 'Auslastung heute',
       icon: Icons.speed_rounded,
       child: Column(
         children: [
-          for (final a in auslastung)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 132,
-                    child: Text(
-                      a.abteilung.anzeigeName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(3),
-                      child: LinearProgressIndicator(
-                        value: a.anteil.clamp(0.0, 1.0),
-                        minHeight: 6,
-                        backgroundColor: theme
-                            .colorScheme.surfaceContainerHighest,
-                        // Dieselben Farben wie im Board: grün gefüllt,
-                        // rot überbucht.
-                        color: a.anteil > 1
-                            ? theme.colorScheme.error
-                            : Colors.green.shade600,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 48,
-                    child: Text(
-                      a.geplant <= 0 ? '—' : '${(a.anteil * 100).round()} %',
-                      textAlign: TextAlign.right,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: a.geplant <= 0
-                            ? theme.colorScheme.onSurfaceVariant
-                            : null,
-                      ),
-                    ),
-                  ),
-                ],
+          for (final a in auslastung) _AuslastungZeile(auslastung: a),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Abteilung: Name, Balken, Prozent.
+///
+/// Der Balken ist zweiteilig — kräftig die Produktion, heller die Rüst-
+/// und Reinigungszeit. Beim Darüberfahren steht die Aufteilung in Stunden
+/// dabei. So sieht man, ob eine volle Abteilung wirklich durch Aufträge
+/// voll ist oder durch Nebenzeiten.
+class _AuslastungZeile extends StatelessWidget {
+  const _AuslastungZeile({required this.auslastung});
+
+  final _Auslastung auslastung;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final a = auslastung;
+    final kap = a.kapazitaet;
+    // Dieselben Farben wie im Board: grün gefüllt, rot überbucht.
+    final farbe =
+        a.anteil > 1 ? theme.colorScheme.error : Colors.green.shade600;
+    final anteilBelegt = kap <= 0 ? 0.0 : (a.belegt / kap).clamp(0.0, 1.0);
+    final anteilProduktion =
+        kap <= 0 ? 0.0 : (a.produktion / kap).clamp(0.0, 1.0);
+
+    final hinweis = [
+      'Produktion ${Zeit.kurz(a.produktion)}',
+      if (a.nebenzeit > 0) 'Rüsten/Reinigen ${Zeit.kurz(a.nebenzeit)}',
+      'Kapazität ${Zeit.kurz(kap)}',
+    ].join(' · ');
+
+    return Tooltip(
+      message: hinweis,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 132,
+              child: Text(
+                a.abteilung.anzeigeName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
               ),
             ),
-        ],
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(3),
+                child: SizedBox(
+                  height: 6,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      ColoredBox(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                      ),
+                      // Gesamte Belegung, hell — der sichtbare Überstand
+                      // über die Produktion ist die Nebenzeit.
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: anteilBelegt,
+                        child: ColoredBox(
+                          color: farbe.withValues(alpha: .4),
+                        ),
+                      ),
+                      FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: anteilProduktion,
+                        child: ColoredBox(color: farbe),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 48,
+              child: Text(
+                a.belegt <= 0 ? '—' : '${(a.anteil * 100).round()} %',
+                textAlign: TextAlign.right,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: a.belegt <= 0
+                      ? theme.colorScheme.onSurfaceVariant
+                      : null,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
