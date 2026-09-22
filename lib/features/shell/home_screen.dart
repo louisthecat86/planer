@@ -446,14 +446,23 @@ Future<void> _beendenFragen(BuildContext context, WidgetRef ref) async {
   // Backup hier — vor dem Exit — schreiben, statt über den Lebenszyklus
   // des Fensters: So läuft nur ein einziger, klar begrenzter Ausstiegsweg
   // (siehe Vollbild.beenden).
+  final db = ref.read(databaseProvider);
   try {
-    final db = ref.read(databaseProvider);
     await BackupService.createAutoBackup(db)
         .timeout(const Duration(seconds: 10));
     await BackupService.cleanupOldAutoBackups()
         .timeout(const Duration(seconds: 5));
   } catch (_) {
     // Das Beenden darf nie blockieren — im Zweifel ohne frisches Backup.
+  }
+  // Die native SQLite-Verbindung läuft auf einem eigenen Isolate
+  // (drift_flutter). Ohne sauberes Schließen kann das Beenden mitten in
+  // einer offenen Verbindung erwischen — das hat auf Windows zum Absturz
+  // beim Beenden geführt.
+  try {
+    await db.close().timeout(const Duration(seconds: 5));
+  } catch (_) {
+    // Auch hier: das Beenden darf nicht hängen bleiben.
   }
   await Vollbild.beenden();
 }

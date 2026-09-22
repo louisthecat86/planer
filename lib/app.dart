@@ -203,8 +203,8 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
   Future<AppExitResponse> _backupBeimBeenden() async {
     if (_exitBackupGestartet) return AppExitResponse.exit;
     _exitBackupGestartet = true;
+    final db = ref.read(databaseProvider);
     try {
-      final db = ref.read(databaseProvider);
       await BackupService.createAutoBackup(db)
           .timeout(const Duration(seconds: 10));
       await BackupService.cleanupOldAutoBackups()
@@ -212,6 +212,14 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     } catch (_) {
       // Das Beenden darf nie blockieren — im Zweifel ohne frisches
       // Backup schließen (die Debounce-Backups existieren weiterhin).
+    }
+    // Verbindung auf dem drift-Isolate sauber schließen — sonst kann der
+    // Prozess-Exit mitten in einer offenen SQLite-Verbindung erwischen
+    // (führte auf Windows zum Absturzdialog beim Beenden).
+    try {
+      await db.close().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // Auch hier: das Beenden darf nicht hängen bleiben.
     }
     return AppExitResponse.exit;
   }
