@@ -13,6 +13,7 @@ import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
 import 'board_print_service.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/utils/kalenderwoche.dart';
 import 'board_providers.dart';
 
 // Breiter als früher (148): Namen wie „Schneideabteilung" oder
@@ -39,20 +40,6 @@ final boardPassendProvider = StateProvider<bool>((ref) => true);
 final boardKompaktProvider = StateProvider<bool>((ref) => true);
 
 enum _Modus { woche, tag }
-
-/// ISO-8601-Kalenderwoche.
-int _isoKw(DateTime date) {
-  final d = DateTime(date.year, date.month, date.day);
-  final dayOfYear = d.difference(DateTime(d.year, 1, 1)).inDays + 1;
-  final wday = d.weekday;
-  final wn = ((dayOfYear - wday + 10) / 7).floor();
-  if (wn < 1) return _isoKw(DateTime(d.year - 1, 12, 31));
-  if (wn > 52) {
-    final dec31 = DateTime(d.year, 12, 31);
-    if (dec31.weekday < 4) return 1;
-  }
-  return wn;
-}
 
 String _fmtTagTitel(DateTime d) =>
     '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.${d.year}';
@@ -287,7 +274,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
         leading: const BackButton(),
         title: Text(
           istWoche
-              ? 'Planungsboard · KW ${_isoKw(montag)}'
+              ? 'Planungsboard · KW ${isoKalenderwoche(montag)}'
               : 'Tagesplan · ${_fmtTagTitel(sel)}',
         ),
         actions: [

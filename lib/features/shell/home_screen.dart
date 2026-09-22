@@ -1,178 +1,1040 @@
+// `hide Column`: drift hat eine eigene Klasse Column, die sonst mit dem
+// Flutter-Widget kollidiert. Gebraucht wird drift für die
+// Datumsvergleiche in den Abfragen (isBiggerOrEqualValue & Co. sind
+// Erweiterungsmethoden und ohne diesen Import unsichtbar).
+import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/constants/abteilungen.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/backup_service.dart';
+import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
+import '../../core/utils/kalenderwoche.dart';
+import '../../core/utils/zeit.dart';
+import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
+import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
 
 /// Ausgewähltes Datum. Wird von anderen Screens (Board) genutzt und bleibt
 /// daher als gemeinsamer Zustand erhalten, auch wenn das Home es selbst
-/// nicht mehr anzeigt.
+/// nicht anzeigt.
 final selectedDateProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
   return DateTime(now.year, now.month, now.day);
 });
 
-/// Anzahl aktiver Artikel (für die Kennzahl im Kopfbereich).
-final _artikelAnzahlProvider = FutureProvider<int>((ref) async {
+// ═══════════════════════════════════════════════════════════════════════════
+// Daten der Tagesübersicht
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Ein Auftrag des heutigen Tages, so wie er im Board steht.
+class _Auftrag {
+  const _Auftrag({
+    required this.abteilung,
+    required this.nummer,
+    required this.name,
+    required this.mengeKg,
+    required this.minuten,
+    required this.erfasst,
+  });
+
+  final Abteilung? abteilung;
+  final String nummer;
+  final String name;
+  final double mengeKg;
+  final double minuten;
+
+  /// Nur für Ketten-Wurzeln bedeutsam — eine Produktion wird einmal
+  /// erfasst, nicht je Abteilungsschritt.
+  final bool? erfasst;
+}
+
+class _Auslastung {
+  const _Auslastung(this.abteilung, this.geplant, this.kapazitaet);
+
+  final Abteilung abteilung;
+  final double geplant;
+  final double kapazitaet;
+
+  double get anteil => kapazitaet <= 0 ? 0 : geplant / kapazitaet;
+}
+
+enum _Art { warnung, info, gut }
+
+class _Hinweis {
+  const _Hinweis(this.art, this.text, {this.ziel, this.aktion});
+
+  final _Art art;
+  final String text;
+
+  /// Route, zu der ein Tippen führt — null, wenn es nichts zu tun gibt.
+  final String? ziel;
+  final String? aktion;
+}
+
+class _Uebersicht {
+  const _Uebersicht({
+    required this.heute,
+    required this.auftraege,
+    required this.auslastung,
+    required this.produktionenHeute,
+    required this.erfasstHeute,
+    required this.kgHeute,
+    required this.wocheMinuten,
+    required this.wocheProduktionen,
+    required this.hinweise,
+  });
+
+  final DateTime heute;
+  final List<_Auftrag> auftraege;
+  final List<_Auslastung> auslastung;
+  final int produktionenHeute;
+  final int erfasstHeute;
+  final double kgHeute;
+  final double wocheMinuten;
+  final int wocheProduktionen;
+  final List<_Hinweis> hinweise;
+
+  _Auslastung? get hoechste {
+    final belegt = auslastung.where((a) => a.geplant > 0).toList()
+      ..sort((a, b) => b.anteil.compareTo(a.anteil));
+    return belegt.isEmpty ? null : belegt.first;
+  }
+}
+
+/// Alles, was die Startseite zeigt, in einem Durchgang.
+///
+/// Gerechnet wird mit denselben Bausteinen wie in den Fachscreens —
+/// Kapazität wie im Board, offener Bedarf wie im Bedarf-Screen, „erfasst"
+/// wie in der Produktionserfassung. Eine zweite, eigene Rechnung würde
+/// früher oder später abweichen.
+///
+/// `autoDispose`, damit die Übersicht beim nächsten Öffnen frisch geladen
+/// wird. Kehrt man aus einem Fachscreen zurück, lädt [_oeffne] sie
+/// zusätzlich neu, weil das Home dabei im Stapel bleibt.
+final _uebersichtProvider =
+    FutureProvider.autoDispose<_Uebersicht>((ref) async {
   final db = ref.watch(databaseProvider);
-  final rows = await (db.select(db.products)
+  final heute = ref.watch(heuteProvider);
+  final montag = montagDerWoche(heute);
+  // Kalenderarithmetik statt Duration: Über eine Zeitumstellung hinweg
+  // wären 7 × 24 Stunden nicht genau eine Woche.
+  final wochenEnde = DateTime(montag.year, montag.month, montag.day + 7);
+  final morgen = DateTime(heute.year, heute.month, heute.day + 1);
+
+  final tasks = await (db.select(db.productionTasks)
+        ..where((t) => t.deletedAt.isNull())
+        ..where((t) => t.status.isNotIn(const ['storniert']))
+        ..where((t) => t.datum.isBiggerOrEqualValue(montag))
+        ..where((t) => t.datum.isSmallerThanValue(wochenEnde)))
+      .get();
+  final produkte = await (db.select(db.products)
         ..where((p) => p.deletedAt.isNull()))
       .get();
-  return rows.length;
+  final produktVon = {for (final p in produkte) p.id: p};
+  final historie = await (db.select(db.productionHistory)
+        ..where((h) => h.deletedAt.isNull())
+        ..where((h) => h.datum.isBiggerOrEqualValue(montag))
+        ..where((h) => h.datum.isSmallerThanValue(wochenEnde)))
+      .get();
+
+  String tagKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
+  final erfasst = {
+    for (final h in historie) '${h.productId}|${tagKey(h.datum)}',
+  };
+  bool istErfasst(String productId, DateTime d) =>
+      erfasst.contains('$productId|${tagKey(d)}');
+  bool istHeute(DateTime d) => !d.isBefore(heute) && d.isBefore(morgen);
+
+  Abteilung? abteilungVon(String db) {
+    for (final a in Abteilung.values) {
+      if (a.dbValue == db) return a;
+    }
+    return null;
+  }
+
+  // ── Heute ─────────────────────────────────────────────────────────
+  final heuteTasks = tasks.where((t) => istHeute(t.datum)).toList()
+    ..sort((a, b) {
+      final ia = abteilungVon(a.abteilung)?.index ?? 99;
+      final ib = abteilungVon(b.abteilung)?.index ?? 99;
+      if (ia != ib) return ia.compareTo(ib);
+      return a.sortierung.compareTo(b.sortierung);
+    });
+
+  final auftraege = [
+    for (final t in heuteTasks)
+      _Auftrag(
+        abteilung: abteilungVon(t.abteilung),
+        nummer: produktVon[t.productId]?.artikelnummer ?? '—',
+        name: produktVon[t.productId]?.artikelbezeichnung ?? 'Unbekannt',
+        mengeKg: t.mengeKg,
+        minuten: t.geplanteDauerMinuten,
+        erfasst: t.parentTaskId == null
+            ? istErfasst(t.productId, heute)
+            : null,
+      ),
+  ];
+
+  final wurzelnHeute = heuteTasks.where((t) => t.parentTaskId == null);
+  final erfasstHeute =
+      wurzelnHeute.where((t) => istErfasst(t.productId, heute)).length;
+
+  // ── Auslastung ────────────────────────────────────────────────────
+  final kapazitaet =
+      await tageskapazitaetJeAbteilung(db, wochenStart: montag);
+  final geplant = <String, double>{};
+  for (final t in heuteTasks) {
+    geplant[t.abteilung] =
+        (geplant[t.abteilung] ?? 0) + t.geplanteDauerMinuten;
+  }
+  final auslastung = [
+    for (final a in Abteilung.values)
+      if ((kapazitaet[a.dbValue] ?? 0) > 0 ||
+          (geplant[a.dbValue] ?? 0) > 0)
+        _Auslastung(
+          a,
+          geplant[a.dbValue] ?? 0,
+          kapazitaet[a.dbValue] ?? 0,
+        ),
+  ];
+
+  // ── Hinweise ──────────────────────────────────────────────────────
+  final hinweise = <_Hinweis>[];
+
+  // Vergangene Tage dieser Woche, an denen Produktionen noch nicht
+  // erfasst sind. Ohne Erfassung lernt die Planung nichts dazu.
+  for (var d = montag;
+      d.isBefore(heute);
+      d = DateTime(d.year, d.month, d.day + 1)) {
+    if (d.weekday > DateTime.friday) continue;
+    final offen = tasks.where(
+      (t) =>
+          t.parentTaskId == null &&
+          tagKey(t.datum) == tagKey(d) &&
+          !istErfasst(t.productId, d),
+    );
+    final n = offen.length;
+    if (n == 0) continue;
+    hinweise.add(
+      _Hinweis(
+        _Art.warnung,
+        '${_wochentage[d.weekday - 1]} ${d.day}.${d.month}. ist noch nicht '
+        'erfasst — $n ${n == 1 ? 'Produktion' : 'Produktionen'}',
+        ziel: 'erfassung',
+        aktion: 'Erfassen',
+      ),
+    );
+  }
+
+  for (final a in auslastung) {
+    if (a.anteil <= 1) continue;
+    hinweise.add(
+      _Hinweis(
+        _Art.warnung,
+        '${a.abteilung.anzeigeName} ist heute überbucht '
+        '(${(a.anteil * 100).round()} %)',
+        ziel: 'board',
+        aktion: 'Zum Board',
+      ),
+    );
+  }
+
+  final bedarfe = await ref.watch(bedarfProvider.future);
+  final offeneBedarfe =
+      bedarfe.where((b) => !b.erledigt && b.offenKg > 0.5).length;
+  if (offeneBedarfe > 0) {
+    hinweise.add(
+      _Hinweis(
+        _Art.info,
+        offeneBedarfe == 1
+            ? 'Ein Bedarf ist noch nicht vollständig eingeplant'
+            : '$offeneBedarfe Bedarfe sind noch nicht vollständig eingeplant',
+        ziel: 'bedarf',
+        aktion: 'Bedarf',
+      ),
+    );
+  }
+
+  final backup = await BackupService.getLatestBackup();
+  if (backup == null) {
+    hinweise.add(
+      const _Hinweis(
+        _Art.warnung,
+        'Es gibt noch kein Backup',
+        ziel: 'data',
+        aktion: 'Sichern',
+      ),
+    );
+  } else {
+    final alter = DateTime.now().difference(backup.timestamp);
+    hinweise.add(
+      _Hinweis(
+        alter.inDays >= 3 ? _Art.warnung : _Art.gut,
+        'Letztes Backup ${_wann(backup.timestamp)}',
+        ziel: alter.inDays >= 3 ? 'data' : null,
+        aktion: alter.inDays >= 3 ? 'Sichern' : null,
+      ),
+    );
+  }
+
+  return _Uebersicht(
+    heute: heute,
+    auftraege: auftraege,
+    auslastung: auslastung,
+    produktionenHeute: wurzelnHeute.length,
+    erfasstHeute: erfasstHeute,
+    kgHeute: wurzelnHeute.fold<double>(0, (s, t) => s + t.mengeKg),
+    wocheMinuten:
+        tasks.fold<double>(0, (s, t) => s + t.geplanteDauerMinuten),
+    wocheProduktionen: tasks.where((t) => t.parentTaskId == null).length,
+    hinweise: hinweise,
+  );
 });
 
-/// Startbildschirm:
-/// Kopf mit Datum + Kennzahlen, darunter zwei Ebenen — oben der tägliche
-/// Arbeitsablauf (Bedarf → Planung → Erfassung → Historie) als große
-/// farbige Kacheln, darunter „Stammdaten und Verwaltung" (Artikel,
-/// Einstellungen) als kleinere, ruhigere Kacheln.
+// ═══════════════════════════════════════════════════════════════════════════
+// Screen
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Startseite: zuerst der heutige Tag, danach die Navigation.
+///
+/// Wer die App morgens öffnet, will wissen, was heute läuft, wie voll die
+/// Abteilungen sind und was liegengeblieben ist. Die Wege in die
+/// Fachscreens folgen darunter, nach Arbeitsschritten geordnet statt als
+/// gleichförmige Kachelreihe.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final daten = ref.watch(_uebersichtProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('Produktion Planer')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const _KopfBereich(),
-          const SizedBox(height: 20),
-          _buildTileGrid(context),
+      appBar: AppBar(
+        title: const Text('Produktion Planer'),
+        actions: [
+          IconButton(
+            tooltip: 'Aktualisieren',
+            icon: const Icon(Icons.refresh_rounded),
+            onPressed: () => _neuLaden(ref),
+          ),
+          const SizedBox(width: 4),
         ],
       ),
-    );
-  }
-
-  Widget _buildTileGrid(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final gesamt = constraints.maxWidth;
-        const spacing = 12.0;
-
-        // Umbruch NICHT an einer festen Pixelgrenze festmachen (das bricht
-        // beim Skalieren), sondern über eine Mindestbreite je Kachel: passen
-        // vier nebeneinander, gibt es vier Spalten — sonst zwei, sonst eine.
-        // So klappt der Umbruch bei jeder Zoomstufe sauber.
-        const minAblauf = 200.0;
-        const anzahlAblauf = 6; // inkl. Navision-Import
-        int ablaufSpalten = (gesamt / (minAblauf + spacing)).floor();
-        ablaufSpalten = ablaufSpalten.clamp(1, anzahlAblauf);
-        // Eine einzelne Kachel in der letzten Zeile sieht abgehängt aus.
-        // Lieber eine Spalte weniger und dafür zwei ausgewogene Reihen
-        // (bei fünf Kacheln also 3 + 2 statt 4 + 1).
-        while (ablaufSpalten > 2 && anzahlAblauf % ablaufSpalten == 1) {
-          ablaufSpalten--;
-        }
-        final ablaufBreite =
-            (gesamt - spacing * (ablaufSpalten - 1)) / ablaufSpalten;
-        final breit = ablaufSpalten >= 3;
-
-        // ── Arbeitsablauf: die täglich benutzten Bereiche, in der
-        //    Reihenfolge des Arbeitstages. Groß und farbig. ──
-        final ablauf = [
-          _NavigationTile(
-            icon: Icons.playlist_add_check_rounded,
-            label: 'Bedarf',
-            subtitle: 'Was produziert werden muss',
-            onTap: () => context.pushNamed('bedarf'),
-          ),
-          // Direkt hinter dem Bedarf: von dort kommen die Mengen her.
-          _NavigationTile(
-            icon: Icons.sync_alt_rounded,
-            label: 'Navision-Import',
-            subtitle: 'Artikel und Bedarf aus der Warenwirtschaft',
-            onTap: () => context.pushNamed('navisionImport'),
-          ),
-          _NavigationTile(
-            icon: Icons.calendar_view_week_rounded,
-            label: 'Planung',
-            subtitle: 'Woche im Board einplanen',
-            onTap: () => context.pushNamed('board'),
-          ),
-          _NavigationTile(
-            icon: Icons.fact_check_rounded,
-            label: 'Produktionserfassung',
-            subtitle: 'Ist-Daten der Woche',
-            onTap: () => context.pushNamed('erfassung'),
-          ),
-          _NavigationTile(
-            icon: Icons.history_rounded,
-            label: 'Wochen-Historie',
-            subtitle: 'Rückblick und Kennzahlen',
-            onTap: () => context.pushNamed('wochenHistorie'),
-          ),
-          // Artikel gehört zum täglichen Arbeiten, nicht in die Verwaltung —
-          // die Stammdaten sind die Grundlage jeder Planung.
-          _NavigationTile(
-            icon: Icons.inventory_2_rounded,
-            label: 'Artikel',
-            subtitle: 'Abläufe, Maschinen, Zeiten',
-            onTap: () => context.pushNamed('articles'),
-          ),
-        ];
-
-        // ── Verwaltung: seltener gebraucht, bewusst kleiner und ruhiger. ──
-        final verwaltung = [
-          _KompakteKachel(
-            icon: Icons.settings_rounded,
-            label: 'Einstellungen',
-            subtitle: 'Excel, Backup, Darstellung',
-            onTap: () => context.pushNamed('settings'),
-          ),
-        ];
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const _AbschnittTitel('Arbeitsablauf'),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: spacing,
-              runSpacing: spacing,
-              children: ablauf
-                  .map(
-                    (tile) => SizedBox(
-                      width: ablaufBreite,
-                      height: 158,
-                      child: tile,
-                    ),
-                  )
-                  .toList(),
+      body: LayoutBuilder(
+        builder: (context, c) {
+          final breit = c.maxWidth >= 1000;
+          return ListView(
+            padding: EdgeInsets.symmetric(
+              horizontal: breit ? 24 : 16,
+              vertical: 20,
             ),
-            const SizedBox(height: 24),
-            const _AbschnittTitel('Stammdaten und Verwaltung'),
-            const SizedBox(height: 10),
-            // Verwaltung schmaler halten, damit der Unterschied zum Ablauf
-            // sichtbar ist: auf breiten Schirmen nur gut halbe Breite.
-            SizedBox(
-              width: breit ? gesamt * 0.6 : gesamt,
-              child: Wrap(
-                spacing: spacing,
-                runSpacing: spacing,
-                children: verwaltung
-                    .map(
-                      (tile) => SizedBox(
-                        width: (((breit ? gesamt * 0.6 : gesamt) - spacing) / 2)
-                            .clamp(150.0, double.infinity),
-                        child: tile,
-                      ),
-                    )
-                    .toList(),
+            children: [
+              daten.when(
+                loading: () => const _Kopf(uebersicht: null),
+                error: (_, __) => const _Kopf(uebersicht: null),
+                data: (u) => _Kopf(uebersicht: u),
               ),
-            ),
-          ],
-        );
-      },
+              const SizedBox(height: 16),
+              daten.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 48),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (e, _) => _Karte(
+                  titel: 'Übersicht nicht verfügbar',
+                  icon: Icons.error_outline_rounded,
+                  child: Text('$e'),
+                ),
+                data: (u) => _Tagesbereich(uebersicht: u, breit: breit),
+              ),
+              const SizedBox(height: 20),
+              _Navigation(breit: breit),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Kopfbereich: Datum + Kennzahlen (ersetzt die technische Status-Karte)
-// ---------------------------------------------------------------------------
+void _neuLaden(WidgetRef ref) {
+  ref
+    ..invalidate(bedarfProvider)
+    ..invalidate(_uebersichtProvider);
+}
 
-const _kWochentage = [
+/// Öffnet einen Fachscreen und lädt die Übersicht nach der Rückkehr neu —
+/// dort wurde vielleicht gerade geplant oder erfasst.
+Future<void> _oeffne(BuildContext context, WidgetRef ref, String ziel) async {
+  await context.pushNamed(ziel);
+  _neuLaden(ref);
+}
+
+// ── Kopf ────────────────────────────────────────────────────────────────
+
+class _Kopf extends ConsumerWidget {
+  const _Kopf({required this.uebersicht});
+
+  final _Uebersicht? uebersicht;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final heute = uebersicht?.heute ?? DateTime.now();
+    final tag = heute.weekday <= DateTime.friday
+        ? 'Tag ${heute.weekday} von 5'
+        : 'Wochenende';
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '${_wochentage[heute.weekday - 1]}, ${heute.day}. '
+                '${_monate[heute.month - 1]} ${heute.year}',
+                style: theme.textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'KW ${isoKalenderwoche(heute)} · $tag',
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+        FilledButton.icon(
+          onPressed: () => _oeffne(context, ref, 'board'),
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Produkt planen'),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Tagesbereich ────────────────────────────────────────────────────────
+
+class _Tagesbereich extends StatelessWidget {
+  const _Tagesbereich({required this.uebersicht, required this.breit});
+
+  final _Uebersicht uebersicht;
+  final bool breit;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = uebersicht;
+    final hoch = u.hoechste;
+
+    final kennzahlen = [
+      _Kennzahl(
+        titel: 'Heute geplant',
+        wert: '${u.produktionenHeute}',
+        zusatz: u.produktionenHeute == 0
+            ? 'keine Produktion'
+            : '${u.produktionenHeute == 1 ? 'Produktion' : 'Produktionen'}'
+                ' · ${_kg(u.kgHeute)}',
+      ),
+      _Kennzahl(
+        titel: 'Höchste Auslastung',
+        wert: hoch == null ? '—' : '${(hoch.anteil * 100).round()} %',
+        zusatz: hoch == null
+            ? 'heute nichts belegt'
+            : '${hoch.abteilung.anzeigeName} · '
+                '${Zeit.kurz(hoch.geplant)} / ${Zeit.kurz(hoch.kapazitaet)}',
+        warnung: hoch != null && hoch.anteil > 1,
+      ),
+      _Kennzahl(
+        titel: 'Erfasst',
+        wert: '${u.erfasstHeute} / ${u.produktionenHeute}',
+        zusatz: u.produktionenHeute == 0
+            ? 'nichts zu erfassen'
+            : u.erfasstHeute == u.produktionenHeute
+                ? 'alles erfasst'
+                : 'heute noch offen',
+      ),
+      _Kennzahl(
+        titel: 'Diese Woche',
+        wert: Zeit.kurz(u.wocheMinuten),
+        zusatz: '${u.wocheProduktionen} '
+            '${u.wocheProduktionen == 1 ? 'Produktion' : 'Produktionen'}'
+            ' geplant',
+      ),
+    ];
+
+    final zeilen = LayoutBuilder(
+      builder: (context, c) {
+        final spalten = c.maxWidth >= 720 ? 4 : 2;
+        const abstand = 12.0;
+        final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
+        return Wrap(
+          spacing: abstand,
+          runSpacing: abstand,
+          children: [
+            for (final k in kennzahlen) SizedBox(width: breite, child: k),
+          ],
+        );
+      },
+    );
+
+    final heute = _HeuteKarte(auftraege: u.auftraege);
+    final auslastung = _AuslastungKarte(auslastung: u.auslastung);
+    final hinweise = _HinweisKarte(hinweise: u.hinweise);
+
+    if (!breit) {
+      return Column(
+        children: [
+          zeilen,
+          const SizedBox(height: 12),
+          heute,
+          const SizedBox(height: 12),
+          auslastung,
+          const SizedBox(height: 12),
+          hinweise,
+        ],
+      );
+    }
+    return Column(
+      children: [
+        zeilen,
+        const SizedBox(height: 12),
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(flex: 3, child: heute),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    auslastung,
+                    const SizedBox(height: 12),
+                    Expanded(child: hinweise),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _Kennzahl extends StatelessWidget {
+  const _Kennzahl({
+    required this.titel,
+    required this.wert,
+    required this.zusatz,
+    this.warnung = false,
+  });
+
+  final String titel;
+  final String wert;
+  final String zusatz;
+  final bool warnung;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final gedimmt = theme.colorScheme.onSurfaceVariant;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest
+            .withValues(alpha: .5),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            titel,
+            style: theme.textTheme.labelMedium?.copyWith(color: gedimmt),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            wert,
+            style: theme.textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: warnung ? theme.colorScheme.error : null,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            zusatz,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(color: gedimmt),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Umrandete Karte mit kleiner Überschrift — der gemeinsame Rahmen aller
+/// Bereiche, damit die Seite ruhig und gleichmäßig wirkt.
+class _Karte extends StatelessWidget {
+  const _Karte({
+    required this.titel,
+    required this.icon,
+    required this.child,
+    this.aktion,
+  });
+
+  final String titel;
+  final IconData icon;
+  final Widget child;
+  final Widget? aktion;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  titel,
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              if (aktion != null) aktion!,
+            ],
+          ),
+          const SizedBox(height: 8),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _HeuteKarte extends ConsumerWidget {
+  const _HeuteKarte({required this.auftraege});
+
+  final List<_Auftrag> auftraege;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final zumBoard = TextButton.icon(
+      onPressed: () => _oeffne(context, ref, 'board'),
+      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+      label: const Text('Zum Board'),
+    );
+    if (auftraege.isEmpty) {
+      return _Karte(
+        titel: 'Heute in der Produktion',
+        icon: Icons.event_note_rounded,
+        aktion: zumBoard,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Center(
+            child: Text(
+              'Für heute ist nichts geplant.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return _Karte(
+      titel: 'Heute in der Produktion',
+      icon: Icons.event_note_rounded,
+      aktion: zumBoard,
+      child: Column(
+        children: [
+          for (final a in auftraege) _AuftragZeile(auftrag: a),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuftragZeile extends StatelessWidget {
+  const _AuftragZeile({required this.auftrag});
+
+  final _Auftrag auftrag;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final a = auftrag;
+    final farbe = a.abteilung?.farbe ?? theme.colorScheme.outline;
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: theme.dividerColor)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            decoration: BoxDecoration(
+              color: farbe.withValues(alpha: .18),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              a.abteilung?.kurzcode ?? '?',
+              style: theme.textTheme.labelSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: farbe,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 52,
+            child: Text(
+              a.nummer,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: theme.colorScheme.primary),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              a.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '${_kg(a.mengeKg)} · ${Zeit.kurz(a.minuten)}',
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 18,
+            child: a.erfasst == true
+                ? Tooltip(
+                    message: 'Erfasst',
+                    child: Icon(
+                      Icons.check_circle_rounded,
+                      size: 16,
+                      color: Colors.green.shade600,
+                    ),
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AuslastungKarte extends StatelessWidget {
+  const _AuslastungKarte({required this.auslastung});
+
+  final List<_Auslastung> auslastung;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _Karte(
+      titel: 'Auslastung heute',
+      icon: Icons.speed_rounded,
+      child: Column(
+        children: [
+          for (final a in auslastung)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 132,
+                    child: Text(
+                      a.abteilung.anzeigeName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: a.anteil.clamp(0.0, 1.0),
+                        minHeight: 6,
+                        backgroundColor: theme
+                            .colorScheme.surfaceContainerHighest,
+                        // Dieselben Farben wie im Board: grün gefüllt,
+                        // rot überbucht.
+                        color: a.anteil > 1
+                            ? theme.colorScheme.error
+                            : Colors.green.shade600,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 48,
+                    child: Text(
+                      a.geplant <= 0 ? '—' : '${(a.anteil * 100).round()} %',
+                      textAlign: TextAlign.right,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: a.geplant <= 0
+                            ? theme.colorScheme.onSurfaceVariant
+                            : null,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HinweisKarte extends ConsumerWidget {
+  const _HinweisKarte({required this.hinweise});
+
+  final List<_Hinweis> hinweise;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return _Karte(
+      titel: 'Hinweise',
+      icon: Icons.notifications_none_rounded,
+      child: Column(
+        children: [
+          for (final h in hinweise)
+            InkWell(
+              onTap: h.ziel == null
+                  ? null
+                  : () => _oeffne(context, ref, h.ziel!),
+              borderRadius: BorderRadius.circular(6),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  children: [
+                    Icon(
+                      switch (h.art) {
+                        _Art.warnung => Icons.warning_amber_rounded,
+                        _Art.info => Icons.info_outline_rounded,
+                        _Art.gut => Icons.cloud_done_outlined,
+                      },
+                      size: 18,
+                      color: switch (h.art) {
+                        _Art.warnung => Colors.orange.shade700,
+                        _Art.info => theme.colorScheme.primary,
+                        _Art.gut => Colors.green.shade600,
+                      },
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        h.text,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: h.art == _Art.gut
+                              ? theme.colorScheme.onSurfaceVariant
+                              : null,
+                        ),
+                      ),
+                    ),
+                    if (h.aktion != null)
+                      Text(
+                        h.aktion!,
+                        style: theme.textTheme.bodySmall
+                            ?.copyWith(color: theme.colorScheme.primary),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Navigation ─────────────────────────────────────────────────────────
+
+class _Ziel {
+  const _Ziel(this.icon, this.titel, this.zusatz, this.route);
+
+  final IconData icon;
+  final String titel;
+  final String zusatz;
+  final String route;
+}
+
+/// Die Wege in die Fachscreens, nach Arbeitsschritten gruppiert.
+class _Navigation extends StatelessWidget {
+  const _Navigation({required this.breit});
+
+  final bool breit;
+
+  static const _gruppen = <(String, List<_Ziel>)>[
+    (
+      'Planen',
+      [
+        _Ziel(Icons.playlist_add_check_rounded, 'Bedarf',
+            'Was produziert werden muss', 'bedarf',),
+        _Ziel(Icons.swap_horiz_rounded, 'Navision-Import',
+            'Artikel und Bedarf aus der Warenwirtschaft', 'navisionImport',),
+        _Ziel(Icons.view_week_rounded, 'Planungsboard',
+            'Woche im Board einplanen', 'board',),
+      ],
+    ),
+    (
+      'Auswerten',
+      [
+        _Ziel(Icons.fact_check_outlined, 'Produktionserfassung',
+            'Ist-Daten der Woche', 'erfassung',),
+        _Ziel(Icons.history_rounded, 'Wochen-Historie',
+            'Rückblick und Kennzahlen', 'wochenHistorie',),
+      ],
+    ),
+    (
+      'Stammdaten',
+      [
+        _Ziel(Icons.inventory_2_outlined, 'Artikel',
+            'Abläufe, Maschinen, Zeiten', 'articles',),
+        _Ziel(Icons.precision_manufacturing_outlined, 'Maschinen-Katalog',
+            'Anlagen und Steckbriefe', 'maschinen',),
+        _Ziel(Icons.settings_outlined, 'Einstellungen',
+            'Excel, Backup, Darstellung', 'settings',),
+      ],
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final karten = [
+      for (final (titel, ziele) in _gruppen)
+        _NavGruppe(titel: titel, ziele: ziele),
+    ];
+    if (!breit) {
+      return Column(
+        children: [
+          for (final k in karten) ...[k, const SizedBox(height: 12)],
+        ],
+      );
+    }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < karten.length; i++) ...[
+            if (i > 0) const SizedBox(width: 12),
+            Expanded(child: karten[i]),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _NavGruppe extends ConsumerWidget {
+  const _NavGruppe({required this.titel, required this.ziele});
+
+  final String titel;
+  final List<_Ziel> ziele;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        border: Border.all(color: theme.dividerColor),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+            child: Text(
+              titel.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                letterSpacing: .8,
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          for (final z in ziele)
+            InkWell(
+              onTap: () => _oeffne(context, ref, z.route),
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(z.icon, size: 22, color: theme.colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            z.titel,
+                            style: theme.textTheme.bodyMedium
+                                ?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                          Text(
+                            z.zusatz,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 18,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Formatierung
+// ═══════════════════════════════════════════════════════════════════════════
+
+const _wochentage = [
   'Montag',
   'Dienstag',
   'Mittwoch',
@@ -182,7 +1044,7 @@ const _kWochentage = [
   'Sonntag',
 ];
 
-const _kMonate = [
+const _monate = [
   'Januar',
   'Februar',
   'März',
@@ -197,290 +1059,31 @@ const _kMonate = [
   'Dezember',
 ];
 
-class _KopfBereich extends ConsumerWidget {
-  const _KopfBereich();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final artikel = ref.watch(_artikelAnzahlProvider);
-
-    final heute = DateTime.now();
-    final datum = '${_kWochentage[heute.weekday - 1]}, '
-        '${heute.day}. ${_kMonate[heute.month - 1]} ${heute.year}';
-
-    // Datenbank-Fehler weiterhin deutlich anzeigen
-    final fehler = artikel.hasError ? artikel.error : null;
-    if (fehler != null) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.error_outline, color: theme.colorScheme.error),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Datenbank-Fehler: $fehler',
-                  style: TextStyle(color: theme.colorScheme.error),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    final artikelAnzahl = artikel.valueOrNull;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          datum,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        // Erste-Schritte-Hinweis nur, wenn noch keine Artikel da sind
-        if (artikelAnzahl == 0) ...[
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    Icons.lightbulb_outline,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      'Noch keine Artikel vorhanden. Importiere eine '
-                      'Excel-Stammdaten-Vorlage unter Einstellungen → '
-                      'Stammdaten, um die App zu füllen.',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ],
-    );
+/// „1.786 kg" — Tausenderpunkt ohne intl, dessen Sprachdaten die App
+/// nicht initialisiert.
+String _kg(double kg) {
+  final s = kg.round().toString();
+  final b = StringBuffer();
+  for (var i = 0; i < s.length; i++) {
+    if (i > 0 && (s.length - i) % 3 == 0) b.write('.');
+    b.write(s[i]);
   }
+  return '$b kg';
 }
 
-// ---------------------------------------------------------------------------
-// Navigation tile
-// ---------------------------------------------------------------------------
-
-/// Große Kachel im Navision-Stil: kantig, flach, eine Akzentfarbe.
-///
-/// Vorher waren es bunte Farbverläufe mit runden Ecken. NAV arbeitet
-/// stattdessen mit ruhigen Flächen, dünnen Kanten und einem einzigen Blau —
-/// die Unterscheidung leisten Symbol und Beschriftung, nicht die Farbe.
-class _NavigationTile extends StatelessWidget {
-  const _NavigationTile({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final akzent = theme.colorScheme.primary;
-    return Material(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(3),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(color: theme.dividerColor),
-            // Schmale Akzentkante links — das NAV-Muster für aktive Bereiche.
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [akzent, akzent, Colors.transparent],
-              stops: const [0, 0.012, 0.012],
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 12),
-          // Stack mit dem Inhalt als UNPOSITIONIERTEM Kind — nur so behält
-          // die Kachel ihre Höhe; das Wasserzeichen liegt dahinter.
-          child: Stack(
-            children: [
-              // Sehr dezente Untermalung: dasselbe Symbol groß und blass
-              // in der Ecke. Gibt der Fläche Charakter, ohne vom Text
-              // abzulenken.
-              Positioned(
-                right: -12,
-                bottom: -14,
-                child: Icon(
-                  icon,
-                  size: 96,
-                  color: akzent.withValues(alpha: 0.06),
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: akzent.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                    child: Icon(icon, color: akzent, size: 24),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: akzent,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Expanded(
-                    child: Text(
-                      subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  Align(
-                    alignment: Alignment.bottomRight,
-                    child: Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Kleine Abschnitts-Überschrift, die die Kachel-Ebenen sichtbar trennt.
-class _AbschnittTitel extends StatelessWidget {
-  const _AbschnittTitel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Text(
-      text.toUpperCase(),
-      style: theme.textTheme.labelMedium?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.8,
-      ),
-    );
-  }
-}
-
-/// Kompakte, ruhige Kachel für die Verwaltung — bewusst kleiner und
-/// dezenter als die farbigen Ablauf-Kacheln: dunkle Fläche, Icon links,
-/// eine Zeile Text daneben. So entsteht die Hierarchie zwischen „hier wird
-/// gearbeitet" und „hier wird eingerichtet".
-class _KompakteKachel extends StatelessWidget {
-  const _KompakteKachel({
-    required this.icon,
-    required this.label,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      borderRadius: BorderRadius.circular(3),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(3),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(3),
-            border: Border.all(
-              color: theme.colorScheme.outline.withValues(alpha: 0.25),
-            ),
-          ),
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          child: Row(
-            children: [
-              Icon(
-                icon,
-                color: theme.colorScheme.onSurfaceVariant,
-                size: 22,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_rounded,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant
-                    .withValues(alpha: 0.6),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+/// „heute 07:41", „gestern 18:02", „vor 4 Tagen".
+String _wann(DateTime t) {
+  final jetzt = DateTime.now();
+  final heute = DateTime(jetzt.year, jetzt.month, jetzt.day);
+  final tag = DateTime(t.year, t.month, t.day);
+  final uhr = '${t.hour.toString().padLeft(2, '0')}:'
+      '${t.minute.toString().padLeft(2, '0')}';
+  // In UTC gezählt, sonst ergibt eine Nacht mit Zeitumstellung 23 oder
+  // 25 Stunden statt eines Tages.
+  final tage = DateTime.utc(heute.year, heute.month, heute.day)
+      .difference(DateTime.utc(tag.year, tag.month, tag.day))
+      .inDays;
+  if (tage <= 0) return 'heute $uhr';
+  if (tage == 1) return 'gestern $uhr';
+  return 'vor $tage Tagen';
 }
