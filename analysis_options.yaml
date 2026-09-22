@@ -7,6 +7,10 @@ analyzer:
     # auf einem Fundament, das gar nicht geprüft wurde.
     - "**/*.g.dart"
     - "**/*.freezed.dart"
+    - build/**
+    - windows/**
+    - macos/**
+    - linux/**
   language:
     strict-casts: true
     strict-inference: true
