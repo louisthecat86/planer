@@ -43,13 +43,6 @@ class SettingsScreen extends ConsumerWidget {
                 onTap: () => context.pushNamed('data'),
               ),
               _Kachel(
-                icon: Icons.precision_manufacturing_rounded,
-                color: const Color(0xFF00695C),
-                title: 'Maschinen-Katalog',
-                subtitle: 'Anlagen, Parameter-Steckbriefe und Grenzwerte',
-                onTap: () => context.pushNamed('maschinen'),
-              ),
-              _Kachel(
                 icon: Icons.schedule_rounded,
                 color: const Color(0xFFEF6C00),
                 title: 'Abteilungskapazität',

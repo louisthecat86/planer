@@ -147,11 +147,15 @@ abstract final class Vollbild {
 
   /// Beendet die App auf demselben Weg wie das ✕ der Titelleiste.
   ///
-  /// Der manuelle Beenden-Knopf nutzt einen verpflichtenden Exit. Dadurch
-  /// wird der Exit-Listener nicht während des Fensterabbaus erneut aufgerufen
-  /// und der Windows-Runner kann sauber schließen.
+  /// `cancelable` läuft durch denselben Lebenszyklus wie das Schließen des
+  /// Fensters — nur so schreibt `app.dart` beim Beenden noch ein Backup.
+  /// Reagiert die Plattform darauf nicht (Fenstermanager hängt, Engine
+  /// antwortet nicht), bliebe der Knopf sonst wirkungslos: Ein harter
+  /// Not-Ausstieg nach kurzer Wartezeit erzwingt das Schließen trotzdem.
   static Future<void> beenden() async {
-    await ServicesBinding.instance.exitApplication(AppExitType.required);
+    final notAusstieg = Timer(const Duration(seconds: 3), () => exit(0));
+    await ServicesBinding.instance.exitApplication(AppExitType.cancelable);
+    notAusstieg.cancel();
   }
 }
 
