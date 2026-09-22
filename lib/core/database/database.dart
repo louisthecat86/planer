@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -382,6 +382,10 @@ class AppDatabase extends _$AppDatabase {
             );
           }
 
+          if (from < 22) {
+            await _migrationMultivacTef2NachVerpackung();
+          }
+
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -633,6 +637,31 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     });
+  }
+
+  /// Verschiebt die Tef2-Verpackungsanlage aus der alten Bratstraßen-Abteilung.
+  Future<void> _migrationMultivacTef2NachVerpackung() async {
+    final maschinen = await customSelect(
+      'SELECT id FROM machines WHERE name = ? AND deleted_at IS NULL',
+      variables: [Variable.withString('Multivac Tef2')],
+    ).get();
+    if (maschinen.isEmpty) return;
+
+    final maschineId = maschinen.first.read<String>('id');
+    await customStatement(
+      "UPDATE machines SET abteilung = 'verpackung_tef2' WHERE id = ?",
+      [maschineId],
+    );
+    await customStatement(
+      "UPDATE product_steps SET abteilung = 'verpackung_tef2' "
+      'WHERE maschine_id = ?',
+      [maschineId],
+    );
+    await customStatement(
+      "UPDATE production_tasks SET abteilung = 'verpackung_tef2' "
+      'WHERE maschine_id = ?',
+      [maschineId],
+    );
   }
 
   /// Alte Anlagennamen auf den maßgeblichen Maschinenkatalog umstellen.
