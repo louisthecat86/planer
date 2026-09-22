@@ -24,7 +24,7 @@ void main() {
   test('Abteilung ohne Anlagen bekommt die Regelarbeitszeit', () async {
     final kap = await tageskapazitaetJeAbteilung(db, wochenStart: montag);
 
-    expect(kap[Abteilung.zerlegung.dbValue], 540);
+    expect(kap[Abteilung.zerlegung.dbValue], 600);
   });
 
   test('drei Anlagen in der Verpackung ergeben die dreifache Kapazität',
@@ -50,10 +50,10 @@ void main() {
 
     final kap = await tageskapazitaetJeAbteilung(db, wochenStart: montag);
 
-    // Das ist der Kern von Q7: 3 × 540, nicht 540.
-    expect(kap[Abteilung.verpackung.dbValue], 1620);
+    // Das ist der Kern von Q7: 3 × 600, nicht 600.
+    expect(kap[Abteilung.verpackung.dbValue], 1800);
     // Andere Abteilungen bleiben davon unberührt.
-    expect(kap[Abteilung.zerlegung.dbValue], 540);
+    expect(kap[Abteilung.zerlegung.dbValue], 600);
   });
 
   test('abweichende Anlagen-Kapazitäten werden einzeln summiert', () async {
@@ -89,8 +89,8 @@ void main() {
 
     final kap = await tageskapazitaetJeAbteilung(db, wochenStart: montag);
 
-    // Keine Planungsspur → es bleibt bei der Sammelspur mit 540.
-    expect(kap[Abteilung.verpackung.dbValue], 540);
+    // Keine Planungsspur → es bleibt bei der Sammelspur mit 600.
+    expect(kap[Abteilung.verpackung.dbValue], 600);
   });
 
   test('jede Abteilung hat einen Wert — nie null oder 0', () async {

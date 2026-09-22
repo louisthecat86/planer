@@ -71,7 +71,7 @@ Future<void> seedAnlage(
   required String id,
   required String name,
   required String abteilung,
-  double kapazitaetMinutenProTag = 540,
+  double kapazitaetMinutenProTag = 600,
   bool istPlanungsressource = true,
 }) async {
   await db.into(db.machines).insert(
