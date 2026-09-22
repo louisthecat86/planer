@@ -147,11 +147,11 @@ abstract final class Vollbild {
 
   /// Beendet die App auf demselben Weg wie das ✕ der Titelleiste.
   ///
-  /// Wichtig, weil `app.dart` beim Beenden noch ein Backup schreibt. Über
-  /// `exitApplication` läuft die Anfrage durch denselben Lebenszyklus wie
-  /// das Schließen des Fensters, das Backup findet also statt.
+  /// Der manuelle Beenden-Knopf nutzt einen verpflichtenden Exit. Dadurch
+  /// wird der Exit-Listener nicht während des Fensterabbaus erneut aufgerufen
+  /// und der Windows-Runner kann sauber schließen.
   static Future<void> beenden() async {
-    await ServicesBinding.instance.exitApplication(AppExitType.cancelable);
+    await ServicesBinding.instance.exitApplication(AppExitType.required);
   }
 }
 
