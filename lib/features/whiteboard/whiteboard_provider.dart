@@ -127,6 +127,10 @@ class GeplanterSchritt {
 
   /// Berechnete Dauer in Minuten.
   final double dauerMinuten;
+
+  /// Personalbedarf dieses Blocks: Summe der `basisMitarbeiter` über alle
+  /// Schritte der Abteilungsgruppe. Gepflegt wird die Zahl je Schritt im
+  /// Step-Editor, nicht im Leistungsdaten-Dialog.
   final int mitarbeiter;
 
   /// Dauer stammt aus dem Historie-Durchschnitt (Bratstraße).
@@ -295,9 +299,17 @@ Future<GeplanterPlan> berechneSchrittPlan({
     if (!dauer.isFinite || dauer.isNaN || dauer < 0) dauer = 30.0;
     if (dauer > 60 * 24 * 7) dauer = 30.0;
 
-    final mitarbeiter = block
+    // Personalbedarf der Abteilung = SUMME über ihre Schritte. An der
+    // Bratstraße stehen Leute gleichzeitig an verschiedenen Anlagen —
+    // zwei am Auflegen, einer am Froster ergeben drei, nicht zwei.
+    // Früher zählte hier das Maximum; das stammt aus der Zeit, als jeder
+    // Schritt denselben Abteilungswert trug.
+    // Mindestens 1, damit Blöcke ohne gepflegte Zahl nicht als
+    // personallos in die Planung gehen.
+    final summe = block
         .map((b) => b.step.basisMitarbeiter)
-        .fold<int>(1, (m, v) => v > m ? v : m);
+        .fold<int>(0, (sum, v) => sum + (v > 0 ? v : 0));
+    final mitarbeiter = summe > 0 ? summe : 1;
 
     result.add(
       GeplanterSchritt(
@@ -490,6 +502,8 @@ Future<double> createTasksFromProduct({
   );
   return plan.rohwareKg;
 }
+
+
 
 
 

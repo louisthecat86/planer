@@ -358,8 +358,13 @@ class _StepsList extends ConsumerWidget {
   }
 
   /// Öffnet die geführte Leistungsdaten-Maske: fragt je Abteilung des
-  /// Prozesses Menge/Zeit/Personen ab und schreibt die Werte auf den
-  /// jeweils ersten Schritt der Abteilungsgruppe (Excel-Konvention).
+  /// Prozesses Menge und Zeit ab und schreibt die Werte auf den jeweils
+  /// ersten Schritt der Abteilungsgruppe (Excel-Konvention).
+  ///
+  /// Personen werden dort NICHT gepflegt — die Zahl hängt am einzelnen
+  /// Schritt und wird im Step-Editor gesetzt. Die Gruppe wird trotzdem
+  /// komplett übergeben, damit der Dialog die Summe je Abteilung anzeigen
+  /// kann.
   Future<void> _leistungsdatenErfassen(
     BuildContext context,
     WidgetRef ref,
@@ -374,6 +379,7 @@ class _StepsList extends ConsumerWidget {
             (
               abteilung: Abteilung.fromDbValue(g.first.step.abteilung),
               erster: g.first.step,
+              schritte: [for (final e in g) e.step],
             ),
         ],
       ),
@@ -533,3 +539,5 @@ class _StepsList extends ConsumerWidget {
 
   /// Karten-Bereich: leerer Hinweis, einspaltig oder zweispaltig verteilt.
 }
+
+

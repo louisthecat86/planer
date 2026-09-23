@@ -20,7 +20,7 @@ import '../../core/services/auto_backup_trigger.dart';
 /// - Abteilung (Dropdown aus Abteilung-Enum)
 /// - Prozessschritt (Freitext)
 /// - Anlage (Dropdown aus Anlagen-Katalog, gefiltert nach Abteilung)
-/// - Personen (Zahl, Default 1)
+/// - Personen an diesem Schritt (Zahl, Default 1 beim Anlegen)
 /// - Menge kg (Zahl)
 /// - Dauer Minuten (Zahl)
 ///
@@ -258,7 +258,9 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       _saveError = null;
     });
 
-    final personen = int.tryParse(_personenCtrl.text.trim()) ?? 1;
+    // Leeres Feld = 0 Personen. Früher stand hier 1 als Fallback — das
+    // stammt aus der Zeit, als der Wert die ganze Abteilung meinte.
+    final personen = int.tryParse(_personenCtrl.text.trim()) ?? 0;
     final menge = _parseZahl(_mengeCtrl.text) ?? 0.0;
     final dauer = _parseZahl(_dauerMinCtrl.text) ?? 0.0;
     final fixZeit = _parseZahl(_fixZeitCtrl.text) ?? 0.0;
@@ -507,12 +509,33 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 ),
               const SizedBox(height: 16),
 
-              // ── Hinweis: Leistungsdaten zentral je Abteilung ─────────
-              // Personen, Menge und Dauer werden nicht mehr pro Schritt
-              // gepflegt, sondern zentral über „Leistungsdaten" je
-              // Abteilung — das verhindert widersprüchliche Zeitangaben.
-              // Die geladenen Werte bleiben erhalten (die Controller
-              // behalten sie); hier sind sie nur nicht editierbar.
+              // ── Personen an diesem Schritt ───────────────────────────
+              // Personen hängen am einzelnen Schritt, nicht an der
+              // Abteilung: Dieselbe Anlage kann bei Artikel A mit zwei
+              // und bei Artikel B mit drei Personen besetzt sein. Die
+              // Abteilung braucht die SUMME über ihre Schritte — so
+              // rechnet der Whiteboard-Provider, und so zeigt es der
+              // Leistungsdaten-Dialog an.
+              TextField(
+                controller: _personenCtrl,
+                enabled: !_isSaving,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Personen an diesem Schritt',
+                  suffixText: 'Pers.',
+                  helperText: 'Gilt nur für diesen Artikel. Leer oder 0 '
+                      'bedeutet: hier steht niemand dediziert.',
+                  helperMaxLines: 3,
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // ── Hinweis: Menge und Zeit zentral je Abteilung ─────────
+              // Menge und Dauer bleiben bewusst an der Abteilung: Sie
+              // sind die Referenz, auf die die App jede Planmenge
+              // hochskaliert. Die Controller halten die geladenen Werte,
+              // hier sind sie nur nicht editierbar.
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -533,7 +556,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Menge, Zeit und Personen werden zentral über '
+                        'Menge und Zeit werden zentral über '
                         '„Leistungsdaten" je Abteilung gepflegt.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
@@ -614,3 +637,5 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     );
   }
 }
+
+

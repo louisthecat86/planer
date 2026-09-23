@@ -370,15 +370,27 @@ class _HistWert extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// Geführte Maske: fragt für jede Abteilung des Prozesses die
-/// Referenzleistung ab — „Menge X kg in Zeit Y mit Z Personen". Daraus
-/// zeigt sie live die Kennzahl kg/h und schreibt die Werte beim Speichern
-/// auf den ersten Schritt jeder Abteilungsgruppe. Mit diesen Basiswerten
-/// skaliert die App die Dauer jeder Planmenge
+/// Referenzleistung ab — „Menge X kg in Zeit Y". Daraus zeigt sie live die
+/// Kennzahl kg/h und schreibt die Werte beim Speichern auf den ersten
+/// Schritt jeder Abteilungsgruppe. Mit diesen Basiswerten skaliert die App
+/// die Dauer jeder Planmenge
 /// (Dauer = Fixzeit + Zeit × Planmenge ÷ Referenzmenge).
+///
+/// Bewusst **personenunabhängig**: Wie viele Leute an einer Anlage stehen,
+/// hängt am einzelnen Schritt (`basisMitarbeiter`) und wird dort im
+/// Step-Editor gepflegt. Die Abteilungszahl ist die Summe über ihre
+/// Schritte und wird nur angezeigt, nie hier geschrieben.
 class _LeistungsdatenDialog extends ConsumerStatefulWidget {
   const _LeistungsdatenDialog({required this.eintraege});
 
-  final List<({Abteilung abteilung, ProductStep erster})> eintraege;
+  /// Je Abteilung: der erste Schritt (trägt die Referenzwerte) und alle
+  /// Schritte der Gruppe (für die Personensumme in der Anzeige).
+  final List<
+      ({
+        Abteilung abteilung,
+        ProductStep erster,
+        List<ProductStep> schritte,
+      })> eintraege;
 
   @override
   ConsumerState<_LeistungsdatenDialog> createState() =>
@@ -390,7 +402,6 @@ class _LeistungsdatenDialogState
   late final List<TextEditingController> _menge;
   /// Dauer je Abteilung in MINUTEN (aus der Stunden/Minuten-Eingabe).
   late List<double?> _zeitMin;
-  late final List<TextEditingController> _personen;
   bool _busy = false;
 
   @override
@@ -408,23 +419,20 @@ class _LeistungsdatenDialogState
       for (final e in widget.eintraege)
         e.erster.basisDauerMinuten > 0 ? e.erster.basisDauerMinuten : null,
     ];
-    _personen = [
-      for (final e in widget.eintraege)
-        TextEditingController(
-          text: e.erster.basisMitarbeiter > 0
-              ? e.erster.basisMitarbeiter.toString()
-              : '',
-        ),
-    ];
   }
 
   @override
   void dispose() {
-    for (final c in [..._menge, ..._personen]) {
+    for (final c in _menge) {
       c.dispose();
     }
     super.dispose();
   }
+
+  /// Personen der Abteilung = Summe über ihre Schritte. Reine Anzeige;
+  /// gepflegt wird die Zahl je Schritt im Step-Editor.
+  int _personenSumme(int i) => widget.eintraege[i].schritte
+      .fold<int>(0, (sum, s) => sum + s.basisMitarbeiter);
 
   String _kgProStunde(int i) {
     final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
@@ -443,7 +451,6 @@ class _LeistungsdatenDialogState
     for (var i = 0; i < widget.eintraege.length; i++) {
       final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
       final min = _zeitMin[i];
-      final pers = int.tryParse(_personen[i].text.trim());
       // Nur vollständig ausgefüllte Abteilungen schreiben — leere Zeilen
       // lassen den bestehenden Stand unangetastet.
       if (kg == null || kg <= 0 || min == null || min <= 0) continue;
@@ -455,8 +462,8 @@ class _LeistungsdatenDialogState
           mengeKg: Value(kg),
           basisMengeKg: Value(kg),
           basisDauerMinuten: Value(min),
-          basisMitarbeiter:
-              pers != null && pers > 0 ? Value(pers) : const Value.absent(),
+          // basisMitarbeiter bleibt unangetastet — die Zahl gehört dem
+          // einzelnen Schritt, nicht der Abteilung.
           updatedAt: Value(jetzt),
         ),
       );
@@ -485,8 +492,9 @@ class _LeistungsdatenDialogState
             children: [
               Text(
                 'Referenz: Welche Menge schafft die Abteilung bei diesem '
-                'Artikel in welcher Zeit mit wie vielen Personen? Daraus '
-                'skaliert die App die Dauer jeder Planmenge.',
+                'Artikel in welcher Zeit? Daraus skaliert die App die Dauer '
+                'jeder Planmenge. Die Personen je Anlage pflegst du im '
+                'jeweiligen Schritt.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
@@ -501,6 +509,13 @@ class _LeistungsdatenDialogState
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),
+                    Text(
+                      '${_personenSumme(i)} Pers.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
                     Text(
                       _kgProStunde(i),
                       style: theme.textTheme.bodySmall?.copyWith(
@@ -537,19 +552,6 @@ class _LeistungsdatenDialogState
                       minuten: _zeitMin[i],
                       onChanged: (m) => setState(() => _zeitMin[i] = m),
                     ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 92,
-                      child: TextField(
-                        controller: _personen[i],
-                        decoration: const InputDecoration(
-                          labelText: 'Personen',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        keyboardType: TextInputType.number,
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 14),
@@ -571,3 +573,5 @@ class _LeistungsdatenDialogState
     );
   }
 }
+
+
