@@ -87,6 +87,12 @@ class _DiagrammStation extends StatelessWidget {
   final void Function(int von, int nach) onReorderSchritt;
   final VoidCallback onUpdated;
 
+  /// Personalbedarf der Abteilung bei diesem Artikel = Summe über die
+  /// Schritte der Station. Gepflegt wird die Zahl je Schritt im
+  /// Detail-Sheet; hier steht nur das Ergebnis.
+  int get _personen =>
+      gruppe.fold<int>(0, (sum, e) => sum + e.step.basisMitarbeiter);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -211,6 +217,39 @@ class _DiagrammStation extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (_personen > 0) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: farbe.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(
+                              color: farbe.withValues(alpha: 0.55),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.groups_outlined, size: 14, color: farbe),
+                              const SizedBox(width: 4),
+                              Text(
+                                _personen == 1
+                                    ? '1 Person'
+                                    : '$_personen Personen',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: farbe,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 7,
@@ -560,3 +599,5 @@ class _SchrittDetailSheet extends ConsumerWidget {
     );
   }
 }
+
+

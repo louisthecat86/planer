@@ -162,6 +162,12 @@ class _AbteilungsPanel extends StatelessWidget {
     }
   }
 
+  /// Personalbedarf der Abteilung bei diesem Artikel = Summe über die
+  /// Schritte. Gepflegt wird die Zahl je Schritt; hier steht nur das
+  /// Ergebnis.
+  int get _personen =>
+      gruppe.fold<int>(0, (sum, e) => sum + e.step.basisMitarbeiter);
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -251,6 +257,15 @@ class _AbteilungsPanel extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
+                      if (_personen > 0) ...[
+                        _Pille(
+                          text: _personen == 1
+                              ? '1 Person'
+                              : '$_personen Personen',
+                          farbe: farbe,
+                        ),
+                        const SizedBox(width: 6),
+                      ],
                       _Pille(
                         text: gruppe.length == 1
                             ? '1 Maschine'
@@ -718,11 +733,34 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           ),
           const SizedBox(height: 14),
 
-          // Nur mengenunabhängige „Fixe Zeit" bleibt am Schritt.
-          // Personen/Menge/Dauer werden zentral über den Leistungsdaten-
-          // Block je Abteilung gepflegt — nicht mehr pro Schritt.
+          // Personen hängen am einzelnen Schritt: Dieselbe Anlage kann
+          // bei Artikel A mit zwei und bei Artikel B mit drei Personen
+          // besetzt sein. Die Abteilungszahl im Kopf der Station ist die
+          // Summe darüber und aktualisiert sich über `onUpdated()` sofort.
+          //
+          // Menge und Dauer bleiben dagegen zentral im Leistungsdaten-
+          // Block je Abteilung — sie sind die Referenz für die
+          // Dauerberechnung.
           Row(
             children: [
+              Expanded(
+                child: _WertFeld(
+                  label: 'Personen',
+                  wert: s.basisMitarbeiter > 0
+                      ? '${s.basisMitarbeiter}'
+                      : '–',
+                  onTap: () => _editNumber(
+                    titel: 'Personen an diesem Schritt',
+                    aktuell: s.basisMitarbeiter.toDouble(),
+                    suffix: 'Pers.',
+                    bauen: (v) => ProductStepsCompanion(
+                      basisMitarbeiter: Value(v > 0 ? v.round() : 0),
+                      updatedAt: Value(DateTime.now()),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: _WertFeld(
                   label: 'Fixe Zeit',
@@ -779,3 +817,5 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
     );
   }
 }
+
+
