@@ -484,7 +484,9 @@ class _LeistungsdatenDialogState
     return AlertDialog(
       title: const Text('Leistungsdaten je Abteilung'),
       content: SizedBox(
-        width: 560,
+        // Breit genug für Menge + Std./Min. + die Kennzahlen rechts.
+        // Bei 560 lief der Minutenwert in seine eigene Beschriftung.
+        width: 720,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -529,6 +531,7 @@ class _LeistungsdatenDialogState
                 Row(
                   children: [
                     Expanded(
+                      flex: 2,
                       child: TextField(
                         controller: _menge[i],
                         decoration: const InputDecoration(
@@ -547,8 +550,11 @@ class _LeistungsdatenDialogState
                     // Getrennte Stunden-/Minutenfelder: „0:08" war als
                     // Freitext fehleranfällig und ließ offen, ob 8 Minuten
                     // oder 8 Stunden gemeint sind.
+                    //
+                    // Nicht kompakt: Die schmalen Felder (66pt) sind zu eng,
+                    // sobald Wert und Einheit zusammen darin stehen.
                     ZeitEingabe(
-                      kompakt: true,
+                      kompakt: false,
                       minuten: _zeitMin[i],
                       onChanged: (m) => setState(() => _zeitMin[i] = m),
                     ),

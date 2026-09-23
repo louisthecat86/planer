@@ -459,12 +459,13 @@ class ArticlePrintService {
           // Kennwert-Kästen
           if (kennwerte.isNotEmpty) ...[
             pw.SizedBox(height: 4),
-            pw.Row(
+            // Wrap statt Row: Bei sechs Kennwerten lief die Zeile sonst
+            // über den Rand des Blocks hinaus.
+            pw.Wrap(
+              spacing: 4,
+              runSpacing: 4,
               children: [
-                for (var i = 0; i < kennwerte.length; i++) ...[
-                  if (i > 0) pw.SizedBox(width: 4),
-                  _kennwertBox(kennwerte[i].label, kennwerte[i].wert),
-                ],
+                for (final k in kennwerte) _kennwertBox(k.label, k.wert),
               ],
             ),
           ],
@@ -519,31 +520,7 @@ class ArticlePrintService {
               runSpacing: 2,
               children: [
                 for (final p in g.value)
-                  pw.SizedBox(
-                    width: 158,
-                    child: pw.Row(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Expanded(
-                          child: pw.Text(
-                            p.parameterName,
-                            style: const pw.TextStyle(
-                              fontSize: 8,
-                              color: PdfColors.grey800,
-                            ),
-                          ),
-                        ),
-                        pw.SizedBox(width: 4),
-                        pw.Text(
-                          p.wert!,
-                          style: pw.TextStyle(
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _parameterZeile(p.parameterName, p.wert!.trim()),
               ],
             ),
           ],
@@ -560,6 +537,62 @@ class ArticlePrintService {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// Breite einer Parameterspalte im Druck. Zwei Spalten passen neben-
+  /// einander in den Schritt-Block.
+  static const double _paramSpalte = 158;
+
+  /// Eine Parameterzeile „Bezeichnung … Wert".
+  ///
+  /// Kurze Werte stehen rechts neben der Bezeichnung. Lange Werte — etwa
+  /// eine ganze Prozessbeschreibung unter „Sonstige Informationen" —
+  /// bekommen eine eigene Zeile darunter und brechen dort um. Vorher lief
+  /// der Wert über die Bezeichnung und beides war unleserlich.
+  ///
+  /// Die Grenze ist bewusst an der Zeichenzahl festgemacht und nicht an
+  /// einer gemessenen Textbreite: Der PDF-Renderer misst erst beim Layout,
+  /// und für die Entscheidung „eine oder zwei Zeilen" reicht die Schätzung.
+  static pw.Widget _parameterZeile(String name, String wert) {
+    // Grober Platzbedarf: Bezeichnung + Wert in 8pt Helvetica passen bis
+    // etwa 38 Zeichen in eine Zeile von 158pt.
+    final einzeilig = (name.length + wert.length) <= 38 && !wert.contains('\n');
+
+    const nameStil = pw.TextStyle(
+      fontSize: 8,
+      color: PdfColors.grey800,
+    );
+    final wertStil = pw.TextStyle(
+      fontSize: 8,
+      fontWeight: pw.FontWeight.bold,
+    );
+
+    if (einzeilig) {
+      return pw.SizedBox(
+        width: _paramSpalte,
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(child: pw.Text(name, style: nameStil)),
+            pw.SizedBox(width: 4),
+            pw.Text(wert, style: wertStil),
+          ],
+        ),
+      );
+    }
+
+    // Lange Werte dürfen die volle Blockbreite nutzen und umbrechen.
+    return pw.SizedBox(
+      width: _paramSpalte * 2 + 10,
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(name, style: nameStil),
+          pw.SizedBox(height: 1),
+          pw.Text(wert, style: wertStil),
         ],
       ),
     );
@@ -764,6 +797,8 @@ class ArticlePrintService {
     return v.toStringAsFixed(1).replaceAll('.', ',');
   }
 }
+
+
 
 
 
