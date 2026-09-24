@@ -18,6 +18,7 @@ import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
 import 'step_editor_dialog.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/constants/artikel_merkmale.dart';
 
 // Die Datei war mit 4.750 Zeilen zu groß, um sich darin zurechtzufinden.
 // Sie ist deshalb zerlegt: Provider und gemeinsame Helfer liegen in
@@ -156,6 +157,47 @@ class _InfoTab extends ConsumerWidget {
 
         final besonderheiten = p.beschreibung?.trim() ?? '';
 
+        // Merkmale als eigene Karte: Sie entscheiden später über die
+        // Reihenfolge in der Planung und sollen deshalb auf einen Blick
+        // erkennbar sein — auch dann, wenn sie fehlen.
+        final verpackung = <String>[
+          if (merkmaleLabel(p.verpackungsformen, kVerpackungsformen)
+              .isNotEmpty)
+            merkmaleLabel(p.verpackungsformen, kVerpackungsformen),
+          if (merkmalLabel(p.kartonGroesse, kKartonGroessen) != null)
+            merkmalLabel(p.kartonGroesse, kKartonGroessen)!,
+          if (merkmalLabel(p.kartonBedruckung, kKartonBedruckungen) != null)
+            merkmalLabel(p.kartonBedruckung, kKartonBedruckungen)!,
+          if (p.packungenProKarton != null)
+            '${p.packungenProKarton} Pack./Kt.',
+          if (p.fuellmengeNettoG != null)
+            '${_gramm(p.fuellmengeNettoG!)} netto',
+          if (merkmalLabel(p.abgabeart, kAbgabearten) != null)
+            merkmalLabel(p.abgabeart, kAbgabearten)!,
+        ].join(' · ');
+
+        final merkmalZeilen = <({String label, String wert})>[
+          (
+            label: 'Allergene',
+            wert: allergeneGepflegt(p.allergene)
+                ? merkmaleLabel(p.allergene, kAllergene)
+                : 'nicht gepflegt',
+          ),
+          if (merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen) != null)
+            (
+              label: 'Qualitätsstufe',
+              wert: merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen)!,
+            ),
+          if (merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen)
+              .isNotEmpty)
+            (
+              label: 'Verarbeitungsstufe',
+              wert: merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen),
+            ),
+          if (verpackung.isNotEmpty)
+            (label: 'Verpackung', wert: verpackung),
+        ];
+
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
@@ -172,6 +214,28 @@ class _InfoTab extends ConsumerWidget {
                       _InfoZeile(
                         label: eintraege[i].label,
                         wert: eintraege[i].wert,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            // Merkmale
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                child: Column(
+                  children: [
+                    for (var i = 0; i < merkmalZeilen.length; i++) ...[
+                      if (i > 0) const Divider(height: 1),
+                      _InfoZeile(
+                        label: merkmalZeilen[i].label,
+                        wert: merkmalZeilen[i].wert,
                       ),
                     ],
                   ],
@@ -206,6 +270,18 @@ class _InfoTab extends ConsumerWidget {
       },
     );
   }
+}
+
+/// Füllmenge lesbar: unter 1000 g in Gramm, darüber in Kilo.
+String _gramm(double g) {
+  if (g >= 1000) {
+    final kg = g / 1000;
+    final text = kg == kg.roundToDouble()
+        ? kg.round().toString()
+        : kg.toStringAsFixed(2).replaceAll('.', ',');
+    return '$text kg';
+  }
+  return '${g == g.roundToDouble() ? g.round() : g} g';
 }
 
 class _InfoZeile extends StatelessWidget {
