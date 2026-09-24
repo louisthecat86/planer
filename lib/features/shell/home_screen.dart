@@ -568,6 +568,8 @@ class _Tagesbereich extends StatelessWidget {
       ),
     ];
 
+
+
     final zeilen = LayoutBuilder(
       builder: (context, c) {
         final spalten = c.maxWidth >= 720 ? 4 : 2;
@@ -1281,8 +1283,6 @@ class _Navigation extends StatelessWidget {
 
   final bool breit;
 
-  // Jede Gruppe hat ihre eigene Farbe — so erkennt man sie auf einen
-  // Blick, noch bevor man die Überschrift liest.
   static const _gruppen = <(String, IconData, Color, List<_Ziel>)>[
     (
       'Planen',
@@ -1328,33 +1328,37 @@ class _Navigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final karten = [
+    // Nur noch drei Knöpfe statt drei ausgeklappter Listen: Das Dashboard
+    // bleibt den Zahlen des Tages vorbehalten, die Ziele liegen eine
+    // Berührung tiefer.
+    final knoepfe = [
       for (final (titel, icon, farbe, ziele) in _gruppen)
-        _NavGruppe(titel: titel, icon: icon, farbe: farbe, ziele: ziele),
+        _NavKnopf(titel: titel, icon: icon, farbe: farbe, ziele: ziele),
     ];
     if (!breit) {
       return Column(
         children: [
-          for (final k in karten) ...[k, const SizedBox(height: 12)],
+          for (final k in knoepfe) ...[
+            SizedBox(width: double.infinity, child: k),
+            const SizedBox(height: 10),
+          ],
         ],
       );
     }
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          for (var i = 0; i < karten.length; i++) ...[
-            if (i > 0) const SizedBox(width: 12),
-            Expanded(child: karten[i]),
-          ],
+    return Row(
+      children: [
+        for (var i = 0; i < knoepfe.length; i++) ...[
+          if (i > 0) const SizedBox(width: 12),
+          Expanded(child: knoepfe[i]),
         ],
-      ),
+      ],
     );
   }
 }
 
-class _NavGruppe extends ConsumerWidget {
-  const _NavGruppe({
+/// Ein Gruppenknopf. Tippen öffnet die Ziele als Menü direkt darunter.
+class _NavKnopf extends ConsumerWidget {
+  const _NavKnopf({
     required this.titel,
     required this.icon,
     required this.farbe,
@@ -1369,76 +1373,68 @@ class _NavGruppe extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
-      decoration: BoxDecoration(
-        // Ein Hauch der Gruppenfarbe — erkennbar, aber nicht bunt.
-        color: farbe.withValues(alpha: .06),
-        border: Border.all(color: farbe.withValues(alpha: .28)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+    return PopupMenuButton<String>(
+      tooltip: titel,
+      position: PopupMenuPosition.under,
+      constraints: const BoxConstraints(minWidth: 300),
+      onSelected: (route) => _oeffne(context, ref, route),
+      itemBuilder: (_) => [
+        for (final z in ziele)
+          PopupMenuItem<String>(
+            value: z.route,
             child: Row(
               children: [
-                Icon(icon, size: 20, color: farbe),
-                const SizedBox(width: 8),
-                Text(
-                  titel,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: farbe,
+                Icon(z.icon, size: 20, color: farbe),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        z.titel,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        z.zusatz,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
-          for (final z in ziele)
-            InkWell(
-              onTap: () => _oeffne(context, ref, z.route),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 10,
-                ),
-                child: Row(
-                  children: [
-                    Icon(z.icon, size: 22, color: farbe),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            z.titel,
-                            style: theme.textTheme.bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          Text(
-                            z.zusatz,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ],
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: farbe.withValues(alpha: .08),
+          border: Border.all(color: farbe.withValues(alpha: .30)),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: farbe),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                titel,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: farbe,
                 ),
               ),
             ),
-        ],
+            Icon(
+              Icons.expand_more_rounded,
+              size: 20,
+              color: farbe.withValues(alpha: .8),
+            ),
+          ],
+        ),
       ),
     );
   }
