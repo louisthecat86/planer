@@ -296,11 +296,11 @@ class _PlanungsvorschlagScreenState
   }
 
   Future<void> _oeffneEinstellungen() async {
-    final neu = await showModalBottomSheet<VorschlagEinstellungen>(
+    // Mittiges Fenster statt Bottom-Sheet: Am Desktop klebt ein Sheet am
+    // unteren Fensterrand und wird dort abgeschnitten.
+    final neu = await showDialog<VorschlagEinstellungen>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (_) => _EinstellungenSheet(start: _einstellungen),
+      builder: (_) => _EinstellungenDialog(start: _einstellungen),
     );
     if (neu == null) return;
     setState(() => _einstellungen = neu);
@@ -1090,16 +1090,16 @@ class _NichtPlanbarKarte extends StatelessWidget {
 // Einstellungen
 // ═══════════════════════════════════════════════════════════════════════
 
-class _EinstellungenSheet extends StatefulWidget {
-  const _EinstellungenSheet({required this.start});
+class _EinstellungenDialog extends StatefulWidget {
+  const _EinstellungenDialog({required this.start});
 
   final VorschlagEinstellungen start;
 
   @override
-  State<_EinstellungenSheet> createState() => _EinstellungenSheetState();
+  State<_EinstellungenDialog> createState() => _EinstellungenDialogState();
 }
 
-class _EinstellungenSheetState extends State<_EinstellungenSheet> {
+class _EinstellungenDialogState extends State<_EinstellungenDialog> {
   late final TextEditingController _ruesten;
   late final TextEditingController _reinigen;
   late final TextEditingController _endreinigung;
@@ -1138,18 +1138,19 @@ class _EinstellungenSheetState extends State<_EinstellungenSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    // Höchstens 80 % der Fensterhöhe, der Inhalt scrollt darin. So bleibt
+    // der Knopf immer erreichbar, egal wie klein das Fenster ist.
+    final maxHoehe = MediaQuery.of(context).size.height * 0.8;
+
+    return AlertDialog(
+      contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: 520, maxHeight: maxHoehe),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Text(
               'Zeiten und Zeitraum',
               style: theme.textTheme.titleMedium
@@ -1222,18 +1223,20 @@ class _EinstellungenSheetState extends State<_EinstellungenSheet> {
                   child: const Text('Sperren aufheben'),
                 ),
               ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: FilledButton(
-                onPressed: _fertig,
-                child: const Text('Neu berechnen'),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: _fertig,
+          child: const Text('Neu berechnen'),
+        ),
+      ],
     );
   }
 
