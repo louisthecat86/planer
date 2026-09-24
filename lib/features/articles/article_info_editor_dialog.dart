@@ -285,7 +285,7 @@ class _ArticleInfoEditorDialogState
               // Reihenfolge wie in kAllergene: Die Liste ist zugleich die
               // Rangfolge für die Produktionsplanung.
               _abschnitt('Allergene'),
-              _mehrfach(kAllergene, _allergene),
+              _allergenChips(),
               const SizedBox(height: 18),
 
               // ── Qualitätsstufe ──────────────────────────────────────
@@ -417,6 +417,39 @@ class _ArticleInfoEditorDialogState
           ),
         ),
       );
+
+  /// Allergene: wie eine normale Mehrfachauswahl, aber „Keine" schließt
+  /// die übrigen aus und umgekehrt. Leer bleibt „noch nicht gepflegt".
+  Widget _allergenChips() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final m in kAllergene)
+          FilterChip(
+            label: Text(m.label),
+            selected: _allergene.contains(m.dbValue),
+            onSelected: _saving
+                ? null
+                : (an) => setState(() {
+                      if (!an) {
+                        _allergene.remove(m.dbValue);
+                        return;
+                      }
+                      if (m.dbValue == kAllergenKeine) {
+                        _allergene
+                          ..clear()
+                          ..add(kAllergenKeine);
+                      } else {
+                        _allergene
+                          ..remove(kAllergenKeine)
+                          ..add(m.dbValue);
+                      }
+                    }),
+          ),
+      ],
+    );
+  }
 
   /// Mehrfachauswahl als anklickbare Chips.
   Widget _mehrfach(List<Merkmal> liste, Set<String> auswahl) {

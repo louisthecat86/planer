@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:drift/drift.dart';
 
 import '../constants/abteilungen.dart';
+import '../constants/artikel_merkmale.dart';
 import '../constants/parameter_namen.dart';
 import '../constants/product_groups.dart';
 import '../database/database.dart';
@@ -137,6 +138,26 @@ class StammdatenExportService {
         'bezeichnung': p.artikelbezeichnung,
         'produktgruppe': p.produktgruppe,
         'notizen': p.notizen,
+        // Merkmale als Klartext — die Mappe soll ohne Schlüsseltabelle
+        // lesbar sein, und der Import erkennt beides.
+        'merkmale': <String, String?>{
+          'Allergene': merkmaleLabel(p.allergene, kAllergene),
+          'Qualitätsstufe': merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen),
+          'Verarbeitungsstufe':
+              merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen),
+          'Verpackungsformen':
+              merkmaleLabel(p.verpackungsformen, kVerpackungsformen),
+          'Kartongröße': merkmalLabel(p.kartonGroesse, kKartonGroessen),
+          'Kartonbedruckung':
+              merkmalLabel(p.kartonBedruckung, kKartonBedruckungen),
+          'Packungen pro Karton': p.packungenProKarton?.toString(),
+          'Füllmenge netto (g)': p.fuellmengeNettoG == null
+              ? null
+              : (p.fuellmengeNettoG! == p.fuellmengeNettoG!.roundToDouble()
+                  ? p.fuellmengeNettoG!.round().toString()
+                  : p.fuellmengeNettoG!.toString()),
+          'Abgabeart': merkmalLabel(p.abgabeart, kAbgabearten),
+        },
         'schritte': [
           for (final s in ps)
             {
@@ -545,15 +566,20 @@ class StammdatenExportService {
     w.verbinde('A$r:$ende$r');
     r++;
     final hinweise = _hinweiseAus(a['notizen'] as String?);
+    // Die gepflegten Merkmale stehen zwischen den festen Zeilen und den
+    // freien Hinweisen: Sie kommen aus eigenen Spalten, nicht aus der
+    // Notiz, und werden beim Import wieder dorthin zurückgeschrieben.
+    final merkmale = (a['merkmale'] as Map<String, String?>?) ?? const {};
     const feste = ['Personal', 'Besonderheit', 'Merkmale', 'Verpackung'];
     final reihe = [
       ...feste,
+      ...merkmale.keys,
       for (final k in hinweise.keys)
-        if (!feste.contains(k)) k,
+        if (!feste.contains(k) && !merkmale.containsKey(k)) k,
     ];
     for (final k in reihe) {
       w.text(r, 1, k, _S.label);
-      final wert = hinweise[k];
+      final wert = merkmale.containsKey(k) ? merkmale[k] : hinweise[k];
       if (wert != null) {
         w.text(r, 2, wert, _S.umbruch);
       } else {
@@ -1161,3 +1187,5 @@ class _Blatt {
     return b.toString();
   }
 }
+
+

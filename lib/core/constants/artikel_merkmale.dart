@@ -20,7 +20,14 @@ typedef Merkmal = ({String dbValue, String label});
 // allergenfrei und arbeitet sich hoch, ein Rücksprung kostet die volle
 // Reinigung. Neue Allergene deshalb an der fachlich richtigen Stelle
 // einfügen, nicht einfach hinten anhängen.
+/// Sonderwert: geprüft und allergenfrei. Schließt die übrigen Einträge
+/// aus und ist bewusst NICHT dasselbe wie eine leere Auswahl — leer heißt
+/// „noch nicht angesehen", und der Planungs-Wizard darf daraus nicht auf
+/// allergenfrei schließen.
+const kAllergenKeine = 'keine';
+
 const kAllergene = <Merkmal>[
+  (dbValue: kAllergenKeine, label: 'Keine'),
   (dbValue: 'gluten', label: 'Gluten'),
   (dbValue: 'eier', label: 'Eier'),
   (dbValue: 'soja', label: 'Soja'),
@@ -128,9 +135,49 @@ String? merkmalLabel(String? dbValue, List<Merkmal> liste) {
 /// „spätesten" Allergens in [kAllergene], plus 1.
 int allergenRang(String? gespeicherteAllergene) {
   final gesetzt = merkmaleAusText(gespeicherteAllergene);
+  if (gesetzt.isEmpty || gesetzt.contains(kAllergenKeine)) return 0;
   var rang = 0;
   for (var i = 0; i < kAllergene.length; i++) {
-    if (gesetzt.contains(kAllergene[i].dbValue)) rang = i + 1;
+    if (kAllergene[i].dbValue == kAllergenKeine) continue;
+    if (gesetzt.contains(kAllergene[i].dbValue)) rang = i;
   }
   return rang;
+}
+
+/// Ist die Allergenangabe gepflegt? Leer heißt unbekannt, `keine` heißt
+/// geprüft allergenfrei.
+bool allergeneGepflegt(String? gespeicherteAllergene) =>
+    merkmaleAusText(gespeicherteAllergene).isNotEmpty;
+
+// ── Lesen aus der Excel ───────────────────────────────────────────────
+
+/// Klartexte aus einer Excel-Zelle zurück in dbValues, z.B.
+/// „Gluten, Eier" → {gluten, eier}. Akzeptiert auch die dbValues selbst,
+/// damit eine von Hand gefüllte Spalte nicht stur auf Groß- und
+/// Kleinschreibung besteht.
+String? merkmaleAusLabels(String? text, List<Merkmal> liste) {
+  if (text == null || text.trim().isEmpty) return null;
+  final teile = text
+      .split(RegExp(r'[,;/]'))
+      .map((e) => e.trim().toLowerCase())
+      .where((e) => e.isNotEmpty);
+  final treffer = <String>{};
+  for (final t in teile) {
+    for (final m in liste) {
+      if (m.label.toLowerCase() == t || m.dbValue == t) {
+        treffer.add(m.dbValue);
+      }
+    }
+  }
+  return merkmaleZuText(treffer, liste);
+}
+
+/// Einzelnen Klartext zurück in den dbValue.
+String? merkmalAusLabel(String? text, List<Merkmal> liste) {
+  if (text == null || text.trim().isEmpty) return null;
+  final t = text.trim().toLowerCase();
+  for (final m in liste) {
+    if (m.label.toLowerCase() == t || m.dbValue == t) return m.dbValue;
+  }
+  return null;
 }

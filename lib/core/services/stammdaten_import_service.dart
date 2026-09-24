@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../constants/abteilungen.dart';
 import '../constants/parameter_namen.dart';
 import '../database/database.dart';
+import '../constants/artikel_merkmale.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis
@@ -93,6 +94,20 @@ class StammdatenImportService {
   static const int _zeileAbteilung = 9;
   static const int _zeileProzessschritt = 10;
   static const int _zeileAnlage = 11;
+  /// Zeilen im Block „Zusätzliche Informationen", die in eigene Spalten
+  /// von `products` gehören statt in den Notiz-Freitext.
+  static const _merkmalZeilen = <String>{
+    'Allergene',
+    'Qualitätsstufe',
+    'Verarbeitungsstufe',
+    'Verpackungsformen',
+    'Kartongröße',
+    'Kartonbedruckung',
+    'Packungen pro Karton',
+    'Füllmenge netto (g)',
+    'Abgabeart',
+  };
+
   static const int _zeilePersonen = 12;
   static const int _zeileMenge = 13;
   static const int _zeileZeit = 14;
@@ -317,6 +332,7 @@ class StammdatenImportService {
     var historieKopfGesehen = false;
     final historie = <Map<String, Object?>>[];
     final hinweise = <String, String>{};
+    final merkmale = <String, String>{};
 
     for (var r = _zeileFixZeit; r < zeilen.length; r++) {
       final a = _text(zeilen[r], 0);
@@ -362,7 +378,16 @@ class StammdatenImportService {
       // Zusätzliche Informationen: Personal, Besonderheit, Merkmale …
       if (aktuellesGeraet == null) {
         final wert = _text(zeilen[r], 1);
-        if (wert != null && wert.isNotEmpty) hinweise[a] = wert;
+        if (wert != null && wert.isNotEmpty) {
+          // Gepflegte Merkmale haben eigene Spalten in `products` und
+          // dürfen nicht im Notiz-Freitext landen, sonst stünden sie nach
+          // dem nächsten Export doppelt in der Mappe.
+          if (_merkmalZeilen.contains(a)) {
+            merkmale[a] = wert;
+          } else {
+            hinweise[a] = wert;
+          }
+        }
         continue;
       }
 
@@ -382,6 +407,7 @@ class StammdatenImportService {
       'schritte': schritte,
       'historie': historie,
       'hinweise': hinweise,
+      'merkmale': merkmale,
     };
   }
 
@@ -564,6 +590,24 @@ class StammdatenImportService {
         final notiz = hinweise.entries
             .map((e) => '${e.key}: ${e.value}')
             .join(' | ');
+        final merkmale = (a['merkmale'] as Map).cast<String, String>();
+
+        // Leere Zellen lassen den bestehenden Wert stehen: Wer die Spalte
+        // in der Mappe nicht ausfüllt, will nichts löschen.
+        Value<String?> textWert(String zeile, List<Merkmal> liste) {
+          final roh = merkmale[zeile];
+          if (roh == null) return const Value.absent();
+          return Value(merkmaleAusLabels(roh, liste));
+        }
+
+        Value<String?> einzelWert(String zeile, List<Merkmal> liste) {
+          final roh = merkmale[zeile];
+          if (roh == null) return const Value.absent();
+          return Value(merkmalAusLabel(roh, liste));
+        }
+
+        final packungen = merkmale['Packungen pro Karton'];
+        final fuellmenge = merkmale['Füllmenge netto (g)'];
 
         var pid = artikelId[nummer];
         if (pid == null) {
@@ -576,6 +620,29 @@ class StammdatenImportService {
                   artikelbezeichnung:
                       bezeichnung.isEmpty ? nummer : bezeichnung,
                   notizen: Value(notiz.isEmpty ? null : notiz),
+                  allergene: textWert('Allergene', kAllergene),
+                  qualitaetsstufe:
+                      einzelWert('Qualitätsstufe', kQualitaetsstufen),
+                  verarbeitungsstufe: textWert(
+                    'Verarbeitungsstufe',
+                    kVerarbeitungsstufen,
+                  ),
+                  verpackungsformen: textWert(
+                    'Verpackungsformen',
+                    kVerpackungsformen,
+                  ),
+                  kartonGroesse: einzelWert('Kartongröße', kKartonGroessen),
+                  kartonBedruckung: einzelWert(
+                    'Kartonbedruckung',
+                    kKartonBedruckungen,
+                  ),
+                  packungenProKarton: packungen == null
+                      ? const Value.absent()
+                      : Value(int.tryParse(packungen.trim())),
+                  fuellmengeNettoG: fuellmenge == null
+                      ? const Value.absent()
+                      : Value(_zahl(fuellmenge)),
+                  abgabeart: einzelWert('Abgabeart', kAbgabearten),
                   istEingepflegt: const Value(false),
                 ),
               );
@@ -588,6 +655,28 @@ class StammdatenImportService {
                   ? const Value.absent()
                   : Value(bezeichnung),
               notizen: notiz.isEmpty ? const Value.absent() : Value(notiz),
+              allergene: textWert('Allergene', kAllergene),
+              qualitaetsstufe: einzelWert('Qualitätsstufe', kQualitaetsstufen),
+              verarbeitungsstufe: textWert(
+                'Verarbeitungsstufe',
+                kVerarbeitungsstufen,
+              ),
+              verpackungsformen: textWert(
+                'Verpackungsformen',
+                kVerpackungsformen,
+              ),
+              kartonGroesse: einzelWert('Kartongröße', kKartonGroessen),
+              kartonBedruckung: einzelWert(
+                'Kartonbedruckung',
+                kKartonBedruckungen,
+              ),
+              packungenProKarton: packungen == null
+                  ? const Value.absent()
+                  : Value(int.tryParse(packungen.trim())),
+              fuellmengeNettoG: fuellmenge == null
+                  ? const Value.absent()
+                  : Value(_zahl(fuellmenge)),
+              abgabeart: einzelWert('Abgabeart', kAbgabearten),
               updatedAt: Value(jetzt),
             ),
           );
@@ -866,3 +955,5 @@ class StammdatenImportService {
     return null;
   }
 }
+
+
