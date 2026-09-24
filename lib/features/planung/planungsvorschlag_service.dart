@@ -112,6 +112,12 @@ class VorschlagPosten {
     required this.nebenzeitMinuten,
     required this.wechselGrund,
     required this.begruendung,
+    required this.allergenRang,
+    required this.bioRang,
+    required this.rohRang,
+    required this.plattenTemp,
+    required this.hoehe,
+    required this.ausgangsMengeKg,
   });
 
   final String? bedarfId;
@@ -139,7 +145,67 @@ class VorschlagPosten {
   /// Klartext für die Ansicht, z.B. „Gluten, Eier · gegart · Bio".
   final String begruendung;
 
+  // Sortierschlüssel — die Ansicht braucht sie, um nach einer Änderung
+  // die Nebenzeiten und die Regelreihenfolge selbst neu zu rechnen,
+  // ohne den ganzen Vorschlag neu aus der Datenbank zu holen.
+  final int allergenRang;
+  final int bioRang;
+  final int rohRang;
+  final double plattenTemp;
+  final double hoehe;
+
+  /// Menge, mit der Dauer und Rohware ursprünglich gerechnet wurden.
+  /// Ändert der Anwender die Menge, werden beide daran skaliert.
+  final double ausgangsMengeKg;
+
   double get gesamtMinuten => dauerMinuten + nebenzeitMinuten;
+
+  VorschlagPosten kopieMit({
+    double? mengeKg,
+    double? rohwareKg,
+    double? dauerMinuten,
+    double? nebenzeitMinuten,
+    WechselGrund? wechselGrund,
+  }) {
+    return VorschlagPosten(
+      bedarfId: bedarfId,
+      productId: productId,
+      artikelnummer: artikelnummer,
+      bezeichnung: bezeichnung,
+      mengeKg: mengeKg ?? this.mengeKg,
+      rohwareKg: rohwareKg ?? this.rohwareKg,
+      dauerMinuten: dauerMinuten ?? this.dauerMinuten,
+      ausHistorie: ausHistorie,
+      nebenzeitMinuten: nebenzeitMinuten ?? this.nebenzeitMinuten,
+      wechselGrund: wechselGrund ?? this.wechselGrund,
+      begruendung: begruendung,
+      allergenRang: allergenRang,
+      bioRang: bioRang,
+      rohRang: rohRang,
+      plattenTemp: plattenTemp,
+      hoehe: hoehe,
+      ausgangsMengeKg: ausgangsMengeKg,
+    );
+  }
+
+  /// Menge ändern: Dauer und Rohware skalieren linear mit.
+  ///
+  /// Die fixen Durchlaufzeiten der Anlagen skalieren streng genommen
+  /// nicht mit — bei großen Änderungen lohnt deshalb ein „Neu berechnen",
+  /// das wieder sauber über die Historie rechnet.
+  VorschlagPosten mitMenge(double neueMenge) {
+    // Basis ist die AUSGANGSmenge, nicht die zuletzt eingestellte: So
+    // driftet der Wert nicht, wenn jemand mehrfach nachjustiert.
+    final basis = ausgangsMengeKg > 0 ? ausgangsMengeKg : mengeKg;
+    if (basis <= 0) return kopieMit(mengeKg: neueMenge);
+    final faktor = neueMenge / basis;
+    return kopieMit(
+      mengeKg: neueMenge,
+      rohwareKg: rohwareKg / (mengeKg > 0 ? mengeKg / basis : 1) * faktor,
+      dauerMinuten:
+          dauerMinuten / (mengeKg > 0 ? mengeKg / basis : 1) * faktor,
+    );
+  }
 }
 
 /// Ein Tag des Vorschlags.
@@ -176,6 +242,23 @@ class VorschlagTag {
 
   double get auslastung =>
       kapazitaetMinuten > 0 ? gesamtMinuten / kapazitaetMinuten : 0;
+
+  double get rohwareKg =>
+      posten.fold<double>(0, (s, p) => s + p.rohwareKg);
+
+  VorschlagTag kopieMit({
+    List<VorschlagPosten>? posten,
+    List<String>? warnungen,
+  }) {
+    return VorschlagTag(
+      tag: tag,
+      posten: posten ?? this.posten,
+      kapazitaetMinuten: kapazitaetMinuten,
+      belegtVorherMinuten: belegtVorherMinuten,
+      endreinigungMinuten: endreinigungMinuten,
+      warnungen: warnungen ?? this.warnungen,
+    );
+  }
 }
 
 /// Ein Bedarf, den der Vorschlag nicht unterbringen konnte.
@@ -205,6 +288,91 @@ class Planungsvorschlag {
   final VorschlagEinstellungen einstellungen;
 
   bool get istLeer => tage.every((t) => t.posten.isEmpty);
+}
+
+/// Rechnet Nebenzeiten und Regelreihenfolge für eine beliebige Liste von
+/// Posten — auch für eine, die der Anwender selbst umsortiert hat.
+///
+/// Bewusst außerhalb des Service: Die Ansicht soll eine Umstellung sofort
+/// durchrechnen können, ohne erneut in die Datenbank zu gehen.
+class Planungsrechner {
+  const Planungsrechner._();
+
+  /// Reihenfolge nach den Produktionsregeln: Allergene aufsteigend, Bio
+  /// vor konventionell, gegart vor roh, dann Temperatur und Höhe.
+  static List<VorschlagPosten> nachRegeln(List<VorschlagPosten> posten) {
+    return [...posten]..sort((a, b) {
+        final al = a.allergenRang.compareTo(b.allergenRang);
+        if (al != 0) return al;
+        final bio = a.bioRang.compareTo(b.bioRang);
+        if (bio != 0) return bio;
+        final roh = a.rohRang.compareTo(b.rohRang);
+        if (roh != 0) return roh;
+        final t = a.plattenTemp.compareTo(b.plattenTemp);
+        if (t != 0) return t;
+        final h = a.hoehe.compareTo(b.hoehe);
+        if (h != 0) return h;
+        return a.artikelnummer.compareTo(b.artikelnummer);
+      });
+  }
+
+  /// Nebenzeit und Wechselgrund für jeden Posten in der GEGEBENEN
+  /// Reihenfolge neu bestimmen. Sortiert nicht um — wer von Hand
+  /// umstellt, sieht sofort, was ihn das kostet.
+  static List<VorschlagPosten> mitNebenzeiten(
+    List<VorschlagPosten> posten,
+    VorschlagEinstellungen e,
+  ) {
+    final neu = <VorschlagPosten>[];
+    VorschlagPosten? vorher;
+    for (final p in posten) {
+      double zeit;
+      WechselGrund grund;
+      if (vorher == null) {
+        zeit = 0;
+        grund = WechselGrund.tagesstart;
+      } else if (p.allergenRang < vorher.allergenRang ||
+          p.bioRang < vorher.bioRang ||
+          p.rohRang < vorher.rohRang) {
+        zeit = e.zwischenreinigungMinuten;
+        grund = WechselGrund.reinigen;
+      } else if (p.plattenTemp == vorher.plattenTemp &&
+          p.hoehe == vorher.hoehe) {
+        zeit = 0;
+        grund = WechselGrund.ohneUmstellung;
+      } else {
+        zeit = e.ruestenMinuten;
+        grund = WechselGrund.umstellen;
+      }
+      final aktualisiert =
+          p.kopieMit(nebenzeitMinuten: zeit, wechselGrund: grund);
+      neu.add(aktualisiert);
+      vorher = aktualisiert;
+    }
+    return neu;
+  }
+
+  /// Verstößt die gegebene Reihenfolge gegen eine Regel? Liefert die
+  /// Klartexte für die Ansicht.
+  static List<String> regelbrueche(List<VorschlagPosten> posten) {
+    final brueche = <String>[];
+    for (var i = 1; i < posten.length; i++) {
+      final a = posten[i - 1], b = posten[i];
+      if (b.allergenRang < a.allergenRang) {
+        brueche.add('${b.artikelnummer} hat weniger Allergene als '
+            '${a.artikelnummer} — Reinigung nötig');
+      }
+      if (b.bioRang < a.bioRang) {
+        brueche.add('${b.artikelnummer} ist Bio und läuft nach '
+            'konventionell — Reinigung nötig');
+      }
+      if (b.rohRang < a.rohRang) {
+        brueche.add('${b.artikelnummer} ist gegart und läuft nach roh — '
+            'Reinigung nötig');
+      }
+    }
+    return brueche;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -723,6 +891,12 @@ class PlanungsvorschlagService {
           nebenzeitMinuten: zeit,
           wechselGrund: grund,
           begruendung: k.begruendung,
+          allergenRang: k.allergenRang,
+          bioRang: k.bioRang,
+          rohRang: k.rohRang,
+          plattenTemp: k.plattenTemp,
+          hoehe: k.hoehe,
+          ausgangsMengeKg: k.mengeKg,
         ),
       );
 
