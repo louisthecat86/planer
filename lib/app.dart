@@ -25,6 +25,7 @@ import 'features/settings/maschinen_katalog_screen.dart';
 import 'features/settings/parameter_grenzen_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/shell/home_screen.dart';
+import 'features/planung/planungsvorschlag_screen.dart';
 
 /// GoRouter-Provider.
 ///
@@ -79,6 +80,16 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'bedarf',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: BedarfScreen(),
+        ),
+      ),
+      // Planungsvorschlag: rechnet aus dem offenen Bedarf mögliche Tage
+      // und überträgt sie auf Wunsch ins Board. Bewusst eine eigene Seite
+      // — hier wird gerechnet und verworfen, im Board geplant.
+      GoRoute(
+        path: '/planungsvorschlag',
+        name: 'planungsvorschlag',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: PlanungsvorschlagScreen(),
         ),
       ),
       // Navision-Import: Artikelkatalog aus der Warenwirtschaft ansehen,
@@ -281,3 +292,5 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     );
   }
 }
+
+
