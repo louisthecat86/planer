@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -390,6 +390,50 @@ class AppDatabase extends _$AppDatabase {
             await _migrationStandardKapazitaetAuf10Stunden();
           }
 
+          // --- v23 → v24: Artikelmerkmale für die Planungsreihenfolge ---
+          // Allergene, Qualitäts- und Verarbeitungsstufe entscheiden, in
+          // welcher Reihenfolge Artikel an einem Tag laufen dürfen. Die
+          // Verpackungsangaben hängen mit dran, weil sie in derselben
+          // Maske gepflegt werden.
+          //
+          // Alle Spalten bleiben NULL: Nicht gepflegt ist etwas anderes
+          // als „hat keine Allergene", und der Wizard soll raten nicht
+          // mit einem Default verwechseln.
+          if (from < 24) {
+            await _addColumnIfNotExists('products', 'allergene', 'TEXT');
+            await _addColumnIfNotExists(
+              'products',
+              'qualitaetsstufe',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'verarbeitungsstufe',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'verpackungsformen',
+              'TEXT',
+            );
+            await _addColumnIfNotExists('products', 'karton_groesse', 'TEXT');
+            await _addColumnIfNotExists(
+              'products',
+              'karton_bedruckung',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'packungen_pro_karton',
+              'INTEGER',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'fuellmenge_netto_g',
+              'REAL',
+            );
+            await _addColumnIfNotExists('products', 'abgabeart', 'TEXT');
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -800,3 +844,5 @@ class AppDatabase extends _$AppDatabase {
 QueryExecutor _openConnection() {
   return driftDatabase(name: 'produktion_planer');
 }
+
+

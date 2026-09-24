@@ -192,6 +192,44 @@ class Products extends Table {
   /// 'hell' | 'mittel' | 'dunkel' (angebratene Brühwurst).
   TextColumn get anbratgrad => text().nullable()();
 
+  // ── Merkmale (Infos-Karte, Grundlage der Planungsreihenfolge) ─────────
+  //
+  // Alle Mehrfachauswahlen liegen als kommagetrennte dbValues aus
+  // `artikel_merkmale.dart`. Kein eigenes Zuordnungs-Schema: Die Listen
+  // sind kurz, ändern sich selten, und eine Textspalte bleibt in Backup,
+  // Excel-Export und Sync lesbar.
+
+  /// Allergene als Kommaliste, z.B. 'gluten,eier'. NULL = noch nicht
+  /// gepflegt, LEER ist nicht dasselbe wie allergenfrei — der Planungs-
+  /// Wizard behandelt ungepflegte Artikel deshalb als nicht planbar.
+  TextColumn get allergene => text().nullable()();
+
+  /// 'bio' | 'konventionell'. Bio läuft vor konventionell.
+  TextColumn get qualitaetsstufe => text().nullable()();
+
+  /// Kommaliste aus 'roh', 'gegart', 'frisch', 'tk'. Garzustand und
+  /// Lieferzustand zugleich — ein rohes Hackprodukt tiefgekühlt ist
+  /// 'roh,tk'. Rohe Artikel laufen nach gegarten.
+  TextColumn get verarbeitungsstufe => text().nullable()();
+
+  /// Kommaliste aus 'karton', 'e2_kiste', 'einschlagbeutel'.
+  TextColumn get verpackungsformen => text().nullable()();
+
+  /// 'gross' | 'klein' — nur bei Karton relevant.
+  TextColumn get kartonGroesse => text().nullable()();
+
+  /// 'neutral' | 'bedruckt' — nur bei Karton relevant.
+  TextColumn get kartonBedruckung => text().nullable()();
+
+  /// Packungen je Karton.
+  IntColumn get packungenProKarton => integer().nullable()();
+
+  /// Füllmenge je Packung als Nettogewicht in Gramm.
+  RealColumn get fuellmengeNettoG => real().nullable()();
+
+  /// 'gezaehlt' | 'gewogen' | 'egalisiert'.
+  TextColumn get abgabeart => text().nullable()();
+
   // ── Sync-Felder (in allen Tabellen identisch) ─────────────────────────
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
@@ -201,3 +239,5 @@ class Products extends Table {
   @override
   Set<Column> get primaryKey => {id};
 }
+
+

@@ -300,6 +300,60 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
   late final GeneratedColumn<String> anbratgrad = GeneratedColumn<String>(
       'anbratgrad', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _allergeneMeta =
+      const VerificationMeta('allergene');
+  @override
+  late final GeneratedColumn<String> allergene = GeneratedColumn<String>(
+      'allergene', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _qualitaetsstufeMeta =
+      const VerificationMeta('qualitaetsstufe');
+  @override
+  late final GeneratedColumn<String> qualitaetsstufe = GeneratedColumn<String>(
+      'qualitaetsstufe', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verarbeitungsstufeMeta =
+      const VerificationMeta('verarbeitungsstufe');
+  @override
+  late final GeneratedColumn<String> verarbeitungsstufe =
+      GeneratedColumn<String>('verarbeitungsstufe', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verpackungsformenMeta =
+      const VerificationMeta('verpackungsformen');
+  @override
+  late final GeneratedColumn<String> verpackungsformen =
+      GeneratedColumn<String>('verpackungsformen', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kartonGroesseMeta =
+      const VerificationMeta('kartonGroesse');
+  @override
+  late final GeneratedColumn<String> kartonGroesse = GeneratedColumn<String>(
+      'karton_groesse', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kartonBedruckungMeta =
+      const VerificationMeta('kartonBedruckung');
+  @override
+  late final GeneratedColumn<String> kartonBedruckung = GeneratedColumn<String>(
+      'karton_bedruckung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _packungenProKartonMeta =
+      const VerificationMeta('packungenProKarton');
+  @override
+  late final GeneratedColumn<int> packungenProKarton = GeneratedColumn<int>(
+      'packungen_pro_karton', aliasedName, true,
+      type: DriftSqlType.int, requiredDuringInsert: false);
+  static const VerificationMeta _fuellmengeNettoGMeta =
+      const VerificationMeta('fuellmengeNettoG');
+  @override
+  late final GeneratedColumn<double> fuellmengeNettoG = GeneratedColumn<double>(
+      'fuellmenge_netto_g', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _abgabeartMeta =
+      const VerificationMeta('abgabeart');
+  @override
+  late final GeneratedColumn<String> abgabeart = GeneratedColumn<String>(
+      'abgabeart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _createdAtMeta =
       const VerificationMeta('createdAt');
   @override
@@ -372,6 +426,15 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
         svBadtempC,
         svGarzeitStd,
         anbratgrad,
+        allergene,
+        qualitaetsstufe,
+        verarbeitungsstufe,
+        verpackungsformen,
+        kartonGroesse,
+        kartonBedruckung,
+        packungenProKarton,
+        fuellmengeNettoG,
+        abgabeart,
         createdAt,
         updatedAt,
         deletedAt
@@ -662,6 +725,56 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           anbratgrad.isAcceptableOrUnknown(
               data['anbratgrad']!, _anbratgradMeta));
     }
+    if (data.containsKey('allergene')) {
+      context.handle(_allergeneMeta,
+          allergene.isAcceptableOrUnknown(data['allergene']!, _allergeneMeta));
+    }
+    if (data.containsKey('qualitaetsstufe')) {
+      context.handle(
+          _qualitaetsstufeMeta,
+          qualitaetsstufe.isAcceptableOrUnknown(
+              data['qualitaetsstufe']!, _qualitaetsstufeMeta));
+    }
+    if (data.containsKey('verarbeitungsstufe')) {
+      context.handle(
+          _verarbeitungsstufeMeta,
+          verarbeitungsstufe.isAcceptableOrUnknown(
+              data['verarbeitungsstufe']!, _verarbeitungsstufeMeta));
+    }
+    if (data.containsKey('verpackungsformen')) {
+      context.handle(
+          _verpackungsformenMeta,
+          verpackungsformen.isAcceptableOrUnknown(
+              data['verpackungsformen']!, _verpackungsformenMeta));
+    }
+    if (data.containsKey('karton_groesse')) {
+      context.handle(
+          _kartonGroesseMeta,
+          kartonGroesse.isAcceptableOrUnknown(
+              data['karton_groesse']!, _kartonGroesseMeta));
+    }
+    if (data.containsKey('karton_bedruckung')) {
+      context.handle(
+          _kartonBedruckungMeta,
+          kartonBedruckung.isAcceptableOrUnknown(
+              data['karton_bedruckung']!, _kartonBedruckungMeta));
+    }
+    if (data.containsKey('packungen_pro_karton')) {
+      context.handle(
+          _packungenProKartonMeta,
+          packungenProKarton.isAcceptableOrUnknown(
+              data['packungen_pro_karton']!, _packungenProKartonMeta));
+    }
+    if (data.containsKey('fuellmenge_netto_g')) {
+      context.handle(
+          _fuellmengeNettoGMeta,
+          fuellmengeNettoG.isAcceptableOrUnknown(
+              data['fuellmenge_netto_g']!, _fuellmengeNettoGMeta));
+    }
+    if (data.containsKey('abgabeart')) {
+      context.handle(_abgabeartMeta,
+          abgabeart.isAcceptableOrUnknown(data['abgabeart']!, _abgabeartMeta));
+    }
     if (data.containsKey('created_at')) {
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
@@ -785,6 +898,24 @@ class $ProductsTable extends Products with TableInfo<$ProductsTable, Product> {
           .read(DriftSqlType.double, data['${effectivePrefix}sv_garzeit_std']),
       anbratgrad: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}anbratgrad']),
+      allergene: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}allergene']),
+      qualitaetsstufe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}qualitaetsstufe']),
+      verarbeitungsstufe: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}verarbeitungsstufe']),
+      verpackungsformen: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}verpackungsformen']),
+      kartonGroesse: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}karton_groesse']),
+      kartonBedruckung: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}karton_bedruckung']),
+      packungenProKarton: attachedDatabase.typeMapping.read(
+          DriftSqlType.int, data['${effectivePrefix}packungen_pro_karton']),
+      fuellmengeNettoG: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}fuellmenge_netto_g']),
+      abgabeart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}abgabeart']),
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
       updatedAt: attachedDatabase.typeMapping
@@ -938,6 +1069,37 @@ class Product extends DataClass implements Insertable<Product> {
 
   /// 'hell' | 'mittel' | 'dunkel' (angebratene Brühwurst).
   final String? anbratgrad;
+
+  /// Allergene als Kommaliste, z.B. 'gluten,eier'. NULL = noch nicht
+  /// gepflegt, LEER ist nicht dasselbe wie allergenfrei — der Planungs-
+  /// Wizard behandelt ungepflegte Artikel deshalb als nicht planbar.
+  final String? allergene;
+
+  /// 'bio' | 'konventionell'. Bio läuft vor konventionell.
+  final String? qualitaetsstufe;
+
+  /// Kommaliste aus 'roh', 'gegart', 'frisch', 'tk'. Garzustand und
+  /// Lieferzustand zugleich — ein rohes Hackprodukt tiefgekühlt ist
+  /// 'roh,tk'. Rohe Artikel laufen nach gegarten.
+  final String? verarbeitungsstufe;
+
+  /// Kommaliste aus 'karton', 'e2_kiste', 'einschlagbeutel'.
+  final String? verpackungsformen;
+
+  /// 'gross' | 'klein' — nur bei Karton relevant.
+  final String? kartonGroesse;
+
+  /// 'neutral' | 'bedruckt' — nur bei Karton relevant.
+  final String? kartonBedruckung;
+
+  /// Packungen je Karton.
+  final int? packungenProKarton;
+
+  /// Füllmenge je Packung als Nettogewicht in Gramm.
+  final double? fuellmengeNettoG;
+
+  /// 'gezaehlt' | 'gewogen' | 'egalisiert'.
+  final String? abgabeart;
   final DateTime createdAt;
   final DateTime updatedAt;
   final DateTime? deletedAt;
@@ -990,6 +1152,15 @@ class Product extends DataClass implements Insertable<Product> {
       this.svBadtempC,
       this.svGarzeitStd,
       this.anbratgrad,
+      this.allergene,
+      this.qualitaetsstufe,
+      this.verarbeitungsstufe,
+      this.verpackungsformen,
+      this.kartonGroesse,
+      this.kartonBedruckung,
+      this.packungenProKarton,
+      this.fuellmengeNettoG,
+      this.abgabeart,
       required this.createdAt,
       required this.updatedAt,
       this.deletedAt});
@@ -1135,6 +1306,33 @@ class Product extends DataClass implements Insertable<Product> {
     if (!nullToAbsent || anbratgrad != null) {
       map['anbratgrad'] = Variable<String>(anbratgrad);
     }
+    if (!nullToAbsent || allergene != null) {
+      map['allergene'] = Variable<String>(allergene);
+    }
+    if (!nullToAbsent || qualitaetsstufe != null) {
+      map['qualitaetsstufe'] = Variable<String>(qualitaetsstufe);
+    }
+    if (!nullToAbsent || verarbeitungsstufe != null) {
+      map['verarbeitungsstufe'] = Variable<String>(verarbeitungsstufe);
+    }
+    if (!nullToAbsent || verpackungsformen != null) {
+      map['verpackungsformen'] = Variable<String>(verpackungsformen);
+    }
+    if (!nullToAbsent || kartonGroesse != null) {
+      map['karton_groesse'] = Variable<String>(kartonGroesse);
+    }
+    if (!nullToAbsent || kartonBedruckung != null) {
+      map['karton_bedruckung'] = Variable<String>(kartonBedruckung);
+    }
+    if (!nullToAbsent || packungenProKarton != null) {
+      map['packungen_pro_karton'] = Variable<int>(packungenProKarton);
+    }
+    if (!nullToAbsent || fuellmengeNettoG != null) {
+      map['fuellmenge_netto_g'] = Variable<double>(fuellmengeNettoG);
+    }
+    if (!nullToAbsent || abgabeart != null) {
+      map['abgabeart'] = Variable<String>(abgabeart);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     if (!nullToAbsent || deletedAt != null) {
@@ -1278,6 +1476,33 @@ class Product extends DataClass implements Insertable<Product> {
       anbratgrad: anbratgrad == null && nullToAbsent
           ? const Value.absent()
           : Value(anbratgrad),
+      allergene: allergene == null && nullToAbsent
+          ? const Value.absent()
+          : Value(allergene),
+      qualitaetsstufe: qualitaetsstufe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(qualitaetsstufe),
+      verarbeitungsstufe: verarbeitungsstufe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verarbeitungsstufe),
+      verpackungsformen: verpackungsformen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verpackungsformen),
+      kartonGroesse: kartonGroesse == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kartonGroesse),
+      kartonBedruckung: kartonBedruckung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kartonBedruckung),
+      packungenProKarton: packungenProKarton == null && nullToAbsent
+          ? const Value.absent()
+          : Value(packungenProKarton),
+      fuellmengeNettoG: fuellmengeNettoG == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fuellmengeNettoG),
+      abgabeart: abgabeart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(abgabeart),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       deletedAt: deletedAt == null && nullToAbsent
@@ -1348,6 +1573,17 @@ class Product extends DataClass implements Insertable<Product> {
       svBadtempC: serializer.fromJson<double?>(json['svBadtempC']),
       svGarzeitStd: serializer.fromJson<double?>(json['svGarzeitStd']),
       anbratgrad: serializer.fromJson<String?>(json['anbratgrad']),
+      allergene: serializer.fromJson<String?>(json['allergene']),
+      qualitaetsstufe: serializer.fromJson<String?>(json['qualitaetsstufe']),
+      verarbeitungsstufe:
+          serializer.fromJson<String?>(json['verarbeitungsstufe']),
+      verpackungsformen:
+          serializer.fromJson<String?>(json['verpackungsformen']),
+      kartonGroesse: serializer.fromJson<String?>(json['kartonGroesse']),
+      kartonBedruckung: serializer.fromJson<String?>(json['kartonBedruckung']),
+      packungenProKarton: serializer.fromJson<int?>(json['packungenProKarton']),
+      fuellmengeNettoG: serializer.fromJson<double?>(json['fuellmengeNettoG']),
+      abgabeart: serializer.fromJson<String?>(json['abgabeart']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -1410,6 +1646,15 @@ class Product extends DataClass implements Insertable<Product> {
       'svBadtempC': serializer.toJson<double?>(svBadtempC),
       'svGarzeitStd': serializer.toJson<double?>(svGarzeitStd),
       'anbratgrad': serializer.toJson<String?>(anbratgrad),
+      'allergene': serializer.toJson<String?>(allergene),
+      'qualitaetsstufe': serializer.toJson<String?>(qualitaetsstufe),
+      'verarbeitungsstufe': serializer.toJson<String?>(verarbeitungsstufe),
+      'verpackungsformen': serializer.toJson<String?>(verpackungsformen),
+      'kartonGroesse': serializer.toJson<String?>(kartonGroesse),
+      'kartonBedruckung': serializer.toJson<String?>(kartonBedruckung),
+      'packungenProKarton': serializer.toJson<int?>(packungenProKarton),
+      'fuellmengeNettoG': serializer.toJson<double?>(fuellmengeNettoG),
+      'abgabeart': serializer.toJson<String?>(abgabeart),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -1465,6 +1710,15 @@ class Product extends DataClass implements Insertable<Product> {
           Value<double?> svBadtempC = const Value.absent(),
           Value<double?> svGarzeitStd = const Value.absent(),
           Value<String?> anbratgrad = const Value.absent(),
+          Value<String?> allergene = const Value.absent(),
+          Value<String?> qualitaetsstufe = const Value.absent(),
+          Value<String?> verarbeitungsstufe = const Value.absent(),
+          Value<String?> verpackungsformen = const Value.absent(),
+          Value<String?> kartonGroesse = const Value.absent(),
+          Value<String?> kartonBedruckung = const Value.absent(),
+          Value<int?> packungenProKarton = const Value.absent(),
+          Value<double?> fuellmengeNettoG = const Value.absent(),
+          Value<String?> abgabeart = const Value.absent(),
           DateTime? createdAt,
           DateTime? updatedAt,
           Value<DateTime?> deletedAt = const Value.absent()}) =>
@@ -1563,6 +1817,28 @@ class Product extends DataClass implements Insertable<Product> {
         svGarzeitStd:
             svGarzeitStd.present ? svGarzeitStd.value : this.svGarzeitStd,
         anbratgrad: anbratgrad.present ? anbratgrad.value : this.anbratgrad,
+        allergene: allergene.present ? allergene.value : this.allergene,
+        qualitaetsstufe: qualitaetsstufe.present
+            ? qualitaetsstufe.value
+            : this.qualitaetsstufe,
+        verarbeitungsstufe: verarbeitungsstufe.present
+            ? verarbeitungsstufe.value
+            : this.verarbeitungsstufe,
+        verpackungsformen: verpackungsformen.present
+            ? verpackungsformen.value
+            : this.verpackungsformen,
+        kartonGroesse:
+            kartonGroesse.present ? kartonGroesse.value : this.kartonGroesse,
+        kartonBedruckung: kartonBedruckung.present
+            ? kartonBedruckung.value
+            : this.kartonBedruckung,
+        packungenProKarton: packungenProKarton.present
+            ? packungenProKarton.value
+            : this.packungenProKarton,
+        fuellmengeNettoG: fuellmengeNettoG.present
+            ? fuellmengeNettoG.value
+            : this.fuellmengeNettoG,
+        abgabeart: abgabeart.present ? abgabeart.value : this.abgabeart,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
         deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -1688,6 +1964,29 @@ class Product extends DataClass implements Insertable<Product> {
           : this.svGarzeitStd,
       anbratgrad:
           data.anbratgrad.present ? data.anbratgrad.value : this.anbratgrad,
+      allergene: data.allergene.present ? data.allergene.value : this.allergene,
+      qualitaetsstufe: data.qualitaetsstufe.present
+          ? data.qualitaetsstufe.value
+          : this.qualitaetsstufe,
+      verarbeitungsstufe: data.verarbeitungsstufe.present
+          ? data.verarbeitungsstufe.value
+          : this.verarbeitungsstufe,
+      verpackungsformen: data.verpackungsformen.present
+          ? data.verpackungsformen.value
+          : this.verpackungsformen,
+      kartonGroesse: data.kartonGroesse.present
+          ? data.kartonGroesse.value
+          : this.kartonGroesse,
+      kartonBedruckung: data.kartonBedruckung.present
+          ? data.kartonBedruckung.value
+          : this.kartonBedruckung,
+      packungenProKarton: data.packungenProKarton.present
+          ? data.packungenProKarton.value
+          : this.packungenProKarton,
+      fuellmengeNettoG: data.fuellmengeNettoG.present
+          ? data.fuellmengeNettoG.value
+          : this.fuellmengeNettoG,
+      abgabeart: data.abgabeart.present ? data.abgabeart.value : this.abgabeart,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -1745,6 +2044,15 @@ class Product extends DataClass implements Insertable<Product> {
           ..write('svBadtempC: $svBadtempC, ')
           ..write('svGarzeitStd: $svGarzeitStd, ')
           ..write('anbratgrad: $anbratgrad, ')
+          ..write('allergene: $allergene, ')
+          ..write('qualitaetsstufe: $qualitaetsstufe, ')
+          ..write('verarbeitungsstufe: $verarbeitungsstufe, ')
+          ..write('verpackungsformen: $verpackungsformen, ')
+          ..write('kartonGroesse: $kartonGroesse, ')
+          ..write('kartonBedruckung: $kartonBedruckung, ')
+          ..write('packungenProKarton: $packungenProKarton, ')
+          ..write('fuellmengeNettoG: $fuellmengeNettoG, ')
+          ..write('abgabeart: $abgabeart, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt')
@@ -1802,6 +2110,15 @@ class Product extends DataClass implements Insertable<Product> {
         svBadtempC,
         svGarzeitStd,
         anbratgrad,
+        allergene,
+        qualitaetsstufe,
+        verarbeitungsstufe,
+        verpackungsformen,
+        kartonGroesse,
+        kartonBedruckung,
+        packungenProKarton,
+        fuellmengeNettoG,
+        abgabeart,
         createdAt,
         updatedAt,
         deletedAt
@@ -1858,6 +2175,15 @@ class Product extends DataClass implements Insertable<Product> {
           other.svBadtempC == this.svBadtempC &&
           other.svGarzeitStd == this.svGarzeitStd &&
           other.anbratgrad == this.anbratgrad &&
+          other.allergene == this.allergene &&
+          other.qualitaetsstufe == this.qualitaetsstufe &&
+          other.verarbeitungsstufe == this.verarbeitungsstufe &&
+          other.verpackungsformen == this.verpackungsformen &&
+          other.kartonGroesse == this.kartonGroesse &&
+          other.kartonBedruckung == this.kartonBedruckung &&
+          other.packungenProKarton == this.packungenProKarton &&
+          other.fuellmengeNettoG == this.fuellmengeNettoG &&
+          other.abgabeart == this.abgabeart &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.deletedAt == this.deletedAt);
@@ -1912,6 +2238,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
   final Value<double?> svBadtempC;
   final Value<double?> svGarzeitStd;
   final Value<String?> anbratgrad;
+  final Value<String?> allergene;
+  final Value<String?> qualitaetsstufe;
+  final Value<String?> verarbeitungsstufe;
+  final Value<String?> verpackungsformen;
+  final Value<String?> kartonGroesse;
+  final Value<String?> kartonBedruckung;
+  final Value<int?> packungenProKarton;
+  final Value<double?> fuellmengeNettoG;
+  final Value<String?> abgabeart;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<DateTime?> deletedAt;
@@ -1965,6 +2300,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.svBadtempC = const Value.absent(),
     this.svGarzeitStd = const Value.absent(),
     this.anbratgrad = const Value.absent(),
+    this.allergene = const Value.absent(),
+    this.qualitaetsstufe = const Value.absent(),
+    this.verarbeitungsstufe = const Value.absent(),
+    this.verpackungsformen = const Value.absent(),
+    this.kartonGroesse = const Value.absent(),
+    this.kartonBedruckung = const Value.absent(),
+    this.packungenProKarton = const Value.absent(),
+    this.fuellmengeNettoG = const Value.absent(),
+    this.abgabeart = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2019,6 +2363,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     this.svBadtempC = const Value.absent(),
     this.svGarzeitStd = const Value.absent(),
     this.anbratgrad = const Value.absent(),
+    this.allergene = const Value.absent(),
+    this.qualitaetsstufe = const Value.absent(),
+    this.verarbeitungsstufe = const Value.absent(),
+    this.verpackungsformen = const Value.absent(),
+    this.kartonGroesse = const Value.absent(),
+    this.kartonBedruckung = const Value.absent(),
+    this.packungenProKarton = const Value.absent(),
+    this.fuellmengeNettoG = const Value.absent(),
+    this.abgabeart = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -2075,6 +2428,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     Expression<double>? svBadtempC,
     Expression<double>? svGarzeitStd,
     Expression<String>? anbratgrad,
+    Expression<String>? allergene,
+    Expression<String>? qualitaetsstufe,
+    Expression<String>? verarbeitungsstufe,
+    Expression<String>? verpackungsformen,
+    Expression<String>? kartonGroesse,
+    Expression<String>? kartonBedruckung,
+    Expression<int>? packungenProKarton,
+    Expression<double>? fuellmengeNettoG,
+    Expression<String>? abgabeart,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<DateTime>? deletedAt,
@@ -2137,6 +2499,16 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       if (svBadtempC != null) 'sv_badtemp_c': svBadtempC,
       if (svGarzeitStd != null) 'sv_garzeit_std': svGarzeitStd,
       if (anbratgrad != null) 'anbratgrad': anbratgrad,
+      if (allergene != null) 'allergene': allergene,
+      if (qualitaetsstufe != null) 'qualitaetsstufe': qualitaetsstufe,
+      if (verarbeitungsstufe != null) 'verarbeitungsstufe': verarbeitungsstufe,
+      if (verpackungsformen != null) 'verpackungsformen': verpackungsformen,
+      if (kartonGroesse != null) 'karton_groesse': kartonGroesse,
+      if (kartonBedruckung != null) 'karton_bedruckung': kartonBedruckung,
+      if (packungenProKarton != null)
+        'packungen_pro_karton': packungenProKarton,
+      if (fuellmengeNettoG != null) 'fuellmenge_netto_g': fuellmengeNettoG,
+      if (abgabeart != null) 'abgabeart': abgabeart,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -2193,6 +2565,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       Value<double?>? svBadtempC,
       Value<double?>? svGarzeitStd,
       Value<String?>? anbratgrad,
+      Value<String?>? allergene,
+      Value<String?>? qualitaetsstufe,
+      Value<String?>? verarbeitungsstufe,
+      Value<String?>? verpackungsformen,
+      Value<String?>? kartonGroesse,
+      Value<String?>? kartonBedruckung,
+      Value<int?>? packungenProKarton,
+      Value<double?>? fuellmengeNettoG,
+      Value<String?>? abgabeart,
       Value<DateTime>? createdAt,
       Value<DateTime>? updatedAt,
       Value<DateTime?>? deletedAt,
@@ -2252,6 +2633,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
       svBadtempC: svBadtempC ?? this.svBadtempC,
       svGarzeitStd: svGarzeitStd ?? this.svGarzeitStd,
       anbratgrad: anbratgrad ?? this.anbratgrad,
+      allergene: allergene ?? this.allergene,
+      qualitaetsstufe: qualitaetsstufe ?? this.qualitaetsstufe,
+      verarbeitungsstufe: verarbeitungsstufe ?? this.verarbeitungsstufe,
+      verpackungsformen: verpackungsformen ?? this.verpackungsformen,
+      kartonGroesse: kartonGroesse ?? this.kartonGroesse,
+      kartonBedruckung: kartonBedruckung ?? this.kartonBedruckung,
+      packungenProKarton: packungenProKarton ?? this.packungenProKarton,
+      fuellmengeNettoG: fuellmengeNettoG ?? this.fuellmengeNettoG,
+      abgabeart: abgabeart ?? this.abgabeart,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -2413,6 +2803,33 @@ class ProductsCompanion extends UpdateCompanion<Product> {
     if (anbratgrad.present) {
       map['anbratgrad'] = Variable<String>(anbratgrad.value);
     }
+    if (allergene.present) {
+      map['allergene'] = Variable<String>(allergene.value);
+    }
+    if (qualitaetsstufe.present) {
+      map['qualitaetsstufe'] = Variable<String>(qualitaetsstufe.value);
+    }
+    if (verarbeitungsstufe.present) {
+      map['verarbeitungsstufe'] = Variable<String>(verarbeitungsstufe.value);
+    }
+    if (verpackungsformen.present) {
+      map['verpackungsformen'] = Variable<String>(verpackungsformen.value);
+    }
+    if (kartonGroesse.present) {
+      map['karton_groesse'] = Variable<String>(kartonGroesse.value);
+    }
+    if (kartonBedruckung.present) {
+      map['karton_bedruckung'] = Variable<String>(kartonBedruckung.value);
+    }
+    if (packungenProKarton.present) {
+      map['packungen_pro_karton'] = Variable<int>(packungenProKarton.value);
+    }
+    if (fuellmengeNettoG.present) {
+      map['fuellmenge_netto_g'] = Variable<double>(fuellmengeNettoG.value);
+    }
+    if (abgabeart.present) {
+      map['abgabeart'] = Variable<String>(abgabeart.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -2479,6 +2896,15 @@ class ProductsCompanion extends UpdateCompanion<Product> {
           ..write('svBadtempC: $svBadtempC, ')
           ..write('svGarzeitStd: $svGarzeitStd, ')
           ..write('anbratgrad: $anbratgrad, ')
+          ..write('allergene: $allergene, ')
+          ..write('qualitaetsstufe: $qualitaetsstufe, ')
+          ..write('verarbeitungsstufe: $verarbeitungsstufe, ')
+          ..write('verpackungsformen: $verpackungsformen, ')
+          ..write('kartonGroesse: $kartonGroesse, ')
+          ..write('kartonBedruckung: $kartonBedruckung, ')
+          ..write('packungenProKarton: $packungenProKarton, ')
+          ..write('fuellmengeNettoG: $fuellmengeNettoG, ')
+          ..write('abgabeart: $abgabeart, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('deletedAt: $deletedAt, ')
@@ -10241,7 +10667,7 @@ class $AppSettingsTable extends AppSettings
 }
 
 class AppSetting extends DataClass implements Insertable<AppSetting> {
-  /// Eindeutiger Schlüssel, z.B. "last_import_excel_bytes".
+  /// Eindeutiger Schlüssel, z.B. "theme_mode".
   final String key;
 
   /// Wert als String. Binäre Daten werden Base64-kodiert abgelegt.
@@ -14154,6 +14580,15 @@ typedef $$ProductsTableCreateCompanionBuilder = ProductsCompanion Function({
   Value<double?> svBadtempC,
   Value<double?> svGarzeitStd,
   Value<String?> anbratgrad,
+  Value<String?> allergene,
+  Value<String?> qualitaetsstufe,
+  Value<String?> verarbeitungsstufe,
+  Value<String?> verpackungsformen,
+  Value<String?> kartonGroesse,
+  Value<String?> kartonBedruckung,
+  Value<int?> packungenProKarton,
+  Value<double?> fuellmengeNettoG,
+  Value<String?> abgabeart,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -14208,6 +14643,15 @@ typedef $$ProductsTableUpdateCompanionBuilder = ProductsCompanion Function({
   Value<double?> svBadtempC,
   Value<double?> svGarzeitStd,
   Value<String?> anbratgrad,
+  Value<String?> allergene,
+  Value<String?> qualitaetsstufe,
+  Value<String?> verarbeitungsstufe,
+  Value<String?> verpackungsformen,
+  Value<String?> kartonGroesse,
+  Value<String?> kartonBedruckung,
+  Value<int?> packungenProKarton,
+  Value<double?> fuellmengeNettoG,
+  Value<String?> abgabeart,
   Value<DateTime> createdAt,
   Value<DateTime> updatedAt,
   Value<DateTime?> deletedAt,
@@ -14462,6 +14906,39 @@ class $$ProductsTableFilterComposer
 
   ColumnFilters<String> get anbratgrad => $composableBuilder(
       column: $table.anbratgrad, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get allergene => $composableBuilder(
+      column: $table.allergene, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get qualitaetsstufe => $composableBuilder(
+      column: $table.qualitaetsstufe,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verarbeitungsstufe => $composableBuilder(
+      column: $table.verarbeitungsstufe,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verpackungsformen => $composableBuilder(
+      column: $table.verpackungsformen,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kartonGroesse => $composableBuilder(
+      column: $table.kartonGroesse, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kartonBedruckung => $composableBuilder(
+      column: $table.kartonBedruckung,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get packungenProKarton => $composableBuilder(
+      column: $table.packungenProKarton,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fuellmengeNettoG => $composableBuilder(
+      column: $table.fuellmengeNettoG,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get abgabeart => $composableBuilder(
+      column: $table.abgabeart, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
@@ -14743,6 +15220,40 @@ class $$ProductsTableOrderingComposer
   ColumnOrderings<String> get anbratgrad => $composableBuilder(
       column: $table.anbratgrad, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get allergene => $composableBuilder(
+      column: $table.allergene, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get qualitaetsstufe => $composableBuilder(
+      column: $table.qualitaetsstufe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get verarbeitungsstufe => $composableBuilder(
+      column: $table.verarbeitungsstufe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get verpackungsformen => $composableBuilder(
+      column: $table.verpackungsformen,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kartonGroesse => $composableBuilder(
+      column: $table.kartonGroesse,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kartonBedruckung => $composableBuilder(
+      column: $table.kartonBedruckung,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get packungenProKarton => $composableBuilder(
+      column: $table.packungenProKarton,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get fuellmengeNettoG => $composableBuilder(
+      column: $table.fuellmengeNettoG,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get abgabeart => $composableBuilder(
+      column: $table.abgabeart, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
 
@@ -14905,6 +15416,33 @@ class $$ProductsTableAnnotationComposer
 
   GeneratedColumn<String> get anbratgrad => $composableBuilder(
       column: $table.anbratgrad, builder: (column) => column);
+
+  GeneratedColumn<String> get allergene =>
+      $composableBuilder(column: $table.allergene, builder: (column) => column);
+
+  GeneratedColumn<String> get qualitaetsstufe => $composableBuilder(
+      column: $table.qualitaetsstufe, builder: (column) => column);
+
+  GeneratedColumn<String> get verarbeitungsstufe => $composableBuilder(
+      column: $table.verarbeitungsstufe, builder: (column) => column);
+
+  GeneratedColumn<String> get verpackungsformen => $composableBuilder(
+      column: $table.verpackungsformen, builder: (column) => column);
+
+  GeneratedColumn<String> get kartonGroesse => $composableBuilder(
+      column: $table.kartonGroesse, builder: (column) => column);
+
+  GeneratedColumn<String> get kartonBedruckung => $composableBuilder(
+      column: $table.kartonBedruckung, builder: (column) => column);
+
+  GeneratedColumn<int> get packungenProKarton => $composableBuilder(
+      column: $table.packungenProKarton, builder: (column) => column);
+
+  GeneratedColumn<double> get fuellmengeNettoG => $composableBuilder(
+      column: $table.fuellmengeNettoG, builder: (column) => column);
+
+  GeneratedColumn<String> get abgabeart =>
+      $composableBuilder(column: $table.abgabeart, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -15078,6 +15616,15 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<double?> svBadtempC = const Value.absent(),
             Value<double?> svGarzeitStd = const Value.absent(),
             Value<String?> anbratgrad = const Value.absent(),
+            Value<String?> allergene = const Value.absent(),
+            Value<String?> qualitaetsstufe = const Value.absent(),
+            Value<String?> verarbeitungsstufe = const Value.absent(),
+            Value<String?> verpackungsformen = const Value.absent(),
+            Value<String?> kartonGroesse = const Value.absent(),
+            Value<String?> kartonBedruckung = const Value.absent(),
+            Value<int?> packungenProKarton = const Value.absent(),
+            Value<double?> fuellmengeNettoG = const Value.absent(),
+            Value<String?> abgabeart = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -15132,6 +15679,15 @@ class $$ProductsTableTableManager extends RootTableManager<
             svBadtempC: svBadtempC,
             svGarzeitStd: svGarzeitStd,
             anbratgrad: anbratgrad,
+            allergene: allergene,
+            qualitaetsstufe: qualitaetsstufe,
+            verarbeitungsstufe: verarbeitungsstufe,
+            verpackungsformen: verpackungsformen,
+            kartonGroesse: kartonGroesse,
+            kartonBedruckung: kartonBedruckung,
+            packungenProKarton: packungenProKarton,
+            fuellmengeNettoG: fuellmengeNettoG,
+            abgabeart: abgabeart,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,
@@ -15186,6 +15742,15 @@ class $$ProductsTableTableManager extends RootTableManager<
             Value<double?> svBadtempC = const Value.absent(),
             Value<double?> svGarzeitStd = const Value.absent(),
             Value<String?> anbratgrad = const Value.absent(),
+            Value<String?> allergene = const Value.absent(),
+            Value<String?> qualitaetsstufe = const Value.absent(),
+            Value<String?> verarbeitungsstufe = const Value.absent(),
+            Value<String?> verpackungsformen = const Value.absent(),
+            Value<String?> kartonGroesse = const Value.absent(),
+            Value<String?> kartonBedruckung = const Value.absent(),
+            Value<int?> packungenProKarton = const Value.absent(),
+            Value<double?> fuellmengeNettoG = const Value.absent(),
+            Value<String?> abgabeart = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
             Value<DateTime> updatedAt = const Value.absent(),
             Value<DateTime?> deletedAt = const Value.absent(),
@@ -15240,6 +15805,15 @@ class $$ProductsTableTableManager extends RootTableManager<
             svBadtempC: svBadtempC,
             svGarzeitStd: svGarzeitStd,
             anbratgrad: anbratgrad,
+            allergene: allergene,
+            qualitaetsstufe: qualitaetsstufe,
+            verarbeitungsstufe: verarbeitungsstufe,
+            verpackungsformen: verpackungsformen,
+            kartonGroesse: kartonGroesse,
+            kartonBedruckung: kartonBedruckung,
+            packungenProKarton: packungenProKarton,
+            fuellmengeNettoG: fuellmengeNettoG,
+            abgabeart: abgabeart,
             createdAt: createdAt,
             updatedAt: updatedAt,
             deletedAt: deletedAt,

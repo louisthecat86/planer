@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/constants/artikel_merkmale.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -57,6 +58,19 @@ class _ArticleInfoEditorDialogState
   late final TextEditingController _beschreibung;
   late final TextEditingController _notizen;
   String? _produktgruppe;
+
+  // Mehrfachauswahlen als Menge von dbValues, Einfachauswahlen als
+  // einzelner dbValue oder null.
+  final Set<String> _allergene = <String>{};
+  final Set<String> _verarbeitung = <String>{};
+  final Set<String> _verpackungsformen = <String>{};
+  String? _qualitaetsstufe;
+  String? _kartonGroesse;
+  String? _kartonBedruckung;
+  String? _abgabeart;
+  late final TextEditingController _packungenProKarton;
+  late final TextEditingController _fuellmenge;
+
   bool _saving = false;
 
   @override
@@ -71,13 +85,33 @@ class _ArticleInfoEditorDialogState
     if (gruppe != null && kProduktgruppen.any((g) => g.dbValue == gruppe)) {
       _produktgruppe = gruppe;
     }
+
+    _allergene.addAll(merkmaleAusText(p.allergene));
+    _verarbeitung.addAll(merkmaleAusText(p.verarbeitungsstufe));
+    _verpackungsformen.addAll(merkmaleAusText(p.verpackungsformen));
+    _qualitaetsstufe = p.qualitaetsstufe;
+    _kartonGroesse = p.kartonGroesse;
+    _kartonBedruckung = p.kartonBedruckung;
+    _abgabeart = p.abgabeart;
+    _packungenProKarton = TextEditingController(
+      text: p.packungenProKarton?.toString() ?? '',
+    );
+    _fuellmenge = TextEditingController(
+      text: p.fuellmengeNettoG == null ? '' : _zahlText(p.fuellmengeNettoG!),
+    );
   }
+
+  /// Ganze Zahlen ohne Nachkomma anzeigen: „400" statt „400.0".
+  static String _zahlText(double v) =>
+      v == v.roundToDouble() ? v.round().toString() : v.toString();
 
   @override
   void dispose() {
     _bezeichnung.dispose();
     _beschreibung.dispose();
     _notizen.dispose();
+    _packungenProKarton.dispose();
+    _fuellmenge.dispose();
     super.dispose();
   }
 
@@ -104,6 +138,25 @@ class _ArticleInfoEditorDialogState
           produktgruppe: Value(_produktgruppe),
           beschreibung: Value(beschr.isEmpty ? null : beschr),
           notizen: Value(notizen.isEmpty ? null : notizen),
+          // Merkmale: leere Auswahl wird zu NULL. Nicht gepflegt und
+          // „nichts davon" sind damit dasselbe — beim Allergen ist das
+          // der Grund, warum der Planungs-Wizard später einen Artikel
+          // ohne Eintrag nicht als allergenfrei behandeln darf.
+          allergene: Value(merkmaleZuText(_allergene, kAllergene)),
+          qualitaetsstufe: Value(_qualitaetsstufe),
+          verarbeitungsstufe:
+              Value(merkmaleZuText(_verarbeitung, kVerarbeitungsstufen)),
+          verpackungsformen: Value(
+            merkmaleZuText(_verpackungsformen, kVerpackungsformen),
+          ),
+          kartonGroesse: Value(_kartonGroesse),
+          kartonBedruckung: Value(_kartonBedruckung),
+          packungenProKarton:
+              Value(int.tryParse(_packungenProKarton.text.trim())),
+          fuellmengeNettoG: Value(
+            double.tryParse(_fuellmenge.text.trim().replaceAll(',', '.')),
+          ),
+          abgabeart: Value(_abgabeart),
           // Sobald eine Produktgruppe gesetzt ist, gilt der Artikel als
           // eingepflegt — das „nicht eingepflegt"-Badge verschwindet. Ohne
           // Gruppe bleibt der Status unverändert (ein Stub bleibt Stub, ein
@@ -228,6 +281,86 @@ class _ArticleInfoEditorDialogState
               ),
               const SizedBox(height: 20),
 
+              // ── Allergene ───────────────────────────────────────────
+              // Reihenfolge wie in kAllergene: Die Liste ist zugleich die
+              // Rangfolge für die Produktionsplanung.
+              _abschnitt('Allergene'),
+              _mehrfach(kAllergene, _allergene),
+              const SizedBox(height: 18),
+
+              // ── Qualitätsstufe ──────────────────────────────────────
+              _abschnitt('Qualitätsstufe'),
+              _einfach(
+                kQualitaetsstufen,
+                _qualitaetsstufe,
+                (v) => setState(() => _qualitaetsstufe = v),
+              ),
+              const SizedBox(height: 18),
+
+              // ── Verarbeitungsstufe ──────────────────────────────────
+              // Mehrfach, weil Garzustand und Lieferzustand gemeint sind.
+              _abschnitt('Verarbeitungsstufe'),
+              _mehrfach(kVerarbeitungsstufen, _verarbeitung),
+              const SizedBox(height: 18),
+
+              // ── Verpackung ──────────────────────────────────────────
+              _abschnitt('Verpackung'),
+              _mehrfach(kVerpackungsformen, _verpackungsformen),
+
+              // Karton-Details nur zeigen, wenn Karton gewählt ist —
+              // sonst stehen zwei Auswahlen ohne Bezug herum.
+              if (_verpackungsformen.contains('karton')) ...[
+                const SizedBox(height: 10),
+                _unterzeile('Karton'),
+                _einfach(
+                  kKartonGroessen,
+                  _kartonGroesse,
+                  (v) => setState(() => _kartonGroesse = v),
+                ),
+                const SizedBox(height: 6),
+                _einfach(
+                  kKartonBedruckungen,
+                  _kartonBedruckung,
+                  (v) => setState(() => _kartonBedruckung = v),
+                ),
+              ],
+
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _packungenProKarton,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Packungen pro Karton',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _fuellmenge,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: const InputDecoration(
+                        labelText: 'Füllmenge netto',
+                        suffixText: 'g',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _unterzeile('Abgabe'),
+              _einfach(
+                kAbgabearten,
+                _abgabeart,
+                (v) => setState(() => _abgabeart = v),
+              ),
+              const SizedBox(height: 20),
+
               // Notizen
               TextField(
                 controller: _notizen,
@@ -263,4 +396,73 @@ class _ArticleInfoEditorDialogState
       },
     );
   }
+
+  // ── Bausteine für die Auswahlfelder ──────────────────────────────────
+
+  Widget _abschnitt(String titel) => Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          titel,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+        ),
+      );
+
+  Widget _unterzeile(String titel) => Padding(
+        padding: const EdgeInsets.only(bottom: 6),
+        child: Text(
+          titel,
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+
+  /// Mehrfachauswahl als anklickbare Chips.
+  Widget _mehrfach(List<Merkmal> liste, Set<String> auswahl) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final m in liste)
+          FilterChip(
+            label: Text(m.label),
+            selected: auswahl.contains(m.dbValue),
+            onSelected: _saving
+                ? null
+                : (an) => setState(() {
+                      if (an) {
+                        auswahl.add(m.dbValue);
+                      } else {
+                        auswahl.remove(m.dbValue);
+                      }
+                    }),
+          ),
+      ],
+    );
+  }
+
+  /// Einfachauswahl: Nochmal antippen hebt die Auswahl wieder auf, damit
+  /// ein versehentlich gesetzter Wert ohne Umweg verschwindet.
+  Widget _einfach(
+    List<Merkmal> liste,
+    String? aktuell,
+    ValueChanged<String?> onChanged,
+  ) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final m in liste)
+          ChoiceChip(
+            label: Text(m.label),
+            selected: aktuell == m.dbValue,
+            onSelected:
+                _saving ? null : (an) => onChanged(an ? m.dbValue : null),
+          ),
+      ],
+    );
+  }
 }
+
+
