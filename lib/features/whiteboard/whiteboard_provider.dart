@@ -127,10 +127,6 @@ class GeplanterSchritt {
 
   /// Berechnete Dauer in Minuten.
   final double dauerMinuten;
-
-  /// Personalbedarf dieses Blocks: Summe der `basisMitarbeiter` über alle
-  /// Schritte der Abteilungsgruppe. Gepflegt wird die Zahl je Schritt im
-  /// Step-Editor, nicht im Leistungsdaten-Dialog.
   final int mitarbeiter;
 
   /// Dauer stammt aus dem Historie-Durchschnitt (Bratstraße).
@@ -186,12 +182,49 @@ Future<GeplanterPlan> berechneSchrittPlan({
 
   // Rückwärtsrechnung der Eingangsmengen (letzter Schritt = mengeKg Fertig).
   final inputMengen = List<double>.filled(steps.length, mengeKg);
+  var hatSchrittAusbeute = false;
   for (var i = steps.length - 1; i >= 0; i--) {
     final ausbeute = steps[i].ausbeuteFaktor ?? 1.0;
     if (ausbeute > 0 && ausbeute < 1.0) {
       inputMengen[i] = inputMengen[i] / ausbeute;
+      hatSchrittAusbeute = true;
     }
     if (i > 0) inputMengen[i - 1] = inputMengen[i];
+  }
+
+  // Fallback, wenn am Schritt keine Ausbeute gepflegt ist: Ohne ihn wäre
+  // die Rohwarenmenge gleich der Fertigmenge — der Bratverlust fiele
+  // unter den Tisch, und eine Bestellung nach diesen Zahlen käme zu
+  // knapp. Quelle ist zuerst die Gesamtausbeute am Artikel, danach der
+  // gemessene Ø Verlust aus der Produktionshistorie.
+  if (!hatSchrittAusbeute) {
+    final produkt = await (db.select(db.products)
+          ..where((p) => p.id.equals(productId)))
+        .getSingleOrNull();
+    var gesamt = produkt?.gesamtAusbeuteFaktor;
+    if (gesamt == null || gesamt <= 0 || gesamt >= 1) {
+      final verlust = await durchschnittsVerlust(db, productId);
+      if (verlust != null && verlust > 0 && verlust < 1) {
+        gesamt = 1 - verlust;
+      }
+    }
+    if (gesamt != null && gesamt > 0 && gesamt < 1) {
+      final rohMenge = mengeKg / gesamt;
+      // Der Verlust entsteht beim Garen. Alles bis einschließlich der
+      // Bratstraße arbeitet deshalb mit der Rohmenge, alles danach
+      // (Verpackung, Wiegen) mit der Fertigmenge. Gibt es keine
+      // Bratstraße, gilt die Rohmenge für die ganze Kette.
+      var letzterGarschritt = steps.length - 1;
+      for (var i = steps.length - 1; i >= 0; i--) {
+        if (steps[i].abteilung == _kBratstrasseDbValue) {
+          letzterGarschritt = i;
+          break;
+        }
+      }
+      for (var i = 0; i <= letzterGarschritt; i++) {
+        inputMengen[i] = rohMenge;
+      }
+    }
   }
 
   // Ø kg/h roh aus der Historie (für die Bratstraße).
@@ -299,17 +332,9 @@ Future<GeplanterPlan> berechneSchrittPlan({
     if (!dauer.isFinite || dauer.isNaN || dauer < 0) dauer = 30.0;
     if (dauer > 60 * 24 * 7) dauer = 30.0;
 
-    // Personalbedarf der Abteilung = SUMME über ihre Schritte. An der
-    // Bratstraße stehen Leute gleichzeitig an verschiedenen Anlagen —
-    // zwei am Auflegen, einer am Froster ergeben drei, nicht zwei.
-    // Früher zählte hier das Maximum; das stammt aus der Zeit, als jeder
-    // Schritt denselben Abteilungswert trug.
-    // Mindestens 1, damit Blöcke ohne gepflegte Zahl nicht als
-    // personallos in die Planung gehen.
-    final summe = block
+    final mitarbeiter = block
         .map((b) => b.step.basisMitarbeiter)
-        .fold<int>(0, (sum, v) => sum + (v > 0 ? v : 0));
-    final mitarbeiter = summe > 0 ? summe : 1;
+        .fold<int>(1, (m, v) => v > m ? v : m);
 
     result.add(
       GeplanterSchritt(
