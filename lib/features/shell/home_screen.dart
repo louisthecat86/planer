@@ -731,20 +731,54 @@ class _Karte extends StatelessWidget {
   }
 }
 
-class _HeuteKarte extends ConsumerWidget {
+class _HeuteKarte extends ConsumerStatefulWidget {
   const _HeuteKarte({required this.auftraege});
 
   final List<_Auftrag> auftraege;
 
+  /// Zoomstufe überlebt den Wechsel auf eine andere Seite und zurück —
+  /// wer sich die Liste kleiner gestellt hat, will sie nicht bei jedem
+  /// Besuch neu verkleinern.
+  static double _skala = 1.0;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_HeuteKarte> createState() => _HeuteKarteState();
+}
+
+class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
+  /// Ab dieser Höhe wird gescrollt statt die Seite länger zu machen.
+  /// Rund neun Zeilen bei voller Schriftgröße, kleiner gestellt mehr.
+  static const double _maxHoehe = 360;
+
+  static const double _minSkala = 0.7;
+  static const double _maxSkala = 1.2;
+
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _zoom(double delta) {
+    final neu = (_HeuteKarte._skala + delta).clamp(_minSkala, _maxSkala);
+    if (neu == _HeuteKarte._skala) return;
+    setState(() => _HeuteKarte._skala = neu);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final skala = _HeuteKarte._skala;
+
     final zumBoard = TextButton.icon(
       onPressed: () => _oeffne(context, ref, 'board'),
       icon: const Icon(Icons.arrow_forward_rounded, size: 16),
       label: const Text('Zum Board'),
     );
-    if (auftraege.isEmpty) {
+
+    if (widget.auftraege.isEmpty) {
       return _Karte(
         titel: 'Heute in der Produktion',
         icon: Icons.event_note_rounded,
@@ -762,31 +796,82 @@ class _HeuteKarte extends ConsumerWidget {
         ),
       );
     }
+
+    final aktion = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          onPressed: skala > _minSkala ? () => _zoom(-0.1) : null,
+          icon: const Icon(Icons.remove_rounded, size: 18),
+          tooltip: 'Kleiner anzeigen',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        Text(
+          '${(skala * 100).round()} %',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+        IconButton(
+          onPressed: skala < _maxSkala ? () => _zoom(0.1) : null,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          tooltip: 'Größer anzeigen',
+          visualDensity: VisualDensity.compact,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        ),
+        const SizedBox(width: 4),
+        zumBoard,
+      ],
+    );
+
     return _Karte(
       titel: 'Heute in der Produktion',
       icon: Icons.event_note_rounded,
-      aktion: zumBoard,
-      child: Column(
-        children: [
-          for (final a in auftraege) _AuftragZeile(auftrag: a),
-        ],
+      aktion: aktion,
+      // Deckel auf der Höhe: Sonst wächst die Karte mit jeder Produktion
+      // weiter und schiebt Auslastung und Hinweise aus dem Bild.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxHeight: _maxHoehe),
+        child: Scrollbar(
+          controller: _scroll,
+          thumbVisibility: true,
+          child: SingleChildScrollView(
+            controller: _scroll,
+            padding: const EdgeInsets.only(right: 8),
+            child: Column(
+              children: [
+                for (final a in widget.auftraege)
+                  _AuftragZeile(auftrag: a, skala: skala),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
 class _AuftragZeile extends StatelessWidget {
-  const _AuftragZeile({required this.auftrag});
+  const _AuftragZeile({required this.auftrag, this.skala = 1.0});
 
   final _Auftrag auftrag;
+
+  /// Zoomfaktor der Karte: skaliert Schrift, Abstände und die festen
+  /// Spaltenbreiten gemeinsam, damit die Zeile im Raster bleibt.
+  final double skala;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final a = auftrag;
     final farbe = a.abteilung?.farbe ?? theme.colorScheme.outline;
+
+    TextStyle? skaliert(TextStyle? stil) =>
+        stil?.copyWith(fontSize: (stil.fontSize ?? 14) * skala);
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: EdgeInsets.symmetric(vertical: 8 * skala),
       decoration: BoxDecoration(
         border: Border(top: BorderSide(color: theme.dividerColor)),
       ),
@@ -795,8 +880,8 @@ class _AuftragZeile extends StatelessWidget {
           // Gefüllt wie im Board: Als Schrift auf blassem Grund war das
           // Braun der Bratstraße im dunklen Modus kaum zu erkennen.
           Container(
-            width: 30,
-            padding: const EdgeInsets.symmetric(vertical: 2),
+            width: 30 * skala,
+            padding: EdgeInsets.symmetric(vertical: 2 * skala),
             decoration: BoxDecoration(
               color: farbe,
               borderRadius: BorderRadius.circular(4),
@@ -804,18 +889,18 @@ class _AuftragZeile extends StatelessWidget {
             alignment: Alignment.center,
             child: Text(
               a.abteilung?.kurzcode ?? '?',
-              style: theme.textTheme.labelSmall?.copyWith(
+              style: skaliert(theme.textTheme.labelSmall)?.copyWith(
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
               ),
             ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10 * skala),
           SizedBox(
-            width: 52,
+            width: 52 * skala,
             child: Text(
               a.nummer,
-              style: theme.textTheme.bodyMedium
+              style: skaliert(theme.textTheme.bodyMedium)
                   ?.copyWith(color: theme.colorScheme.primary),
             ),
           ),
@@ -824,24 +909,24 @@ class _AuftragZeile extends StatelessWidget {
               a.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium,
+              style: skaliert(theme.textTheme.bodyMedium),
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: 12 * skala),
           Text(
             '${_kg(a.mengeKg)} · ${Zeit.kurz(a.minuten)}',
-            style: theme.textTheme.bodySmall
+            style: skaliert(theme.textTheme.bodySmall)
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: 10 * skala),
           SizedBox(
-            width: 18,
+            width: 18 * skala,
             child: a.erfasst == true
                 ? Tooltip(
                     message: 'Erfasst',
                     child: Icon(
                       Icons.check_circle_rounded,
-                      size: 16,
+                      size: 16 * skala,
                       color: Colors.green.shade600,
                     ),
                   )
@@ -1262,3 +1347,5 @@ String _wann(DateTime t) {
   if (tage == 1) return 'gestern $uhr';
   return 'vor $tage Tagen';
 }
+
+
