@@ -106,7 +106,9 @@ class VorschlagPosten {
     required this.artikelnummer,
     required this.bezeichnung,
     required this.mengeKg,
+    required this.rohwareKg,
     required this.dauerMinuten,
+    required this.ausHistorie,
     required this.nebenzeitMinuten,
     required this.wechselGrund,
     required this.begruendung,
@@ -120,8 +122,14 @@ class VorschlagPosten {
   /// Fertigmenge in kg.
   final double mengeKg;
 
+  /// Benötigte Rohware in kg, über die Ausbeute zurückgerechnet.
+  final double rohwareKg;
+
   /// Reine Produktionszeit in der Bratstraße.
   final double dauerMinuten;
+
+  /// Dauer aus der Historie (Ø kg/h) statt aus gepflegten Leistungsdaten.
+  final bool ausHistorie;
 
   /// Rüsten oder Reinigen VOR diesem Posten.
   final double nebenzeitMinuten;
@@ -211,7 +219,9 @@ class _Kandidat {
     required this.artikelnummer,
     required this.bezeichnung,
     required this.mengeKg,
+    required this.rohwareKg,
     required this.dauerMinuten,
+    required this.ausHistorie,
     required this.termin,
     required this.prioritaet,
     required this.allergenRang,
@@ -228,7 +238,17 @@ class _Kandidat {
   final String artikelnummer;
   final String bezeichnung;
   final double mengeKg;
+
+  /// Benötigte Rohware laut Ausbeute — die Zahl, die für die Bestellung
+  /// und die Rohwarenverfügbarkeit zählt.
+  final double rohwareKg;
+
   final double dauerMinuten;
+
+  /// Dauer stammt aus dem Ø kg/h der Historie statt aus den gepflegten
+  /// Leistungsdaten. Wird in der Ansicht ausgewiesen.
+  final bool ausHistorie;
+
   final DateTime? termin;
   final int prioritaet;
 
@@ -464,23 +484,34 @@ class PlanungsvorschlagService {
         raus('Kein Schritt in der ${_fuehrend.anzeigeName}');
         continue;
       }
-      if (fuehrendeSchritte
-          .every((s) => s.basisMengeKg <= 0 || s.basisDauerMinuten <= 0)) {
-        raus('Keine Leistungsdaten in der ${_fuehrend.anzeigeName}');
-        continue;
-      }
-
+      // Nicht vorschnell aussortieren: Die Dauer der Bratstraße kommt in
+      // erster Linie aus dem Ø kg/h der Produktionshistorie, erst danach
+      // aus den gepflegten Leistungsdaten. Ein Artikel ohne gepflegte
+      // Referenz, aber mit erfassten Produktionen, ist also planbar.
       final plan = await berechneSchrittPlan(
         db: _db,
         productId: p.id,
         mengeKg: offen,
         startTag: DateTime.now(),
       );
-      final dauer = plan.schritte
+      final fuehrendeBloecke = plan.schritte
           .where((s) => s.abteilungDbValue == _fuehrend.dbValue)
-          .fold<double>(0, (s, x) => s + x.dauerMinuten);
+          .toList();
+      final dauer =
+          fuehrendeBloecke.fold<double>(0, (s, x) => s + x.dauerMinuten);
+      final ausHistorie = fuehrendeBloecke.any((s) => s.ausHistorie);
+      final platzhalter = fuehrendeBloecke.any((s) => s.platzhalter);
+
       if (dauer <= 0) {
         raus('Dauer in der ${_fuehrend.anzeigeName} nicht berechenbar');
+        continue;
+      }
+      // Platzhalter heißt: weder Historie noch Leistungsdaten. Damit wäre
+      // die Tagesauslastung geraten, und das ist schlimmer als ein Artikel
+      // in der Restliste.
+      if (platzhalter && !ausHistorie) {
+        raus('Weder Produktionshistorie noch Leistungsdaten in der '
+            '${_fuehrend.anzeigeName}');
         continue;
       }
 
@@ -500,7 +531,9 @@ class PlanungsvorschlagService {
           artikelnummer: nummer,
           bezeichnung: bez,
           mengeKg: offen,
+          rohwareKg: plan.rohwareKg,
           dauerMinuten: dauer,
+          ausHistorie: ausHistorie,
           termin: d.termin,
           prioritaet: d.prioritaet,
           allergenRang: allergenRang(p.allergene),
@@ -684,7 +717,9 @@ class PlanungsvorschlagService {
           artikelnummer: k.artikelnummer,
           bezeichnung: k.bezeichnung,
           mengeKg: k.mengeKg,
+          rohwareKg: k.rohwareKg,
           dauerMinuten: k.dauerMinuten,
+          ausHistorie: k.ausHistorie,
           nebenzeitMinuten: zeit,
           wechselGrund: grund,
           begruendung: k.begruendung,

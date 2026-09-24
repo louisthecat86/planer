@@ -291,6 +291,7 @@ class _TagKarte extends StatelessWidget {
                   'bereits im Board ${Zeit.kurz(tag.belegtVorherMinuten)}',
                 'neu ${Zeit.kurz(tag.neuMinuten)}',
                 'Kapazität ${Zeit.kurz(tag.kapazitaetMinuten)}',
+                '${tag.posten.fold<double>(0, (s, p) => s + p.rohwareKg).round()} kg Rohware',
               ].join(' · '),
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
@@ -456,11 +457,27 @@ class _PostenZeile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                '${posten.mengeKg.round()} kg · '
-                '${Zeit.kurz(posten.dauerMinuten)}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${posten.mengeKg.round()} kg · '
+                    '${Zeit.kurz(posten.dauerMinuten)}',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ),
+                  // Rohware ist die Zahl, die für Bestellung und
+                  // Verfügbarkeit zählt — sie kommt über die Ausbeute aus
+                  // der Historie und steht deshalb gleich daneben.
+                  Text(
+                    '${posten.rohwareKg.round()} kg roh'
+                    '${posten.ausHistorie ? ' · Ø Historie' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
