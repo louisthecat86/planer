@@ -85,8 +85,11 @@ class _PlanungsvorschlagScreenState
   void _sortiereNeu(int tagIndex, int von, int nach) {
     final t = _tage[tagIndex];
     final posten = [...t.posten];
-    // onReorderItem liefert den Zielindex bereits korrigiert — anders als
-    // das abgelöste onReorder, wo man selbst um eins zurückzählen musste.
+    // `onReorder` liefert den Zielindex VOR dem Entfernen des Elements —
+    // beim Verschieben nach unten muss deshalb um eins zurückgezählt
+    // werden. Das neuere `onReorderItem` täte das selbst, fehlt aber in
+    // der Flutter-Version der CI; deshalb bleibt es bei onReorder.
+    if (nach > von) nach -= 1;
     posten.insert(nach, posten.removeAt(von));
     _manuell.add(_key(t.tag));
     _ersetzeTag(
@@ -592,7 +595,12 @@ class _TagKarte extends StatelessWidget {
             buildDefaultDragHandles: false,
             padding: const EdgeInsets.symmetric(vertical: 4),
             itemCount: tag.posten.length,
-            onReorderItem: onReorder,
+            // Die Flutter-Version der CI kennt `onReorderItem` noch nicht,
+            // die lokale hält `onReorder` bereits für veraltet. Bis beide
+            // auf derselben Version sind, gewinnt die CI — ein Fehler dort
+            // wiegt schwerer als ein Hinweis im Terminal.
+            // ignore: deprecated_member_use
+            onReorder: onReorder,
             itemBuilder: (context, i) {
               final p = tag.posten[i];
               return _PostenZeile(
