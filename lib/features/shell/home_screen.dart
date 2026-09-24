@@ -127,10 +127,14 @@ class _Uebersicht {
 /// `autoDispose`, damit die Übersicht beim nächsten Öffnen frisch geladen
 /// wird. Kehrt man aus einem Fachscreen zurück, lädt [_oeffne] sie
 /// zusätzlich neu, weil das Home dabei im Stapel bleibt.
+/// Parameter ist der angezeigte Tag. Ohne Angabe (`null`) der heutige —
+/// so bleibt „heute" die Voreinstellung und der Provider wird beim
+/// Blättern für jeden Tag einzeln gehalten.
 final _uebersichtProvider =
-    FutureProvider.autoDispose<_Uebersicht>((ref) async {
+    FutureProvider.autoDispose.family<_Uebersicht, DateTime?>(
+        (ref, gewaehlterTag) async {
   final db = ref.watch(databaseProvider);
-  final heute = ref.watch(heuteProvider);
+  final DateTime heute = gewaehlterTag ?? ref.watch(heuteProvider);
   final montag = montagDerWoche(heute);
   // Kalenderarithmetik statt Duration: Über eine Zeitumstellung hinweg
   // wären 7 × 24 Stunden nicht genau eine Woche.
@@ -335,12 +339,36 @@ final _uebersichtProvider =
 /// Abteilungen sind und was liegengeblieben ist. Die Wege in die
 /// Fachscreens folgen darunter, nach Arbeitsschritten geordnet statt als
 /// gleichförmige Kachelreihe.
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final daten = ref.watch(_uebersichtProvider);
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  /// Angezeigter Tag. `null` heißt heute — dadurch wandert die Ansicht
+  /// über Mitternacht automatisch mit, solange niemand geblättert hat.
+  DateTime? _tag;
+
+  bool get _istHeute => _tag == null;
+
+  void _blaettere(int tage) {
+    final DateTime basis = _tag ?? ref.read(heuteProvider);
+    final neu = DateTime(basis.year, basis.month, basis.day + tage);
+    final heute = ref.read(heuteProvider);
+    setState(() {
+      _tag = (neu.year == heute.year &&
+              neu.month == heute.month &&
+              neu.day == heute.day)
+          ? null
+          : neu;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final daten = ref.watch(_uebersichtProvider(_tag));
     return Scaffold(
       appBar: AppBar(
         title: const Text('Produktion Planer'),
@@ -388,9 +416,9 @@ class HomeScreen extends ConsumerWidget {
             ),
             children: [
               daten.when(
-                loading: () => const _Kopf(uebersicht: null),
-                error: (_, __) => const _Kopf(uebersicht: null),
-                data: (u) => _Kopf(uebersicht: u),
+                loading: () => _kopf(null),
+                error: (_, __) => _kopf(null),
+                data: _kopf,
               ),
               const SizedBox(height: 16),
               daten.when(
@@ -403,7 +431,11 @@ class HomeScreen extends ConsumerWidget {
                   icon: Icons.error_outline_rounded,
                   child: Text('$e'),
                 ),
-                data: (u) => _Tagesbereich(uebersicht: u, breit: breit),
+                data: (u) => _Tagesbereich(
+                  uebersicht: u,
+                  breit: breit,
+                  istHeute: _istHeute,
+                ),
               ),
               const SizedBox(height: 20),
               _Navigation(breit: breit),
@@ -413,6 +445,14 @@ class HomeScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Widget _kopf(_Uebersicht? u) => _Kopf(
+        uebersicht: u,
+        istHeute: _istHeute,
+        onZurueck: () => _blaettere(-1),
+        onVor: () => _blaettere(1),
+        onHeute: _istHeute ? null : () => setState(() => _tag = null),
+      );
 }
 
 void _neuLaden(WidgetRef ref) {
@@ -477,32 +517,73 @@ Future<void> _oeffne(BuildContext context, WidgetRef ref, String ziel) async {
 // ── Kopf ────────────────────────────────────────────────────────────────
 
 class _Kopf extends ConsumerWidget {
-  const _Kopf({required this.uebersicht});
+  const _Kopf({
+    required this.uebersicht,
+    required this.istHeute,
+    required this.onZurueck,
+    required this.onVor,
+    required this.onHeute,
+  });
 
   final _Uebersicht? uebersicht;
+  final bool istHeute;
+  final VoidCallback onZurueck;
+  final VoidCallback onVor;
+
+  /// `null`, wenn ohnehin heute angezeigt wird.
+  final VoidCallback? onHeute;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final heute = uebersicht?.heute ?? DateTime.now();
-    final tag = heute.weekday <= DateTime.friday
-        ? 'Tag ${heute.weekday} von 5'
+    final tagDatum = uebersicht?.heute ?? DateTime.now();
+    final tag = tagDatum.weekday <= DateTime.friday
+        ? 'Tag ${tagDatum.weekday} von 5'
         : 'Wochenende';
+
     return Row(
       children: [
+        // Blättern direkt am Datum: Der Tag ist die Klammer um alles
+        // darunter, also gehört die Navigation auch dorthin.
+        IconButton(
+          onPressed: onZurueck,
+          icon: const Icon(Icons.chevron_left_rounded),
+          tooltip: 'Tag zurück',
+        ),
+        IconButton(
+          onPressed: onVor,
+          icon: const Icon(Icons.chevron_right_rounded),
+          tooltip: 'Tag vor',
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '${_wochentage[heute.weekday - 1]}, ${heute.day}. '
-                '${_monate[heute.month - 1]} ${heute.year}',
-                style: theme.textTheme.headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      '${_wochentage[tagDatum.weekday - 1]}, '
+                      '${tagDatum.day}. ${_monate[tagDatum.month - 1]} '
+                      '${tagDatum.year}',
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  if (!istHeute) ...[
+                    const SizedBox(width: 10),
+                    TextButton.icon(
+                      onPressed: onHeute,
+                      icon: const Icon(Icons.today_rounded, size: 16),
+                      label: const Text('Heute'),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 2),
               Text(
-                'KW ${isoKalenderwoche(heute)} · $tag',
+                'KW ${isoKalenderwoche(tagDatum)} · $tag',
                 style: theme.textTheme.bodyMedium
                     ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
@@ -522,78 +603,36 @@ class _Kopf extends ConsumerWidget {
 // ── Tagesbereich ────────────────────────────────────────────────────────
 
 class _Tagesbereich extends StatelessWidget {
-  const _Tagesbereich({required this.uebersicht, required this.breit});
+  const _Tagesbereich({
+    required this.uebersicht,
+    required this.breit,
+    required this.istHeute,
+  });
 
   final _Uebersicht uebersicht;
   final bool breit;
+  final bool istHeute;
 
   @override
   Widget build(BuildContext context) {
     final u = uebersicht;
-    final hoch = u.hoechste;
 
-    final kennzahlen = [
-      _Kennzahl(
-        titel: 'Heute geplant',
-        wert: '${u.produktionenHeute}',
-        zusatz: u.produktionenHeute == 0
-            ? 'keine Produktion'
-            : '${u.produktionenHeute == 1 ? 'Produktion' : 'Produktionen'}'
-                ' · ${_kg(u.kgHeute)}',
-      ),
-      _Kennzahl(
-        titel: 'Höchste Auslastung',
-        wert: hoch == null ? '—' : '${(hoch.anteil * 100).round()} %',
-        zusatz: hoch == null
-            ? 'heute nichts belegt'
-            : '${hoch.abteilung.anzeigeName} · '
-                '${Zeit.kurz(hoch.belegt)} / ${Zeit.kurz(hoch.kapazitaet)}',
-        warnung: hoch != null && hoch.anteil > 1,
-      ),
-      _Kennzahl(
-        titel: 'Erfasst',
-        wert: '${u.erfasstHeute} / ${u.produktionenHeute}',
-        zusatz: u.produktionenHeute == 0
-            ? 'nichts zu erfassen'
-            : u.erfasstHeute == u.produktionenHeute
-                ? 'alles erfasst'
-                : 'heute noch offen',
-      ),
-      _Kennzahl(
-        titel: 'Diese Woche',
-        wert: Zeit.kurz(u.wocheMinuten),
-        zusatz: '${u.wocheProduktionen} '
-            '${u.wocheProduktionen == 1 ? 'Produktion' : 'Produktionen'}'
-            ' geplant',
-      ),
-    ];
-
-
-
-    final zeilen = LayoutBuilder(
-      builder: (context, c) {
-        final spalten = c.maxWidth >= 720 ? 4 : 2;
-        const abstand = 12.0;
-        final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
-        return Wrap(
-          spacing: abstand,
-          runSpacing: abstand,
-          children: [
-            for (final k in kennzahlen) SizedBox(width: breite, child: k),
-          ],
-        );
-      },
+    // Keine Kennzahlenleiste mehr: „3 Produktionen" stand direkt über der
+    // Liste, die genau diese drei zeigt. Der Platz gehört den Karten, die
+    // wirklich etwas zeigen.
+    final heute = _HeuteKarte(
+      auftraege: u.auftraege,
+      titel: istHeute
+          ? 'Heute in der Produktion'
+          : 'Produktion am ${u.heute.day.toString().padLeft(2, '0')}.'
+              '${u.heute.month.toString().padLeft(2, '0')}.${u.heute.year}',
     );
-
-    final heute = _HeuteKarte(auftraege: u.auftraege);
     final auslastung = _AuslastungKarte(auslastung: u.auslastung);
     final hinweise = _HinweisKarte(hinweise: u.hinweise);
 
     if (!breit) {
       return Column(
         children: [
-          zeilen,
-          const SizedBox(height: 12),
           heute,
           const SizedBox(height: 12),
           auslastung,
@@ -602,80 +641,22 @@ class _Tagesbereich extends StatelessWidget {
         ],
       );
     }
-    return Column(
-      children: [
-        zeilen,
-        const SizedBox(height: 12),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 3, child: heute),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    auslastung,
-                    const SizedBox(height: 12),
-                    Expanded(child: hinweise),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Kennzahl extends StatelessWidget {
-  const _Kennzahl({
-    required this.titel,
-    required this.wert,
-    required this.zusatz,
-    this.warnung = false,
-  });
-
-  final String titel;
-  final String wert;
-  final String zusatz;
-  final bool warnung;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final gedimmt = theme.colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: .5),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            titel,
-            style: theme.textTheme.labelMedium?.copyWith(color: gedimmt),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            wert,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: warnung ? theme.colorScheme.error : null,
+          Expanded(flex: 3, child: heute),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                auslastung,
+                const SizedBox(height: 12),
+                Expanded(child: hinweise),
+              ],
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            zusatz,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(color: gedimmt),
           ),
         ],
       ),
@@ -683,8 +664,6 @@ class _Kennzahl extends StatelessWidget {
   }
 }
 
-/// Umrandete Karte mit kleiner Überschrift — der gemeinsame Rahmen aller
-/// Bereiche, damit die Seite ruhig und gleichmäßig wirkt.
 class _Karte extends StatelessWidget {
   const _Karte({
     required this.titel,
@@ -734,9 +713,12 @@ class _Karte extends StatelessWidget {
 }
 
 class _HeuteKarte extends ConsumerStatefulWidget {
-  const _HeuteKarte({required this.auftraege});
+  const _HeuteKarte({required this.auftraege, required this.titel});
 
   final List<_Auftrag> auftraege;
+
+  /// „Heute in der Produktion" oder, beim Blättern, das Datum.
+  final String titel;
 
   /// Zoomstufe überlebt den Wechsel auf eine andere Seite und zurück —
   /// wer sich die Liste kleiner gestellt hat, will sie nicht bei jedem
@@ -755,8 +737,9 @@ class _HeuteKarte extends ConsumerStatefulWidget {
 
 class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
   /// Ab dieser Höhe wird gescrollt statt die Seite länger zu machen.
-  /// Rund neun Zeilen bei voller Schriftgröße, kleiner gestellt mehr.
-  static const double _maxHoehe = 360;
+  /// Seit die Kennzahlenleiste weg ist, passt deutlich mehr — rund
+  /// vierzehn Zeilen bei voller Schriftgröße, kleiner gestellt mehr.
+  static const double _maxHoehe = 560;
 
   static const double _minSkala = 0.7;
   static const double _maxSkala = 1.2;
@@ -805,14 +788,14 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
 
     if (widget.auftraege.isEmpty) {
       return _Karte(
-        titel: 'Heute in der Produktion',
+        titel: widget.titel,
         icon: Icons.event_note_rounded,
         aktion: zumBoard,
         child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 24),
           child: Center(
             child: Text(
-              'Für heute ist nichts geplant.',
+              'Für diesen Tag ist nichts geplant.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -856,7 +839,7 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
     );
 
     return _Karte(
-      titel: 'Heute in der Produktion',
+      titel: widget.titel,
       icon: Icons.event_note_rounded,
       aktion: aktion,
       // Deckel auf der Höhe: Sonst wächst die Karte mit jeder Produktion
@@ -1278,7 +1261,7 @@ class _Ziel {
 }
 
 /// Die Wege in die Fachscreens, nach Arbeitsschritten gruppiert.
-class _Navigation extends StatelessWidget {
+class _Navigation extends StatefulWidget {
   const _Navigation({required this.breit});
 
   final bool breit;
@@ -1327,114 +1310,205 @@ class _Navigation extends StatelessWidget {
   ];
 
   @override
+  State<_Navigation> createState() => _NavigationState();
+}
+
+class _NavigationState extends State<_Navigation> {
+  /// Index der offenen Gruppe. Immer nur eine — bei drei geöffneten
+  /// Kästen springt die Seite sonst stark.
+  int? _offen;
+
+  @override
   Widget build(BuildContext context) {
-    // Nur noch drei Knöpfe statt drei ausgeklappter Listen: Das Dashboard
-    // bleibt den Zahlen des Tages vorbehalten, die Ziele liegen eine
-    // Berührung tiefer.
-    final knoepfe = [
-      for (final (titel, icon, farbe, ziele) in _gruppen)
-        _NavKnopf(titel: titel, icon: icon, farbe: farbe, ziele: ziele),
+    final felder = [
+      for (var i = 0; i < _Navigation._gruppen.length; i++)
+        Builder(
+          builder: (context) {
+            final (titel, icon, farbe, ziele) = _Navigation._gruppen[i];
+            return _NavFeld(
+              titel: titel,
+              icon: icon,
+              farbe: farbe,
+              ziele: ziele,
+              offen: _offen == i,
+              onUmschalten: () =>
+                  setState(() => _offen = _offen == i ? null : i),
+            );
+          },
+        ),
     ];
-    if (!breit) {
+
+    if (!widget.breit) {
       return Column(
         children: [
-          for (final k in knoepfe) ...[
-            SizedBox(width: double.infinity, child: k),
-            const SizedBox(height: 10),
-          ],
+          for (final f in felder) ...[f, const SizedBox(height: 10)],
         ],
       );
     }
+    // Oben ausrichten statt strecken: Das geöffnete Feld wächst nach
+    // unten, die beiden anderen bleiben flach.
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (var i = 0; i < knoepfe.length; i++) ...[
+        for (var i = 0; i < felder.length; i++) ...[
           if (i > 0) const SizedBox(width: 12),
-          Expanded(child: knoepfe[i]),
+          Expanded(child: felder[i]),
         ],
       ],
     );
   }
 }
 
-/// Ein Gruppenknopf. Tippen öffnet die Ziele als Menü direkt darunter.
-class _NavKnopf extends ConsumerWidget {
-  const _NavKnopf({
+/// Eine Gruppe als aufklappbarer Kasten. Die Ziele erscheinen innerhalb
+/// des farbigen Rahmens, nicht als Überlagerung darüber.
+class _NavFeld extends ConsumerWidget {
+  const _NavFeld({
     required this.titel,
     required this.icon,
     required this.farbe,
     required this.ziele,
+    required this.offen,
+    required this.onUmschalten,
   });
 
   final String titel;
   final IconData icon;
   final Color farbe;
   final List<_Ziel> ziele;
+  final bool offen;
+  final VoidCallback onUmschalten;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return PopupMenuButton<String>(
-      tooltip: titel,
-      position: PopupMenuPosition.under,
-      constraints: const BoxConstraints(minWidth: 300),
-      onSelected: (route) => _oeffne(context, ref, route),
-      itemBuilder: (_) => [
-        for (final z in ziele)
-          PopupMenuItem<String>(
-            value: z.route,
-            child: Row(
-              children: [
-                Icon(z.icon, size: 20, color: farbe),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        z.titel,
-                        style: theme.textTheme.bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      decoration: BoxDecoration(
+        color: farbe.withValues(alpha: offen ? .10 : .07),
+        border: Border.all(color: farbe.withValues(alpha: offen ? .45 : .28)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            onTap: onUmschalten,
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 16,
+              ),
+              child: Row(
+                children: [
+                  Icon(icon, size: 22, color: farbe),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      titel,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: farbe,
                       ),
-                      Text(
-                        z.zusatz,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        decoration: BoxDecoration(
-          color: farbe.withValues(alpha: .08),
-          border: Border.all(color: farbe.withValues(alpha: .30)),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: farbe),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                titel,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: farbe,
-                ),
+                  AnimatedRotation(
+                    turns: offen ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 150),
+                    child: Icon(
+                      Icons.expand_more_rounded,
+                      size: 20,
+                      color: farbe.withValues(alpha: .8),
+                    ),
+                  ),
+                ],
               ),
             ),
-            Icon(
-              Icons.expand_more_rounded,
-              size: 20,
-              color: farbe.withValues(alpha: .8),
-            ),
-          ],
-        ),
+          ),
+          // AnimatedSize statt Ein- und Ausblenden: Der Kasten wächst und
+          // schiebt den Inhalt darunter weich nach unten.
+          AnimatedSize(
+            duration: const Duration(milliseconds: 150),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: offen
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Divider(
+                          height: 12,
+                          color: farbe.withValues(alpha: .25),
+                        ),
+                        for (final z in ziele)
+                          InkWell(
+                            onTap: () => _oeffne(context, ref, z.route),
+                            borderRadius: BorderRadius.circular(9),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 9,
+                              ),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 34,
+                                    height: 34,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: farbe.withValues(alpha: .14),
+                                      borderRadius: BorderRadius.circular(9),
+                                    ),
+                                    child: Icon(
+                                      z.icon,
+                                      size: 19,
+                                      color: farbe,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          z.titel,
+                                          style: theme.textTheme.bodyMedium
+                                              ?.copyWith(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          z.zusatz,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                            color: theme
+                                                .colorScheme.onSurfaceVariant,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Icon(
+                                    Icons.chevron_right_rounded,
+                                    size: 18,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
       ),
     );
   }
