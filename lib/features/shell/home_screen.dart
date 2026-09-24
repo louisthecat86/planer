@@ -741,6 +741,12 @@ class _HeuteKarte extends ConsumerStatefulWidget {
   /// Besuch neu verkleinern.
   static double _skala = 1.0;
 
+  /// Ausgeblendete Abteilungen, als dbValue. Gilt nur für diese Karte
+  /// und überlebt wie die Zoomstufe den Seitenwechsel. Absichtlich eine
+  /// Ausblend- und keine Einblendliste: Kommt später eine Abteilung
+  /// dazu, ist sie sichtbar, statt still zu fehlen.
+  static final Set<String> _versteckt = <String>{};
+
   @override
   ConsumerState<_HeuteKarte> createState() => _HeuteKarteState();
 }
@@ -767,10 +773,27 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
     setState(() => _HeuteKarte._skala = neu);
   }
 
+  /// Abteilungen, die heute überhaupt vorkommen — nur die stehen im
+  /// Filtermenü. Reihenfolge wie im Prozess, nicht wie in der Liste.
+  List<Abteilung> get _abteilungenHeute {
+    final vorhanden = <Abteilung>{
+      for (final a in widget.auftraege)
+        if (a.abteilung != null) a.abteilung!,
+    };
+    return Abteilung.values.where(vorhanden.contains).toList();
+  }
+
+  List<_Auftrag> get _sichtbare => widget.auftraege.where((a) {
+        final abt = a.abteilung;
+        return abt == null || !_HeuteKarte._versteckt.contains(abt.dbValue);
+      }).toList();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final skala = _HeuteKarte._skala;
+    final sichtbare = _sichtbare;
+    final gefiltert = sichtbare.length != widget.auftraege.length;
 
     final zumBoard = TextButton.icon(
       onPressed: () => _oeffne(context, ref, 'board'),
@@ -800,6 +823,11 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
     final aktion = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
+        _AbteilungsFilter(
+          abteilungen: _abteilungenHeute,
+          versteckt: _HeuteKarte._versteckt,
+          onGeaendert: () => setState(() {}),
+        ),
         IconButton(
           onPressed: skala > _minSkala ? () => _zoom(-0.1) : null,
           icon: const Icon(Icons.remove_rounded, size: 18),
@@ -841,13 +869,136 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
             padding: const EdgeInsets.only(right: 8),
             child: Column(
               children: [
-                for (final a in widget.auftraege)
+                if (sichtbare.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
+                    child: Text(
+                      'Alle Abteilungen ausgeblendet.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                for (final a in sichtbare)
                   _AuftragZeile(auftrag: a, skala: skala),
+                if (gefiltert && sichtbare.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.filter_alt_rounded,
+                          size: 13,
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '${widget.auftraege.length - sichtbare.length} '
+                          'Zeilen ausgeblendet',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
               ],
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Filterknopf mit Abteilungsliste zum Ab- und Anwählen.
+///
+/// Bewusst ein eigenes Menü statt Chips über der Liste: Die Kopfzeile ist
+/// schmal, und bei sieben Abteilungen bräuchten Chips mehr Platz als die
+/// Liste selbst.
+class _AbteilungsFilter extends StatelessWidget {
+  const _AbteilungsFilter({
+    required this.abteilungen,
+    required this.versteckt,
+    required this.onGeaendert,
+  });
+
+  final List<Abteilung> abteilungen;
+  final Set<String> versteckt;
+  final VoidCallback onGeaendert;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final aktiv = abteilungen.any((a) => versteckt.contains(a.dbValue));
+
+    return PopupMenuButton<String>(
+      tooltip: 'Abteilungen filtern',
+      position: PopupMenuPosition.under,
+      // Menü offen halten: Wer zwei Abteilungen ausblendet, will nicht
+      // zweimal aufklappen. PopupMenuItem schließt sonst bei jedem Tipp.
+      itemBuilder: (context) => [
+        for (final a in abteilungen)
+          PopupMenuItem<String>(
+            value: a.dbValue,
+            padding: EdgeInsets.zero,
+            child: StatefulBuilder(
+              builder: (context, setzeMenue) {
+                final sichtbar = !versteckt.contains(a.dbValue);
+                return InkWell(
+                  onTap: () {
+                    if (sichtbar) {
+                      versteckt.add(a.dbValue);
+                    } else {
+                      versteckt.remove(a.dbValue);
+                    }
+                    setzeMenue(() {});
+                    onGeaendert();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          sichtbar
+                              ? Icons.check_box_rounded
+                              : Icons.check_box_outline_blank_rounded,
+                          size: 18,
+                          color: sichtbar
+                              ? a.farbe
+                              : theme.colorScheme.outline,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(a.anzeigeName),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value: '__alle__',
+          enabled: aktiv,
+          child: const Text('Alle einblenden'),
+        ),
+      ],
+      onSelected: (wert) {
+        if (wert == '__alle__') {
+          versteckt.clear();
+          onGeaendert();
+        }
+      },
+      icon: Icon(
+        aktiv ? Icons.filter_alt_rounded : Icons.filter_alt_outlined,
+        size: 18,
+        color: aktiv ? theme.colorScheme.primary : null,
+      ),
+      constraints: const BoxConstraints(minWidth: 220),
     );
   }
 }
