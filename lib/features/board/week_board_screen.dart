@@ -51,6 +51,33 @@ String _fmtTagTitel(DateTime d) =>
 /// hinten Minuten stehen.
 String _fmtStunden(double minuten) => Zeit.kurzOhneEinheit(minuten);
 
+/// Kilogramm als ganze Zahl mit Tausenderpunkt: „12.857".
+String _fmtKg(double kg) => kg.round().toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
+
+/// „Ausbeute 56,0 % · aus der Gesamtausbeute des Artikels · erfasste
+/// Produktionen Ø 55,8 %" — damit sichtbar ist, mit welcher Zahl
+/// gerechnet wird und ob sie zu den erfassten Produktionen passt.
+String _ausbeuteText(Ausbeute a) {
+  String prozent(double f) =>
+      '${(f * 100).toStringAsFixed(1).replaceAll('.', ',')} %';
+  if (!a.bekannt) return 'Keine Ausbeute bekannt — gerechnet ohne Verlust';
+  final quelle = switch (a.quelle) {
+    AusbeuteQuelle.schritte => 'aus den Ausbeuten der Prozessschritte',
+    AusbeuteQuelle.artikel => 'aus der Gesamtausbeute des Artikels',
+    AusbeuteQuelle.historie => 'Ø aus den erfassten Produktionen',
+    AusbeuteQuelle.eingabe => 'von Hand eingetragen',
+    AusbeuteQuelle.keine => '',
+  };
+  final historie = a.historie;
+  final vergleich = historie != null && a.quelle != AusbeuteQuelle.historie
+      ? ' · erfasste Produktionen Ø ${prozent(historie)}'
+      : '';
+  return 'Ausbeute ${prozent(a.faktor)} · $quelle$vergleich';
+}
+
 Color _ampelFarbe(CapacityStatus status) {
   switch (status) {
     case CapacityStatus.frei:
@@ -2039,21 +2066,21 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   final _suche = TextEditingController();
   final _menge = TextEditingController(text: '100');
 
-  /// Manuell eingegebener Verlust in % (nur relevant, wenn Einheit =
-  /// Fertigware und keine Historie vorliegt).
+  /// Von Hand eingetragener Verlust in %. Wird nur gefragt, wenn der
+  /// Artikel selbst keine Ausbeute kennt — weder an den Schritten noch in
+  /// den Stammdaten noch aus erfassten Produktionen.
   final _verlustProzent = TextEditingController();
 
   List<Product> _produkte = [];
   Product? _gewaehlt;
 
-  /// Einheit der eingegebenen Menge: rohware (Standard) oder fertigware.
-  /// Bei fertigware rechnet die App über den Verlust auf Rohware hoch, mit
-  /// der dann geplant wird — im Board steht immer Rohgewicht.
+  /// Womit geplant wird: Rohware (Standard), Fertigware oder Zeit. Wer aus
+  /// einem Bedarf plant, landet bei Fertigware — Bedarfe sind Fertigware.
   _MengenEinheit _einheit = _MengenEinheit.rohware;
 
-  /// Durchschnittlicher Verlust des gewählten Artikels aus der Historie
-  /// (0…1), oder null wenn keine Daten. Wird beim Artikelwechsel geladen.
-  double? _histVerlust;
+  /// Ausbeute des gewählten Artikels — dieselbe Zahl, mit der der Plan
+  /// rechnet. null, solange sie noch geladen wird.
+  Ausbeute? _ausbeute;
 
   /// Bedarf, aus dem geplant wird (optional). Ist einer gewählt, wird die
   /// geplante Menge gegen ihn gerechnet — die Bedarfsliste zeigt dann
@@ -2064,8 +2091,22 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
   _PlanStufe _stufe = _PlanStufe.auswahl;
   List<GeplanterSchritt> _plan = [];
-  double _rohware = 0;
+
+  /// Rohware und Fertigware des berechneten Plans.
+  double _planRohKg = 0;
+  double _planFertigKg = 0;
+
+  /// Ist [_planFertigKg] eine echte Fertigmenge? Bei Rohware- oder
+  /// Zeit-Eingabe ohne bekannte Ausbeute nicht — dann wird nichts gegen
+  /// den Bedarf gerechnet.
+  bool _planFertigBekannt = false;
+
   bool _busy = false;
+
+  /// Zählt die Ladevorgänge der Artikeldaten. Eine ältere Rechnung, die
+  /// erst nach einer neueren fertig wird, darf deren Ergebnis nicht
+  /// überschreiben.
+  int _ladeNr = 0;
 
   @override
   void initState() {
@@ -2083,16 +2124,62 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     if (mounted) setState(() => _produkte = list);
   }
 
-  /// Lädt den historischen Durchschnittsverlust für den gewählten Artikel.
-  Future<void> _ladeVerlust(String productId) async {
-    final db = ref.read(databaseProvider);
-    final v = await durchschnittsVerlust(db, productId);
-    if (mounted) setState(() => _histVerlust = v);
+  /// Artikel gewählt: Ausbeute und Zeitmodell laden.
+  void _waehleProdukt(Product p) {
+    setState(() {
+      _gewaehlt = p;
+      _ausbeute = null;
+      _dauerModelle = [];
+      _zeitAbteilung = null;
+    });
+    _ladeArtikeldaten(p.id);
   }
 
-  // -- Zeitmodell: Minuten = Fixanteil + Faktor × Menge -----------------
+  void _produktAbwaehlen() {
+    _ladeNr++; // laufende Rechnungen verwerfen
+    setState(() {
+      _gewaehlt = null;
+      _ausbeute = null;
+      _dauerModelle = [];
+      _zeitAbteilung = null;
+    });
+  }
+
+  /// Lädt Ausbeute und Zeitmodell des Artikels.
+  ///
+  /// Beides hängt vom von Hand eingetragenen Verlust ab, wenn der Artikel
+  /// keine eigene Ausbeute hat — deshalb wird bei jeder Änderung dieses
+  /// Felds neu geladen.
+  Future<void> _ladeArtikeldaten(String productId) async {
+    final nr = ++_ladeNr;
+    final db = ref.read(databaseProvider);
+    final ersatz = _ersatzAusbeute;
+    try {
+      final ausbeute = await ermittleAusbeute(db, productId, ersatz: ersatz);
+      final modelle = await _berechneZeitmodell(db, productId, ersatz);
+      if (!mounted || nr != _ladeNr) return;
+      setState(() {
+        _ausbeute = ausbeute;
+        _dauerModelle = modelle;
+        _zeitAbteilung = _passendeZeitAbteilung(modelle);
+      });
+    } catch (_) {
+      if (!mounted || nr != _ladeNr) return;
+      setState(() {
+        _ausbeute = Ausbeute.unbekannt;
+        _dauerModelle = [];
+        _zeitAbteilung = null;
+      });
+    }
+  }
+
+  // -- Zeitmodell: Minuten = Fixanteil + Faktor × FERTIGmenge -------------
   // Die Schrittdauer ist „Fixzeit + Zeit × (Menge / Referenzmenge)", also
   // linear in der Menge — die Rechnung lässt sich damit umkehren.
+  //
+  // Die Menge ist die FERTIGmenge, weil [berechneSchrittPlan] mit ihr
+  // gerechnet wird. Die Bratstraße läuft dabei mit der zugehörigen Rohware
+  // (Fertigmenge ÷ Ausbeute) gegen den Ø kg/h roh aus der Historie.
   //
   // WICHTIG: Es wird JE ABTEILUNG gerechnet, nicht über die Summe. Im
   // Wochenplan bekommt jede Abteilung ihren eigenen Tag mit 9 Stunden;
@@ -2101,61 +2188,59 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   // engste Abteilung — sie begrenzt, was in der Zeit zu schaffen ist.
   List<({String abteilung, double fix, double proKg})> _dauerModelle = [];
 
-  Future<void> _ladeZeitmodell(String productId) async {
-    final db = ref.read(databaseProvider);
-    try {
-      final klein = await berechneSchrittPlan(
-        db: db,
-        productId: productId,
-        mengeKg: 100,
-        startTag: _startTag,
-      );
-      final gross = await berechneSchrittPlan(
-        db: db,
-        productId: productId,
-        mengeKg: 1000,
-        startTag: _startTag,
-      );
-      final modelle = <({String abteilung, double fix, double proKg})>[];
-      final anzahl = klein.schritte.length < gross.schritte.length
-          ? klein.schritte.length
-          : gross.schritte.length;
-      for (var i = 0; i < anzahl; i++) {
-        final t1 = klein.schritte[i].dauerMinuten;
-        final t2 = gross.schritte[i].dauerMinuten;
-        final steigung = (t2 - t1) / 900.0;
-        if (steigung <= 0) continue; // reine Fixzeit — begrenzt nicht
-        modelle.add((
-          abteilung: klein.schritte[i].abteilungDbValue,
-          fix: t1 - steigung * 100,
-          proKg: steigung,
-        ),);
-      }
-      if (!mounted) return;
-      setState(() {
-        _dauerModelle = modelle;
-        // Bezug vorbelegen: die Bratstraße ist die durchlaufende Linie und
-        // damit der übliche Taktgeber. Gibt es sie nicht, nimm die erste
-        // Abteilung des Prozesses.
-        String? bevorzugt;
-        for (final m in modelle) {
-          if (m.abteilung.contains('bratstra')) {
-            bevorzugt = m.abteilung;
-            break;
-          }
-        }
-        _zeitAbteilung = modelle.isEmpty
-            ? null
-            : (bevorzugt ?? modelle.first.abteilung);
-      });
-    } catch (_) {
-      if (mounted) {
-        setState(() {
-          _dauerModelle = [];
-          _zeitAbteilung = null;
-        });
-      }
+  Future<List<({String abteilung, double fix, double proKg})>>
+      _berechneZeitmodell(
+    AppDatabase db,
+    String productId,
+    double? ersatz,
+  ) async {
+    final klein = await berechneSchrittPlan(
+      db: db,
+      productId: productId,
+      mengeKg: 100,
+      startTag: _startTag,
+      ausbeuteErsatz: ersatz,
+    );
+    final gross = await berechneSchrittPlan(
+      db: db,
+      productId: productId,
+      mengeKg: 1000,
+      startTag: _startTag,
+      ausbeuteErsatz: ersatz,
+    );
+    final modelle = <({String abteilung, double fix, double proKg})>[];
+    final anzahl = klein.schritte.length < gross.schritte.length
+        ? klein.schritte.length
+        : gross.schritte.length;
+    for (var i = 0; i < anzahl; i++) {
+      final t1 = klein.schritte[i].dauerMinuten;
+      final t2 = gross.schritte[i].dauerMinuten;
+      final steigung = (t2 - t1) / 900.0;
+      if (steigung <= 0) continue; // reine Fixzeit — begrenzt nicht
+      modelle.add((
+        abteilung: klein.schritte[i].abteilungDbValue,
+        fix: t1 - steigung * 100,
+        proKg: steigung,
+      ),);
     }
+    return modelle;
+  }
+
+  /// Bezug der Zeiteingabe: die bisher gewählte Abteilung, wenn es sie
+  /// noch gibt, sonst die Bratstraße — die durchlaufende Linie und damit
+  /// der übliche Taktgeber —, sonst die erste Abteilung des Prozesses.
+  String? _passendeZeitAbteilung(
+    List<({String abteilung, double fix, double proKg})> modelle,
+  ) {
+    if (modelle.isEmpty) return null;
+    final bisher = _zeitAbteilung;
+    if (bisher != null && modelle.any((m) => m.abteilung == bisher)) {
+      return bisher;
+    }
+    for (final m in modelle) {
+      if (m.abteilung.contains('bratstra')) return m.abteilung;
+    }
+    return modelle.first.abteilung;
   }
 
   /// Auf welche Abteilung sich die eingegebene Stundenzahl bezieht.
@@ -2173,7 +2258,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   /// Abteilungen, die für die gewählte Menge über die 9-Stunden-Kapazität
   /// laufen würden — als ehrlicher Hinweis unter der Vorschau.
   List<({String name, double stunden})> get _ueberlaufAbteilungen {
-    final menge = _mengeAusStunden;
+    final menge = _fertigAusZeit;
     if (menge == null) return const [];
     final treffer = <({String name, double stunden})>[];
     for (final m in _dauerModelle) {
@@ -2198,9 +2283,51 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   /// Eingabe). Bewusst getrennt vom Mengenfeld — Zeit ist keine Menge.
   double? _zeitMinuten;
 
-  /// Aus der eingegebenen Dauer die planbare ROHWARENMENGE — bezogen auf
-  /// die gewählte Abteilung.
-  double? get _mengeAusStunden {
+  // -- Mengen ---------------------------------------------------------------
+  // Geplant wird IMMER mit der Fertigmenge: [berechneSchrittPlan] rechnet
+  // daraus über die Ausbeute die Rohware zurück. Rohware- und Zeiteingabe
+  // werden deshalb erst in Fertigware umgerechnet — mit derselben Ausbeute,
+  // die auch der Plan nimmt. Früher ging die Rohware direkt in den Plan
+  // und wurde dort als Fertigware behandelt: Der Verlust kam ein zweites
+  // Mal obendrauf, und der Plan war um genau diesen Faktor zu groß.
+
+  /// Von Hand eingetragener Verlust als Ausbeute (0…1), oder null.
+  double? get _ersatzAusbeute {
+    final p = double.tryParse(
+      _verlustProzent.text.trim().replaceAll(',', '.'),
+    );
+    if (p == null || p <= 0 || p >= 100) return null;
+    return 1 - p / 100;
+  }
+
+  /// Muss der Verlust von Hand eingetragen werden? Nur, wenn der Artikel
+  /// selbst keine Ausbeute liefert.
+  bool get _verlustAbfragen {
+    final q = _ausbeute?.quelle;
+    return q == AusbeuteQuelle.keine || q == AusbeuteQuelle.eingabe;
+  }
+
+  /// Die Ausbeute, mit der gerechnet wird. Hat der Artikel keine eigene,
+  /// gilt sofort der von Hand eingetragene Verlust — ohne auf das
+  /// Nachladen zu warten.
+  Ausbeute get _effektiveAusbeute {
+    final a = _ausbeute ?? Ausbeute.unbekannt;
+    if (!_verlustAbfragen) return a;
+    final e = _ersatzAusbeute;
+    return e == null
+        ? Ausbeute.unbekannt
+        : Ausbeute(faktor: e, quelle: AusbeuteQuelle.eingabe);
+  }
+
+  /// Eingegebene Menge in kg (Rohware oder Fertigware, je nach Einheit).
+  double? get _eingabeKg {
+    final v = double.tryParse(_menge.text.trim().replaceAll(',', '.'));
+    return (v != null && v.isFinite && v > 0) ? v : null;
+  }
+
+  /// Aus der eingegebenen Dauer die FERTIGMENGE, die in dieser Zeit an der
+  /// gewählten Abteilung entsteht.
+  double? get _fertigAusZeit {
     if (_einheit != _MengenEinheit.stunden) return null;
     final dauer = _zeitMinuten;
     final modell = _bezugsModell;
@@ -2210,54 +2337,30 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     return menge > 0 ? menge : null;
   }
 
-  /// Fertigmenge, die in der eingegebenen Zeit herauskommt.
-  double? get _fertigAusStunden {
-    final roh = _mengeAusStunden;
-    final v = _effektiverVerlust;
-    if (roh == null) return null;
-    return v == null ? null : roh * (1 - v);
-  }
-
-  /// Die Menge, mit der tatsächlich geplant wird — in ROHWARE.
-  ///
-  /// Bei Fertigware-Eingabe wird die zuvor nur informativ angezeigte
-  /// Rohwarenmenge jetzt auch wirklich verplant: Die Anlagen verarbeiten
-  /// die Rohware, nicht das Fertiggewicht.
-  double? get _planMenge {
+  /// Die Fertigmenge, mit der geplant wird.
+  double? get _planFertig {
     switch (_einheit) {
-      case _MengenEinheit.rohware:
-        final v = double.tryParse(_menge.text.replaceAll(',', '.'));
-        return (v != null && v > 0) ? v : null;
       case _MengenEinheit.fertigware:
-        final eingabe = double.tryParse(_menge.text.replaceAll(',', '.'));
-        if (eingabe == null || eingabe <= 0) return null;
-        // Ohne bekannten Verlust bleibt es bei der Eingabe.
-        return _rohwareVorschau ?? eingabe;
+        return _eingabeKg;
+      case _MengenEinheit.rohware:
+        final roh = _eingabeKg;
+        return roh == null ? null : _effektiveAusbeute.fertigAusRoh(roh);
       case _MengenEinheit.stunden:
-        return _mengeAusStunden;
+        return _fertigAusZeit;
     }
   }
 
-  /// Effektiver Verlust (0…1): Historie bevorzugt, sonst der manuell
-  /// eingegebene Prozentwert. null, wenn beides fehlt.
-  double? get _effektiverVerlust {
-    if (_histVerlust != null) return _histVerlust;
-    final p = double.tryParse(_verlustProzent.text.replaceAll(',', '.'));
-    if (p != null && p > 0 && p < 100) return p / 100;
-    return null;
+  /// Die Rohware dazu — dieselbe Zahl, die der Plan ergibt.
+  double? get _planRoh {
+    final fertig = _planFertig;
+    return fertig == null ? null : _effektiveAusbeute.rohAusFertig(fertig);
   }
 
-  /// Informative Rohwaren-Vorschau bei Fertigware-Eingabe:
-  /// Rohware ˜ Fertig / (1 - Verlust). null, wenn kein Verlust bekannt ist.
-  /// Beeinflusst die eigentliche Planung NICHT — die läuft über die
-  /// Ausbeute-Faktoren.
-  double? get _rohwareVorschau {
-    if (_einheit != _MengenEinheit.fertigware) return null;
-    final eingabe = double.tryParse(_menge.text.replaceAll(',', '.'));
-    final v = _effektiverVerlust;
-    if (eingabe == null || eingabe <= 0 || v == null || v >= 1) return null;
-    return eingabe / (1 - v);
-  }
+  /// Ist die Fertigmenge wirklich bekannt? Bei Rohware- und Zeiteingabe
+  /// nur mit einer Ausbeute; ohne sie rechnet die App ohne Verlust, und
+  /// die Fertigmenge wäre geraten.
+  bool get _fertigBekannt =>
+      _einheit == _MengenEinheit.fertigware || _effektiveAusbeute.bekannt;
 
   @override
   void dispose() {
@@ -2267,12 +2370,12 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     super.dispose();
   }
 
-  // -- Stufe 1 ? 2: Plan berechnen ---------------------------------------
+  // -- Stufe 1 → 2: Plan berechnen ----------------------------------------
   Future<void> _weiter() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
-    final menge = _planMenge;
-    if (menge == null || menge <= 0) {
+    final fertig = _planFertig;
+    if (fertig == null || fertig <= 0) {
       final hinweis = _einheit == _MengenEinheit.stunden
           ? (_dauerModelle.isEmpty
               ? 'Für dieses Produkt lässt sich aus der Zeit keine Menge '
@@ -2285,19 +2388,18 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       return;
     }
 
-    // [menge] ist immer die ROHWARENMENGE, mit der die Anlagen laufen.
-    // Bei Fertigware-Eingabe wurde sie über den Verlust hochgerechnet,
-    // bei Stunden-Eingabe über das Zeitmodell — siehe [_planMenge].
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
+    final fertigBekannt = _fertigBekannt;
 
     final GeplanterPlan plan;
     try {
       plan = await berechneSchrittPlan(
         db: db,
         productId: produkt.id,
-        mengeKg: menge,
+        mengeKg: fertig,
         startTag: _startTag,
+        ausbeuteErsatz: _ersatzAusbeute,
       );
     } catch (e) {
       // Ohne diesen Zweig bliebe _busy auf true stehen: Das Sheet hinge
@@ -2328,7 +2430,9 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     }
     setState(() {
       _plan = plan.schritte;
-      _rohware = plan.rohwareKg;
+      _planRohKg = plan.rohwareKg;
+      _planFertigKg = plan.fertigwareKg;
+      _planFertigBekannt = fertigBekannt;
       _stufe = _PlanStufe.tage;
       _busy = false;
     });
@@ -2341,17 +2445,10 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
-    final eingabe =
-        double.tryParse(_menge.text.replaceAll(',', '.')) ?? 0;
-    // Der Bedarf ist in Fertigware definiert. Bei Fertigware-Eingabe ist
-    // das direkt die Eingabe; bei Stunden-Eingabe die errechnete
-    // Fertigmenge (sofern der Verlust bekannt ist). Bei Rohware-Eingabe
-    // bleibt sie unbekannt (0) — dann wird nichts vom Bedarf abgezogen.
-    final fertigMenge = switch (_einheit) {
-      _MengenEinheit.fertigware => eingabe,
-      _MengenEinheit.stunden => _fertigAusStunden ?? 0.0,
-      _MengenEinheit.rohware => 0.0,
-    };
+    // Gegen den Bedarf zählt die Fertigmenge — aber nur, wenn sie bekannt
+    // ist. Bei Rohware- oder Zeiteingabe ohne Ausbeute bleibt sie 0, dann
+    // wird nichts vom Bedarf abgezogen.
+    final fertigMenge = _planFertigBekannt ? _planFertigKg : 0.0;
     try {
       await erstelleTasksAusPlan(
         db: db,
@@ -2384,12 +2481,13 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     ref.invalidate(bedarfProvider);
 
     if (!mounted) return;
-    // Hinweis auf die berechnete Rohwaren-Menge des Plans.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Eingeplant · Rohwaren-Bedarf: '
-          '${_rohware.toStringAsFixed(0)} kg',
+          _planFertigBekannt
+              ? 'Eingeplant · Rohware ${_fmtKg(_planRohKg)} kg → '
+                  'Fertigware ${_fmtKg(_planFertigKg)} kg'
+              : 'Eingeplant · Rohware ${_fmtKg(_planRohKg)} kg',
         ),
         duration: const Duration(seconds: 3),
       ),
@@ -2490,24 +2588,23 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         _BedarfVorschlaege(
           gewaehlt: _bedarf,
           onWaehlen: (info) {
+            if (info == null || _bedarf?.bedarf.id == info.bedarf.id) {
+              setState(() => _bedarf = null);
+              return;
+            }
+            final p = _produkte
+                .where((x) => x.id == info.bedarf.productId)
+                .firstOrNull;
             setState(() {
-              if (_bedarf?.bedarf.id == info?.bedarf.id) {
-                _bedarf = null;
-                return;
-              }
               _bedarf = info;
-              if (info != null) {
-                final p = _produkte
-                    .where((x) => x.id == info.bedarf.productId)
-                    .firstOrNull;
-                if (p != null) {
-                  _gewaehlt = p;
-                  _ladeVerlust(p.id);
-                  _ladeZeitmodell(p.id);
-                }
-                _menge.text = info.offenKg.round().toString();
-              }
+              // Ein Bedarf ist Fertigware. Bliebe die Einheit auf Rohware,
+              // würde die Bedarfsmenge als Rohware verplant — es käme um
+              // den Verlust zu wenig heraus, und gegen den Bedarf zählte
+              // nichts.
+              _einheit = _MengenEinheit.fertigware;
+              _menge.text = info.offenKg.round().toString();
             });
+            if (p != null && p.id != _gewaehlt?.id) _waehleProdukt(p);
           },
         ),
 
@@ -2570,11 +2667,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                         dense: true,
                         title: Text(p.artikelbezeichnung),
                         subtitle: Text(p.artikelnummer),
-                        onTap: () {
-                          setState(() => _gewaehlt = p);
-                          _ladeVerlust(p.id);
-                          _ladeZeitmodell(p.id);
-                        },
+                        onTap: () => _waehleProdukt(p),
                       );
                     },
                   ),
@@ -2588,7 +2681,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               subtitle: Text(_gewaehlt!.artikelnummer),
               trailing: IconButton(
                 icon: const Icon(Icons.close),
-                onPressed: () => setState(() => _gewaehlt = null),
+                onPressed: _produktAbwaehlen,
               ),
             ),
           ),
@@ -2635,19 +2728,23 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
               onChanged: (_) => setState(() {}),
             ),
 
-          // Zeit-Eingabe: zeigt, was in dieser Zeit zu schaffen ist.
+          // Zeit-Eingabe: Worauf sich die Zeit bezieht. Ohne diese Wahl wäre
+          // unklar, welche Abteilung gemeint ist — die übrigen werden aus
+          // der Menge hochgerechnet.
           if (_einheit == _MengenEinheit.stunden) ...[
-            const SizedBox(height: 10),
-            if (_dauerModelle.isEmpty)
+            if (_ausbeute != null && _dauerModelle.isEmpty) ...[
+              const SizedBox(height: 10),
               const _RohwareHinweis(
                 text: 'Für dieses Produkt fehlen Leistungsdaten — aus der '
                     'Zeit lässt sich noch keine Menge ableiten.',
-              )
-            else ...[
-              // Worauf sich die Stundenzahl bezieht. Ohne diese Wahl wäre
-              // unklar, welche Abteilung gemeint ist — die übrigen werden
-              // aus der Menge hochgerechnet.
+              ),
+            ] else if (_dauerModelle.isNotEmpty) ...[
+              const SizedBox(height: 10),
               DropdownButtonFormField<String>(
+                // Der Schlüssel baut das Feld neu, wenn die App die
+                // Abteilung selbst setzt — `initialValue` allein zöge nur
+                // beim ersten Aufbau.
+                key: ValueKey(_zeitAbteilung),
                 initialValue: _zeitAbteilung,
                 decoration: const InputDecoration(
                   labelText: 'Zeit gilt für',
@@ -2662,73 +2759,12 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 ],
                 onChanged: (v) => setState(() => _zeitAbteilung = v),
               ),
-              const SizedBox(height: 10),
-              if (_mengeAusStunden != null) ...[
-                _RohwareHinweis(
-                  text: 'Schaffbar: ˜ ${_mengeAusStunden!.round()} kg Rohware'
-                      '${_fertigAusStunden != null ? '  ?  ergibt ˜ '
-                          '${_fertigAusStunden!.round()} kg Fertigware' : ''}',
-                ),
-                // Ehrlicher Hinweis, wenn eine andere Abteilung dafür über
-                // ihre 9 Stunden laufen müsste.
-                for (final u in _ueberlaufAbteilungen) ...[
-                  const SizedBox(height: 6),
-                  _RohwareHinweis(
-                    text: 'Achtung: ${u.name} bräuchte dafür '
-                        '${Zeit.kurz(u.stunden * 60)} — mehr als die '
-                        '9 Stunden eines Tages.',
-                  ),
-                ],
-              ],
-              if (_fertigAusStunden == null && _histVerlust == null) ...[
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _verlustProzent,
-                  decoration: const InputDecoration(
-                    labelText: 'Verlust (%) — für die Fertigmenge',
-                    suffixText: '%',
-                    border: OutlineInputBorder(),
-                  ),
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ],
             ],
           ],
 
-          // Bei Fertigware: Verlust-Anzeige bzw. -Eingabe + Rohwaren-Vorschau.
-          if (_einheit == _MengenEinheit.fertigware) ...[
-            const SizedBox(height: 10),
-            if (_histVerlust != null)
-              _RohwareHinweis(
-                text: 'Ø Verlust aus Historie: '
-                    '${(_histVerlust! * 100).toStringAsFixed(1)} %'
-                    '${_rohwareVorschau != null ? '  ?  es werden ˜ '
-                        '${_rohwareVorschau!.round()} kg Rohware verplant'
-                        : ''}',
-              )
-            else ...[
-              TextField(
-                controller: _verlustProzent,
-                decoration: const InputDecoration(
-                  labelText: 'Verlust (%) — keine Historie vorhanden',
-                  suffixText: '%',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (_) => setState(() {}),
-              ),
-              if (_rohwareVorschau != null) ...[
-                const SizedBox(height: 8),
-                _RohwareHinweis(
-                  text: 'Es werden ˜ ${_rohwareVorschau!.round()} kg '
-                      'Rohware verplant',
-                ),
-              ],
-            ],
-          ],
+          // Rohware ↔ Fertigware — mit derselben Ausbeute, mit der gleich
+          // auch der Plan rechnet.
+          ..._umrechnungsHinweise(),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
@@ -2753,6 +2789,88 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     );
   }
 
+  /// Was aus der Eingabe wird — Rohware, Fertigware und die Ausbeute
+  /// dazwischen samt Herkunft. Kennt der Artikel keine Ausbeute, wird hier
+  /// der Verlust abgefragt.
+  List<Widget> _umrechnungsHinweise() {
+    // Solange die Ausbeute lädt, lieber nichts als eine falsche Zahl.
+    if (_ausbeute == null) return const [];
+    final a = _effektiveAusbeute;
+    final mengen = _mengenHinweis(a);
+
+    return [
+      if (mengen != null) ...[
+        const SizedBox(height: 10),
+        _RohwareHinweis(text: mengen),
+      ],
+      // Ehrlicher Hinweis, wenn eine andere Abteilung für die Menge über
+      // ihre 9 Stunden laufen müsste.
+      for (final u in _ueberlaufAbteilungen) ...[
+        const SizedBox(height: 6),
+        _RohwareHinweis(
+          text: 'Achtung: ${u.name} bräuchte dafür '
+              '${Zeit.kurz(u.stunden * 60)} — mehr als die '
+              '9 Stunden eines Tages.',
+        ),
+      ],
+      const SizedBox(height: 8),
+      if (_verlustAbfragen)
+        TextField(
+          controller: _verlustProzent,
+          decoration: const InputDecoration(
+            labelText: 'Verlust (%) — für diesen Artikel ist keine Ausbeute '
+                'hinterlegt',
+            suffixText: '%',
+            border: OutlineInputBorder(),
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (_) {
+            setState(() {});
+            // Das Zeitmodell hängt an der Ausbeute — neu rechnen.
+            final p = _gewaehlt;
+            if (p != null) _ladeArtikeldaten(p.id);
+          },
+        )
+      else
+        Text(
+          _ausbeuteText(a),
+          style: TextStyle(
+            fontSize: 12,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+    ];
+  }
+
+  /// Die umgerechnete Menge zur Eingabe, oder null ohne gültige Eingabe.
+  String? _mengenHinweis(Ausbeute a) {
+    final roh = _planRoh;
+    final fertig = _planFertig;
+    if (roh == null || fertig == null) return null;
+    if (!a.bekannt) {
+      switch (_einheit) {
+        case _MengenEinheit.rohware:
+          return 'Fertigmenge unbekannt — ohne Ausbeute rechnet die App '
+              'ohne Verlust';
+        case _MengenEinheit.fertigware:
+          return 'Ohne Ausbeute rechnet die App ohne Verlust: Rohware = '
+              'Fertigware';
+        case _MengenEinheit.stunden:
+          return 'Schaffbar: ≈ ${_fmtKg(roh)} kg — Fertigmenge unbekannt, '
+              'ohne Ausbeute rechnet die App ohne Verlust';
+      }
+    }
+    switch (_einheit) {
+      case _MengenEinheit.rohware:
+        return 'Ergibt ≈ ${_fmtKg(fertig)} kg Fertigware';
+      case _MengenEinheit.fertigware:
+        return 'Braucht ≈ ${_fmtKg(roh)} kg Rohware';
+      case _MengenEinheit.stunden:
+        return 'Schaffbar: ≈ ${_fmtKg(roh)} kg Rohware → '
+            '≈ ${_fmtKg(fertig)} kg Fertigware';
+    }
+  }
+
   // -- Stufe 2: Tag je Schritt zuweisen ----------------------------------
   Widget _buildTage(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
@@ -2771,10 +2889,14 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           'Starttag — schieb einzelne Schritte nach Bedarf.',
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
-        if (_rohware > 0) ...[
+        if (_planRohKg > 0) ...[
           const SizedBox(height: 8),
           Text(
-            'Rohwaren-Bedarf: ${_rohware.toStringAsFixed(1)} kg',
+            _planFertigBekannt
+                ? 'Rohware ${_fmtKg(_planRohKg)} kg → Fertigware '
+                    '${_fmtKg(_planFertigKg)} kg'
+                : 'Rohware ${_fmtKg(_planRohKg)} kg · Fertigmenge unbekannt '
+                    '(keine Ausbeute)',
             style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
           ),
         ],
@@ -2893,7 +3015,8 @@ class _SchrittTagKarte extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$dauerLabel h · ${schritt.mitarbeiter} P',
+                  '${_fmtKg(schritt.mengeKg)} kg · $dauerLabel h · '
+                  '${schritt.mitarbeiter} P',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

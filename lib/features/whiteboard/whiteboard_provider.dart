@@ -151,79 +151,227 @@ class GeplanterSchritt {
 
 /// Ergebnis von [berechneSchrittPlan].
 class GeplanterPlan {
-  GeplanterPlan({required this.rohwareKg, required this.schritte});
+  GeplanterPlan({
+    required this.rohwareKg,
+    required this.fertigwareKg,
+    required this.ausbeute,
+    required this.schritte,
+  });
 
   /// Benötigte Rohwarenmenge (Input des ersten Schritts).
   final double rohwareKg;
+
+  /// Fertigmenge, für die der Plan gerechnet wurde.
+  final double fertigwareKg;
+
+  /// Die Ausbeute, mit der zwischen beiden gerechnet wurde.
+  final Ausbeute ausbeute;
+
   final List<GeplanterSchritt> schritte;
 }
 
-/// Berechnet aus Produkt + gewünschter Fertigmenge den Schritt-Plan:
+// ---------------------------------------------------------------------------
+// Ausbeute: Rohware ↔ Fertigware
+// ---------------------------------------------------------------------------
+
+/// Woher die Ausbeute eines Artikels stammt — in dieser Reihenfolge
+/// gesucht.
+enum AusbeuteQuelle {
+  /// Ausbeute-Faktoren an den einzelnen Prozessschritten; sie
+  /// multiplizieren sich über die Kette.
+  schritte,
+
+  /// „Gesamtausbeute" in den Stammdaten des Artikels.
+  artikel,
+
+  /// Ø Verlust aus der Produktionshistorie.
+  historie,
+
+  /// Im Planen-Dialog von Hand eingetragen — gilt nur, wenn der Artikel
+  /// selbst keine Ausbeute liefert.
+  eingabe,
+
+  /// Nichts bekannt: Es wird ohne Verlust gerechnet.
+  keine,
+}
+
+/// Wie viel Fertigware aus einem Kilo Rohware wird, und woher die Zahl
+/// stammt.
+///
+/// Rohware heißt hier: was am Anfang der Kette in den ersten Schritt geht.
+/// Fertigware: was am Ende herauskommt. Mit genau dieser Zahl rechnet
+/// [berechneSchrittPlan] — wer irgendwo zwischen Rohware und Fertigware
+/// umrechnet, muss sie verwenden, sonst passen Anzeige und Plan nicht
+/// zusammen.
+class Ausbeute {
+  const Ausbeute({
+    required this.faktor,
+    required this.quelle,
+    this.historie,
+  });
+
+  /// Keine Ausbeute bekannt: Rohware = Fertigware.
+  static const unbekannt = Ausbeute(faktor: 1, quelle: AusbeuteQuelle.keine);
+
+  /// Fertigware je kg Rohware, 0 < faktor ≤ 1.
+  final double faktor;
+
+  final AusbeuteQuelle quelle;
+
+  /// Ø Ausbeute laut Produktionshistorie — zum Vergleich, auch wenn eine
+  /// andere Quelle gilt. null ohne Historie.
+  final double? historie;
+
+  bool get bekannt => quelle != AusbeuteQuelle.keine;
+
+  double rohAusFertig(double fertigKg) => fertigKg / faktor;
+
+  double fertigAusRoh(double rohKg) => rohKg * faktor;
+}
+
+/// Ermittelt die Ausbeute eines Artikels nach denselben Regeln wie
+/// [berechneSchrittPlan]. [ersatz] (0 < x < 1) gilt nur, wenn der Artikel
+/// weder an den Schritten noch in den Stammdaten noch in der Historie eine
+/// Ausbeute hat.
+Future<Ausbeute> ermittleAusbeute(
+  AppDatabase db,
+  String productId, {
+  double? ersatz,
+}) async {
+  final steps = await _ladeSchritte(db, productId);
+  return _ausbeuteFuer(db, productId, steps, ersatz: ersatz);
+}
+
+Future<List<ProductStep>> _ladeSchritte(AppDatabase db, String productId) {
+  return (db.select(db.productSteps)
+        ..where((s) => s.productId.equals(productId))
+        ..where((s) => s.deletedAt.isNull())
+        ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+      .get();
+}
+
+Future<Ausbeute> _ausbeuteFuer(
+  AppDatabase db,
+  String productId,
+  List<ProductStep> steps, {
+  double? ersatz,
+}) async {
+  final verlust = await durchschnittsVerlust(db, productId);
+  final historie = verlust == null ? null : 1 - verlust;
+
+  // 1. Ausbeute an den Schritten: Sie multipliziert sich über die Kette.
+  var kette = 1.0;
+  var hatSchrittAusbeute = false;
+  for (final s in steps) {
+    final a = s.ausbeuteFaktor;
+    if (a != null && a > 0 && a < 1) {
+      kette *= a;
+      hatSchrittAusbeute = true;
+    }
+  }
+  if (hatSchrittAusbeute) {
+    return Ausbeute(
+      faktor: kette,
+      quelle: AusbeuteQuelle.schritte,
+      historie: historie,
+    );
+  }
+
+  // 2. Gesamtausbeute am Artikel.
+  final produkt = await (db.select(db.products)
+        ..where((p) => p.id.equals(productId)))
+      .getSingleOrNull();
+  final gesamt = produkt?.gesamtAusbeuteFaktor;
+  if (gesamt != null && gesamt > 0 && gesamt < 1) {
+    return Ausbeute(
+      faktor: gesamt,
+      quelle: AusbeuteQuelle.artikel,
+      historie: historie,
+    );
+  }
+
+  // 3. Gemessener Ø Verlust aus der Produktionshistorie.
+  if (historie != null) {
+    return Ausbeute(
+      faktor: historie,
+      quelle: AusbeuteQuelle.historie,
+      historie: historie,
+    );
+  }
+
+  // 4. Von Hand im Dialog eingetragen.
+  if (ersatz != null && ersatz > 0 && ersatz < 1) {
+    return Ausbeute(faktor: ersatz, quelle: AusbeuteQuelle.eingabe);
+  }
+  return Ausbeute.unbekannt;
+}
+
+/// Berechnet aus Produkt + gewünschter **Fertigmenge** den Schritt-Plan:
 /// pro Schritt Eingangsmenge (rückwärts über die Ausbeute), Dauer und
 /// Personen. Für die **Bratstraße** wird die Dauer aus dem Ø der
 /// Produktions-Historie (kg/h roh) bestimmt, sonst aus den Schritt-Stammdaten
 /// linear auf die Menge skaliert. Alle Schritte starten auf [startTag];
 /// die Tageszuordnung wird anschließend im Dialog angepasst.
+///
+/// [mengeKg] ist IMMER Fertigware. Wer von einer Rohwarenmenge ausgeht,
+/// rechnet sie vorher mit [ermittleAusbeute] um — sonst wird der Verlust
+/// ein zweites Mal aufgeschlagen, und der Plan ist um genau diesen Faktor
+/// zu groß. [ausbeuteErsatz] gilt nur für Artikel ohne eigene Ausbeute
+/// (siehe [AusbeuteQuelle.eingabe]).
 Future<GeplanterPlan> berechneSchrittPlan({
   required AppDatabase db,
   required String productId,
   required double mengeKg,
   required DateTime startTag,
+  double? ausbeuteErsatz,
 }) async {
-  final steps = await (db.select(db.productSteps)
-        ..where((s) => s.productId.equals(productId))
-        ..where((s) => s.deletedAt.isNull())
-        ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
-      .get();
+  final steps = await _ladeSchritte(db, productId);
 
   if (steps.isEmpty) {
-    return GeplanterPlan(rohwareKg: mengeKg, schritte: const []);
+    return GeplanterPlan(
+      rohwareKg: mengeKg,
+      fertigwareKg: mengeKg,
+      ausbeute: Ausbeute.unbekannt,
+      schritte: const [],
+    );
   }
+
+  final ausbeute = await _ausbeuteFuer(
+    db,
+    productId,
+    steps,
+    ersatz: ausbeuteErsatz,
+  );
 
   // Rückwärtsrechnung der Eingangsmengen (letzter Schritt = mengeKg Fertig).
   final inputMengen = List<double>.filled(steps.length, mengeKg);
-  var hatSchrittAusbeute = false;
-  for (var i = steps.length - 1; i >= 0; i--) {
-    final ausbeute = steps[i].ausbeuteFaktor ?? 1.0;
-    if (ausbeute > 0 && ausbeute < 1.0) {
-      inputMengen[i] = inputMengen[i] / ausbeute;
-      hatSchrittAusbeute = true;
+  if (ausbeute.quelle == AusbeuteQuelle.schritte) {
+    for (var i = steps.length - 1; i >= 0; i--) {
+      final a = steps[i].ausbeuteFaktor;
+      if (a != null && a > 0 && a < 1) {
+        inputMengen[i] = inputMengen[i] / a;
+      }
+      if (i > 0) inputMengen[i - 1] = inputMengen[i];
     }
-    if (i > 0) inputMengen[i - 1] = inputMengen[i];
-  }
-
-  // Fallback, wenn am Schritt keine Ausbeute gepflegt ist: Ohne ihn wäre
-  // die Rohwarenmenge gleich der Fertigmenge — der Bratverlust fiele
-  // unter den Tisch, und eine Bestellung nach diesen Zahlen käme zu
-  // knapp. Quelle ist zuerst die Gesamtausbeute am Artikel, danach der
-  // gemessene Ø Verlust aus der Produktionshistorie.
-  if (!hatSchrittAusbeute) {
-    final produkt = await (db.select(db.products)
-          ..where((p) => p.id.equals(productId)))
-        .getSingleOrNull();
-    var gesamt = produkt?.gesamtAusbeuteFaktor;
-    if (gesamt == null || gesamt <= 0 || gesamt >= 1) {
-      final verlust = await durchschnittsVerlust(db, productId);
-      if (verlust != null && verlust > 0 && verlust < 1) {
-        gesamt = 1 - verlust;
+  } else if (ausbeute.bekannt) {
+    // Eine Gesamtausbeute für den ganzen Artikel. Ohne sie wäre die
+    // Rohwarenmenge gleich der Fertigmenge — der Bratverlust fiele unter
+    // den Tisch, und eine Bestellung nach diesen Zahlen käme zu knapp.
+    //
+    // Der Verlust entsteht beim Garen. Alles bis einschließlich der
+    // Bratstraße arbeitet deshalb mit der Rohmenge, alles danach
+    // (Verpackung, Wiegen) mit der Fertigmenge. Gibt es keine Bratstraße,
+    // gilt die Rohmenge für die ganze Kette.
+    final rohMenge = ausbeute.rohAusFertig(mengeKg);
+    var letzterGarschritt = steps.length - 1;
+    for (var i = steps.length - 1; i >= 0; i--) {
+      if (steps[i].abteilung == _kBratstrasseDbValue) {
+        letzterGarschritt = i;
+        break;
       }
     }
-    if (gesamt != null && gesamt > 0 && gesamt < 1) {
-      final rohMenge = mengeKg / gesamt;
-      // Der Verlust entsteht beim Garen. Alles bis einschließlich der
-      // Bratstraße arbeitet deshalb mit der Rohmenge, alles danach
-      // (Verpackung, Wiegen) mit der Fertigmenge. Gibt es keine
-      // Bratstraße, gilt die Rohmenge für die ganze Kette.
-      var letzterGarschritt = steps.length - 1;
-      for (var i = steps.length - 1; i >= 0; i--) {
-        if (steps[i].abteilung == _kBratstrasseDbValue) {
-          letzterGarschritt = i;
-          break;
-        }
-      }
-      for (var i = 0; i <= letzterGarschritt; i++) {
-        inputMengen[i] = rohMenge;
-      }
+    for (var i = 0; i <= letzterGarschritt; i++) {
+      inputMengen[i] = rohMenge;
     }
   }
 
@@ -357,7 +505,12 @@ Future<GeplanterPlan> berechneSchrittPlan({
     );
   }
 
-  return GeplanterPlan(rohwareKg: inputMengen[0], schritte: result);
+  return GeplanterPlan(
+    rohwareKg: inputMengen[0],
+    fertigwareKg: mengeKg,
+    ausbeute: ausbeute,
+    schritte: result,
+  );
 }
 
 /// Lineare Dauer-Skalierung aus den Schritt-Stammdaten inkl. Chargen-Logik.

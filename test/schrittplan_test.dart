@@ -182,4 +182,175 @@ void main() {
       expect(plan.schritte.length, 1);
     });
   });
+
+  group('Ausbeute: Rohware und Fertigware', () {
+    Future<void> gesamtausbeute(String productId, double faktor) async {
+      await (db.update(db.products)..where((p) => p.id.equals(productId)))
+          .write(ProductsCompanion(gesamtAusbeuteFaktor: Value(faktor)));
+    }
+
+    Future<void> historie(
+      String productId, {
+      required String id,
+      required double verlust,
+      double? kgProStundeRoh,
+    }) async {
+      await db.into(db.productionHistory).insert(
+            ProductionHistoryCompanion.insert(
+              id: id,
+              productId: productId,
+              datum: DateTime(2026, 9, 1),
+              kgRohware: const Value(1000),
+              kgFertigware: Value(1000 * (1 - verlust)),
+              verlustAnteil: Value(verlust),
+              kgProStundeRoh: Value(kgProStundeRoh),
+            ),
+          );
+    }
+
+    test('die Gesamtausbeute des Artikels geht vor der Historie', () async {
+      await seedArtikel(db, id: 'p7', nummer: '12429');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p7',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+      );
+      await gesamtausbeute('p7', 0.56);
+      await historie('p7', id: 'h1', verlust: 0.44);
+
+      final a = await ermittleAusbeute(db, 'p7');
+
+      expect(a.quelle, AusbeuteQuelle.artikel);
+      expect(a.faktor, closeTo(0.56, 1e-9));
+      // Die Historie steht zum Vergleich daneben.
+      expect(a.historie, closeTo(0.56, 1e-9));
+    });
+
+    test('ohne Artikelwert zählt die Historie, erst danach die Eingabe',
+        () async {
+      await seedArtikel(db, id: 'p8', nummer: '1008');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p8',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+      );
+
+      expect(
+        (await ermittleAusbeute(db, 'p8', ersatz: 0.7)).quelle,
+        AusbeuteQuelle.eingabe,
+      );
+      expect((await ermittleAusbeute(db, 'p8')).quelle, AusbeuteQuelle.keine);
+
+      await historie('p8', id: 'h1', verlust: 0.25);
+      final a = await ermittleAusbeute(db, 'p8', ersatz: 0.7);
+
+      expect(a.quelle, AusbeuteQuelle.historie);
+      expect(a.faktor, closeTo(0.75, 1e-9));
+    });
+
+    test('Rohware umgerechnet und geplant ergibt wieder dieselbe Rohware',
+        () async {
+      // Der Fehler aus dem Planen-Dialog: 7.200 kg Rohware gingen als
+      // Fertigware in den Plan, und heraus kamen 12.857 kg Rohware — der
+      // Verlust war doppelt drin. Richtig: 7.200 kg Rohware ergeben bei
+      // 56 % Ausbeute 4.032 kg Fertigware, und der Plan dazu braucht
+      // wieder genau 7.200 kg Rohware.
+      await seedArtikel(db, id: 'p9', nummer: '12429');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p9',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p9',
+        reihenfolge: 2,
+        abteilung: 'verpackung',
+      );
+      await gesamtausbeute('p9', 0.56);
+
+      final a = await ermittleAusbeute(db, 'p9');
+      final fertig = a.fertigAusRoh(7200);
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p9',
+        mengeKg: fertig,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      expect(fertig, closeTo(4032, 0.01));
+      expect(plan.rohwareKg, closeTo(7200, 0.01));
+      expect(plan.fertigwareKg, closeTo(4032, 0.01));
+      expect(plan.ausbeute.quelle, AusbeuteQuelle.artikel);
+      // Bis einschließlich Bratstraße Rohware, danach Fertigware.
+      expect(plan.schritte[0].mengeKg, closeTo(7200, 0.01));
+      expect(plan.schritte[1].mengeKg, closeTo(4032, 0.01));
+    });
+
+    test('die Bratstraße rechnet mit dem Ø kg/h Rohware der Historie',
+        () async {
+      // 620 kg Rohware je Stunde: 5.580 kg Rohware brauchen 9 Stunden.
+      await seedArtikel(db, id: 'p10', nummer: '12429');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p10',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+      );
+      await gesamtausbeute('p10', 0.56);
+      await historie('p10', id: 'h1', verlust: 0.44, kgProStundeRoh: 620);
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p10',
+        mengeKg: 5580 * 0.56,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      expect(plan.rohwareKg, closeTo(5580, 0.01));
+      expect(plan.schritte.single.ausHistorie, isTrue);
+      expect(plan.schritte.single.dauerMinuten, closeTo(540, 0.5));
+    });
+
+    test('ein von Hand eingetragener Verlust gilt nur ohne eigene Ausbeute',
+        () async {
+      await seedArtikel(db, id: 'p11', nummer: '1011');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p11',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+      );
+
+      final ohne = await berechneSchrittPlan(
+        db: db,
+        productId: 'p11',
+        mengeKg: 800,
+        startTag: DateTime(2026, 9, 14),
+        ausbeuteErsatz: 0.8,
+      );
+      expect(ohne.ausbeute.quelle, AusbeuteQuelle.eingabe);
+      expect(ohne.rohwareKg, closeTo(1000, 0.01));
+
+      await gesamtausbeute('p11', 0.5);
+      final mit = await berechneSchrittPlan(
+        db: db,
+        productId: 'p11',
+        mengeKg: 800,
+        startTag: DateTime(2026, 9, 14),
+        ausbeuteErsatz: 0.8,
+      );
+      expect(mit.ausbeute.quelle, AusbeuteQuelle.artikel);
+      expect(mit.rohwareKg, closeTo(1600, 0.01));
+    });
+  });
 }
