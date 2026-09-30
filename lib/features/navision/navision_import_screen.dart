@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -30,6 +31,43 @@ final appArtikelnummernProvider = FutureProvider<Set<String>>((ref) async {
         ..where((p) => p.deletedAt.isNull()))
       .get();
   return liste.map((p) => p.artikelnummer).toSet();
+});
+
+/// Abteilungen je Artikelnummer, abgeleitet aus den Prozessschritten.
+///
+/// Damit lässt sich die Navision-Liste nach Abteilung filtern: Ein Artikel
+/// gehört zur Bratstraße, wenn irgendein Schritt seines Prozesses dort
+/// läuft. Ein Artikel ohne Prozess — etwa eine frische Hülle aus dem
+/// Navision-Abgleich — hat keinen Eintrag und fällt bei gesetztem Filter
+/// heraus; genau das ist gewollt, denn für ihn gibt es in der Abteilung
+/// noch nichts zu tun.
+///
+/// Verknüpft wird über die Artikelnummer, weil der Navision-Katalog die
+/// App-Artikel-ID nicht kennt.
+///
+/// `autoDispose`, damit die Zuordnung beim nächsten Öffnen des Bildschirms
+/// neu gelesen wird. Wer zwischendurch in einem Artikel einen Schritt
+/// ergänzt, soll ihn hier sofort unter der neuen Abteilung finden und nicht
+/// erst nach einem Neustart.
+final abteilungenJeArtikelProvider =
+    FutureProvider.autoDispose<Map<String, Set<String>>>((ref) async {
+  final db = ref.watch(databaseProvider);
+
+  final produkte = await (db.select(db.products)
+        ..where((p) => p.deletedAt.isNull()))
+      .get();
+  final schritte = await (db.select(db.productSteps)
+        ..where((s) => s.deletedAt.isNull()))
+      .get();
+
+  final nummerJeId = {for (final p in produkte) p.id: p.artikelnummer};
+  final map = <String, Set<String>>{};
+  for (final s in schritte) {
+    final nummer = nummerJeId[s.productId];
+    if (nummer == null || nummer.isEmpty) continue;
+    map.putIfAbsent(nummer, () => <String>{}).add(s.abteilung);
+  }
+  return map;
 });
 
 /// Bereits im Bedarf liegende Fertigmenge je Artikelnummer, in kg — abgeleitet
@@ -92,6 +130,9 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   String? _kategorie;
   String? _buchungsgruppe;
   String? _einheit;
+
+  /// dbValue der gewählten Abteilung (null = alle).
+  String? _abteilung;
   // Standardmäßig alle importierten Navision-Artikel anzeigen. Viele
   // Navision-Exporte enthalten vor allem Null-/0-Bedarf-Zeilen; der Filter
   // „Nur mit Bedarf“ würde sonst sofort die komplette Liste verbergen und
@@ -115,9 +156,17 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     List<NavisionArtikel> alle,
     Map<String, double> imBedarfKg,
     Map<String, double> faktoren,
+    Map<String, Set<String>> abteilungen,
   ) {
     final suchText = _suche.text.trim().toLowerCase();
+    final gewaehlteAbteilung = _abteilung;
     final liste = alle.where((a) {
+      if (gewaehlteAbteilung != null) {
+        final eigene = abteilungen[a.nummer];
+        if (eigene == null || !eigene.contains(gewaehlteAbteilung)) {
+          return false;
+        }
+      }
       if (_nurBedarf) {
         final netto = nettoOffenKg(a, imBedarfKg, faktoren);
         // netto == null → mangels Faktor nicht bestimmbar → sichtbar
@@ -324,6 +373,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf aus NAV');
     ref.invalidate(appArtikelnummernProvider);
+    ref.invalidate(abteilungenJeArtikelProvider);
     ref.invalidate(bedarfProvider);
     ref.invalidate(imBedarfKgProvider);
     ref.invalidate(umrechnungsFaktorenProvider);
@@ -356,6 +406,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         const <String, double>{};
     final faktoren = ref.watch(umrechnungsFaktorenProvider).valueOrNull ??
         const <String, double>{};
+    final abteilungen = ref.watch(abteilungenJeArtikelProvider).valueOrNull ??
+        const <String, Set<String>>{};
 
     final fortschritt = _fortschritt;
 
@@ -373,7 +425,14 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
       ),
       body: Stack(
         children: [
-          _inhalt(context, katalog, appNummern, imBedarfKg, faktoren),
+          _inhalt(
+            context,
+            katalog,
+            appNummern,
+            imBedarfKg,
+            faktoren,
+            abteilungen,
+          ),
           if (fortschritt != null) _fortschrittsSchleier(context, fortschritt),
         ],
       ),
@@ -449,13 +508,14 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     Set<String> appNummern,
     Map<String, double> imBedarfKg,
     Map<String, double> faktoren,
+    Map<String, Set<String>> abteilungen,
   ) {
     return katalog.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Fehler: $e')),
       data: (alle) {
         if (alle.isEmpty) return _leerHinweis(context);
-        final liste = _gefiltert(alle, imBedarfKg, faktoren);
+        final liste = _gefiltert(alle, imBedarfKg, faktoren, abteilungen);
         final markierte =
             liste.where((a) => _markiert.contains(a.nummer)).toList();
         final fehlendeMitBedarf = alle
@@ -466,7 +526,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 
         return Column(
           children: [
-            _filterLeiste(context, alle, liste.length),
+            _filterLeiste(context, alle, liste.length, abteilungen),
             if (fehlendeMitBedarf.isNotEmpty)
               _fehlendeBanner(context, fehlendeMitBedarf),
             const Divider(height: 1),
@@ -526,8 +586,29 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     BuildContext context,
     List<NavisionArtikel> alle,
     int treffer,
+    Map<String, Set<String>> abteilungenJeArtikel,
   ) {
     final theme = Theme.of(context);
+
+    // Wie viele der eingelesenen Artikel jede Abteilung betreffen. Die Zahl
+    // steht in der Auswahl und beantwortet die eigentliche Frage schon vor
+    // dem Klick: „Habe ich heute überhaupt etwas für die Schneideabteilung?"
+    //
+    // Gezählt wird gegen den ganzen Katalog, nicht gegen die übrigen Filter
+    // — sonst änderte sich die Zahl bei jedem Tastendruck in der Suche.
+    //
+    // Angeboten werden immer alle Abteilungen, auch die mit Null. Eine
+    // Auswahl, die je nach Datenlage verschwindet, würde den gesetzten
+    // Filter unsichtbar machen und die Liste ohne erkennbaren Grund leer
+    // lassen.
+    final anzahlJeAbteilung = <String, int>{};
+    for (final a in alle) {
+      final eigene = abteilungenJeArtikel[a.nummer];
+      if (eigene == null) continue;
+      for (final d in eigene) {
+        anzahlJeAbteilung[d] = (anzahlJeAbteilung[d] ?? 0) + 1;
+      }
+    }
     List<String> werte(String? Function(NavisionArtikel) f) {
       final s = <String>{};
       for (final a in alle) {
@@ -611,6 +692,49 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                 werte((a) => a.basiseinheit),
                 (v) => _einheit = v,
               ),
+              SizedBox(
+                width: 230,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _abteilung,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Abteilung',
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Alle'),
+                    ),
+                    for (final a in Abteilung.values)
+                      DropdownMenuItem(
+                        value: a.dbValue,
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: a.farbe,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                '${a.anzeigeName} '
+                                '(${anzahlJeAbteilung[a.dbValue] ?? 0})',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _abteilung = v),
+                ),
+              ),
               FilterChip(
                 label: const Text('Nur mit Bedarf'),
                 selected: _nurBedarf,
@@ -634,7 +758,15 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   ),
-                  style: const TextStyle(fontSize: 12.5),
+                  // Farbe ausdrücklich setzen: Ohne sie erbte der Text die
+                  // Standardfarbe der Umgebung und stand im hellen Modus
+                  // weiß auf hellem Grund — unlesbar. Die anderen
+                  // Auswahlfelder haben kein eigenes `style` und waren
+                  // deshalb nie betroffen.
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: theme.colorScheme.onSurface,
+                  ),
                   items: [
                     for (final s in _NavSort.values)
                       DropdownMenuItem(value: s, child: Text(s.label)),
@@ -647,6 +779,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                   _kategorie != null ||
                   _buchungsgruppe != null ||
                   _einheit != null ||
+                  _abteilung != null ||
                   _suche.text.isNotEmpty)
                 TextButton.icon(
                   onPressed: () => setState(() {
@@ -654,6 +787,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                     _kategorie = null;
                     _buchungsgruppe = null;
                     _einheit = null;
+                    _abteilung = null;
                     _suche.clear();
                   }),
                   icon: const Icon(Icons.filter_alt_off, size: 18),
@@ -670,6 +804,19 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
+          if (_abteilung != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Gezeigt werden nur Artikel, deren Prozess einen Schritt in '
+                'dieser Abteilung hat. Artikel ohne gepflegten Prozess '
+                'erscheinen nicht.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
         ],
       ),
     );
