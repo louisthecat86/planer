@@ -668,9 +668,17 @@ class _SteckbriefBlock extends StatelessWidget {
                       horizontal: 4,
                       vertical: 5,
                     ),
+                    // Beide Spalten sind fest verteilt (2 : 3). Vorher war
+                    // nur die Beschriftung dehnbar, der Wert nicht — ein
+                    // langer Satz in „Sonstige Informationen" nahm sich
+                    // deshalb seine volle Textbreite, überragte die Karte
+                    // und drückte die Beschriftung auf Buchstabenbreite
+                    // zusammen, die dann senkrecht umbrach.
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
+                          flex: 2,
                           child: Text(
                             (def.einheit ?? '').isEmpty
                                 ? def.parameterName
@@ -678,16 +686,21 @@ class _SteckbriefBlock extends StatelessWidget {
                             style: theme.textTheme.bodySmall,
                           ),
                         ),
-                        hatWert
-                            ? _ParamWert(wert: wert)
-                            : Text(
-                                'eintragen …',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  fontStyle: FontStyle.italic,
-                                  color: theme.colorScheme.onSurfaceVariant
-                                      .withValues(alpha: 0.7),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 3,
+                          child: hatWert
+                              ? _ParamWert(wert: wert, rechts: true)
+                              : Text(
+                                  'eintragen …',
+                                  textAlign: TextAlign.right,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontStyle: FontStyle.italic,
+                                    color: theme.colorScheme.onSurfaceVariant
+                                        .withValues(alpha: 0.7),
+                                  ),
                                 ),
-                              ),
+                        ),
                       ],
                     ),
                   ),
@@ -836,7 +849,7 @@ class _ParameterZeileStandard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 2,
@@ -846,14 +859,20 @@ class _ParameterZeileStandard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
+            // Flex 3 statt 1: Ein Freitextwert bekam vorher nur ein Drittel
+            // der Zeile und zerfiel dort in viele kurze Zeilen.
             Expanded(
-              flex: 1,
+              flex: 3,
               child: _ParamWert(wert: param.wert),
             ),
-            Icon(
-              Icons.edit,
-              size: 15,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+            const SizedBox(width: 6),
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(
+                Icons.edit,
+                size: 15,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+              ),
             ),
           ],
         ),
@@ -864,9 +883,12 @@ class _ParameterZeileStandard extends StatelessWidget {
 
 /// Wert-Anzeige für Parameter: gefüllt = grüne Pille, leer = gedämpftes „—".
 class _ParamWert extends StatelessWidget {
-  const _ParamWert({required this.wert});
+  const _ParamWert({required this.wert, this.rechts = false});
 
   final String? wert;
+
+  /// Pille am rechten Rand ausrichten (Steckbrief-Block) statt am linken.
+  final bool rechts;
 
   @override
   Widget build(BuildContext context) {
@@ -876,6 +898,7 @@ class _ParamWert extends StatelessWidget {
     if (!hat) {
       return Text(
         '—',
+        textAlign: rechts ? TextAlign.right : TextAlign.left,
         style: theme.textTheme.bodyMedium?.copyWith(
           color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
         ),
@@ -883,15 +906,19 @@ class _ParamWert extends StatelessWidget {
     }
     final accent = dark ? const Color(0xFF9CCC65) : const Color(0xFF2E7D32);
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: rechts ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: accent.withValues(alpha: dark ? 0.20 : 0.12),
           borderRadius: BorderRadius.circular(6),
         ),
+        // Ohne weiche Umbrüche stünde ein ganzer Satz in einer einzigen
+        // Zeile und liefe aus der Karte heraus.
         child: Text(
           wert!,
+          softWrap: true,
+          textAlign: rechts ? TextAlign.right : TextAlign.left,
           style: theme.textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.w700,
             color: accent,
@@ -920,7 +947,7 @@ class _ParameterZeileEditierbar extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
             flex: 2,
@@ -931,7 +958,7 @@ class _ParameterZeileEditierbar extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           Expanded(
-            flex: 1,
+            flex: 3,
             child: _ParamWert(wert: param.wert),
           ),
           IconButton(
