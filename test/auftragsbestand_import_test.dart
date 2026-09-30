@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/services/auftragsbestand_deckung.dart';
 import 'package:produktion_planer/core/services/auftragsbestand_import_service.dart';
 
 import 'helpers/test_db.dart';

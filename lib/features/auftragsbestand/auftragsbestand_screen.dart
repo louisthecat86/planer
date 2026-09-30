@@ -7,7 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/artikel_anlage_service.dart';
+import '../../core/services/auftragsbestand_deckung.dart';
 import '../../core/services/auftragsbestand_import_service.dart';
+import '../../core/services/auto_backup_trigger.dart';
+import '../articles/article_list_screen.dart' show articlesProvider;
 import '../bedarf/bedarf_screen.dart' show heuteProvider;
 import '../navision/navision_import_screen.dart'
     show abteilungenJeArtikelProvider, appArtikelnummernProvider;
@@ -16,20 +20,31 @@ import '../navision/navision_import_screen.dart'
 // Daten für die Ansicht
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Ein Artikel des Auftragsbestands samt Deckung aus dem Lager.
+/// Ein Artikel des Auftragsbestands samt Deckung aus Lager und Produktion.
 class AuftragsbestandZeile {
   const AuftragsbestandZeile({
     required this.artikel,
     required this.positionen,
+    required this.zugaenge,
     required this.deckung,
   });
 
   final AuftragsArtikel artikel;
   final List<AuftragsPosition> positionen;
+
+  /// Produktionen der App für diesen Artikel — auch die, die nicht
+  /// mitzählen (vor dem Bericht fertig, Menge unbekannt).
+  final List<ProduktionsZugang> zugaenge;
+
   final ArtikelDeckung deckung;
 
   Set<String> get belege => {for (final p in positionen) p.beleg};
   Set<String> get kunden => {for (final p in positionen) p.debitor};
+
+  /// Eingeplante Produktionen ohne Fertigmenge — sie zählen nicht mit.
+  int get ohneMenge => zugaenge
+      .where((z) => z.kg == null && z.art != ZugangsArt.imLager)
+      .length;
 }
 
 /// Der zuletzt eingelesene Auftragsbestand.
@@ -40,6 +55,7 @@ class AuftragsbestandAnsicht {
     this.von,
     this.bis,
     this.importiertAm,
+    this.berichtTag,
   });
 
   final List<AuftragsbestandZeile> zeilen;
@@ -48,18 +64,26 @@ class AuftragsbestandAnsicht {
   final DateTime? bis;
   final DateTime? importiertAm;
 
+  /// Tag, gegen den die Produktionen eingeordnet wurden: der Tag des
+  /// Berichts, ersatzweise der Tag des Einlesens.
+  final DateTime? berichtTag;
+
   bool get leer => zeilen.isEmpty;
 }
 
-/// Lädt den Auftragsbestand und rechnet je Artikel die Deckung aus dem
-/// Lager.
+/// Lädt den Auftragsbestand und rechnet je Artikel die Deckung: erst das
+/// Lager, dann die Produktionen der App.
 ///
-/// `autoDispose`: Beim nächsten Öffnen wird neu gelesen. Die Rechnung ist
-/// billig — ein paar tausend Zeilen —, und so gibt es keinen veralteten
-/// Zwischenstand.
+/// `autoDispose`: Beim nächsten Öffnen wird neu gelesen und gerechnet. Die
+/// Rechnung ist billig — ein paar tausend Zeilen —, und so gibt es keinen
+/// veralteten Zwischenstand.
 final auftragsbestandProvider =
     FutureProvider.autoDispose<AuftragsbestandAnsicht>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Um Mitternacht rechnet die Ansicht neu: Was gestern eingeplant war,
+  // ist heute produziert.
+  final heute = ref.watch(heuteProvider);
+
   final artikel = await db.select(db.auftragsbestandArtikel).get();
   if (artikel.isEmpty) return const AuftragsbestandAnsicht(zeilen: []);
 
@@ -70,24 +94,47 @@ final auftragsbestandProvider =
   }
 
   final erster = artikel.first;
+  final stand = erster.berichtStand ?? erster.importiertAm;
+  final berichtTag = DateTime(stand.year, stand.month, stand.day);
+  final zugaenge = await ladeProduktionsZugaenge(
+    db,
+    heute: heute,
+    berichtTag: berichtTag,
+  );
+
   return AuftragsbestandAnsicht(
     stand: erster.berichtStand,
     von: erster.zeitraumVon,
     bis: erster.zeitraumBis,
     importiertAm: erster.importiertAm,
+    berichtTag: berichtTag,
     zeilen: [
       for (final a in artikel)
-        AuftragsbestandZeile(
-          artikel: a,
-          positionen: jeArtikel[a.artikelnummer] ?? const [],
-          deckung: berechneDeckung(
-            lagerKg: a.lagerKg,
-            positionen: jeArtikel[a.artikelnummer] ?? const [],
-          ),
+        _zeile(
+          a,
+          jeArtikel[a.artikelnummer] ?? const [],
+          zugaenge[a.artikelnummer] ?? const [],
         ),
     ],
   );
 });
+
+AuftragsbestandZeile _zeile(
+  AuftragsArtikel artikel,
+  List<AuftragsPosition> positionen,
+  List<ProduktionsZugang> zugaenge,
+) {
+  return AuftragsbestandZeile(
+    artikel: artikel,
+    positionen: positionen,
+    zugaenge: zugaenge,
+    deckung: berechneDeckung(
+      lagerKg: artikel.lagerKg,
+      positionen: positionen,
+      zugaenge: zugaenge,
+    ),
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Screen
@@ -96,7 +143,7 @@ final auftragsbestandProvider =
 /// Sortierungen der Artikelliste.
 enum _Sortierung {
   engpass('Frühester Engpass'),
-  fehlmenge('Fehlmenge ↓'),
+  fehlmenge('Noch einzuplanen ↓'),
   auftrag('Auftragsmenge ↓'),
   nummer('Artikelnummer');
 
@@ -105,11 +152,11 @@ enum _Sortierung {
 }
 
 /// Auftragsbestand aus Navision: Aufträge je Artikel nach Warenausgang,
-/// das Lager dagegen gerechnet, und ab wann es nicht mehr reicht.
+/// dagegen gerechnet das Lager und die Produktionen der App — und was
+/// danach noch einzuplanen ist.
 ///
-/// Erster Schritt: nur ansehen. Bedarf und Planungsvorschlag bleiben
-/// vorerst, wie sie sind — der Auftragsbestand fließt erst in den nächsten
-/// Schritten dort hinein.
+/// Bedarf und Planungsvorschlag bleiben vorerst, wie sie sind. Der
+/// Auftragsbestand fließt erst im nächsten Schritt dort hinein.
 class AuftragsbestandScreen extends ConsumerStatefulWidget {
   const AuftragsbestandScreen({super.key});
 
@@ -122,14 +169,15 @@ class _AuftragsbestandScreenState
     extends ConsumerState<AuftragsbestandScreen> {
   final _suche = TextEditingController();
 
-  /// Standard: nur Artikel, bei denen das Lager nicht reicht — das ist
-  /// die Arbeit. Der Zähler zeigt, wie viele ausgeblendet sind.
-  bool _nurEngpaesse = true;
+  /// Standard: nur Artikel, bei denen etwas fehlt oder zu spät kommt —
+  /// das ist die Arbeit. Der Zähler zeigt, wie viele es sind.
+  bool _nurOffene = true;
   String? _abteilung;
   _Sortierung _sortierung = _Sortierung.engpass;
   final Set<String> _offen = {};
 
   bool _liest = false;
+  bool _legtAn = false;
   String? _fehler;
   List<String> _hinweise = const [];
 
@@ -202,6 +250,78 @@ class _AuftragsbestandScreenState
     }
   }
 
+  // ── Fehlende Artikel anlegen ─────────────────────────────────────────
+
+  /// Legt die gewählten Artikel des Auftragsbestands, die es in der App
+  /// noch nicht gibt, als Hülle an („nicht eingepflegt").
+  Future<void> _fehlendeAnlegen(List<AuftragsbestandZeile> fehlende) async {
+    // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
+    // jemand den Bildschirm währenddessen schließt — die Listen der App
+    // müssen trotzdem neu geladen werden.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final db = ref.read(databaseProvider);
+
+    final auswahl = await showDialog<Set<String>>(
+      context: context,
+      builder: (_) => _FehlendeDialog(zeilen: fehlende),
+    );
+    if (auswahl == null || auswahl.isEmpty || !mounted) return;
+
+    setState(() => _legtAn = true);
+    try {
+      final ergebnis = await ArtikelAnlageService(db).legeAn([
+        for (final z in fehlende)
+          if (auswahl.contains(z.artikel.artikelnummer))
+            FehlenderArtikel(
+              nummer: z.artikel.artikelnummer,
+              bezeichnung: z.artikel.bezeichnung,
+              bezeichnung2: z.artikel.bezeichnung2,
+            ),
+      ]);
+      container.invalidate(appArtikelnummernProvider);
+      container.invalidate(articlesProvider);
+      if (ergebnis.gesamt > 0) {
+        container
+            .read(autoBackupTriggerProvider)
+            .fireDebounced(reason: 'Artikel aus dem Auftragsbestand angelegt');
+      }
+      if (!mounted) return;
+
+      final teile = [
+        if (ergebnis.angelegt > 0) '${ergebnis.angelegt} angelegt',
+        if (ergebnis.reaktiviert > 0)
+          '${ergebnis.reaktiviert} früher gelöschte wieder aktiviert',
+        if (ergebnis.schonVorhanden > 0)
+          '${ergebnis.schonVorhanden} gab es schon',
+      ];
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            ergebnis.gesamt == 0
+                ? 'Nichts angelegt · ${teile.join(' · ')}.'
+                : 'Artikel ${teile.join(' · ')}. Sie sind als „nicht '
+                    'eingepflegt" markiert — Schritte und Stammdaten in der '
+                    'Artikelliste nachtragen, dann lassen sie sich '
+                    'einplanen.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Anlegen fehlgeschlagen — es wurde nichts angelegt. ($e)',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _legtAn = false);
+    }
+  }
+
   // ── Filtern und Sortieren ────────────────────────────────────────────
 
   List<AuftragsbestandZeile> _gefiltert(
@@ -210,7 +330,7 @@ class _AuftragsbestandScreenState
   ) {
     final suche = _suche.text.trim().toLowerCase();
     final liste = alle.where((z) {
-      if (_nurEngpaesse && z.deckung.gedeckt) return false;
+      if (_nurOffene && z.deckung.gedeckt) return false;
       final abteilung = _abteilung;
       if (abteilung != null &&
           !(abteilungen[z.artikel.artikelnummer]?.contains(abteilung) ??
@@ -267,8 +387,9 @@ class _AuftragsbestandScreenState
   @override
   Widget build(BuildContext context) {
     final ansicht = ref.watch(auftragsbestandProvider);
-    final appNummern = ref.watch(appArtikelnummernProvider).valueOrNull ??
-        const <String>{};
+    // null, solange die Artikel der App noch geladen werden — dann wird
+    // nichts als „fehlt in der App" markiert, statt kurz alles.
+    final appNummern = ref.watch(appArtikelnummernProvider).valueOrNull;
     final abteilungen = ref.watch(abteilungenJeArtikelProvider).valueOrNull ??
         const <String, Set<String>>{};
     final heute = ref.watch(heuteProvider);
@@ -277,6 +398,11 @@ class _AuftragsbestandScreenState
       appBar: AppBar(
         title: const Text('Auftragsbestand'),
         actions: [
+          IconButton(
+            onPressed: () => ref.invalidate(auftragsbestandProvider),
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Neu rechnen — etwa nach Änderungen im Board',
+          ),
           TextButton.icon(
             onPressed: _liest ? null : _einlesen,
             icon: const Icon(Icons.upload_file, size: 18),
@@ -327,14 +453,26 @@ class _AuftragsbestandScreenState
   Widget _inhalt(
     BuildContext context,
     AuftragsbestandAnsicht ansicht,
-    Set<String> appNummern,
+    Set<String>? appNummern,
     Map<String, Set<String>> abteilungen,
     DateTime heute,
   ) {
     final liste = _gefiltert(ansicht.zeilen, abteilungen);
+    final fehlende = appNummern == null
+        ? const <AuftragsbestandZeile>[]
+        : [
+            for (final z in ansicht.zeilen)
+              if (!appNummern.contains(z.artikel.artikelnummer)) z,
+          ];
+
     return Column(
       children: [
-        _Kopf(ansicht: ansicht),
+        _Kopf(ansicht: ansicht, heute: heute),
+        if (fehlende.isNotEmpty)
+          _FehlendeBanner(
+            anzahl: fehlende.length,
+            onAnlegen: _legtAn ? null : () => _fehlendeAnlegen(fehlende),
+          ),
         _filterLeiste(context, ansicht, abteilungen, liste.length),
         const Divider(height: 1),
         Expanded(
@@ -353,7 +491,7 @@ class _AuftragsbestandScreenState
                     final nr = z.artikel.artikelnummer;
                     return _ArtikelKarte(
                       zeile: z,
-                      inApp: appNummern.contains(nr),
+                      inApp: appNummern?.contains(nr) ?? true,
                       offen: _offen.contains(nr),
                       heute: heute,
                       onUmschalten: () => setState(() {
@@ -384,7 +522,7 @@ class _AuftragsbestandScreenState
         anzahl[d] = (anzahl[d] ?? 0) + 1;
       }
     }
-    final engpaesse = ansicht.zeilen.where((z) => !z.deckung.gedeckt).length;
+    final offene = ansicht.zeilen.where((z) => !z.deckung.gedeckt).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -450,9 +588,11 @@ class _AuftragsbestandScreenState
                 ),
               ),
               FilterChip(
-                label: Text('Nur wo das Lager nicht reicht ($engpaesse)'),
-                selected: _nurEngpaesse,
-                onSelected: (v) => setState(() => _nurEngpaesse = v),
+                label: Text('Nur mit Handlungsbedarf ($offene)'),
+                tooltip: 'Artikel, bei denen noch etwas fehlt oder die '
+                    'Produktion zu spät fertig wird',
+                selected: _nurOffene,
+                onSelected: (v) => setState(() => _nurOffene = v),
               ),
               SizedBox(
                 width: 210,
@@ -498,11 +638,23 @@ class _AuftragsbestandScreenState
 // Bausteine
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Grün für „gedeckt", passend zu hellem und dunklem Modus.
+Color _gruen(ThemeData theme) => theme.brightness == Brightness.dark
+    ? Colors.green.shade400
+    : Colors.green.shade700;
+
+/// Bernstein für „zu spät" und „knapp" — dunkel genug, um auf hellem
+/// Grund lesbar zu bleiben.
+Color _bernstein(ThemeData theme) => theme.brightness == Brightness.dark
+    ? const Color(0xFFFBBF24)
+    : const Color(0xFFB45309);
+
 /// Stand, Zeitraum und Kennzahlen des eingelesenen Berichts.
 class _Kopf extends StatelessWidget {
-  const _Kopf({required this.ansicht});
+  const _Kopf({required this.ansicht, required this.heute});
 
   final AuftragsbestandAnsicht ansicht;
+  final DateTime heute;
 
   @override
   Widget build(BuildContext context) {
@@ -511,14 +663,21 @@ class _Kopf extends StatelessWidget {
     final belege = <String>{};
     final kunden = <String>{};
     var auftragKg = 0.0;
+    var lagerKg = 0.0;
+    var planungKg = 0.0;
     var fehltKg = 0.0;
-    var engpaesse = 0;
+    var zuSpaetKg = 0.0;
+    var offene = 0;
     for (final z in zeilen) {
+      final d = z.deckung;
       belege.addAll(z.belege);
       kunden.addAll(z.kunden);
-      auftragKg += z.deckung.auftragKg;
-      fehltKg += z.deckung.fehltKg;
-      if (!z.deckung.gedeckt) engpaesse++;
+      auftragKg += d.auftragKg;
+      lagerKg += d.ausLagerKg;
+      planungKg += d.ausPlanungKg + d.zuSpaetKg;
+      fehltKg += d.fehltKg;
+      zuSpaetKg += d.zuSpaetKg;
+      if (!d.gedeckt) offene++;
     }
 
     final stand = ansicht.stand;
@@ -532,17 +691,37 @@ class _Kopf extends StatelessWidget {
       if (importiert != null)
         'eingelesen ${_datumKurz(importiert)}, ${_uhrzeit(importiert)}',
     ].join(' · ');
+    final berichtTag = ansicht.berichtTag;
+    final veraltet = berichtTag != null && berichtTag.isBefore(heute);
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            zeile,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(zeile, style: grau),
+              if (veraltet)
+                _Marke(
+                  text: 'Bericht nicht von heute — frisch einlesen',
+                  farbe: _bernstein(theme),
+                ),
+              TextButton.icon(
+                onPressed: () => _zeigeRechenweg(context),
+                icon: const Icon(Icons.help_outline, size: 16),
+                label: const Text('So wird gerechnet'),
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -553,15 +732,26 @@ class _Kopf extends StatelessWidget {
               _Kennzahl(wert: '${belege.length}', label: 'Aufträge'),
               _Kennzahl(wert: '${kunden.length}', label: 'Kunden'),
               _Kennzahl(wert: '${_kg(auftragKg)} kg', label: 'bestellt'),
+              _Kennzahl(wert: '${_kg(lagerKg)} kg', label: 'aus dem Lager'),
               _Kennzahl(
-                wert: '$engpaesse',
-                label: 'Artikel reichen nicht',
-                warnung: engpaesse > 0,
+                wert: '${_kg(planungKg)} kg',
+                label: 'aus Produktion',
               ),
               _Kennzahl(
                 wert: '${_kg(fehltKg)} kg',
-                label: 'fehlen gegen das Lager',
-                warnung: fehltKg > 0,
+                label: 'noch einzuplanen',
+                farbe: fehltKg >= 0.005 ? theme.colorScheme.error : null,
+              ),
+              if (zuSpaetKg >= 0.005)
+                _Kennzahl(
+                  wert: '${_kg(zuSpaetKg)} kg',
+                  label: 'zu spät eingeplant',
+                  farbe: _bernstein(theme),
+                ),
+              _Kennzahl(
+                wert: '$offene',
+                label: 'Artikel mit Handlungsbedarf',
+                farbe: offene > 0 ? theme.colorScheme.error : null,
               ),
             ],
           ),
@@ -571,22 +761,63 @@ class _Kopf extends StatelessWidget {
   }
 }
 
+const _rechenweg =
+    'Je Artikel werden die Aufträge nach Warenausgang abgearbeitet, der '
+    'früheste zuerst:\n\n'
+    '1. Lager laut Bericht.\n'
+    '2. Produktionen der App, die bis zum Versandtag fertig sind. Fertig '
+    'heißt: der letzte Schritt der Kette im Board. Wird sie erst am '
+    'Versandtag selbst fertig, zählt sie, ist aber knapp.\n'
+    '3. Produktionen, die erst nach dem Versandtag fertig werden, decken '
+    'die Menge — aber zu spät.\n\n'
+    'Was danach noch fehlt, ist einzuplanen. Termin ist der erste Tag, an '
+    'dem es fehlt.\n\n'
+    'Welche Produktionen mitzählen:\n'
+    '• Eingeplant: letzter Schritt heute oder später.\n'
+    '• Produziert am Tag des Berichts oder danach: im Lager des Berichts '
+    'noch nicht enthalten, zählt dazu.\n'
+    '• Vor dem Tag des Berichts produziert: Die App geht davon aus, dass '
+    'Navision sie bis zum Bericht gebucht hat. Sie steckt im Lager und '
+    'zählt nicht doppelt.\n\n'
+    'Gerechnet wird mit der geplanten Fertigmenge, bei erfassten '
+    'Produktionen mit der erfassten. Produktionen, die in Rohware geplant '
+    'wurden, haben keine Fertigmenge und zählen nicht mit.';
+
+Future<void> _zeigeRechenweg(BuildContext context) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('So wird gerechnet'),
+      content: const SizedBox(
+        width: 520,
+        child: SingleChildScrollView(child: Text(_rechenweg)),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Schließen'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _Kennzahl extends StatelessWidget {
   const _Kennzahl({
     required this.wert,
     required this.label,
-    this.warnung = false,
+    this.farbe,
   });
 
   final String wert;
   final String label;
-  final bool warnung;
+
+  /// Hervorhebung des Werts; ohne Angabe die normale Textfarbe.
+  final Color? farbe;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final farbe =
-        warnung ? theme.colorScheme.error : theme.colorScheme.onSurface;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
@@ -602,7 +833,7 @@ class _Kennzahl extends StatelessWidget {
             wert,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w700,
-              color: farbe,
+              color: farbe ?? theme.colorScheme.onSurface,
             ),
           ),
           Text(
@@ -617,8 +848,188 @@ class _Kennzahl extends StatelessWidget {
   }
 }
 
+/// Hinweis über der Liste: Artikel aus dem Bericht, die es in der App
+/// nicht gibt — für sie lässt sich nichts einplanen.
+class _FehlendeBanner extends StatelessWidget {
+  const _FehlendeBanner({required this.anzahl, required this.onAnlegen});
+
+  final int anzahl;
+  final VoidCallback? onAnlegen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = theme.colorScheme.onTertiaryContainer;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.playlist_add, size: 20, color: farbe),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              anzahl == 1
+                  ? '1 Artikel aus dem Auftragsbestand gibt es in der App '
+                      'noch nicht. Einplanen lässt er sich erst mit '
+                      'Artikelmaske.'
+                  : '$anzahl Artikel aus dem Auftragsbestand gibt es in der '
+                      'App noch nicht. Einplanen lassen sie sich erst mit '
+                      'Artikelmaske.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: farbe,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: onAnlegen,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Fehlende anlegen …'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Auswahl, welche fehlenden Artikel angelegt werden. Vorausgewählt sind
+/// die, bei denen das Lager nicht reicht — für die übrigen gibt es gerade
+/// nichts zu produzieren, und jede Hülle will später gepflegt werden.
+class _FehlendeDialog extends StatefulWidget {
+  const _FehlendeDialog({required this.zeilen});
+
+  final List<AuftragsbestandZeile> zeilen;
+
+  @override
+  State<_FehlendeDialog> createState() => _FehlendeDialogState();
+}
+
+class _FehlendeDialogState extends State<_FehlendeDialog> {
+  late final Set<String> _gewaehlt = {
+    for (final z in widget.zeilen)
+      if (!z.deckung.gedeckt) z.artikel.artikelnummer,
+  };
+
+  void _waehle(bool Function(AuftragsbestandZeile z) passt) {
+    setState(() {
+      _gewaehlt
+        ..clear()
+        ..addAll([
+          for (final z in widget.zeilen)
+            if (passt(z)) z.artikel.artikelnummer,
+        ]);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final zeilen = widget.zeilen;
+    final mitFehlmenge = zeilen.where((z) => !z.deckung.gedeckt).length;
+    final anzahl = _gewaehlt.length;
+
+    return AlertDialog(
+      title: const Text('Fehlende Artikel anlegen'),
+      content: SizedBox(
+        width: 580,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Die gewählten Artikel werden mit Nummer und Bezeichnung aus '
+              'dem Auftragsbestand angelegt und als „nicht eingepflegt" '
+              'markiert. Prozessschritte und Stammdaten trägst du danach in '
+              'der Artikelliste nach. Gab es einen Artikel früher schon und '
+              'wurde er gelöscht, wird er wieder aktiviert.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 4,
+              children: [
+                TextButton(
+                  onPressed: () => _waehle((z) => !z.deckung.gedeckt),
+                  child: Text('Nur wo das Lager nicht reicht ($mitFehlmenge)'),
+                ),
+                TextButton(
+                  onPressed: () => _waehle((_) => true),
+                  child: Text('Alle (${zeilen.length})'),
+                ),
+                TextButton(
+                  onPressed: () => _waehle((_) => false),
+                  child: const Text('Keine'),
+                ),
+              ],
+            ),
+            const Divider(height: 1),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: zeilen.length,
+                itemBuilder: (context, i) {
+                  final z = zeilen[i];
+                  final nr = z.artikel.artikelnummer;
+                  final d = z.deckung;
+                  final tag = d.ersterFehltag;
+                  final status = d.gedeckt || tag == null
+                      ? 'Lager reicht'
+                      : 'fehlt ${_kg(d.fehltKg)} kg ab ${_tagKurz(tag)}';
+                  return CheckboxListTile(
+                    dense: true,
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    value: _gewaehlt.contains(nr),
+                    onChanged: (v) => setState(() {
+                      if (v ?? false) {
+                        _gewaehlt.add(nr);
+                      } else {
+                        _gewaehlt.remove(nr);
+                      }
+                    }),
+                    title: Text(
+                      '$nr  ${z.artikel.bezeichnung}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      '$status · ${_kg(d.auftragKg)} kg bestellt',
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: anzahl == 0
+              ? null
+              : () => Navigator.of(context).pop(Set<String>.of(_gewaehlt)),
+          child: Text(
+            anzahl == 1 ? '1 Artikel anlegen' : '$anzahl Artikel anlegen',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Ein Artikel: Kopfzeile mit Mengen und Status, aufgeklappt die Aufträge
-/// nach Warenausgang.
+/// nach Warenausgang und die Produktionen der App.
 class _ArtikelKarte extends StatelessWidget {
   const _ArtikelKarte({
     required this.zeile,
@@ -639,18 +1050,31 @@ class _ArtikelKarte extends StatelessWidget {
     final theme = Theme.of(context);
     final a = zeile.artikel;
     final d = zeile.deckung;
-    final engpass = d.ersterEngpass;
-    final rot = theme.colorScheme.error;
-    final gruen = theme.brightness == Brightness.dark
-        ? Colors.green.shade400
-        : Colors.green.shade700;
-    final akzent = d.gedeckt ? gruen : rot;
+    final fehltAb = d.ersterFehltag;
+    final zuSpaetAb = d.ersterZuSpaet;
+
+    final Color akzent;
+    final String status;
+    if (fehltAb != null) {
+      akzent = theme.colorScheme.error;
+      status = 'fehlt ${_kg(d.fehltKg)} kg ab ${_tagKurz(fehltAb)}';
+    } else if (zuSpaetAb != null) {
+      akzent = _bernstein(theme);
+      status = 'zu spät eingeplant · ${_tagKurz(zuSpaetAb)}';
+    } else if (d.lagerReicht) {
+      akzent = _gruen(theme);
+      status = 'Lager reicht';
+    } else {
+      akzent = _gruen(theme);
+      status = 'gedeckt mit Produktion';
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
-        // Farbiger Rand links: rot = Lager reicht nicht, grün = reicht.
+        // Farbiger Rand links: rot = fehlt, bernstein = zu spät,
+        // grün = rechtzeitig gedeckt.
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: akzent, width: 4)),
         ),
@@ -665,14 +1089,7 @@ class _ArtikelKarte extends StatelessWidget {
                   children: [
                     Expanded(child: _kopfText(theme, a, d)),
                     const SizedBox(width: 10),
-                    _Marke(
-                      text: engpass == null
-                          ? 'Lager reicht'
-                          : 'fehlt ${_kg(d.fehltKg)} kg '
-                              'ab ${_tagKurz(engpass)}',
-                      farbe: akzent,
-                      kraeftig: true,
-                    ),
+                    _Marke(text: status, farbe: akzent, kraeftig: true),
                     const SizedBox(width: 4),
                     Icon(
                       offen ? Icons.expand_less : Icons.expand_more,
@@ -683,7 +1100,12 @@ class _ArtikelKarte extends StatelessWidget {
                 ),
               ),
             ),
-            if (offen) _Tage(deckung: d, heute: heute),
+            if (offen)
+              _Details(
+                deckung: d,
+                zugaenge: zeile.zugaenge,
+                heute: heute,
+              ),
           ],
         ),
       ),
@@ -693,11 +1115,13 @@ class _ArtikelKarte extends StatelessWidget {
   Widget _kopfText(ThemeData theme, AuftragsArtikel a, ArtikelDeckung d) {
     final auftraege = zeile.belege.length;
     final tage = d.tage.length;
+    final ohneMenge = zeile.ohneMenge;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
           spacing: 8,
+          runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
@@ -710,6 +1134,13 @@ class _ArtikelKarte extends StatelessWidget {
                 text: 'nicht in der App',
                 farbe: theme.colorScheme.onSurfaceVariant,
               ),
+            if (ohneMenge > 0)
+              _Marke(
+                text: ohneMenge == 1
+                    ? '1 Planung ohne Fertigmenge'
+                    : '$ohneMenge Planungen ohne Fertigmenge',
+                farbe: _bernstein(theme),
+              ),
           ],
         ),
         if ((a.bezeichnung2 ?? '').isNotEmpty)
@@ -720,9 +1151,13 @@ class _ArtikelKarte extends StatelessWidget {
           ),
         const SizedBox(height: 4),
         Text(
-          'Aufträge ${_kg(d.auftragKg)} kg · Lager ${_kg(d.lagerKg)} kg · '
-          '$auftraege ${auftraege == 1 ? 'Auftrag' : 'Aufträge'} an '
-          '$tage ${tage == 1 ? 'Tag' : 'Tagen'}',
+          [
+            'Aufträge ${_kg(d.auftragKg)} kg',
+            'Lager ${_kg(d.lagerKg)} kg',
+            if (d.zugangKg >= 0.005) 'Produktion ${_kg(d.zugangKg)} kg',
+            '$auftraege ${auftraege == 1 ? 'Auftrag' : 'Aufträge'} an '
+                '$tage ${tage == 1 ? 'Tag' : 'Tagen'}',
+          ].join(' · '),
           style: theme.textTheme.bodySmall,
         ),
       ],
@@ -730,11 +1165,17 @@ class _ArtikelKarte extends StatelessWidget {
   }
 }
 
-/// Aufgeklappt: je Warenausgangstag Summe, Deckung und die Aufträge.
-class _Tage extends StatelessWidget {
-  const _Tage({required this.deckung, required this.heute});
+/// Aufgeklappt: je Warenausgangstag Summe und Deckung samt Aufträgen,
+/// darunter die Produktionen der App für diesen Artikel.
+class _Details extends StatelessWidget {
+  const _Details({
+    required this.deckung,
+    required this.zugaenge,
+    required this.heute,
+  });
 
   final ArtikelDeckung deckung;
+  final List<ProduktionsZugang> zugaenge;
   final DateTime heute;
 
   @override
@@ -743,6 +1184,7 @@ class _Tage extends StatelessWidget {
     final klein = theme.textTheme.bodySmall;
     final grau = klein?.copyWith(color: theme.colorScheme.onSurfaceVariant);
     final rot = theme.colorScheme.error;
+    final bernstein = _bernstein(theme);
 
     return Container(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
@@ -754,6 +1196,7 @@ class _Tage extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8, bottom: 2),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: 92,
@@ -775,17 +1218,56 @@ class _Tage extends StatelessWidget {
                       style: klein?.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ),
-                  Text('aus Lager ${_kg(t.ausLagerKg)} kg', style: grau),
+                  Text('Lager ${_kg(t.ausLagerKg)} kg', style: grau),
+                  if (t.ausPlanungKg >= 0.005) ...[
+                    const SizedBox(width: 12),
+                    Text(
+                      'Produktion ${_kg(t.ausPlanungKg)} kg',
+                      style: grau,
+                    ),
+                  ],
+                  if (t.knappKg >= 0.005) ...[
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: '${_kg(t.knappKg)} kg werden erst am '
+                          'Versandtag selbst fertig',
+                      child: _Marke(text: 'knapp', farbe: bernstein),
+                    ),
+                  ],
                   const SizedBox(width: 12),
                   SizedBox(
-                    width: 110,
-                    child: Text(
-                      t.fehltKg >= 0.005 ? 'fehlt ${_kg(t.fehltKg)} kg' : '—',
-                      textAlign: TextAlign.right,
-                      style: klein?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: t.fehltKg >= 0.005 ? rot : null,
-                      ),
+                    width: 150,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        if (t.fehltKg >= 0.005)
+                          Text(
+                            'fehlt ${_kg(t.fehltKg)} kg',
+                            textAlign: TextAlign.right,
+                            style: klein?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: rot,
+                            ),
+                          ),
+                        if (t.zuSpaetKg >= 0.005) ...[
+                          Text(
+                            'zu spät ${_kg(t.zuSpaetKg)} kg',
+                            textAlign: TextAlign.right,
+                            style: klein?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: bernstein,
+                            ),
+                          ),
+                          if (t.zuSpaetBis != null)
+                            Text(
+                              'fertig erst ${_tagKurz(t.zuSpaetBis!)}',
+                              textAlign: TextAlign.right,
+                              style: grau,
+                            ),
+                        ],
+                        if (t.fehltKg < 0.005 && t.zuSpaetKg < 0.005)
+                          Text('—', textAlign: TextAlign.right, style: klein),
+                      ],
                     ),
                   ),
                 ],
@@ -821,6 +1303,78 @@ class _Tage extends StatelessWidget {
                 ),
               ),
           ],
+          if (zugaenge.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'Produktionen in der App — nach Tag der Fertigstellung',
+              style: klein?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            for (final z in zugaenge) _ZugangZeile(zugang: z),
+          ],
+          if (deckung.ueberschussKg >= 0.005)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                '${_kg(deckung.ueberschussKg)} kg davon brauchen diese '
+                'Aufträge nicht — Ware fürs Lager oder für Aufträge nach '
+                'dem Berichtszeitraum.',
+                style: grau,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Produktion der App: wann fertig, wie viel, und ob sie mitzählt.
+class _ZugangZeile extends StatelessWidget {
+  const _ZugangZeile({required this.zugang});
+
+  final ProduktionsZugang zugang;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final z = zugang;
+    final zaehlt = z.zaehlt;
+    final farbe = zaehlt
+        ? theme.colorScheme.onSurface
+        : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75);
+    final stil = theme.textTheme.bodySmall?.copyWith(color: farbe);
+
+    final text = z.kg == null
+        ? 'Menge unbekannt — in Rohware geplant, zählt nicht mit'
+        : switch (z.art) {
+            ZugangsArt.eingeplant =>
+              z.erfasst ? 'eingeplant · schon erfasst' : 'eingeplant',
+            ZugangsArt.nachBericht =>
+              'produziert, im Lager des Berichts noch nicht enthalten',
+            ZugangsArt.imLager =>
+              'vor dem Bericht produziert — steckt im Lager, zählt nicht '
+                  'doppelt',
+          };
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(_tagKurz(z.fertigAm), style: stil),
+          ),
+          Expanded(child: Text(text, style: stil)),
+          SizedBox(
+            width: 110,
+            child: Text(
+              z.kg == null ? '—' : '${_kg(z.kg!)} kg',
+              textAlign: TextAlign.right,
+              style: stil?.copyWith(
+                fontWeight: zaehlt ? FontWeight.w700 : FontWeight.w400,
+                decoration: zaehlt ? null : TextDecoration.lineThrough,
+              ),
+            ),
+          ),
         ],
       ),
     );
