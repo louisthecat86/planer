@@ -12,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
+import 'features/auftragsbestand/auftragsbestand_screen.dart';
 import 'features/backup/backup_management_screen.dart';
 import 'features/bedarf/bedarf_screen.dart';
 import 'features/navision/navision_import_screen.dart';
@@ -99,6 +100,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'navisionImport',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: NavisionImportScreen(),
+        ),
+      ),
+      // Auftragsbestand aus Navision: Aufträge je Kunde mit Warenausgang,
+      // gegen das Lager gerechnet.
+      GoRoute(
+        path: '/auftragsbestand',
+        name: 'auftragsbestand',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: AuftragsbestandScreen(),
         ),
       ),
       // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
