@@ -208,7 +208,8 @@ void main() {
           );
     }
 
-    test('die Gesamtausbeute des Artikels geht vor der Historie', () async {
+    test('unter drei Erfassungen gilt die Gesamtausbeute des Artikels',
+        () async {
       await seedArtikel(db, id: 'p7', nummer: '12429');
       await seedSchritt(
         db,
@@ -218,14 +219,48 @@ void main() {
         abteilung: 'bratstrasse',
       );
       await gesamtausbeute('p7', 0.56);
-      await historie('p7', id: 'h1', verlust: 0.44);
+      await historie('p7', id: 'h1', verlust: 0.40);
+      await historie('p7', id: 'h2', verlust: 0.42);
 
       final a = await ermittleAusbeute(db, 'p7');
 
       expect(a.quelle, AusbeuteQuelle.artikel);
       expect(a.faktor, closeTo(0.56, 1e-9));
       // Die Historie steht zum Vergleich daneben.
-      expect(a.historie, closeTo(0.56, 1e-9));
+      expect(a.historie, closeTo(0.59, 1e-9));
+      expect(a.historieAnzahl, 2);
+    });
+
+    test('ab drei Erfassungen gilt der Ø der erfassten Produktionen',
+        () async {
+      await seedArtikel(db, id: 'p12', nummer: '12429');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p12',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+        ausbeuteFaktor: 0.7,
+      );
+      await gesamtausbeute('p12', 0.56);
+      await historie('p12', id: 'h1', verlust: 0.40);
+      await historie('p12', id: 'h2', verlust: 0.42);
+      await historie('p12', id: 'h3', verlust: 0.44);
+
+      final a = await ermittleAusbeute(db, 'p12');
+
+      // Gemessen schlägt gepflegt — auch die Ausbeute am Schritt.
+      expect(a.quelle, AusbeuteQuelle.historie);
+      expect(a.faktor, closeTo(0.58, 1e-9));
+      expect(a.historieAnzahl, 3);
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p12',
+        mengeKg: 580,
+        startTag: DateTime(2026, 9, 14),
+      );
+      expect(plan.rohwareKg, closeTo(1000, 0.01));
     });
 
     test('ohne Artikelwert zählt die Historie, erst danach die Eingabe',

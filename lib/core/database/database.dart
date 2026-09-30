@@ -74,7 +74,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -461,6 +461,17 @@ class AppDatabase extends _$AppDatabase {
           if (from < 26) {
             await m.createTable(auftragsbestandArtikel);
             await m.createTable(auftragsbestandPositionen);
+          }
+
+          // --- v26 → v27: Produktion ↔ Auftragszeilen -------------------
+          // An der Wurzel einer Kette steht, für welche Auftragszeilen sie
+          // eingeplant wurde. Leer bei allem, was bisher geplant ist.
+          if (from < 27) {
+            await _addColumnIfNotExists(
+              'production_tasks',
+              'auftrags_zeilen',
+              'TEXT',
+            );
           }
         },
         beforeOpen: (details) async {

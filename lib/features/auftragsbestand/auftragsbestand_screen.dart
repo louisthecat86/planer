@@ -15,6 +15,9 @@ import '../articles/article_list_screen.dart' show articlesProvider;
 import '../bedarf/bedarf_screen.dart' show heuteProvider;
 import '../navision/navision_import_screen.dart'
     show abteilungenJeArtikelProvider, appArtikelnummernProvider;
+import '../whiteboard/whiteboard_provider.dart'
+    show Ausbeute, AusbeuteQuelle, dailyTasksProvider, ermittleAusbeute;
+import 'auftrags_einplanung.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten für die Ansicht
@@ -176,8 +179,13 @@ class _AuftragsbestandScreenState
   _Sortierung _sortierung = _Sortierung.engpass;
   final Set<String> _offen = {};
 
+  /// Abgehakte Versandtage je Artikelnummer — die Auswahl für „Zur
+  /// Planung hinzufügen".
+  final Map<String, Set<DateTime>> _markiert = {};
+
   bool _liest = false;
   bool _legtAn = false;
+  bool _plant = false;
   String? _fehler;
   List<String> _hinweise = const [];
 
@@ -225,6 +233,7 @@ class _AuftragsbestandScreenState
       ref.invalidate(auftragsbestandProvider);
       setState(() {
         _offen.clear();
+        _markiert.clear();
         _hinweise = ergebnis.warnungen;
       });
       final verpackung = ergebnis.uebersprungen.isEmpty
@@ -319,6 +328,118 @@ class _AuftragsbestandScreenState
       );
     } finally {
       if (mounted) setState(() => _legtAn = false);
+    }
+  }
+
+  // ── Einplanen ────────────────────────────────────────────────────────
+
+  /// Plant die abgehakten Tage eines Artikels ein: fragt Menge und
+  /// Produktionstag ab und legt die Kette im Board an — mit der Zuordnung
+  /// zu genau den Auftragszeilen, die an diesen Tagen noch fehlen.
+  Future<void> _einplanen(AuftragsbestandZeile zeile) async {
+    final nr = zeile.artikel.artikelnummer;
+    final tage = _markiert[nr] ?? const <DateTime>{};
+    final bezuege = bezuegeFuerTage(zeile.deckung, tage);
+    if (bezuege.isEmpty) {
+      setState(() => _markiert.remove(nr));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('An den markierten Tagen fehlt nichts mehr.'),
+        ),
+      );
+      return;
+    }
+
+    // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
+    // jemand den Bildschirm währenddessen schließt.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final db = ref.read(databaseProvider);
+    final heute = ref.read(heuteProvider);
+
+    final produkt = await (db.select(db.products)
+          ..where((p) => p.artikelnummer.equals(nr))
+          ..where((p) => p.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (!mounted) return;
+    if (produkt == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Artikel $nr gibt es in der App nicht — erst anlegen, dann '
+            'einplanen.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final ausbeute = await ermittleAusbeute(db, produkt.id);
+    if (!mounted) return;
+
+    final gewaehlt = [
+      for (final t in zeile.deckung.tage)
+        if (tage.contains(t.tag) && t.einplanbar) t,
+    ];
+    final fehltKg = bezuege.fold<double>(0, (s, b) => s + b.kg);
+    final auswahl = await showDialog<({double fertigKg, DateTime tag})>(
+      context: context,
+      builder: (_) => _EinplanenDialog(
+        artikel: zeile.artikel,
+        tage: gewaehlt,
+        fehltKg: fehltKg,
+        ausbeute: ausbeute,
+        vorschlag: vorschlagProduktionstag(gewaehlt.first.tag, heute),
+      ),
+    );
+    if (auswahl == null || !mounted) return;
+
+    setState(() => _plant = true);
+    try {
+      final e = await planeAuftragszeilen(
+        db: db,
+        productId: produkt.id,
+        fertigKg: auswahl.fertigKg,
+        tag: auswahl.tag,
+        bezuege: bezuege,
+      );
+      container.invalidate(auftragsbestandProvider);
+      container.invalidate(dailyTasksProvider);
+      container
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Aus dem Auftragsbestand eingeplant');
+      if (!mounted) return;
+      setState(() => _markiert.remove(nr));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 6),
+          content: Text(
+            'Eingeplant am ${_tagKurz(e.tag)} · ${_kg(e.fertigwareKg)} kg '
+            'Fertigware (≈ ${_kg(e.rohwareKg)} kg Rohware) · '
+            '${e.schritte} ${e.schritte == 1 ? 'Schritt' : 'Schritte'} im '
+            'Board',
+          ),
+        ),
+      );
+    } on StateError catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(e.message),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Einplanen fehlgeschlagen — es wurde nichts angelegt. ($e)',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _plant = false);
     }
   }
 
@@ -489,11 +610,31 @@ class _AuftragsbestandScreenState
                   itemBuilder: (context, i) {
                     final z = liste[i];
                     final nr = z.artikel.artikelnummer;
+                    final inApp = appNummern?.contains(nr) ?? true;
+                    final markiert = _markiert[nr] ?? const <DateTime>{};
                     return _ArtikelKarte(
                       zeile: z,
-                      inApp: appNummern?.contains(nr) ?? true,
+                      inApp: inApp,
                       offen: _offen.contains(nr),
                       heute: heute,
+                      markiert: markiert,
+                      onMarkieren: inApp
+                          ? (DateTime tag, bool an) => setState(() {
+                                final auswahl = _markiert.putIfAbsent(
+                                  nr,
+                                  () => <DateTime>{},
+                                );
+                                if (an) {
+                                  auswahl.add(tag);
+                                } else {
+                                  auswahl.remove(tag);
+                                }
+                                if (auswahl.isEmpty) _markiert.remove(nr);
+                              })
+                          : null,
+                      onEinplanen: markiert.isEmpty || _plant
+                          ? null
+                          : () => _einplanen(z),
                       onUmschalten: () => setState(() {
                         if (!_offen.remove(nr)) _offen.add(nr);
                       }),
@@ -767,7 +908,9 @@ const _rechenweg =
     '1. Lager laut Bericht.\n'
     '2. Produktionen der App, die bis zum Versandtag fertig sind. Fertig '
     'heißt: der letzte Schritt der Kette im Board. Wird sie erst am '
-    'Versandtag selbst fertig, zählt sie, ist aber knapp.\n'
+    'Versandtag selbst fertig, zählt sie, ist aber knapp. Wurde eine '
+    'Produktion über „Zur Planung hinzufügen" für bestimmte Aufträge '
+    'angelegt, bekommen zuerst diese Aufträge ihre Ware.\n'
     '3. Produktionen, die erst nach dem Versandtag fertig werden, decken '
     'die Menge — aber zu spät.\n\n'
     'Was danach noch fehlt, ist einzuplanen. Termin ist der erste Tag, an '
@@ -780,8 +923,12 @@ const _rechenweg =
     'Navision sie bis zum Bericht gebucht hat. Sie steckt im Lager und '
     'zählt nicht doppelt.\n\n'
     'Gerechnet wird mit der geplanten Fertigmenge, bei erfassten '
-    'Produktionen mit der erfassten. Produktionen, die in Rohware geplant '
-    'wurden, haben keine Fertigmenge und zählen nicht mit.';
+    'Produktionen mit der erfassten. Produktionen ohne Fertigmenge (in '
+    'Rohware geplant, ohne bekannte Ausbeute) zählen nicht mit.\n\n'
+    'Einplanen: Tage eines Artikels abhaken und „Zur Planung '
+    'hinzufügen". Die Aufträge dieser Tage werden grau und zeigen, wann '
+    'produziert wird. Wird die Produktion im Board gelöscht, sind sie '
+    'wieder offen.';
 
 Future<void> _zeigeRechenweg(BuildContext context) {
   return showDialog<void>(
@@ -1028,6 +1175,207 @@ class _FehlendeDialogState extends State<_FehlendeDialog> {
   }
 }
 
+/// Menge und Produktionstag für die abgehakten Tage eines Artikels.
+///
+/// Vorgeschlagen ist genau das, was an diesen Tagen fehlt, und als Tag der
+/// Arbeitstag vor dem ersten Versand. Beides lässt sich ändern — etwa auf
+/// eine volle Charge aufrunden.
+class _EinplanenDialog extends StatefulWidget {
+  const _EinplanenDialog({
+    required this.artikel,
+    required this.tage,
+    required this.fehltKg,
+    required this.ausbeute,
+    required this.vorschlag,
+  });
+
+  final AuftragsArtikel artikel;
+
+  /// Die abgehakten Versandtage, frühester zuerst.
+  final List<TagesDeckung> tage;
+  final double fehltKg;
+  final Ausbeute ausbeute;
+  final DateTime vorschlag;
+
+  @override
+  State<_EinplanenDialog> createState() => _EinplanenDialogState();
+}
+
+class _EinplanenDialogState extends State<_EinplanenDialog> {
+  late final TextEditingController _menge = TextEditingController(
+    text: widget.fehltKg.ceil().toString(),
+  );
+  late DateTime _tag = widget.vorschlag;
+
+  @override
+  void dispose() {
+    _menge.dispose();
+    super.dispose();
+  }
+
+  double? get _fertigKg {
+    final v = double.tryParse(_menge.text.trim().replaceAll(',', '.'));
+    return (v != null && v.isFinite && v > 0) ? v : null;
+  }
+
+  Future<void> _waehleTag() async {
+    final gewaehlt = await showDatePicker(
+      context: context,
+      initialDate: _tag,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (gewaehlt == null || !mounted) return;
+    setState(
+      () => _tag = DateTime(gewaehlt.year, gewaehlt.month, gewaehlt.day),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final klein = theme.textTheme.bodySmall;
+    final grau = klein?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final fertig = _fertigKg;
+    final a = widget.ausbeute;
+    final ersterVersand = widget.tage.first.tag;
+    final zuSpaet = _tag.isAfter(ersterVersand);
+    final amVersandtag = _tag.isAtSameMomentAs(ersterVersand);
+
+    final String rohware;
+    if (fertig == null) {
+      rohware = '';
+    } else if (!a.bekannt) {
+      rohware = 'Ausbeute unbekannt — gerechnet ohne Verlust';
+    } else {
+      final quelle = switch (a.quelle) {
+        AusbeuteQuelle.historie => 'Ø der erfassten Produktionen',
+        AusbeuteQuelle.artikel => 'Gesamtausbeute des Artikels',
+        AusbeuteQuelle.schritte => 'Ausbeute der Schritte',
+        AusbeuteQuelle.eingabe || AusbeuteQuelle.keine => '',
+      };
+      final prozent = (a.faktor * 100).toStringAsFixed(1).replaceAll('.', ',');
+      rohware = '≈ ${_kg(a.rohAusFertig(fertig))} kg Rohware · Ausbeute '
+          '$prozent %${quelle.isEmpty ? '' : ' ($quelle)'}';
+    }
+
+    return AlertDialog(
+      title: Text(
+        '${widget.artikel.artikelnummer}  ${widget.artikel.bezeichnung}',
+      ),
+      content: SizedBox(
+        width: 480,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Abgehakte Versandtage',
+                style: klein?.copyWith(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 4),
+              for (final t in widget.tage)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 92,
+                        child: Text(_tagKurz(t.tag), style: klein),
+                      ),
+                      Expanded(
+                        child: Text(
+                          '${t.zeilen.length} '
+                          '${t.zeilen.length == 1 ? 'Auftrag' : 'Aufträge'}'
+                          ' · ${_kg(t.kg)} kg',
+                          style: grau,
+                        ),
+                      ),
+                      Text(
+                        'fehlen ${_kg(t.fehltKg)} kg',
+                        style: klein?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _menge,
+                autofocus: true,
+                decoration: InputDecoration(
+                  labelText: 'Fertigware einplanen',
+                  suffixText: 'kg',
+                  helperText: 'Vorschlag: was an diesen Tagen fehlt '
+                      '(${_kg(widget.fehltKg)} kg)',
+                  border: const OutlineInputBorder(),
+                ),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+              ),
+              if (rohware.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(rohware, style: grau),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Produktionstag: ${_tagKurz(_tag)}${_tag.year}',
+                      style: theme.textTheme.bodyMedium
+                          ?.copyWith(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _waehleTag,
+                    icon: const Icon(Icons.calendar_month, size: 18),
+                    label: const Text('Ändern'),
+                  ),
+                ],
+              ),
+              if (zuSpaet)
+                Text(
+                  'Zu spät für den ersten Versandtag '
+                  '(${_tagKurz(ersterVersand)}).',
+                  style: klein?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: _bernstein(theme),
+                  ),
+                )
+              else if (amVersandtag)
+                Text(
+                  'Knapp: Produktion am ersten Versandtag selbst.',
+                  style: klein?.copyWith(color: _bernstein(theme)),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'Alle Abteilungen kommen zunächst auf diesen Tag. Einzelne '
+                'Schritte kannst du danach im Board verschieben.',
+                style: grau,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton.icon(
+          onPressed: fertig == null
+              ? null
+              : () => Navigator.of(context).pop((fertigKg: fertig, tag: _tag)),
+          icon: const Icon(Icons.event_available, size: 18),
+          label: const Text('Einplanen'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Ein Artikel: Kopfzeile mit Mengen und Status, aufgeklappt die Aufträge
 /// nach Warenausgang und die Produktionen der App.
 class _ArtikelKarte extends StatelessWidget {
@@ -1036,6 +1384,9 @@ class _ArtikelKarte extends StatelessWidget {
     required this.inApp,
     required this.offen,
     required this.heute,
+    required this.markiert,
+    required this.onMarkieren,
+    required this.onEinplanen,
     required this.onUmschalten,
   });
 
@@ -1043,6 +1394,9 @@ class _ArtikelKarte extends StatelessWidget {
   final bool inApp;
   final bool offen;
   final DateTime heute;
+  final Set<DateTime> markiert;
+  final void Function(DateTime tag, bool an)? onMarkieren;
+  final VoidCallback? onEinplanen;
   final VoidCallback onUmschalten;
 
   @override
@@ -1105,6 +1459,10 @@ class _ArtikelKarte extends StatelessWidget {
                 deckung: d,
                 zugaenge: zeile.zugaenge,
                 heute: heute,
+                inApp: inApp,
+                markiert: markiert,
+                onMarkieren: onMarkieren,
+                onEinplanen: onEinplanen,
               ),
           ],
         ),
@@ -1167,39 +1525,187 @@ class _ArtikelKarte extends StatelessWidget {
 
 /// Aufgeklappt: je Warenausgangstag Summe und Deckung samt Aufträgen,
 /// darunter die Produktionen der App für diesen Artikel.
+///
+/// Tage, an denen noch etwas fehlt, lassen sich abhaken und gemeinsam
+/// einplanen. Zeilen, für die schon eine Produktion eingeplant ist, sind
+/// grau und zeigen, wann.
 class _Details extends StatelessWidget {
   const _Details({
     required this.deckung,
     required this.zugaenge,
     required this.heute,
+    required this.inApp,
+    required this.markiert,
+    required this.onMarkieren,
+    required this.onEinplanen,
   });
 
   final ArtikelDeckung deckung;
   final List<ProduktionsZugang> zugaenge;
   final DateTime heute;
+  final bool inApp;
+  final Set<DateTime> markiert;
+
+  /// null, wenn sich nichts abhaken lässt (Artikel nicht in der App).
+  final void Function(DateTime tag, bool an)? onMarkieren;
+
+  /// null, solange nichts abgehakt ist oder gerade eingeplant wird.
+  final VoidCallback? onEinplanen;
+
+  /// Breite der Spalte mit dem Haken und der mit dem Tag — die Aufträge
+  /// darunter rücken um beide ein.
+  static const double _hakenBreite = 36;
+  static const double _tagBreite = 92;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final klein = theme.textTheme.bodySmall;
     final grau = klein?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final blass = klein?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
+    );
     final rot = theme.colorScheme.error;
     final bernstein = _bernstein(theme);
+    final gruen = _gruen(theme);
+    final markieren = onMarkieren;
+
+    final markierteTage = [
+      for (final t in deckung.tage)
+        if (markiert.contains(t.tag) && t.einplanbar) t,
+    ];
+    final fehltMarkiert =
+        markierteTage.fold<double>(0, (s, t) => s + t.fehltKg);
+
+    Widget haken(TagesDeckung t) {
+      if (markieren != null && t.einplanbar) {
+        return Checkbox(
+          value: markiert.contains(t.tag),
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          onChanged: (v) => markieren(t.tag, v ?? false),
+        );
+      }
+      if (t.eingeplantIn.isNotEmpty) {
+        return Tooltip(
+          message: 'Eingeplant ${_geplantText(t.eingeplantIn)}',
+          child: Icon(Icons.event_available, size: 18, color: gruen),
+        );
+      }
+      return const SizedBox.shrink();
+    }
+
+    Widget status(TagesDeckung t) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (t.fehltKg >= 0.005)
+            Text(
+              'fehlt ${_kg(t.fehltKg)} kg',
+              textAlign: TextAlign.right,
+              style: klein?.copyWith(fontWeight: FontWeight.w700, color: rot),
+            ),
+          if (t.zuSpaetKg >= 0.005) ...[
+            Text(
+              'zu spät ${_kg(t.zuSpaetKg)} kg',
+              textAlign: TextAlign.right,
+              style: klein?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: bernstein,
+              ),
+            ),
+            if (t.zuSpaetBis != null)
+              Text(
+                'fertig erst ${_tagKurz(t.zuSpaetBis!)}',
+                textAlign: TextAlign.right,
+                style: grau,
+              ),
+          ],
+          if (!t.offen)
+            Text(
+              t.eingeplantIn.isEmpty ? '—' : 'eingeplant',
+              textAlign: TextAlign.right,
+              style: t.eingeplantIn.isEmpty
+                  ? klein
+                  : klein?.copyWith(fontWeight: FontWeight.w700, color: gruen),
+            ),
+        ],
+      );
+    }
+
+    Widget zeile(ZeilenDeckung z) {
+      final p = z.position;
+      // Grau heißt: eingeplant und damit erledigt. Fehlt trotz Planung
+      // noch etwas — etwa weil der Kunde nachbestellt hat —, bleibt die
+      // Zeile normal, damit der Rest auffällt.
+      final stil = z.geplant && !z.offen ? blass : grau;
+      return Padding(
+        padding: const EdgeInsets.only(left: _hakenBreite + _tagBreite, top: 1),
+        child: Row(
+          children: [
+            SizedBox(width: 90, child: Text(p.beleg, style: stil)),
+            Expanded(
+              child: Text(
+                p.debitor,
+                style: stil,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (z.geplant)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _Marke(
+                  text: 'geplant ${_geplantText(z.eingeplantIn)}',
+                  farbe: gruen,
+                ),
+              ),
+            Text('${_zahl(p.menge)} ${p.einheit ?? ''}', style: stil),
+            SizedBox(
+              width: 110,
+              child: Text(
+                '${_kg(p.kg)} kg',
+                textAlign: TextAlign.right,
+                style: stil,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Container(
       color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      padding: const EdgeInsets.fromLTRB(8, 8, 16, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (!inApp)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
+              child: Text(
+                'Diesen Artikel gibt es in der App noch nicht. Erst über '
+                '„Fehlende anlegen …" anlegen und die Schritte pflegen, dann '
+                'lässt er sich einplanen.',
+                style: grau,
+              ),
+            )
+          else if (deckung.tage.any((t) => t.einplanbar))
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
+              child: Text(
+                'Tage abhaken, die zusammen produziert werden sollen, dann '
+                '„Zur Planung hinzufügen".',
+                style: grau,
+              ),
+            ),
           for (final t in deckung.tage) ...[
             Padding(
-              padding: const EdgeInsets.only(top: 8, bottom: 2),
+              padding: const EdgeInsets.only(top: 6, bottom: 2),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  SizedBox(width: _hakenBreite, child: haken(t)),
                   SizedBox(
-                    width: 92,
+                    width: _tagBreite,
                     child: Text(
                       _tagKurz(t.tag),
                       style: klein?.copyWith(fontWeight: FontWeight.w700),
@@ -1212,8 +1718,8 @@ class _Details extends StatelessWidget {
                     ),
                   Expanded(
                     child: Text(
-                      '${t.positionen.length} '
-                      '${t.positionen.length == 1 ? 'Auftrag' : 'Aufträge'}'
+                      '${t.zeilen.length} '
+                      '${t.zeilen.length == 1 ? 'Auftrag' : 'Aufträge'}'
                       ' · ${_kg(t.kg)} kg',
                       style: klein?.copyWith(fontWeight: FontWeight.w600),
                     ),
@@ -1235,85 +1741,57 @@ class _Details extends StatelessWidget {
                     ),
                   ],
                   const SizedBox(width: 12),
-                  SizedBox(
-                    width: 150,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        if (t.fehltKg >= 0.005)
-                          Text(
-                            'fehlt ${_kg(t.fehltKg)} kg',
-                            textAlign: TextAlign.right,
-                            style: klein?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: rot,
-                            ),
-                          ),
-                        if (t.zuSpaetKg >= 0.005) ...[
-                          Text(
-                            'zu spät ${_kg(t.zuSpaetKg)} kg',
-                            textAlign: TextAlign.right,
-                            style: klein?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              color: bernstein,
-                            ),
-                          ),
-                          if (t.zuSpaetBis != null)
-                            Text(
-                              'fertig erst ${_tagKurz(t.zuSpaetBis!)}',
-                              textAlign: TextAlign.right,
-                              style: grau,
-                            ),
-                        ],
-                        if (t.fehltKg < 0.005 && t.zuSpaetKg < 0.005)
-                          Text('—', textAlign: TextAlign.right, style: klein),
-                      ],
+                  SizedBox(width: 150, child: status(t)),
+                ],
+              ),
+            ),
+            for (final z in t.zeilen) zeile(z),
+          ],
+          if (markierteTage.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${markierteTage.length} '
+                      '${markierteTage.length == 1 ? 'Tag' : 'Tage'} '
+                      'markiert · fehlen ${_kg(fehltMarkiert)} kg',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onPrimaryContainer,
+                      ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: onEinplanen,
+                    icon: const Icon(Icons.playlist_add, size: 18),
+                    label: const Text('Zur Planung hinzufügen'),
                   ),
                 ],
               ),
             ),
-            for (final p in [...t.positionen]
-              ..sort((a, b) => a.debitor.compareTo(b.debitor)))
-              Padding(
-                padding: const EdgeInsets.only(left: 92, top: 1),
-                child: Row(
-                  children: [
-                    SizedBox(width: 90, child: Text(p.beleg, style: grau)),
-                    Expanded(
-                      child: Text(
-                        p.debitor,
-                        style: grau,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Text(
-                      '${_zahl(p.menge)} ${p.einheit ?? ''}',
-                      style: grau,
-                    ),
-                    SizedBox(
-                      width: 110,
-                      child: Text(
-                        '${_kg(p.kg)} kg',
-                        textAlign: TextAlign.right,
-                        style: grau,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
           ],
           if (zugaenge.isNotEmpty) ...[
             const SizedBox(height: 14),
-            Text(
-              'Produktionen in der App — nach Tag der Fertigstellung',
-              style: klein?.copyWith(fontWeight: FontWeight.w700),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                'Produktionen in der App — nach Tag der Fertigstellung',
+                style: klein?.copyWith(fontWeight: FontWeight.w700),
+              ),
             ),
             for (final z in zugaenge) _ZugangZeile(zugang: z),
           ],
           if (deckung.ueberschussKg >= 0.005)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(left: 8, top: 6),
               child: Text(
                 '${_kg(deckung.ueberschussKg)} kg davon brauchen diese '
                 'Aufträge nicht — Ware fürs Lager oder für Aufträge nach '
@@ -1325,6 +1803,18 @@ class _Details extends StatelessWidget {
       ),
     );
   }
+}
+
+/// „Mi 01.10." oder „Mi 01.10.–Do 02.10." je Produktion, durch Komma
+/// getrennt.
+String _geplantText(List<ProduktionsZugang> produktionen) {
+  return produktionen.map((p) {
+    final von = p.beginn;
+    final bis = p.fertigAm;
+    return von.isAtSameMomentAs(bis)
+        ? _tagKurz(von)
+        : '${_tagKurz(von)}–${_tagKurz(bis)}';
+  }).join(', ');
 }
 
 /// Eine Produktion der App: wann fertig, wie viel, und ob sie mitzählt.
@@ -1343,8 +1833,8 @@ class _ZugangZeile extends StatelessWidget {
         : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.75);
     final stil = theme.textTheme.bodySmall?.copyWith(color: farbe);
 
-    final text = z.kg == null
-        ? 'Menge unbekannt — in Rohware geplant, zählt nicht mit'
+    final art = z.kg == null
+        ? 'Menge unbekannt — ohne Fertigmenge geplant, zählt nicht mit'
         : switch (z.art) {
             ZugangsArt.eingeplant =>
               z.erfasst ? 'eingeplant · schon erfasst' : 'eingeplant',
@@ -1354,6 +1844,11 @@ class _ZugangZeile extends StatelessWidget {
               'vor dem Bericht produziert — steckt im Lager, zählt nicht '
                   'doppelt',
           };
+    final n = z.bezuege.length;
+    final fuer = n == 0
+        ? ''
+        : ' · für ${n == 1 ? '1 Auftragszeile' : '$n Auftragszeilen'}';
+    final text = '$art$fuer';
 
     return Padding(
       padding: const EdgeInsets.only(top: 3),

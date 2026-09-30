@@ -57,23 +57,29 @@ String _fmtKg(double kg) => kg.round().toString().replaceAllMapped(
       (_) => '.',
     );
 
-/// „Ausbeute 56,0 % · aus der Gesamtausbeute des Artikels · erfasste
-/// Produktionen Ø 55,8 %" — damit sichtbar ist, mit welcher Zahl
+/// „Ausbeute 56,0 % · aus der Gesamtausbeute des Artikels · 2 erfasste
+/// Produktionen: Ø 55,8 %" — damit sichtbar ist, mit welcher Zahl
 /// gerechnet wird und ob sie zu den erfassten Produktionen passt.
 String _ausbeuteText(Ausbeute a) {
   String prozent(double f) =>
       '${(f * 100).toStringAsFixed(1).replaceAll('.', ',')} %';
   if (!a.bekannt) return 'Keine Ausbeute bekannt — gerechnet ohne Verlust';
+  final n = a.historieAnzahl;
+  final erfasst =
+      n == 1 ? '1 erfassten Produktion' : '$n erfassten Produktionen';
   final quelle = switch (a.quelle) {
     AusbeuteQuelle.schritte => 'aus den Ausbeuten der Prozessschritte',
     AusbeuteQuelle.artikel => 'aus der Gesamtausbeute des Artikels',
-    AusbeuteQuelle.historie => 'Ø aus den erfassten Produktionen',
+    AusbeuteQuelle.historie => 'Ø aus $erfasst',
     AusbeuteQuelle.eingabe => 'von Hand eingetragen',
     AusbeuteQuelle.keine => '',
   };
+  // Zum Vergleich: Was die wenigen erfassten Produktionen sagen. Ab
+  // [kMindestErfassungenAusbeute] gilt ihr Wert von selbst.
   final historie = a.historie;
   final vergleich = historie != null && a.quelle != AusbeuteQuelle.historie
-      ? ' · erfasste Produktionen Ø ${prozent(historie)}'
+      ? ' · Ø aus $erfasst: ${prozent(historie)} (zählt ab '
+          '$kMindestErfassungenAusbeute)'
       : '';
   return 'Ausbeute ${prozent(a.faktor)} · $quelle$vergleich';
 }

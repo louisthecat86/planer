@@ -49,6 +49,16 @@ class ProductionTasks extends Table {
   /// Genau dieser Wert wird gegen den Bedarf gerechnet.
   RealColumn get fertigMengeKg => real().nullable()();
 
+  /// Auftragszeilen aus dem Auftragsbestand, für die diese Produktion
+  /// eingeplant wurde — als JSON-Liste (siehe `AuftragsBezug`).
+  ///
+  /// Wie [fertigMengeKg] nur an der Wurzel der Kette. Bewusst hier und
+  /// nicht in einer eigenen Tabelle: Die Zuordnung lebt und stirbt mit der
+  /// Produktion. Wird die Kette im Board gelöscht, sind die Zeilen im
+  /// Auftragsbestand ohne weiteres Zutun wieder offen — und das Backup
+  /// trägt die Zuordnung mit, ohne dass es davon wissen muss.
+  TextColumn get auftragsZeilen => text().nullable()();
+
   /// Geplante Startzeit als "HH:MM"-String (z.B. "08:30"). Null, wenn der
   /// Task für den Tag geplant ist, aber keine feste Uhrzeit hat.
   TextColumn get startZeit => text().nullable()();

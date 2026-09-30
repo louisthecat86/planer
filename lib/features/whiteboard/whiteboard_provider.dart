@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auftragsbestand_deckung.dart' show AuftragsBezug;
 
 // ---------------------------------------------------------------------------
 // Datums-Auswahl
@@ -174,8 +175,13 @@ class GeplanterPlan {
 // Ausbeute: Rohware ↔ Fertigware
 // ---------------------------------------------------------------------------
 
-/// Woher die Ausbeute eines Artikels stammt — in dieser Reihenfolge
-/// gesucht.
+/// Woher die Ausbeute eines Artikels stammt.
+///
+/// Gesucht wird so: Sind mindestens [kMindestErfassungenAusbeute]
+/// Produktionen erfasst, gilt deren Ø — gemessen schlägt gepflegt. Sonst
+/// die Ausbeute an den Schritten, dann die Gesamtausbeute des Artikels,
+/// dann der Ø aus den wenigen erfassten Produktionen, zuletzt die Eingabe
+/// im Planen-Dialog.
 enum AusbeuteQuelle {
   /// Ausbeute-Faktoren an den einzelnen Prozessschritten; sie
   /// multiplizieren sich über die Kette.
@@ -184,7 +190,7 @@ enum AusbeuteQuelle {
   /// „Gesamtausbeute" in den Stammdaten des Artikels.
   artikel,
 
-  /// Ø Verlust aus der Produktionshistorie.
+  /// Ø Verlust aus den erfassten Produktionen.
   historie,
 
   /// Im Planen-Dialog von Hand eingetragen — gilt nur, wenn der Artikel
@@ -208,6 +214,7 @@ class Ausbeute {
     required this.faktor,
     required this.quelle,
     this.historie,
+    this.historieAnzahl = 0,
   });
 
   /// Keine Ausbeute bekannt: Rohware = Fertigware.
@@ -221,6 +228,9 @@ class Ausbeute {
   /// Ø Ausbeute laut Produktionshistorie — zum Vergleich, auch wenn eine
   /// andere Quelle gilt. null ohne Historie.
   final double? historie;
+
+  /// Aus wie vielen erfassten Produktionen [historie] stammt.
+  final int historieAnzahl;
 
   bool get bekannt => quelle != AusbeuteQuelle.keine;
 
@@ -250,16 +260,32 @@ Future<List<ProductStep>> _ladeSchritte(AppDatabase db, String productId) {
       .get();
 }
 
+/// Ab so vielen erfassten Produktionen gilt deren Ø-Ausbeute vor den
+/// gepflegten Stammdaten. Eine einzelne Produktion kann ein Ausreißer
+/// sein; ab drei trägt der Schnitt.
+const int kMindestErfassungenAusbeute = 3;
+
 Future<Ausbeute> _ausbeuteFuer(
   AppDatabase db,
   String productId,
   List<ProductStep> steps, {
   double? ersatz,
 }) async {
-  final verlust = await durchschnittsVerlust(db, productId);
-  final historie = verlust == null ? null : 1 - verlust;
+  final (:historie, :anzahl) = await _historienAusbeute(db, productId);
 
-  // 1. Ausbeute an den Schritten: Sie multipliziert sich über die Kette.
+  Ausbeute ausHistorie(double faktor) => Ausbeute(
+        faktor: faktor,
+        quelle: AusbeuteQuelle.historie,
+        historie: faktor,
+        historieAnzahl: anzahl,
+      );
+
+  // 1. Genug erfasste Produktionen: Gemessen schlägt gepflegt.
+  if (historie != null && anzahl >= kMindestErfassungenAusbeute) {
+    return ausHistorie(historie);
+  }
+
+  // 2. Ausbeute an den Schritten: Sie multipliziert sich über die Kette.
   var kette = 1.0;
   var hatSchrittAusbeute = false;
   for (final s in steps) {
@@ -274,10 +300,11 @@ Future<Ausbeute> _ausbeuteFuer(
       faktor: kette,
       quelle: AusbeuteQuelle.schritte,
       historie: historie,
+      historieAnzahl: anzahl,
     );
   }
 
-  // 2. Gesamtausbeute am Artikel.
+  // 3. Gesamtausbeute am Artikel.
   final produkt = await (db.select(db.products)
         ..where((p) => p.id.equals(productId)))
       .getSingleOrNull();
@@ -287,19 +314,14 @@ Future<Ausbeute> _ausbeuteFuer(
       faktor: gesamt,
       quelle: AusbeuteQuelle.artikel,
       historie: historie,
+      historieAnzahl: anzahl,
     );
   }
 
-  // 3. Gemessener Ø Verlust aus der Produktionshistorie.
-  if (historie != null) {
-    return Ausbeute(
-      faktor: historie,
-      quelle: AusbeuteQuelle.historie,
-      historie: historie,
-    );
-  }
+  // 4. Wenige erfasste Produktionen sind immer noch besser als nichts.
+  if (historie != null) return ausHistorie(historie);
 
-  // 4. Von Hand im Dialog eingetragen.
+  // 5. Von Hand im Dialog eingetragen.
   if (ersatz != null && ersatz > 0 && ersatz < 1) {
     return Ausbeute(faktor: ersatz, quelle: AusbeuteQuelle.eingabe);
   }
@@ -575,6 +597,26 @@ Future<double?> _avgKghRohAusHistorie(
   return werte.reduce((a, b) => a + b) / werte.length;
 }
 
+/// Ø Ausbeute aus den erfassten Produktionen samt deren Anzahl. Es zählen
+/// dieselben Werte wie bei [durchschnittsVerlust].
+Future<({double? historie, int anzahl})> _historienAusbeute(
+  AppDatabase db,
+  String productId,
+) async {
+  final rows = await (db.select(db.productionHistory)
+        ..where((h) => h.productId.equals(productId))
+        ..where((h) => h.deletedAt.isNull()))
+      .get();
+  final werte = rows
+      .map((h) => h.verlustAnteil)
+      .whereType<double>()
+      .where((v) => v > 0 && v < 1)
+      .toList();
+  if (werte.isEmpty) return (historie: null, anzahl: 0);
+  final verlust = werte.reduce((a, b) => a + b) / werte.length;
+  return (historie: 1 - verlust, anzahl: werte.length);
+}
+
 /// Durchschnittlicher Verlustanteil eines Artikels aus der Historie
 /// (0…1, z.B. 0.18 = 18 % Verlust). null, wenn keine brauchbaren Werte da
 /// sind. Wird genutzt, um aus einer Fertigmenge die nötige Rohmenge
@@ -610,12 +652,17 @@ Future<double?> durchschnittsVerlust(
 /// Bratstraße und Verpackung fehlen. Schlimmer noch: Die Wurzel trägt
 /// `bedarfId` und `fertigMengeKg`, der Bedarf gälte also als vollständig
 /// eingeplant, obwohl die Kette hinten abbricht. Entweder alles oder nichts.
+///
+/// [auftragsBezuege]: Auftragszeilen aus dem Auftragsbestand, für die die
+/// Produktion eingeplant wird. Sie stehen wie die Fertigmenge an der
+/// Wurzel.
 Future<void> erstelleTasksAusPlan({
   required AppDatabase db,
   required String productId,
   required List<GeplanterSchritt> schritte,
   String? bedarfId,
   double? fertigMengeKg,
+  List<AuftragsBezug> auftragsBezuege = const [],
 }) async {
   const uuid = Uuid();
   final sortiert = [...schritte]
@@ -642,6 +689,9 @@ Future<void> erstelleTasksAusPlan({
               maschineId: Value(s.maschineId),
               bedarfId: Value(istWurzel ? bedarfId : null),
               fertigMengeKg: Value(istWurzel ? fertigMengeKg : null),
+              auftragsZeilen: Value(
+                istWurzel ? AuftragsBezug.kodiere(auftragsBezuege) : null,
+              ),
               geplanteDauerMinuten: s.dauerMinuten,
               geplanteMitarbeiter: s.mitarbeiter,
               parentTaskId: Value(previousTaskId),

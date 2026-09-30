@@ -135,6 +135,136 @@ void main() {
     });
   });
 
+  group('Eingeplante Auftragszeilen', () {
+    test('eine Produktion bedient zuerst die Zeilen, für die sie geplant ist',
+        () {
+      // Mo und Di je 100 kg. Eingeplant wurden 100 kg für den Dienstag,
+      // fertig am Freitag davor. Ohne die Zuordnung ginge die Ware an den
+      // Montag, und der gerade eingeplante Dienstag stünde als offen da.
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100), _pos(2, _tag(36), 100)],
+        zugaenge: [
+          _zugang(_tag(32), 100, fuer: [_fuer(2, _tag(36), 100)]),
+        ],
+      );
+
+      expect(d.tage[1].ausPlanungKg, 100);
+      expect(d.tage[1].zeilen.single.geplant, isTrue);
+      expect(d.tage[1].einplanbar, isFalse);
+      expect(d.tage[0].fehltKg, 100);
+      expect(d.tage[0].zeilen.single.geplant, isFalse);
+      expect(d.tage[0].einplanbar, isTrue);
+    });
+
+    test('zu spät eingeplant bleibt bei der Zeile — als zu spät', () {
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100)],
+        zugaenge: [
+          _zugang(_tag(36), 100, fuer: [_fuer(1, _tag(35), 100)]),
+        ],
+      );
+
+      final z = d.tage.single.zeilen.single;
+      expect(z.zuSpaetKg, 100);
+      expect(z.zuSpaetBis, _tag(36));
+      expect(z.fehltKg, 0);
+      expect(z.geplant, isTrue);
+    });
+
+    test('bestellt der Kunde nach, bleibt der Rest offen', () {
+      // Eingeplant für 100 kg, inzwischen stehen 150 kg im Auftrag.
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 150)],
+        zugaenge: [
+          _zugang(_tag(32), 100, fuer: [_fuer(1, _tag(35), 100)]),
+        ],
+      );
+
+      final t = d.tage.single;
+      expect(t.ausPlanungKg, 100);
+      expect(t.fehltKg, 50);
+      expect(t.zeilen.single.geplant, isTrue);
+      expect(t.einplanbar, isTrue);
+    });
+
+    test('eine Produktion, die nicht zählt, markiert, deckt aber nicht', () {
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100)],
+        zugaenge: [
+          _zugang(
+            _tag(29),
+            100,
+            art: ZugangsArt.imLager,
+            fuer: [_fuer(1, _tag(35), 100)],
+          ),
+        ],
+      );
+
+      expect(d.tage.single.zeilen.single.geplant, isTrue);
+      expect(d.fehltKg, 100);
+    });
+
+    test('für die gewählten Tage zählen nur die fehlenden Zeilen', () {
+      // Lager 60: Zeile 1 (50 kg) ganz, Zeile 2 (30 kg) zu 10 kg. Es
+      // fehlen 20 kg in Zeile 2 und 40 kg in Zeile 3 am Folgetag.
+      final d = berechneDeckung(
+        lagerKg: 60,
+        positionen: [
+          _pos(1, _tag(35), 50),
+          _pos(2, _tag(35), 30),
+          _pos(3, _tag(36), 40),
+        ],
+      );
+
+      final nurMontag = bezuegeFuerTage(d, {_tag(35)});
+      expect(nurMontag.map((b) => b.beleg), ['VA2']);
+      expect(nurMontag.single.kg, closeTo(20, 1e-9));
+      expect(nurMontag.single.debitor, 'Kunde 2');
+
+      final beide = bezuegeFuerTage(d, {_tag(35), _tag(36)});
+      expect(beide.map((b) => b.beleg), ['VA2', 'VA3']);
+      expect(beide.fold<double>(0, (s, b) => s + b.kg), closeTo(60, 1e-9));
+    });
+
+    test('die Zuordnung übersteht den Weg durch die Datenbankspalte', () {
+      final text = AuftragsBezug.kodiere([
+        AuftragsBezug(
+          beleg: 'VA2608879',
+          warenausgang: _tag(32),
+          kg: 12.5,
+          debitor: 'Metzgerei Muster',
+        ),
+      ]);
+      final zurueck = AuftragsBezug.dekodiere(text);
+
+      expect(zurueck, hasLength(1));
+      expect(zurueck.single.beleg, 'VA2608879');
+      expect(zurueck.single.warenausgang, _tag(32));
+      expect(zurueck.single.kg, 12.5);
+      expect(zurueck.single.debitor, 'Metzgerei Muster');
+      expect(AuftragsBezug.kodiere(const []), isNull);
+    });
+
+    test('unlesbarer Inhalt ergibt keine Zuordnung statt eines Absturzes',
+        () {
+      expect(AuftragsBezug.dekodiere(null), isEmpty);
+      expect(AuftragsBezug.dekodiere(''), isEmpty);
+      expect(AuftragsBezug.dekodiere('{kaputt'), isEmpty);
+      expect(AuftragsBezug.dekodiere('{"beleg": "VA1"}'), isEmpty);
+      // Kaputte Einträge fallen raus, gute bleiben.
+      expect(
+        AuftragsBezug.dekodiere(
+          '[1, {"beleg": "VA1", "wa": "2026-10-02", "kg": 5}]',
+        ).single.beleg,
+        'VA1',
+      );
+    });
+  });
+
   group('Produktionen der App laden', () {
     late AppDatabase db;
 
@@ -384,6 +514,7 @@ ProduktionsZugang _zugang(
   DateTime fertigAm,
   double? kg, {
   ZugangsArt art = ZugangsArt.eingeplant,
+  List<AuftragsBezug> fuer = const [],
 }) =>
     ProduktionsZugang(
       kettenId: 'k${fertigAm.day}',
@@ -391,7 +522,12 @@ ProduktionsZugang _zugang(
       fertigAm: fertigAm,
       art: art,
       kg: kg,
+      bezuege: fuer,
     );
+
+/// Bezug auf die Auftragszeile, die [_pos] mit derselben [id] anlegt.
+AuftragsBezug _fuer(int id, DateTime warenausgang, double kg) =>
+    AuftragsBezug(beleg: 'VA$id', warenausgang: warenausgang, kg: kg);
 
 /// Legt eine Auftragskette an: ein Schritt je Tag in [tage], verkettet
 /// wie im Board über `parentTaskId`. Die Fertigmenge steht an der Wurzel.

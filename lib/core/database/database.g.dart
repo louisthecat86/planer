@@ -7212,6 +7212,12 @@ class $ProductionTasksTable extends ProductionTasks
   late final GeneratedColumn<double> fertigMengeKg = GeneratedColumn<double>(
       'fertig_menge_kg', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _auftragsZeilenMeta =
+      const VerificationMeta('auftragsZeilen');
+  @override
+  late final GeneratedColumn<String> auftragsZeilen = GeneratedColumn<String>(
+      'auftrags_zeilen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _startZeitMeta =
       const VerificationMeta('startZeit');
   @override
@@ -7289,6 +7295,7 @@ class $ProductionTasksTable extends ProductionTasks
         maschineId,
         bedarfId,
         fertigMengeKg,
+        auftragsZeilen,
         startZeit,
         geplanteDauerMinuten,
         geplanteMitarbeiter,
@@ -7354,6 +7361,12 @@ class $ProductionTasksTable extends ProductionTasks
           _fertigMengeKgMeta,
           fertigMengeKg.isAcceptableOrUnknown(
               data['fertig_menge_kg']!, _fertigMengeKgMeta));
+    }
+    if (data.containsKey('auftrags_zeilen')) {
+      context.handle(
+          _auftragsZeilenMeta,
+          auftragsZeilen.isAcceptableOrUnknown(
+              data['auftrags_zeilen']!, _auftragsZeilenMeta));
     }
     if (data.containsKey('start_zeit')) {
       context.handle(_startZeitMeta,
@@ -7432,6 +7445,8 @@ class $ProductionTasksTable extends ProductionTasks
           .read(DriftSqlType.string, data['${effectivePrefix}bedarf_id']),
       fertigMengeKg: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}fertig_menge_kg']),
+      auftragsZeilen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}auftrags_zeilen']),
       startZeit: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}start_zeit']),
       geplanteDauerMinuten: attachedDatabase.typeMapping.read(
@@ -7497,6 +7512,16 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
   /// Genau dieser Wert wird gegen den Bedarf gerechnet.
   final double? fertigMengeKg;
 
+  /// Auftragszeilen aus dem Auftragsbestand, für die diese Produktion
+  /// eingeplant wurde — als JSON-Liste (siehe `AuftragsBezug`).
+  ///
+  /// Wie [fertigMengeKg] nur an der Wurzel der Kette. Bewusst hier und
+  /// nicht in einer eigenen Tabelle: Die Zuordnung lebt und stirbt mit der
+  /// Produktion. Wird die Kette im Board gelöscht, sind die Zeilen im
+  /// Auftragsbestand ohne weiteres Zutun wieder offen — und das Backup
+  /// trägt die Zuordnung mit, ohne dass es davon wissen muss.
+  final String? auftragsZeilen;
+
   /// Geplante Startzeit als "HH:MM"-String (z.B. "08:30"). Null, wenn der
   /// Task für den Tag geplant ist, aber keine feste Uhrzeit hat.
   final String? startZeit;
@@ -7533,6 +7558,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       this.maschineId,
       this.bedarfId,
       this.fertigMengeKg,
+      this.auftragsZeilen,
       this.startZeit,
       required this.geplanteDauerMinuten,
       required this.geplanteMitarbeiter,
@@ -7559,6 +7585,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
     }
     if (!nullToAbsent || fertigMengeKg != null) {
       map['fertig_menge_kg'] = Variable<double>(fertigMengeKg);
+    }
+    if (!nullToAbsent || auftragsZeilen != null) {
+      map['auftrags_zeilen'] = Variable<String>(auftragsZeilen);
     }
     if (!nullToAbsent || startZeit != null) {
       map['start_zeit'] = Variable<String>(startZeit);
@@ -7597,6 +7626,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       fertigMengeKg: fertigMengeKg == null && nullToAbsent
           ? const Value.absent()
           : Value(fertigMengeKg),
+      auftragsZeilen: auftragsZeilen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(auftragsZeilen),
       startZeit: startZeit == null && nullToAbsent
           ? const Value.absent()
           : Value(startZeit),
@@ -7630,6 +7662,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       maschineId: serializer.fromJson<String?>(json['maschineId']),
       bedarfId: serializer.fromJson<String?>(json['bedarfId']),
       fertigMengeKg: serializer.fromJson<double?>(json['fertigMengeKg']),
+      auftragsZeilen: serializer.fromJson<String?>(json['auftragsZeilen']),
       startZeit: serializer.fromJson<String?>(json['startZeit']),
       geplanteDauerMinuten:
           serializer.fromJson<double>(json['geplanteDauerMinuten']),
@@ -7656,6 +7689,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       'maschineId': serializer.toJson<String?>(maschineId),
       'bedarfId': serializer.toJson<String?>(bedarfId),
       'fertigMengeKg': serializer.toJson<double?>(fertigMengeKg),
+      'auftragsZeilen': serializer.toJson<String?>(auftragsZeilen),
       'startZeit': serializer.toJson<String?>(startZeit),
       'geplanteDauerMinuten': serializer.toJson<double>(geplanteDauerMinuten),
       'geplanteMitarbeiter': serializer.toJson<int>(geplanteMitarbeiter),
@@ -7678,6 +7712,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           Value<String?> maschineId = const Value.absent(),
           Value<String?> bedarfId = const Value.absent(),
           Value<double?> fertigMengeKg = const Value.absent(),
+          Value<String?> auftragsZeilen = const Value.absent(),
           Value<String?> startZeit = const Value.absent(),
           double? geplanteDauerMinuten,
           int? geplanteMitarbeiter,
@@ -7698,6 +7733,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
         bedarfId: bedarfId.present ? bedarfId.value : this.bedarfId,
         fertigMengeKg:
             fertigMengeKg.present ? fertigMengeKg.value : this.fertigMengeKg,
+        auftragsZeilen:
+            auftragsZeilen.present ? auftragsZeilen.value : this.auftragsZeilen,
         startZeit: startZeit.present ? startZeit.value : this.startZeit,
         geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
         geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -7723,6 +7760,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       fertigMengeKg: data.fertigMengeKg.present
           ? data.fertigMengeKg.value
           : this.fertigMengeKg,
+      auftragsZeilen: data.auftragsZeilen.present
+          ? data.auftragsZeilen.value
+          : this.auftragsZeilen,
       startZeit: data.startZeit.present ? data.startZeit.value : this.startZeit,
       geplanteDauerMinuten: data.geplanteDauerMinuten.present
           ? data.geplanteDauerMinuten.value
@@ -7754,6 +7794,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           ..write('maschineId: $maschineId, ')
           ..write('bedarfId: $bedarfId, ')
           ..write('fertigMengeKg: $fertigMengeKg, ')
+          ..write('auftragsZeilen: $auftragsZeilen, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -7778,6 +7819,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       maschineId,
       bedarfId,
       fertigMengeKg,
+      auftragsZeilen,
       startZeit,
       geplanteDauerMinuten,
       geplanteMitarbeiter,
@@ -7800,6 +7842,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           other.maschineId == this.maschineId &&
           other.bedarfId == this.bedarfId &&
           other.fertigMengeKg == this.fertigMengeKg &&
+          other.auftragsZeilen == this.auftragsZeilen &&
           other.startZeit == this.startZeit &&
           other.geplanteDauerMinuten == this.geplanteDauerMinuten &&
           other.geplanteMitarbeiter == this.geplanteMitarbeiter &&
@@ -7821,6 +7864,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
   final Value<String?> maschineId;
   final Value<String?> bedarfId;
   final Value<double?> fertigMengeKg;
+  final Value<String?> auftragsZeilen;
   final Value<String?> startZeit;
   final Value<double> geplanteDauerMinuten;
   final Value<int> geplanteMitarbeiter;
@@ -7841,6 +7885,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.maschineId = const Value.absent(),
     this.bedarfId = const Value.absent(),
     this.fertigMengeKg = const Value.absent(),
+    this.auftragsZeilen = const Value.absent(),
     this.startZeit = const Value.absent(),
     this.geplanteDauerMinuten = const Value.absent(),
     this.geplanteMitarbeiter = const Value.absent(),
@@ -7862,6 +7907,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.maschineId = const Value.absent(),
     this.bedarfId = const Value.absent(),
     this.fertigMengeKg = const Value.absent(),
+    this.auftragsZeilen = const Value.absent(),
     this.startZeit = const Value.absent(),
     required double geplanteDauerMinuten,
     required int geplanteMitarbeiter,
@@ -7889,6 +7935,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     Expression<String>? maschineId,
     Expression<String>? bedarfId,
     Expression<double>? fertigMengeKg,
+    Expression<String>? auftragsZeilen,
     Expression<String>? startZeit,
     Expression<double>? geplanteDauerMinuten,
     Expression<int>? geplanteMitarbeiter,
@@ -7910,6 +7957,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       if (maschineId != null) 'maschine_id': maschineId,
       if (bedarfId != null) 'bedarf_id': bedarfId,
       if (fertigMengeKg != null) 'fertig_menge_kg': fertigMengeKg,
+      if (auftragsZeilen != null) 'auftrags_zeilen': auftragsZeilen,
       if (startZeit != null) 'start_zeit': startZeit,
       if (geplanteDauerMinuten != null)
         'geplante_dauer_minuten': geplanteDauerMinuten,
@@ -7935,6 +7983,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       Value<String?>? maschineId,
       Value<String?>? bedarfId,
       Value<double?>? fertigMengeKg,
+      Value<String?>? auftragsZeilen,
       Value<String?>? startZeit,
       Value<double>? geplanteDauerMinuten,
       Value<int>? geplanteMitarbeiter,
@@ -7955,6 +8004,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       maschineId: maschineId ?? this.maschineId,
       bedarfId: bedarfId ?? this.bedarfId,
       fertigMengeKg: fertigMengeKg ?? this.fertigMengeKg,
+      auftragsZeilen: auftragsZeilen ?? this.auftragsZeilen,
       startZeit: startZeit ?? this.startZeit,
       geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
       geplanteMitarbeiter: geplanteMitarbeiter ?? this.geplanteMitarbeiter,
@@ -7995,6 +8045,9 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     }
     if (fertigMengeKg.present) {
       map['fertig_menge_kg'] = Variable<double>(fertigMengeKg.value);
+    }
+    if (auftragsZeilen.present) {
+      map['auftrags_zeilen'] = Variable<String>(auftragsZeilen.value);
     }
     if (startZeit.present) {
       map['start_zeit'] = Variable<String>(startZeit.value);
@@ -8044,6 +8097,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
           ..write('maschineId: $maschineId, ')
           ..write('bedarfId: $bedarfId, ')
           ..write('fertigMengeKg: $fertigMengeKg, ')
+          ..write('auftragsZeilen: $auftragsZeilen, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
           ..write('geplanteMitarbeiter: $geplanteMitarbeiter, ')
@@ -19858,6 +19912,7 @@ typedef $$ProductionTasksTableCreateCompanionBuilder = ProductionTasksCompanion
   Value<String?> maschineId,
   Value<String?> bedarfId,
   Value<double?> fertigMengeKg,
+  Value<String?> auftragsZeilen,
   Value<String?> startZeit,
   required double geplanteDauerMinuten,
   required int geplanteMitarbeiter,
@@ -19880,6 +19935,7 @@ typedef $$ProductionTasksTableUpdateCompanionBuilder = ProductionTasksCompanion
   Value<String?> maschineId,
   Value<String?> bedarfId,
   Value<double?> fertigMengeKg,
+  Value<String?> auftragsZeilen,
   Value<String?> startZeit,
   Value<double> geplanteDauerMinuten,
   Value<int> geplanteMitarbeiter,
@@ -19991,6 +20047,10 @@ class $$ProductionTasksTableFilterComposer
 
   ColumnFilters<double> get fertigMengeKg => $composableBuilder(
       column: $table.fertigMengeKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get auftragsZeilen => $composableBuilder(
+      column: $table.auftragsZeilen,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnFilters(column));
@@ -20139,6 +20199,10 @@ class $$ProductionTasksTableOrderingComposer
       column: $table.fertigMengeKg,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get auftragsZeilen => $composableBuilder(
+      column: $table.auftragsZeilen,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get startZeit => $composableBuilder(
       column: $table.startZeit, builder: (column) => ColumnOrderings(column));
 
@@ -20222,6 +20286,9 @@ class $$ProductionTasksTableAnnotationComposer
 
   GeneratedColumn<double> get fertigMengeKg => $composableBuilder(
       column: $table.fertigMengeKg, builder: (column) => column);
+
+  GeneratedColumn<String> get auftragsZeilen => $composableBuilder(
+      column: $table.auftragsZeilen, builder: (column) => column);
 
   GeneratedColumn<String> get startZeit =>
       $composableBuilder(column: $table.startZeit, builder: (column) => column);
@@ -20373,6 +20440,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> maschineId = const Value.absent(),
             Value<String?> bedarfId = const Value.absent(),
             Value<double?> fertigMengeKg = const Value.absent(),
+            Value<String?> auftragsZeilen = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             Value<double> geplanteDauerMinuten = const Value.absent(),
             Value<int> geplanteMitarbeiter = const Value.absent(),
@@ -20394,6 +20462,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             maschineId: maschineId,
             bedarfId: bedarfId,
             fertigMengeKg: fertigMengeKg,
+            auftragsZeilen: auftragsZeilen,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
@@ -20415,6 +20484,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> maschineId = const Value.absent(),
             Value<String?> bedarfId = const Value.absent(),
             Value<double?> fertigMengeKg = const Value.absent(),
+            Value<String?> auftragsZeilen = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             required double geplanteDauerMinuten,
             required int geplanteMitarbeiter,
@@ -20436,6 +20506,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             maschineId: maschineId,
             bedarfId: bedarfId,
             fertigMengeKg: fertigMengeKg,
+            auftragsZeilen: auftragsZeilen,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
             geplanteMitarbeiter: geplanteMitarbeiter,
