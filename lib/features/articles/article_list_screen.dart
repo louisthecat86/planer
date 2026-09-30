@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
-import '../../core/constants/machines.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -502,11 +501,27 @@ class _ArticleTile extends StatelessWidget {
       if (!abteilungen.contains(a)) abteilungen.add(a);
     }
 
-    // Maschinen-Zähler
-    final machineCount = steps.fold<int>(
-      0,
-      (sum, s) => sum + enabledMachines(s.maschinenEinstellungenJson).length,
-    );
+    // Anlagen-Zähler: wie viele verschiedene Anlagen im Prozess stecken.
+    //
+    // Gezählt wird, was an den Schritten hängt. Vorher stand hier ein
+    // Zähler über `maschinenEinstellungenJson` — eine Spalte aus der Zeit
+    // vor dem Maschinen-Katalog, in die seit dessen Einführung niemand
+    // mehr schreibt. Der Zähler stand deshalb bei jedem Artikel auf 0 und
+    // das Zahnrad tauchte nie auf.
+    //
+    // Maßgeblich ist die Maschinen-ID; nur wenn ein Schritt noch keine
+    // hat (alte Importe führten die Anlage als Freitext), zählt der Name.
+    final anlagen = <String>{};
+    for (final s in steps) {
+      final id = s.maschineId;
+      if (id != null && id.isNotEmpty) {
+        anlagen.add(id);
+        continue;
+      }
+      final name = s.maschine?.trim();
+      if (name != null && name.isNotEmpty) anlagen.add(name);
+    }
+    final machineCount = anlagen.length;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),

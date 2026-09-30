@@ -71,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -383,56 +383,9 @@ class AppDatabase extends _$AppDatabase {
           }
 
           if (from < 22) {
-            await _migrationMultivacTef2NachVerpackung();
-          }
-
-          if (from < 23) {
-            await _migrationStandardKapazitaetAuf10Stunden();
-          }
-
-          // --- v23 → v24: Artikelmerkmale für die Planungsreihenfolge ---
-          // Allergene, Qualitäts- und Verarbeitungsstufe entscheiden, in
-          // welcher Reihenfolge Artikel an einem Tag laufen dürfen. Die
-          // Verpackungsangaben hängen mit dran, weil sie in derselben
-          // Maske gepflegt werden.
-          //
-          // Alle Spalten bleiben NULL: Nicht gepflegt ist etwas anderes
-          // als „hat keine Allergene", und der Wizard soll raten nicht
-          // mit einem Default verwechseln.
-          if (from < 24) {
-            await _addColumnIfNotExists('products', 'allergene', 'TEXT');
-            await _addColumnIfNotExists(
-              'products',
-              'qualitaetsstufe',
-              'TEXT',
-            );
-            await _addColumnIfNotExists(
-              'products',
-              'verarbeitungsstufe',
-              'TEXT',
-            );
-            await _addColumnIfNotExists(
-              'products',
-              'verpackungsformen',
-              'TEXT',
-            );
-            await _addColumnIfNotExists('products', 'karton_groesse', 'TEXT');
-            await _addColumnIfNotExists(
-              'products',
-              'karton_bedruckung',
-              'TEXT',
-            );
-            await _addColumnIfNotExists(
-              'products',
-              'packungen_pro_karton',
-              'INTEGER',
-            );
-            await _addColumnIfNotExists(
-              'products',
-              'fuellmenge_netto_g',
-              'REAL',
-            );
-            await _addColumnIfNotExists('products', 'abgabeart', 'TEXT');
+            // Drei Schreibfehler aus dem ersten Katalog. Sie hängen an
+            // gepflegten Werten, deshalb wird umbenannt statt neu angelegt.
+            await _migrationSchreibfehler();
           }
         },
         beforeOpen: (details) async {
@@ -687,44 +640,10 @@ class AppDatabase extends _$AppDatabase {
     });
   }
 
-  /// Verschiebt die Tef2-Verpackungsanlage aus der alten Bratstraßen-Abteilung.
-  Future<void> _migrationMultivacTef2NachVerpackung() async {
-    final maschinen = await customSelect(
-      'SELECT id FROM machines WHERE name = ? AND deleted_at IS NULL',
-      variables: [Variable.withString('Multivac Tef2')],
-    ).get();
-    if (maschinen.isEmpty) return;
-
-    final maschineId = maschinen.first.read<String>('id');
-    await customStatement(
-      "UPDATE machines SET abteilung = 'verpackung_tef2' WHERE id = ?",
-      [maschineId],
-    );
-    await customStatement(
-      "UPDATE product_steps SET abteilung = 'verpackung_tef2' "
-      'WHERE maschine_id = ?',
-      [maschineId],
-    );
-    await customStatement(
-      "UPDATE production_tasks SET abteilung = 'verpackung_tef2' "
-      'WHERE maschine_id = ?',
-      [maschineId],
-    );
-  }
-
-  /// Hebt unveränderte Planungsspuren vom alten Standard 9 h auf 10 h.
-  /// Individuell gepflegte Kapazitäten bleiben unangetastet.
-  Future<void> _migrationStandardKapazitaetAuf10Stunden() async {
-    await customStatement(
-      'UPDATE machines SET kapazitaet_minuten_pro_tag = 600 '
-      'WHERE ist_planungsressource = 1 AND kapazitaet_minuten_pro_tag = 540',
-    );
-  }
-
   /// Alte Anlagennamen auf den maßgeblichen Maschinenkatalog umstellen.
   ///
   /// Über die Jahre sind für dieselben Geräte mehrere Namen entstanden —
-  /// „Mehrkopfwaage" neben „Mehrkopfwage", „Füllmaschine B 1" neben
+  /// „Mehrkopfwage" neben „Mehrkopfwaage", „Füllmaschine B 1" neben
   /// „Füllmaschine Bratstraße 1". Ein Katalog-Import legt die neuen Namen
   /// an, lässt die alten aber stehen, weil er Anlagen, die in der Datei
   /// fehlen, grundsätzlich nicht löscht. Beide Namen erschienen deshalb
@@ -741,7 +660,8 @@ class AppDatabase extends _$AppDatabase {
   /// enthält). Wiederholbar: Ein zweiter Lauf findet nichts mehr.
   Future<void> _migrationAltnamenZusammenfuehren() async {
     const altZuNeu = <String, String>{
-      'Mehrkopfwaage': 'Mehrkopfwage',
+      // Maßgeblich ist die korrekte Schreibweise mit zwei „a".
+      'Mehrkopfwage': 'Mehrkopfwaage',
       'Füllmaschine B 1': 'Füllmaschine Bratstraße 1',
       'Füllmaschine B 2': 'Füllmaschine Bratstraße 2',
       'Füllmaschine WK 1': 'Füllmaschine Wurstküche 1',
@@ -770,6 +690,27 @@ class AppDatabase extends _$AppDatabase {
       'Kochkammer 4': 'Kochkammer 1-4',
     };
 
+    for (final paar in altZuNeu.entries) {
+      await _maschineUmbenennenOderZusammenfuehren(paar.key, paar.value);
+    }
+  }
+
+  /// Bringt eine Anlage vom Namen [alt] auf den Namen [neu].
+  ///
+  /// Gibt es beide Einträge, wandert alles vom alten auf den neuen und der
+  /// alte wird als gelöscht markiert. Gibt es nur den alten, genügt
+  /// Umbenennen. Gibt es nur den neuen, passiert nichts — deshalb ist ein
+  /// zweiter Aufruf folgenlos.
+  ///
+  /// Eigene Methode, weil nicht nur die Altnamen-Migration sie braucht:
+  /// Auch die Korrektur der Schreibweise „Mehrkopfwage" → „Mehrkopfwaage"
+  /// muss an denselben fünf Stellen umhängen. Die Spalte `machines.name`
+  /// trägt einen Unique-Index; ein blindes UPDATE würde scheitern, sobald
+  /// beide Namen in der Datenbank stehen.
+  Future<void> _maschineUmbenennenOderZusammenfuehren(
+    String alt,
+    String neu,
+  ) async {
     Future<String?> idVon(String name) async {
       final r = await customSelect(
         'SELECT id FROM machines WHERE name = ? AND deleted_at IS NULL',
@@ -778,51 +719,117 @@ class AppDatabase extends _$AppDatabase {
       return r?.read<String>('id');
     }
 
-    for (final paar in altZuNeu.entries) {
+    try {
+      final altId = await idVon(alt);
+      if (altId == null) return;
+      final neuId = await idVon(neu);
+
+      if (neuId == null) {
+        // Nur der alte Name existiert → umbenennen genügt.
+        await customStatement(
+          'UPDATE machines SET name = ? WHERE id = ?',
+          [neu, altId],
+        );
+        await customStatement(
+          'UPDATE product_steps SET maschine = ? WHERE maschine_id = ?',
+          [neu, altId],
+        );
+        return;
+      }
+
+      // Beide existieren → alles auf den neuen Eintrag umhängen.
+      await customStatement(
+        'UPDATE product_steps SET maschine_id = ?, maschine = ? '
+        'WHERE maschine_id = ?',
+        [neuId, neu, altId],
+      );
+      await customStatement(
+        'UPDATE production_tasks SET maschine_id = ? WHERE maschine_id = ?',
+        [neuId, altId],
+      );
+      await customStatement(
+        "UPDATE zusatzzeiten SET spur_id = REPLACE(spur_id, ?, ?) "
+        "WHERE spur_id LIKE '%|' || ?",
+        ['|$altId', '|$neuId', altId],
+      );
+      await customStatement(
+        'DELETE FROM machine_parameter_defs WHERE maschine_id = ?',
+        [altId],
+      );
+      await customStatement(
+        'UPDATE machines SET deleted_at = ? WHERE id = ?',
+        [DateTime.now().millisecondsSinceEpoch ~/ 1000, altId],
+      );
+    } catch (e) {
+      // ignore: avoid_print
+      print('Zusammenführen „$alt" übersprungen: $e');
+    }
+  }
+
+  /// Schreibfehler im Maschinenkatalog geradeziehen.
+  ///
+  /// Drei Namen waren seit dem ersten Katalog falsch geschrieben:
+  /// „Mehrkopfwage" (die Anlage), „Gaszeizt" und „Verzögerung belüftung
+  /// oben/unten" (beides Parameter der Multivac Tef2). Sie stehen so in
+  /// `machines.name`, `machine_parameter_defs.parameter_name` und — bei
+  /// jedem Artikel, an dem schon ein Wert gepflegt ist — in
+  /// `product_step_parameters`. Ein reines Umbenennen im Katalog würde die
+  /// gepflegten Werte abhängen: Die App sucht den Wert über den
+  /// Parameternamen, ein „Gaszeit" fände die Zeile „Gaszeizt" nicht mehr.
+  /// Deshalb diese Migration.
+  ///
+  /// Wiederholbar: Ein zweiter Lauf findet die alten Schreibweisen nicht
+  /// mehr und ändert nichts.
+  Future<void> _migrationSchreibfehler() async {
+    // 1) Die Anlage selbst.
+    await _maschineUmbenennenOderZusammenfuehren(
+      'Mehrkopfwage',
+      'Mehrkopfwaage',
+    );
+
+    // 2) Die Parametergruppe heißt wie die Anlage in Großbuchstaben.
+    try {
+      await customStatement(
+        "UPDATE product_step_parameters SET parameter_gruppe = 'MEHRKOPFWAAGE' "
+        "WHERE parameter_gruppe = 'MEHRKOPFWAGE'",
+      );
+    } catch (e) {
+      // ignore: avoid_print
+      print('Parametergruppe MEHRKOPFWAGE übersprungen: $e');
+    }
+
+    // 3) Die Parameternamen der Multivac Tef2.
+    const namen = <String, String>{
+      'Gaszeizt': 'Gaszeit',
+      'Verzögerung belüftung unten': 'Verzögerung Belüftung unten',
+      'Verzögerung belüftung oben': 'Verzögerung Belüftung oben',
+    };
+    for (final paar in namen.entries) {
       try {
-        final altId = await idVon(paar.key);
-        if (altId == null) continue;
-        final neuId = await idVon(paar.value);
-
-        if (neuId == null) {
-          // Nur der alte Name existiert → umbenennen genügt.
-          await customStatement(
-            'UPDATE machines SET name = ? WHERE id = ?',
-            [paar.value, altId],
-          );
-          await customStatement(
-            'UPDATE product_steps SET maschine = ? WHERE maschine_id = ?',
-            [paar.value, altId],
-          );
-          continue;
-        }
-
-        // Beide existieren → alles auf den neuen Eintrag umhängen.
+        // `machine_parameter_defs` trägt einen Unique-Index auf
+        // (maschine_id, parameter_name). Stünde die richtige Schreibweise
+        // schon daneben, liefe das Umbenennen in diesen Index. Die Zeile
+        // mit dem alten Namen ist die maßgebliche — an ihr hängen die
+        // gepflegten Werte —, also weicht die andere.
         await customStatement(
-          'UPDATE product_steps SET maschine_id = ?, maschine = ? '
-          'WHERE maschine_id = ?',
-          [neuId, paar.value, altId],
+          'DELETE FROM machine_parameter_defs WHERE parameter_name = ? '
+          'AND maschine_id IN (SELECT maschine_id FROM machine_parameter_defs '
+          'WHERE parameter_name = ?)',
+          [paar.value, paar.key],
         );
         await customStatement(
-          'UPDATE production_tasks SET maschine_id = ? WHERE maschine_id = ?',
-          [neuId, altId],
+          'UPDATE machine_parameter_defs SET parameter_name = ? '
+          'WHERE parameter_name = ?',
+          [paar.value, paar.key],
         );
         await customStatement(
-          "UPDATE zusatzzeiten SET spur_id = REPLACE(spur_id, ?, ?) "
-          "WHERE spur_id LIKE '%|' || ?",
-          ['|$altId', '|$neuId', altId],
-        );
-        await customStatement(
-          'DELETE FROM machine_parameter_defs WHERE maschine_id = ?',
-          [altId],
-        );
-        await customStatement(
-          'UPDATE machines SET deleted_at = ? WHERE id = ?',
-          [DateTime.now().millisecondsSinceEpoch ~/ 1000, altId],
+          'UPDATE product_step_parameters SET parameter_name = ? '
+          'WHERE parameter_name = ?',
+          [paar.value, paar.key],
         );
       } catch (e) {
         // ignore: avoid_print
-        print('Zusammenführen „${paar.key}" übersprungen: $e');
+        print('Umbenennen „${paar.key}" übersprungen: $e');
       }
     }
   }
@@ -844,5 +851,3 @@ class AppDatabase extends _$AppDatabase {
 QueryExecutor _openConnection() {
   return driftDatabase(name: 'produktion_planer');
 }
-
-
