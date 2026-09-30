@@ -1276,6 +1276,8 @@ class _Navigation extends StatefulWidget {
             'Was produziert werden muss', 'bedarf',),
         _Ziel(Icons.swap_horiz_rounded, 'Navision-Import',
             'Artikel und Bedarf aus der Warenwirtschaft', 'navisionImport',),
+        _Ziel(Icons.local_shipping_outlined, 'Auftragsbestand',
+            'Aufträge nach Versandtag gegen das Lager', 'auftragsbestand',),
         _Ziel(Icons.auto_awesome_rounded, 'Planungsvorschlag',
             'Tage aus dem offenen Bedarf vorschlagen lassen',
             'planungsvorschlag',),

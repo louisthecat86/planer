@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'tables/app_settings.dart';
+import 'tables/auftragsbestand.dart';
 import 'tables/machine_parameter_defs.dart';
 import 'tables/machines.dart';
 import 'tables/order_list_items.dart';
@@ -54,6 +55,8 @@ part 'database.g.dart';
     Zusatzzeiten,
     NavisionArtikelKatalog,
     NavisionUmrechnungen,
+    AuftragsbestandArtikel,
+    AuftragsbestandPositionen,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -71,7 +74,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -383,9 +386,81 @@ class AppDatabase extends _$AppDatabase {
           }
 
           if (from < 22) {
-            // Drei Schreibfehler aus dem ersten Katalog. Sie hängen an
-            // gepflegten Werten, deshalb wird umbenannt statt neu angelegt.
+            await _migrationMultivacTef2NachVerpackung();
+          }
+
+          if (from < 23) {
+            await _migrationStandardKapazitaetAuf10Stunden();
+          }
+
+          // --- v23 → v24: Artikelmerkmale für die Planungsreihenfolge ---
+          // Allergene, Qualitäts- und Verarbeitungsstufe entscheiden, in
+          // welcher Reihenfolge Artikel an einem Tag laufen dürfen. Die
+          // Verpackungsangaben hängen mit dran, weil sie in derselben
+          // Maske gepflegt werden.
+          //
+          // Alle Spalten bleiben NULL: Nicht gepflegt ist etwas anderes
+          // als „hat keine Allergene", und der Wizard soll raten nicht
+          // mit einem Default verwechseln.
+          if (from < 24) {
+            await _addColumnIfNotExists('products', 'allergene', 'TEXT');
+            await _addColumnIfNotExists(
+              'products',
+              'qualitaetsstufe',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'verarbeitungsstufe',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'verpackungsformen',
+              'TEXT',
+            );
+            await _addColumnIfNotExists('products', 'karton_groesse', 'TEXT');
+            await _addColumnIfNotExists(
+              'products',
+              'karton_bedruckung',
+              'TEXT',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'packungen_pro_karton',
+              'INTEGER',
+            );
+            await _addColumnIfNotExists(
+              'products',
+              'fuellmenge_netto_g',
+              'REAL',
+            );
+            await _addColumnIfNotExists('products', 'abgabeart', 'TEXT');
+          }
+
+          // --- v24 → v25: Schreibfehler aus dem ersten Katalog ----------
+          // „Mehrkopfwage", „Gaszeizt", „Verzögerung belüftung …". Sie
+          // hängen an gepflegten Werten, deshalb wird umbenannt statt neu
+          // angelegt.
+          //
+          // Diese Migration lief kurzzeitig als v22 und überschrieb dabei
+          // die Nummern 22–24. Eine Datenbank, die in der Zwischenzeit
+          // geöffnet wurde, steht deshalb auf 22 und durchläuft 23 und 24
+          // ein zweites Mal — beide sind dafür gebaut: 23 hebt nur Spuren,
+          // die noch genau auf 540 stehen, 24 legt Spalten nur an, wenn sie
+          // fehlen.
+          if (from < 25) {
             await _migrationSchreibfehler();
+          }
+
+          // --- v25 → v26: Auftragsbestand aus Navision ------------------
+          // Aufträge je Kunde mit Warenausgangsdatum und Nettogewicht.
+          // Zwei reine Import-Tabellen, jeder Import ersetzt den Stand.
+          // createTable arbeitet mit IF NOT EXISTS und ist damit auch bei
+          // einem zweiten Lauf harmlos.
+          if (from < 26) {
+            await m.createTable(auftragsbestandArtikel);
+            await m.createTable(auftragsbestandPositionen);
           }
         },
         beforeOpen: (details) async {
@@ -638,6 +713,40 @@ class AppDatabase extends _$AppDatabase {
         );
       }
     });
+  }
+
+  /// Verschiebt die Tef2-Verpackungsanlage aus der alten Bratstraßen-Abteilung.
+  Future<void> _migrationMultivacTef2NachVerpackung() async {
+    final maschinen = await customSelect(
+      'SELECT id FROM machines WHERE name = ? AND deleted_at IS NULL',
+      variables: [Variable.withString('Multivac Tef2')],
+    ).get();
+    if (maschinen.isEmpty) return;
+
+    final maschineId = maschinen.first.read<String>('id');
+    await customStatement(
+      "UPDATE machines SET abteilung = 'verpackung_tef2' WHERE id = ?",
+      [maschineId],
+    );
+    await customStatement(
+      "UPDATE product_steps SET abteilung = 'verpackung_tef2' "
+      'WHERE maschine_id = ?',
+      [maschineId],
+    );
+    await customStatement(
+      "UPDATE production_tasks SET abteilung = 'verpackung_tef2' "
+      'WHERE maschine_id = ?',
+      [maschineId],
+    );
+  }
+
+  /// Hebt unveränderte Planungsspuren vom alten Standard 9 h auf 10 h.
+  /// Individuell gepflegte Kapazitäten bleiben unangetastet.
+  Future<void> _migrationStandardKapazitaetAuf10Stunden() async {
+    await customStatement(
+      'UPDATE machines SET kapazitaet_minuten_pro_tag = 600 '
+      'WHERE ist_planungsressource = 1 AND kapazitaet_minuten_pro_tag = 540',
+    );
   }
 
   /// Alte Anlagennamen auf den maßgeblichen Maschinenkatalog umstellen.

@@ -14470,6 +14470,1092 @@ class NavisionUmrechnungenCompanion
   }
 }
 
+class $AuftragsbestandArtikelTable extends AuftragsbestandArtikel
+    with TableInfo<$AuftragsbestandArtikelTable, AuftragsArtikel> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AuftragsbestandArtikelTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _bezeichnungMeta =
+      const VerificationMeta('bezeichnung');
+  @override
+  late final GeneratedColumn<String> bezeichnung = GeneratedColumn<String>(
+      'bezeichnung', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _bezeichnung2Meta =
+      const VerificationMeta('bezeichnung2');
+  @override
+  late final GeneratedColumn<String> bezeichnung2 = GeneratedColumn<String>(
+      'bezeichnung2', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _lagerKgMeta =
+      const VerificationMeta('lagerKg');
+  @override
+  late final GeneratedColumn<double> lagerKg = GeneratedColumn<double>(
+      'lager_kg', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _auftragKgMeta =
+      const VerificationMeta('auftragKg');
+  @override
+  late final GeneratedColumn<double> auftragKg = GeneratedColumn<double>(
+      'auftrag_kg', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _auftragMengeMeta =
+      const VerificationMeta('auftragMenge');
+  @override
+  late final GeneratedColumn<double> auftragMenge = GeneratedColumn<double>(
+      'auftrag_menge', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _auftragEinheitMeta =
+      const VerificationMeta('auftragEinheit');
+  @override
+  late final GeneratedColumn<String> auftragEinheit = GeneratedColumn<String>(
+      'auftrag_einheit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _berichtStandMeta =
+      const VerificationMeta('berichtStand');
+  @override
+  late final GeneratedColumn<DateTime> berichtStand = GeneratedColumn<DateTime>(
+      'bericht_stand', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _zeitraumVonMeta =
+      const VerificationMeta('zeitraumVon');
+  @override
+  late final GeneratedColumn<DateTime> zeitraumVon = GeneratedColumn<DateTime>(
+      'zeitraum_von', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _zeitraumBisMeta =
+      const VerificationMeta('zeitraumBis');
+  @override
+  late final GeneratedColumn<DateTime> zeitraumBis = GeneratedColumn<DateTime>(
+      'zeitraum_bis', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _importiertAmMeta =
+      const VerificationMeta('importiertAm');
+  @override
+  late final GeneratedColumn<DateTime> importiertAm = GeneratedColumn<DateTime>(
+      'importiert_am', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        artikelnummer,
+        bezeichnung,
+        bezeichnung2,
+        lagerKg,
+        auftragKg,
+        auftragMenge,
+        auftragEinheit,
+        berichtStand,
+        zeitraumVon,
+        zeitraumBis,
+        importiertAm
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'auftragsbestand_artikel';
+  @override
+  VerificationContext validateIntegrity(Insertable<AuftragsArtikel> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    } else if (isInserting) {
+      context.missing(_artikelnummerMeta);
+    }
+    if (data.containsKey('bezeichnung')) {
+      context.handle(
+          _bezeichnungMeta,
+          bezeichnung.isAcceptableOrUnknown(
+              data['bezeichnung']!, _bezeichnungMeta));
+    }
+    if (data.containsKey('bezeichnung2')) {
+      context.handle(
+          _bezeichnung2Meta,
+          bezeichnung2.isAcceptableOrUnknown(
+              data['bezeichnung2']!, _bezeichnung2Meta));
+    }
+    if (data.containsKey('lager_kg')) {
+      context.handle(_lagerKgMeta,
+          lagerKg.isAcceptableOrUnknown(data['lager_kg']!, _lagerKgMeta));
+    }
+    if (data.containsKey('auftrag_kg')) {
+      context.handle(_auftragKgMeta,
+          auftragKg.isAcceptableOrUnknown(data['auftrag_kg']!, _auftragKgMeta));
+    }
+    if (data.containsKey('auftrag_menge')) {
+      context.handle(
+          _auftragMengeMeta,
+          auftragMenge.isAcceptableOrUnknown(
+              data['auftrag_menge']!, _auftragMengeMeta));
+    }
+    if (data.containsKey('auftrag_einheit')) {
+      context.handle(
+          _auftragEinheitMeta,
+          auftragEinheit.isAcceptableOrUnknown(
+              data['auftrag_einheit']!, _auftragEinheitMeta));
+    }
+    if (data.containsKey('bericht_stand')) {
+      context.handle(
+          _berichtStandMeta,
+          berichtStand.isAcceptableOrUnknown(
+              data['bericht_stand']!, _berichtStandMeta));
+    }
+    if (data.containsKey('zeitraum_von')) {
+      context.handle(
+          _zeitraumVonMeta,
+          zeitraumVon.isAcceptableOrUnknown(
+              data['zeitraum_von']!, _zeitraumVonMeta));
+    }
+    if (data.containsKey('zeitraum_bis')) {
+      context.handle(
+          _zeitraumBisMeta,
+          zeitraumBis.isAcceptableOrUnknown(
+              data['zeitraum_bis']!, _zeitraumBisMeta));
+    }
+    if (data.containsKey('importiert_am')) {
+      context.handle(
+          _importiertAmMeta,
+          importiertAm.isAcceptableOrUnknown(
+              data['importiert_am']!, _importiertAmMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {artikelnummer};
+  @override
+  AuftragsArtikel map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AuftragsArtikel(
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer'])!,
+      bezeichnung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bezeichnung'])!,
+      bezeichnung2: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bezeichnung2']),
+      lagerKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}lager_kg'])!,
+      auftragKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}auftrag_kg'])!,
+      auftragMenge: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}auftrag_menge']),
+      auftragEinheit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}auftrag_einheit']),
+      berichtStand: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}bericht_stand']),
+      zeitraumVon: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}zeitraum_von']),
+      zeitraumBis: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}zeitraum_bis']),
+      importiertAm: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}importiert_am'])!,
+    );
+  }
+
+  @override
+  $AuftragsbestandArtikelTable createAlias(String alias) {
+    return $AuftragsbestandArtikelTable(attachedDatabase, alias);
+  }
+}
+
+class AuftragsArtikel extends DataClass implements Insertable<AuftragsArtikel> {
+  /// Navision-Artikelnummer — dieselbe wie in der App.
+  final String artikelnummer;
+  final String bezeichnung;
+
+  /// Zweite Zeile der Bezeichnung, z.B. „geschnitten, egal. 500g Pack".
+  final String? bezeichnung2;
+
+  /// „Nettogewicht Auf Lager" laut Bericht, in kg.
+  final double lagerKg;
+
+  /// Summe aller Auftragszeilen im Zeitraum, in kg (Zeile „Gesamt").
+  final double auftragKg;
+
+  /// Dieselbe Summe in der Einheit des Berichts, z.B. 35 PACK.
+  final double? auftragMenge;
+  final String? auftragEinheit;
+
+  /// Wann Navision den Bericht erzeugt hat (Kopf des Berichts).
+  final DateTime? berichtStand;
+
+  /// Filterzeitraum des Berichts (Warenausgang von … bis).
+  final DateTime? zeitraumVon;
+  final DateTime? zeitraumBis;
+
+  /// Wann die Datei in die App eingelesen wurde.
+  final DateTime importiertAm;
+  const AuftragsArtikel(
+      {required this.artikelnummer,
+      required this.bezeichnung,
+      this.bezeichnung2,
+      required this.lagerKg,
+      required this.auftragKg,
+      this.auftragMenge,
+      this.auftragEinheit,
+      this.berichtStand,
+      this.zeitraumVon,
+      this.zeitraumBis,
+      required this.importiertAm});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['artikelnummer'] = Variable<String>(artikelnummer);
+    map['bezeichnung'] = Variable<String>(bezeichnung);
+    if (!nullToAbsent || bezeichnung2 != null) {
+      map['bezeichnung2'] = Variable<String>(bezeichnung2);
+    }
+    map['lager_kg'] = Variable<double>(lagerKg);
+    map['auftrag_kg'] = Variable<double>(auftragKg);
+    if (!nullToAbsent || auftragMenge != null) {
+      map['auftrag_menge'] = Variable<double>(auftragMenge);
+    }
+    if (!nullToAbsent || auftragEinheit != null) {
+      map['auftrag_einheit'] = Variable<String>(auftragEinheit);
+    }
+    if (!nullToAbsent || berichtStand != null) {
+      map['bericht_stand'] = Variable<DateTime>(berichtStand);
+    }
+    if (!nullToAbsent || zeitraumVon != null) {
+      map['zeitraum_von'] = Variable<DateTime>(zeitraumVon);
+    }
+    if (!nullToAbsent || zeitraumBis != null) {
+      map['zeitraum_bis'] = Variable<DateTime>(zeitraumBis);
+    }
+    map['importiert_am'] = Variable<DateTime>(importiertAm);
+    return map;
+  }
+
+  AuftragsbestandArtikelCompanion toCompanion(bool nullToAbsent) {
+    return AuftragsbestandArtikelCompanion(
+      artikelnummer: Value(artikelnummer),
+      bezeichnung: Value(bezeichnung),
+      bezeichnung2: bezeichnung2 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bezeichnung2),
+      lagerKg: Value(lagerKg),
+      auftragKg: Value(auftragKg),
+      auftragMenge: auftragMenge == null && nullToAbsent
+          ? const Value.absent()
+          : Value(auftragMenge),
+      auftragEinheit: auftragEinheit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(auftragEinheit),
+      berichtStand: berichtStand == null && nullToAbsent
+          ? const Value.absent()
+          : Value(berichtStand),
+      zeitraumVon: zeitraumVon == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zeitraumVon),
+      zeitraumBis: zeitraumBis == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zeitraumBis),
+      importiertAm: Value(importiertAm),
+    );
+  }
+
+  factory AuftragsArtikel.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AuftragsArtikel(
+      artikelnummer: serializer.fromJson<String>(json['artikelnummer']),
+      bezeichnung: serializer.fromJson<String>(json['bezeichnung']),
+      bezeichnung2: serializer.fromJson<String?>(json['bezeichnung2']),
+      lagerKg: serializer.fromJson<double>(json['lagerKg']),
+      auftragKg: serializer.fromJson<double>(json['auftragKg']),
+      auftragMenge: serializer.fromJson<double?>(json['auftragMenge']),
+      auftragEinheit: serializer.fromJson<String?>(json['auftragEinheit']),
+      berichtStand: serializer.fromJson<DateTime?>(json['berichtStand']),
+      zeitraumVon: serializer.fromJson<DateTime?>(json['zeitraumVon']),
+      zeitraumBis: serializer.fromJson<DateTime?>(json['zeitraumBis']),
+      importiertAm: serializer.fromJson<DateTime>(json['importiertAm']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'artikelnummer': serializer.toJson<String>(artikelnummer),
+      'bezeichnung': serializer.toJson<String>(bezeichnung),
+      'bezeichnung2': serializer.toJson<String?>(bezeichnung2),
+      'lagerKg': serializer.toJson<double>(lagerKg),
+      'auftragKg': serializer.toJson<double>(auftragKg),
+      'auftragMenge': serializer.toJson<double?>(auftragMenge),
+      'auftragEinheit': serializer.toJson<String?>(auftragEinheit),
+      'berichtStand': serializer.toJson<DateTime?>(berichtStand),
+      'zeitraumVon': serializer.toJson<DateTime?>(zeitraumVon),
+      'zeitraumBis': serializer.toJson<DateTime?>(zeitraumBis),
+      'importiertAm': serializer.toJson<DateTime>(importiertAm),
+    };
+  }
+
+  AuftragsArtikel copyWith(
+          {String? artikelnummer,
+          String? bezeichnung,
+          Value<String?> bezeichnung2 = const Value.absent(),
+          double? lagerKg,
+          double? auftragKg,
+          Value<double?> auftragMenge = const Value.absent(),
+          Value<String?> auftragEinheit = const Value.absent(),
+          Value<DateTime?> berichtStand = const Value.absent(),
+          Value<DateTime?> zeitraumVon = const Value.absent(),
+          Value<DateTime?> zeitraumBis = const Value.absent(),
+          DateTime? importiertAm}) =>
+      AuftragsArtikel(
+        artikelnummer: artikelnummer ?? this.artikelnummer,
+        bezeichnung: bezeichnung ?? this.bezeichnung,
+        bezeichnung2:
+            bezeichnung2.present ? bezeichnung2.value : this.bezeichnung2,
+        lagerKg: lagerKg ?? this.lagerKg,
+        auftragKg: auftragKg ?? this.auftragKg,
+        auftragMenge:
+            auftragMenge.present ? auftragMenge.value : this.auftragMenge,
+        auftragEinheit:
+            auftragEinheit.present ? auftragEinheit.value : this.auftragEinheit,
+        berichtStand:
+            berichtStand.present ? berichtStand.value : this.berichtStand,
+        zeitraumVon: zeitraumVon.present ? zeitraumVon.value : this.zeitraumVon,
+        zeitraumBis: zeitraumBis.present ? zeitraumBis.value : this.zeitraumBis,
+        importiertAm: importiertAm ?? this.importiertAm,
+      );
+  AuftragsArtikel copyWithCompanion(AuftragsbestandArtikelCompanion data) {
+    return AuftragsArtikel(
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      bezeichnung:
+          data.bezeichnung.present ? data.bezeichnung.value : this.bezeichnung,
+      bezeichnung2: data.bezeichnung2.present
+          ? data.bezeichnung2.value
+          : this.bezeichnung2,
+      lagerKg: data.lagerKg.present ? data.lagerKg.value : this.lagerKg,
+      auftragKg: data.auftragKg.present ? data.auftragKg.value : this.auftragKg,
+      auftragMenge: data.auftragMenge.present
+          ? data.auftragMenge.value
+          : this.auftragMenge,
+      auftragEinheit: data.auftragEinheit.present
+          ? data.auftragEinheit.value
+          : this.auftragEinheit,
+      berichtStand: data.berichtStand.present
+          ? data.berichtStand.value
+          : this.berichtStand,
+      zeitraumVon:
+          data.zeitraumVon.present ? data.zeitraumVon.value : this.zeitraumVon,
+      zeitraumBis:
+          data.zeitraumBis.present ? data.zeitraumBis.value : this.zeitraumBis,
+      importiertAm: data.importiertAm.present
+          ? data.importiertAm.value
+          : this.importiertAm,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuftragsArtikel(')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('bezeichnung2: $bezeichnung2, ')
+          ..write('lagerKg: $lagerKg, ')
+          ..write('auftragKg: $auftragKg, ')
+          ..write('auftragMenge: $auftragMenge, ')
+          ..write('auftragEinheit: $auftragEinheit, ')
+          ..write('berichtStand: $berichtStand, ')
+          ..write('zeitraumVon: $zeitraumVon, ')
+          ..write('zeitraumBis: $zeitraumBis, ')
+          ..write('importiertAm: $importiertAm')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      artikelnummer,
+      bezeichnung,
+      bezeichnung2,
+      lagerKg,
+      auftragKg,
+      auftragMenge,
+      auftragEinheit,
+      berichtStand,
+      zeitraumVon,
+      zeitraumBis,
+      importiertAm);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AuftragsArtikel &&
+          other.artikelnummer == this.artikelnummer &&
+          other.bezeichnung == this.bezeichnung &&
+          other.bezeichnung2 == this.bezeichnung2 &&
+          other.lagerKg == this.lagerKg &&
+          other.auftragKg == this.auftragKg &&
+          other.auftragMenge == this.auftragMenge &&
+          other.auftragEinheit == this.auftragEinheit &&
+          other.berichtStand == this.berichtStand &&
+          other.zeitraumVon == this.zeitraumVon &&
+          other.zeitraumBis == this.zeitraumBis &&
+          other.importiertAm == this.importiertAm);
+}
+
+class AuftragsbestandArtikelCompanion extends UpdateCompanion<AuftragsArtikel> {
+  final Value<String> artikelnummer;
+  final Value<String> bezeichnung;
+  final Value<String?> bezeichnung2;
+  final Value<double> lagerKg;
+  final Value<double> auftragKg;
+  final Value<double?> auftragMenge;
+  final Value<String?> auftragEinheit;
+  final Value<DateTime?> berichtStand;
+  final Value<DateTime?> zeitraumVon;
+  final Value<DateTime?> zeitraumBis;
+  final Value<DateTime> importiertAm;
+  final Value<int> rowid;
+  const AuftragsbestandArtikelCompanion({
+    this.artikelnummer = const Value.absent(),
+    this.bezeichnung = const Value.absent(),
+    this.bezeichnung2 = const Value.absent(),
+    this.lagerKg = const Value.absent(),
+    this.auftragKg = const Value.absent(),
+    this.auftragMenge = const Value.absent(),
+    this.auftragEinheit = const Value.absent(),
+    this.berichtStand = const Value.absent(),
+    this.zeitraumVon = const Value.absent(),
+    this.zeitraumBis = const Value.absent(),
+    this.importiertAm = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AuftragsbestandArtikelCompanion.insert({
+    required String artikelnummer,
+    this.bezeichnung = const Value.absent(),
+    this.bezeichnung2 = const Value.absent(),
+    this.lagerKg = const Value.absent(),
+    this.auftragKg = const Value.absent(),
+    this.auftragMenge = const Value.absent(),
+    this.auftragEinheit = const Value.absent(),
+    this.berichtStand = const Value.absent(),
+    this.zeitraumVon = const Value.absent(),
+    this.zeitraumBis = const Value.absent(),
+    this.importiertAm = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : artikelnummer = Value(artikelnummer);
+  static Insertable<AuftragsArtikel> custom({
+    Expression<String>? artikelnummer,
+    Expression<String>? bezeichnung,
+    Expression<String>? bezeichnung2,
+    Expression<double>? lagerKg,
+    Expression<double>? auftragKg,
+    Expression<double>? auftragMenge,
+    Expression<String>? auftragEinheit,
+    Expression<DateTime>? berichtStand,
+    Expression<DateTime>? zeitraumVon,
+    Expression<DateTime>? zeitraumBis,
+    Expression<DateTime>? importiertAm,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (bezeichnung != null) 'bezeichnung': bezeichnung,
+      if (bezeichnung2 != null) 'bezeichnung2': bezeichnung2,
+      if (lagerKg != null) 'lager_kg': lagerKg,
+      if (auftragKg != null) 'auftrag_kg': auftragKg,
+      if (auftragMenge != null) 'auftrag_menge': auftragMenge,
+      if (auftragEinheit != null) 'auftrag_einheit': auftragEinheit,
+      if (berichtStand != null) 'bericht_stand': berichtStand,
+      if (zeitraumVon != null) 'zeitraum_von': zeitraumVon,
+      if (zeitraumBis != null) 'zeitraum_bis': zeitraumBis,
+      if (importiertAm != null) 'importiert_am': importiertAm,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AuftragsbestandArtikelCompanion copyWith(
+      {Value<String>? artikelnummer,
+      Value<String>? bezeichnung,
+      Value<String?>? bezeichnung2,
+      Value<double>? lagerKg,
+      Value<double>? auftragKg,
+      Value<double?>? auftragMenge,
+      Value<String?>? auftragEinheit,
+      Value<DateTime?>? berichtStand,
+      Value<DateTime?>? zeitraumVon,
+      Value<DateTime?>? zeitraumBis,
+      Value<DateTime>? importiertAm,
+      Value<int>? rowid}) {
+    return AuftragsbestandArtikelCompanion(
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      bezeichnung: bezeichnung ?? this.bezeichnung,
+      bezeichnung2: bezeichnung2 ?? this.bezeichnung2,
+      lagerKg: lagerKg ?? this.lagerKg,
+      auftragKg: auftragKg ?? this.auftragKg,
+      auftragMenge: auftragMenge ?? this.auftragMenge,
+      auftragEinheit: auftragEinheit ?? this.auftragEinheit,
+      berichtStand: berichtStand ?? this.berichtStand,
+      zeitraumVon: zeitraumVon ?? this.zeitraumVon,
+      zeitraumBis: zeitraumBis ?? this.zeitraumBis,
+      importiertAm: importiertAm ?? this.importiertAm,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (bezeichnung.present) {
+      map['bezeichnung'] = Variable<String>(bezeichnung.value);
+    }
+    if (bezeichnung2.present) {
+      map['bezeichnung2'] = Variable<String>(bezeichnung2.value);
+    }
+    if (lagerKg.present) {
+      map['lager_kg'] = Variable<double>(lagerKg.value);
+    }
+    if (auftragKg.present) {
+      map['auftrag_kg'] = Variable<double>(auftragKg.value);
+    }
+    if (auftragMenge.present) {
+      map['auftrag_menge'] = Variable<double>(auftragMenge.value);
+    }
+    if (auftragEinheit.present) {
+      map['auftrag_einheit'] = Variable<String>(auftragEinheit.value);
+    }
+    if (berichtStand.present) {
+      map['bericht_stand'] = Variable<DateTime>(berichtStand.value);
+    }
+    if (zeitraumVon.present) {
+      map['zeitraum_von'] = Variable<DateTime>(zeitraumVon.value);
+    }
+    if (zeitraumBis.present) {
+      map['zeitraum_bis'] = Variable<DateTime>(zeitraumBis.value);
+    }
+    if (importiertAm.present) {
+      map['importiert_am'] = Variable<DateTime>(importiertAm.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuftragsbestandArtikelCompanion(')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('bezeichnung2: $bezeichnung2, ')
+          ..write('lagerKg: $lagerKg, ')
+          ..write('auftragKg: $auftragKg, ')
+          ..write('auftragMenge: $auftragMenge, ')
+          ..write('auftragEinheit: $auftragEinheit, ')
+          ..write('berichtStand: $berichtStand, ')
+          ..write('zeitraumVon: $zeitraumVon, ')
+          ..write('zeitraumBis: $zeitraumBis, ')
+          ..write('importiertAm: $importiertAm, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AuftragsbestandPositionenTable extends AuftragsbestandPositionen
+    with TableInfo<$AuftragsbestandPositionenTable, AuftragsPosition> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AuftragsbestandPositionenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+      'id', aliasedName, false,
+      hasAutoIncrement: true,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('PRIMARY KEY AUTOINCREMENT'));
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _belegMeta = const VerificationMeta('beleg');
+  @override
+  late final GeneratedColumn<String> beleg = GeneratedColumn<String>(
+      'beleg', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _debitorMeta =
+      const VerificationMeta('debitor');
+  @override
+  late final GeneratedColumn<String> debitor = GeneratedColumn<String>(
+      'debitor', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _warenausgangMeta =
+      const VerificationMeta('warenausgang');
+  @override
+  late final GeneratedColumn<DateTime> warenausgang = GeneratedColumn<DateTime>(
+      'warenausgang', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _lieferdatumMeta =
+      const VerificationMeta('lieferdatum');
+  @override
+  late final GeneratedColumn<DateTime> lieferdatum = GeneratedColumn<DateTime>(
+      'lieferdatum', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _mengeMeta = const VerificationMeta('menge');
+  @override
+  late final GeneratedColumn<double> menge = GeneratedColumn<double>(
+      'menge', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _einheitMeta =
+      const VerificationMeta('einheit');
+  @override
+  late final GeneratedColumn<String> einheit = GeneratedColumn<String>(
+      'einheit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kgMeta = const VerificationMeta('kg');
+  @override
+  late final GeneratedColumn<double> kg = GeneratedColumn<double>(
+      'kg', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        artikelnummer,
+        beleg,
+        debitor,
+        warenausgang,
+        lieferdatum,
+        menge,
+        einheit,
+        kg
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'auftragsbestand_positionen';
+  @override
+  VerificationContext validateIntegrity(Insertable<AuftragsPosition> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    } else if (isInserting) {
+      context.missing(_artikelnummerMeta);
+    }
+    if (data.containsKey('beleg')) {
+      context.handle(
+          _belegMeta, beleg.isAcceptableOrUnknown(data['beleg']!, _belegMeta));
+    } else if (isInserting) {
+      context.missing(_belegMeta);
+    }
+    if (data.containsKey('debitor')) {
+      context.handle(_debitorMeta,
+          debitor.isAcceptableOrUnknown(data['debitor']!, _debitorMeta));
+    }
+    if (data.containsKey('warenausgang')) {
+      context.handle(
+          _warenausgangMeta,
+          warenausgang.isAcceptableOrUnknown(
+              data['warenausgang']!, _warenausgangMeta));
+    } else if (isInserting) {
+      context.missing(_warenausgangMeta);
+    }
+    if (data.containsKey('lieferdatum')) {
+      context.handle(
+          _lieferdatumMeta,
+          lieferdatum.isAcceptableOrUnknown(
+              data['lieferdatum']!, _lieferdatumMeta));
+    }
+    if (data.containsKey('menge')) {
+      context.handle(
+          _mengeMeta, menge.isAcceptableOrUnknown(data['menge']!, _mengeMeta));
+    }
+    if (data.containsKey('einheit')) {
+      context.handle(_einheitMeta,
+          einheit.isAcceptableOrUnknown(data['einheit']!, _einheitMeta));
+    }
+    if (data.containsKey('kg')) {
+      context.handle(_kgMeta, kg.isAcceptableOrUnknown(data['kg']!, _kgMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  AuftragsPosition map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AuftragsPosition(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}id'])!,
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer'])!,
+      beleg: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}beleg'])!,
+      debitor: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}debitor'])!,
+      warenausgang: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}warenausgang'])!,
+      lieferdatum: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}lieferdatum']),
+      menge: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}menge'])!,
+      einheit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}einheit']),
+      kg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}kg'])!,
+    );
+  }
+
+  @override
+  $AuftragsbestandPositionenTable createAlias(String alias) {
+    return $AuftragsbestandPositionenTable(attachedDatabase, alias);
+  }
+}
+
+class AuftragsPosition extends DataClass
+    implements Insertable<AuftragsPosition> {
+  final int id;
+  final String artikelnummer;
+
+  /// Belegnummer des Verkaufsauftrags, z.B. „VA2608879".
+  final String beleg;
+
+  /// Kunde laut Bericht.
+  final String debitor;
+
+  /// Warenausgangsdatum — der Tag, an dem die Ware das Haus verlässt.
+  final DateTime warenausgang;
+
+  /// Lieferdatum beim Kunden. In den bisherigen Berichten immer leer.
+  final DateTime? lieferdatum;
+
+  /// Menge in der Verkaufseinheit.
+  final double menge;
+  final String? einheit;
+
+  /// Nettogewicht in kg.
+  final double kg;
+  const AuftragsPosition(
+      {required this.id,
+      required this.artikelnummer,
+      required this.beleg,
+      required this.debitor,
+      required this.warenausgang,
+      this.lieferdatum,
+      required this.menge,
+      this.einheit,
+      required this.kg});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['artikelnummer'] = Variable<String>(artikelnummer);
+    map['beleg'] = Variable<String>(beleg);
+    map['debitor'] = Variable<String>(debitor);
+    map['warenausgang'] = Variable<DateTime>(warenausgang);
+    if (!nullToAbsent || lieferdatum != null) {
+      map['lieferdatum'] = Variable<DateTime>(lieferdatum);
+    }
+    map['menge'] = Variable<double>(menge);
+    if (!nullToAbsent || einheit != null) {
+      map['einheit'] = Variable<String>(einheit);
+    }
+    map['kg'] = Variable<double>(kg);
+    return map;
+  }
+
+  AuftragsbestandPositionenCompanion toCompanion(bool nullToAbsent) {
+    return AuftragsbestandPositionenCompanion(
+      id: Value(id),
+      artikelnummer: Value(artikelnummer),
+      beleg: Value(beleg),
+      debitor: Value(debitor),
+      warenausgang: Value(warenausgang),
+      lieferdatum: lieferdatum == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lieferdatum),
+      menge: Value(menge),
+      einheit: einheit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(einheit),
+      kg: Value(kg),
+    );
+  }
+
+  factory AuftragsPosition.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AuftragsPosition(
+      id: serializer.fromJson<int>(json['id']),
+      artikelnummer: serializer.fromJson<String>(json['artikelnummer']),
+      beleg: serializer.fromJson<String>(json['beleg']),
+      debitor: serializer.fromJson<String>(json['debitor']),
+      warenausgang: serializer.fromJson<DateTime>(json['warenausgang']),
+      lieferdatum: serializer.fromJson<DateTime?>(json['lieferdatum']),
+      menge: serializer.fromJson<double>(json['menge']),
+      einheit: serializer.fromJson<String?>(json['einheit']),
+      kg: serializer.fromJson<double>(json['kg']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'artikelnummer': serializer.toJson<String>(artikelnummer),
+      'beleg': serializer.toJson<String>(beleg),
+      'debitor': serializer.toJson<String>(debitor),
+      'warenausgang': serializer.toJson<DateTime>(warenausgang),
+      'lieferdatum': serializer.toJson<DateTime?>(lieferdatum),
+      'menge': serializer.toJson<double>(menge),
+      'einheit': serializer.toJson<String?>(einheit),
+      'kg': serializer.toJson<double>(kg),
+    };
+  }
+
+  AuftragsPosition copyWith(
+          {int? id,
+          String? artikelnummer,
+          String? beleg,
+          String? debitor,
+          DateTime? warenausgang,
+          Value<DateTime?> lieferdatum = const Value.absent(),
+          double? menge,
+          Value<String?> einheit = const Value.absent(),
+          double? kg}) =>
+      AuftragsPosition(
+        id: id ?? this.id,
+        artikelnummer: artikelnummer ?? this.artikelnummer,
+        beleg: beleg ?? this.beleg,
+        debitor: debitor ?? this.debitor,
+        warenausgang: warenausgang ?? this.warenausgang,
+        lieferdatum: lieferdatum.present ? lieferdatum.value : this.lieferdatum,
+        menge: menge ?? this.menge,
+        einheit: einheit.present ? einheit.value : this.einheit,
+        kg: kg ?? this.kg,
+      );
+  AuftragsPosition copyWithCompanion(AuftragsbestandPositionenCompanion data) {
+    return AuftragsPosition(
+      id: data.id.present ? data.id.value : this.id,
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      beleg: data.beleg.present ? data.beleg.value : this.beleg,
+      debitor: data.debitor.present ? data.debitor.value : this.debitor,
+      warenausgang: data.warenausgang.present
+          ? data.warenausgang.value
+          : this.warenausgang,
+      lieferdatum:
+          data.lieferdatum.present ? data.lieferdatum.value : this.lieferdatum,
+      menge: data.menge.present ? data.menge.value : this.menge,
+      einheit: data.einheit.present ? data.einheit.value : this.einheit,
+      kg: data.kg.present ? data.kg.value : this.kg,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuftragsPosition(')
+          ..write('id: $id, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('beleg: $beleg, ')
+          ..write('debitor: $debitor, ')
+          ..write('warenausgang: $warenausgang, ')
+          ..write('lieferdatum: $lieferdatum, ')
+          ..write('menge: $menge, ')
+          ..write('einheit: $einheit, ')
+          ..write('kg: $kg')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, artikelnummer, beleg, debitor,
+      warenausgang, lieferdatum, menge, einheit, kg);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AuftragsPosition &&
+          other.id == this.id &&
+          other.artikelnummer == this.artikelnummer &&
+          other.beleg == this.beleg &&
+          other.debitor == this.debitor &&
+          other.warenausgang == this.warenausgang &&
+          other.lieferdatum == this.lieferdatum &&
+          other.menge == this.menge &&
+          other.einheit == this.einheit &&
+          other.kg == this.kg);
+}
+
+class AuftragsbestandPositionenCompanion
+    extends UpdateCompanion<AuftragsPosition> {
+  final Value<int> id;
+  final Value<String> artikelnummer;
+  final Value<String> beleg;
+  final Value<String> debitor;
+  final Value<DateTime> warenausgang;
+  final Value<DateTime?> lieferdatum;
+  final Value<double> menge;
+  final Value<String?> einheit;
+  final Value<double> kg;
+  const AuftragsbestandPositionenCompanion({
+    this.id = const Value.absent(),
+    this.artikelnummer = const Value.absent(),
+    this.beleg = const Value.absent(),
+    this.debitor = const Value.absent(),
+    this.warenausgang = const Value.absent(),
+    this.lieferdatum = const Value.absent(),
+    this.menge = const Value.absent(),
+    this.einheit = const Value.absent(),
+    this.kg = const Value.absent(),
+  });
+  AuftragsbestandPositionenCompanion.insert({
+    this.id = const Value.absent(),
+    required String artikelnummer,
+    required String beleg,
+    this.debitor = const Value.absent(),
+    required DateTime warenausgang,
+    this.lieferdatum = const Value.absent(),
+    this.menge = const Value.absent(),
+    this.einheit = const Value.absent(),
+    this.kg = const Value.absent(),
+  })  : artikelnummer = Value(artikelnummer),
+        beleg = Value(beleg),
+        warenausgang = Value(warenausgang);
+  static Insertable<AuftragsPosition> custom({
+    Expression<int>? id,
+    Expression<String>? artikelnummer,
+    Expression<String>? beleg,
+    Expression<String>? debitor,
+    Expression<DateTime>? warenausgang,
+    Expression<DateTime>? lieferdatum,
+    Expression<double>? menge,
+    Expression<String>? einheit,
+    Expression<double>? kg,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (beleg != null) 'beleg': beleg,
+      if (debitor != null) 'debitor': debitor,
+      if (warenausgang != null) 'warenausgang': warenausgang,
+      if (lieferdatum != null) 'lieferdatum': lieferdatum,
+      if (menge != null) 'menge': menge,
+      if (einheit != null) 'einheit': einheit,
+      if (kg != null) 'kg': kg,
+    });
+  }
+
+  AuftragsbestandPositionenCompanion copyWith(
+      {Value<int>? id,
+      Value<String>? artikelnummer,
+      Value<String>? beleg,
+      Value<String>? debitor,
+      Value<DateTime>? warenausgang,
+      Value<DateTime?>? lieferdatum,
+      Value<double>? menge,
+      Value<String?>? einheit,
+      Value<double>? kg}) {
+    return AuftragsbestandPositionenCompanion(
+      id: id ?? this.id,
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      beleg: beleg ?? this.beleg,
+      debitor: debitor ?? this.debitor,
+      warenausgang: warenausgang ?? this.warenausgang,
+      lieferdatum: lieferdatum ?? this.lieferdatum,
+      menge: menge ?? this.menge,
+      einheit: einheit ?? this.einheit,
+      kg: kg ?? this.kg,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (beleg.present) {
+      map['beleg'] = Variable<String>(beleg.value);
+    }
+    if (debitor.present) {
+      map['debitor'] = Variable<String>(debitor.value);
+    }
+    if (warenausgang.present) {
+      map['warenausgang'] = Variable<DateTime>(warenausgang.value);
+    }
+    if (lieferdatum.present) {
+      map['lieferdatum'] = Variable<DateTime>(lieferdatum.value);
+    }
+    if (menge.present) {
+      map['menge'] = Variable<double>(menge.value);
+    }
+    if (einheit.present) {
+      map['einheit'] = Variable<String>(einheit.value);
+    }
+    if (kg.present) {
+      map['kg'] = Variable<double>(kg.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AuftragsbestandPositionenCompanion(')
+          ..write('id: $id, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('beleg: $beleg, ')
+          ..write('debitor: $debitor, ')
+          ..write('warenausgang: $warenausgang, ')
+          ..write('lieferdatum: $lieferdatum, ')
+          ..write('menge: $menge, ')
+          ..write('einheit: $einheit, ')
+          ..write('kg: $kg')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -14503,6 +15589,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $NavisionArtikelKatalogTable(this);
   late final $NavisionUmrechnungenTable navisionUmrechnungen =
       $NavisionUmrechnungenTable(this);
+  late final $AuftragsbestandArtikelTable auftragsbestandArtikel =
+      $AuftragsbestandArtikelTable(this);
+  late final $AuftragsbestandPositionenTable auftragsbestandPositionen =
+      $AuftragsbestandPositionenTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14527,7 +15617,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         machineParameterDefs,
         zusatzzeiten,
         navisionArtikelKatalog,
-        navisionUmrechnungen
+        navisionUmrechnungen,
+        auftragsbestandArtikel,
+        auftragsbestandPositionen
       ];
 }
 
@@ -22965,6 +24057,519 @@ typedef $$NavisionUmrechnungenTableProcessedTableManager
         ),
         NavisionUmrechnung,
         PrefetchHooks Function()>;
+typedef $$AuftragsbestandArtikelTableCreateCompanionBuilder
+    = AuftragsbestandArtikelCompanion Function({
+  required String artikelnummer,
+  Value<String> bezeichnung,
+  Value<String?> bezeichnung2,
+  Value<double> lagerKg,
+  Value<double> auftragKg,
+  Value<double?> auftragMenge,
+  Value<String?> auftragEinheit,
+  Value<DateTime?> berichtStand,
+  Value<DateTime?> zeitraumVon,
+  Value<DateTime?> zeitraumBis,
+  Value<DateTime> importiertAm,
+  Value<int> rowid,
+});
+typedef $$AuftragsbestandArtikelTableUpdateCompanionBuilder
+    = AuftragsbestandArtikelCompanion Function({
+  Value<String> artikelnummer,
+  Value<String> bezeichnung,
+  Value<String?> bezeichnung2,
+  Value<double> lagerKg,
+  Value<double> auftragKg,
+  Value<double?> auftragMenge,
+  Value<String?> auftragEinheit,
+  Value<DateTime?> berichtStand,
+  Value<DateTime?> zeitraumVon,
+  Value<DateTime?> zeitraumBis,
+  Value<DateTime> importiertAm,
+  Value<int> rowid,
+});
+
+class $$AuftragsbestandArtikelTableFilterComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandArtikelTable> {
+  $$AuftragsbestandArtikelTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bezeichnung2 => $composableBuilder(
+      column: $table.bezeichnung2, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get lagerKg => $composableBuilder(
+      column: $table.lagerKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get auftragKg => $composableBuilder(
+      column: $table.auftragKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get auftragMenge => $composableBuilder(
+      column: $table.auftragMenge, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get auftragEinheit => $composableBuilder(
+      column: $table.auftragEinheit,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get berichtStand => $composableBuilder(
+      column: $table.berichtStand, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get zeitraumVon => $composableBuilder(
+      column: $table.zeitraumVon, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get zeitraumBis => $composableBuilder(
+      column: $table.zeitraumBis, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get importiertAm => $composableBuilder(
+      column: $table.importiertAm, builder: (column) => ColumnFilters(column));
+}
+
+class $$AuftragsbestandArtikelTableOrderingComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandArtikelTable> {
+  $$AuftragsbestandArtikelTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bezeichnung2 => $composableBuilder(
+      column: $table.bezeichnung2,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get lagerKg => $composableBuilder(
+      column: $table.lagerKg, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get auftragKg => $composableBuilder(
+      column: $table.auftragKg, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get auftragMenge => $composableBuilder(
+      column: $table.auftragMenge,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get auftragEinheit => $composableBuilder(
+      column: $table.auftragEinheit,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get berichtStand => $composableBuilder(
+      column: $table.berichtStand,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get zeitraumVon => $composableBuilder(
+      column: $table.zeitraumVon, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get zeitraumBis => $composableBuilder(
+      column: $table.zeitraumBis, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get importiertAm => $composableBuilder(
+      column: $table.importiertAm,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$AuftragsbestandArtikelTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandArtikelTable> {
+  $$AuftragsbestandArtikelTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => column);
+
+  GeneratedColumn<String> get bezeichnung2 => $composableBuilder(
+      column: $table.bezeichnung2, builder: (column) => column);
+
+  GeneratedColumn<double> get lagerKg =>
+      $composableBuilder(column: $table.lagerKg, builder: (column) => column);
+
+  GeneratedColumn<double> get auftragKg =>
+      $composableBuilder(column: $table.auftragKg, builder: (column) => column);
+
+  GeneratedColumn<double> get auftragMenge => $composableBuilder(
+      column: $table.auftragMenge, builder: (column) => column);
+
+  GeneratedColumn<String> get auftragEinheit => $composableBuilder(
+      column: $table.auftragEinheit, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get berichtStand => $composableBuilder(
+      column: $table.berichtStand, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get zeitraumVon => $composableBuilder(
+      column: $table.zeitraumVon, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get zeitraumBis => $composableBuilder(
+      column: $table.zeitraumBis, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get importiertAm => $composableBuilder(
+      column: $table.importiertAm, builder: (column) => column);
+}
+
+class $$AuftragsbestandArtikelTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $AuftragsbestandArtikelTable,
+    AuftragsArtikel,
+    $$AuftragsbestandArtikelTableFilterComposer,
+    $$AuftragsbestandArtikelTableOrderingComposer,
+    $$AuftragsbestandArtikelTableAnnotationComposer,
+    $$AuftragsbestandArtikelTableCreateCompanionBuilder,
+    $$AuftragsbestandArtikelTableUpdateCompanionBuilder,
+    (
+      AuftragsArtikel,
+      BaseReferences<_$AppDatabase, $AuftragsbestandArtikelTable,
+          AuftragsArtikel>
+    ),
+    AuftragsArtikel,
+    PrefetchHooks Function()> {
+  $$AuftragsbestandArtikelTableTableManager(
+      _$AppDatabase db, $AuftragsbestandArtikelTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AuftragsbestandArtikelTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AuftragsbestandArtikelTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AuftragsbestandArtikelTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> artikelnummer = const Value.absent(),
+            Value<String> bezeichnung = const Value.absent(),
+            Value<String?> bezeichnung2 = const Value.absent(),
+            Value<double> lagerKg = const Value.absent(),
+            Value<double> auftragKg = const Value.absent(),
+            Value<double?> auftragMenge = const Value.absent(),
+            Value<String?> auftragEinheit = const Value.absent(),
+            Value<DateTime?> berichtStand = const Value.absent(),
+            Value<DateTime?> zeitraumVon = const Value.absent(),
+            Value<DateTime?> zeitraumBis = const Value.absent(),
+            Value<DateTime> importiertAm = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AuftragsbestandArtikelCompanion(
+            artikelnummer: artikelnummer,
+            bezeichnung: bezeichnung,
+            bezeichnung2: bezeichnung2,
+            lagerKg: lagerKg,
+            auftragKg: auftragKg,
+            auftragMenge: auftragMenge,
+            auftragEinheit: auftragEinheit,
+            berichtStand: berichtStand,
+            zeitraumVon: zeitraumVon,
+            zeitraumBis: zeitraumBis,
+            importiertAm: importiertAm,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String artikelnummer,
+            Value<String> bezeichnung = const Value.absent(),
+            Value<String?> bezeichnung2 = const Value.absent(),
+            Value<double> lagerKg = const Value.absent(),
+            Value<double> auftragKg = const Value.absent(),
+            Value<double?> auftragMenge = const Value.absent(),
+            Value<String?> auftragEinheit = const Value.absent(),
+            Value<DateTime?> berichtStand = const Value.absent(),
+            Value<DateTime?> zeitraumVon = const Value.absent(),
+            Value<DateTime?> zeitraumBis = const Value.absent(),
+            Value<DateTime> importiertAm = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              AuftragsbestandArtikelCompanion.insert(
+            artikelnummer: artikelnummer,
+            bezeichnung: bezeichnung,
+            bezeichnung2: bezeichnung2,
+            lagerKg: lagerKg,
+            auftragKg: auftragKg,
+            auftragMenge: auftragMenge,
+            auftragEinheit: auftragEinheit,
+            berichtStand: berichtStand,
+            zeitraumVon: zeitraumVon,
+            zeitraumBis: zeitraumBis,
+            importiertAm: importiertAm,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AuftragsbestandArtikelTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $AuftragsbestandArtikelTable,
+        AuftragsArtikel,
+        $$AuftragsbestandArtikelTableFilterComposer,
+        $$AuftragsbestandArtikelTableOrderingComposer,
+        $$AuftragsbestandArtikelTableAnnotationComposer,
+        $$AuftragsbestandArtikelTableCreateCompanionBuilder,
+        $$AuftragsbestandArtikelTableUpdateCompanionBuilder,
+        (
+          AuftragsArtikel,
+          BaseReferences<_$AppDatabase, $AuftragsbestandArtikelTable,
+              AuftragsArtikel>
+        ),
+        AuftragsArtikel,
+        PrefetchHooks Function()>;
+typedef $$AuftragsbestandPositionenTableCreateCompanionBuilder
+    = AuftragsbestandPositionenCompanion Function({
+  Value<int> id,
+  required String artikelnummer,
+  required String beleg,
+  Value<String> debitor,
+  required DateTime warenausgang,
+  Value<DateTime?> lieferdatum,
+  Value<double> menge,
+  Value<String?> einheit,
+  Value<double> kg,
+});
+typedef $$AuftragsbestandPositionenTableUpdateCompanionBuilder
+    = AuftragsbestandPositionenCompanion Function({
+  Value<int> id,
+  Value<String> artikelnummer,
+  Value<String> beleg,
+  Value<String> debitor,
+  Value<DateTime> warenausgang,
+  Value<DateTime?> lieferdatum,
+  Value<double> menge,
+  Value<String?> einheit,
+  Value<double> kg,
+});
+
+class $$AuftragsbestandPositionenTableFilterComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandPositionenTable> {
+  $$AuftragsbestandPositionenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get beleg => $composableBuilder(
+      column: $table.beleg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get debitor => $composableBuilder(
+      column: $table.debitor, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get warenausgang => $composableBuilder(
+      column: $table.warenausgang, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get lieferdatum => $composableBuilder(
+      column: $table.lieferdatum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get menge => $composableBuilder(
+      column: $table.menge, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get einheit => $composableBuilder(
+      column: $table.einheit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kg => $composableBuilder(
+      column: $table.kg, builder: (column) => ColumnFilters(column));
+}
+
+class $$AuftragsbestandPositionenTableOrderingComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandPositionenTable> {
+  $$AuftragsbestandPositionenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get beleg => $composableBuilder(
+      column: $table.beleg, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get debitor => $composableBuilder(
+      column: $table.debitor, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get warenausgang => $composableBuilder(
+      column: $table.warenausgang,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get lieferdatum => $composableBuilder(
+      column: $table.lieferdatum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get menge => $composableBuilder(
+      column: $table.menge, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get einheit => $composableBuilder(
+      column: $table.einheit, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kg => $composableBuilder(
+      column: $table.kg, builder: (column) => ColumnOrderings(column));
+}
+
+class $$AuftragsbestandPositionenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AuftragsbestandPositionenTable> {
+  $$AuftragsbestandPositionenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get beleg =>
+      $composableBuilder(column: $table.beleg, builder: (column) => column);
+
+  GeneratedColumn<String> get debitor =>
+      $composableBuilder(column: $table.debitor, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get warenausgang => $composableBuilder(
+      column: $table.warenausgang, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lieferdatum => $composableBuilder(
+      column: $table.lieferdatum, builder: (column) => column);
+
+  GeneratedColumn<double> get menge =>
+      $composableBuilder(column: $table.menge, builder: (column) => column);
+
+  GeneratedColumn<String> get einheit =>
+      $composableBuilder(column: $table.einheit, builder: (column) => column);
+
+  GeneratedColumn<double> get kg =>
+      $composableBuilder(column: $table.kg, builder: (column) => column);
+}
+
+class $$AuftragsbestandPositionenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $AuftragsbestandPositionenTable,
+    AuftragsPosition,
+    $$AuftragsbestandPositionenTableFilterComposer,
+    $$AuftragsbestandPositionenTableOrderingComposer,
+    $$AuftragsbestandPositionenTableAnnotationComposer,
+    $$AuftragsbestandPositionenTableCreateCompanionBuilder,
+    $$AuftragsbestandPositionenTableUpdateCompanionBuilder,
+    (
+      AuftragsPosition,
+      BaseReferences<_$AppDatabase, $AuftragsbestandPositionenTable,
+          AuftragsPosition>
+    ),
+    AuftragsPosition,
+    PrefetchHooks Function()> {
+  $$AuftragsbestandPositionenTableTableManager(
+      _$AppDatabase db, $AuftragsbestandPositionenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AuftragsbestandPositionenTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AuftragsbestandPositionenTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$AuftragsbestandPositionenTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> artikelnummer = const Value.absent(),
+            Value<String> beleg = const Value.absent(),
+            Value<String> debitor = const Value.absent(),
+            Value<DateTime> warenausgang = const Value.absent(),
+            Value<DateTime?> lieferdatum = const Value.absent(),
+            Value<double> menge = const Value.absent(),
+            Value<String?> einheit = const Value.absent(),
+            Value<double> kg = const Value.absent(),
+          }) =>
+              AuftragsbestandPositionenCompanion(
+            id: id,
+            artikelnummer: artikelnummer,
+            beleg: beleg,
+            debitor: debitor,
+            warenausgang: warenausgang,
+            lieferdatum: lieferdatum,
+            menge: menge,
+            einheit: einheit,
+            kg: kg,
+          ),
+          createCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            required String artikelnummer,
+            required String beleg,
+            Value<String> debitor = const Value.absent(),
+            required DateTime warenausgang,
+            Value<DateTime?> lieferdatum = const Value.absent(),
+            Value<double> menge = const Value.absent(),
+            Value<String?> einheit = const Value.absent(),
+            Value<double> kg = const Value.absent(),
+          }) =>
+              AuftragsbestandPositionenCompanion.insert(
+            id: id,
+            artikelnummer: artikelnummer,
+            beleg: beleg,
+            debitor: debitor,
+            warenausgang: warenausgang,
+            lieferdatum: lieferdatum,
+            menge: menge,
+            einheit: einheit,
+            kg: kg,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$AuftragsbestandPositionenTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $AuftragsbestandPositionenTable,
+        AuftragsPosition,
+        $$AuftragsbestandPositionenTableFilterComposer,
+        $$AuftragsbestandPositionenTableOrderingComposer,
+        $$AuftragsbestandPositionenTableAnnotationComposer,
+        $$AuftragsbestandPositionenTableCreateCompanionBuilder,
+        $$AuftragsbestandPositionenTableUpdateCompanionBuilder,
+        (
+          AuftragsPosition,
+          BaseReferences<_$AppDatabase, $AuftragsbestandPositionenTable,
+              AuftragsPosition>
+        ),
+        AuftragsPosition,
+        PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -23010,4 +24615,10 @@ class $AppDatabaseManager {
           _db, _db.navisionArtikelKatalog);
   $$NavisionUmrechnungenTableTableManager get navisionUmrechnungen =>
       $$NavisionUmrechnungenTableTableManager(_db, _db.navisionUmrechnungen);
+  $$AuftragsbestandArtikelTableTableManager get auftragsbestandArtikel =>
+      $$AuftragsbestandArtikelTableTableManager(
+          _db, _db.auftragsbestandArtikel);
+  $$AuftragsbestandPositionenTableTableManager get auftragsbestandPositionen =>
+      $$AuftragsbestandPositionenTableTableManager(
+          _db, _db.auftragsbestandPositionen);
 }
