@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' show max;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -874,6 +875,9 @@ class _AuftragsbestandScreenState
                     final inApp = appNummern?.contains(nr) ?? true;
                     final markiert = _markiert[nr] ?? const <DateTime>{};
                     return _ArtikelKarte(
+                      // Mit Schlüssel: Aufgeklappte Tage bleiben beim
+                      // Artikel, auch wenn sich die Liste umsortiert.
+                      key: ValueKey(nr),
                       zeile: z,
                       inApp: inApp,
                       offen: _offen.contains(nr),
@@ -1213,6 +1217,12 @@ const _rechenweg =
     'Was danach noch fehlt, ist einzuplanen. Termin ist der erste Tag, an '
     'dem es fehlt. Ist es an den Planungsvorschlag übergeben, ist es '
     'vorgemerkt — es fehlt noch, ist aber in Arbeit.\n\n'
+    'Aufgeklappt zeigt ein Artikel je Versandtag, was bestellt ist und '
+    'woher es kommt: aus Lager, aus Produktion, vorgemerkt — und was '
+    'fehlt. Der Balken zeigt dasselbe in Farbe. „Lagerbestand" ist, was '
+    'laut Bericht auf Lager liegt; „aus Lager", was davon an die Aufträge '
+    'des Tages geht. Ein Klick auf den Tag zeigt die einzelnen Aufträge '
+    'mit derselben Aufteilung.\n\n'
     'Welche Produktionen mitzählen:\n'
     '• Eingeplant: letzter Schritt heute oder später.\n'
     '• Produziert am Tag des Berichts oder danach: im Lager des Berichts '
@@ -1879,6 +1889,7 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
 /// nach Warenausgang und die Produktionen der App.
 class _ArtikelKarte extends StatelessWidget {
   const _ArtikelKarte({
+    super.key,
     required this.zeile,
     required this.inApp,
     required this.offen,
@@ -2052,8 +2063,10 @@ class _ArtikelKarte extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           [
-            'Aufträge ${_kg(d.auftragKg)} kg',
-            'Lager ${_kg(d.lagerKg)} kg',
+            // „Lagerbestand", nicht „Lager": In den Tagen steht, was davon
+            // an die Aufträge geht („aus Lager").
+            'bestellt ${_kg(d.auftragKg)} kg',
+            'Lagerbestand ${_kg(d.lagerKg)} kg',
             if (d.zugangKg >= 0.005) 'Produktion ${_kg(d.zugangKg)} kg',
             '$auftraege ${auftraege == 1 ? 'Auftrag' : 'Aufträge'} an '
                 '$tage ${tage == 1 ? 'Tag' : 'Tagen'}',
@@ -2065,16 +2078,16 @@ class _ArtikelKarte extends StatelessWidget {
   }
 }
 
-/// Aufgeklappt: je Warenausgangstag Summe und Deckung samt Aufträgen,
-/// darunter die Vormerkungen und die Produktionen der App für diesen
-/// Artikel.
+/// Aufgeklappt: wie weit der Lagerbestand reicht, je Warenausgangstag die
+/// Deckung als Tabelle und darunter die Vormerkungen und Produktionen der
+/// App für diesen Artikel.
 ///
-/// Tage, an denen noch etwas offen ist, lassen sich abhaken und gemeinsam
-/// einplanen. Zeilen, für die schon eine Produktion eingeplant ist, sind
-/// grau und zeigen, wann; vorgemerkte zeigen blau, bis wann sie spätestens
-/// produziert werden. Verschobene Aufträge, deren Planung noch am alten
-/// Tag hängt, sind lila markiert und gesperrt.
-class _Details extends StatelessWidget {
+/// Die Aufträge eines Tages sind eingeklappt — ein Klick auf den Tag zeigt
+/// sie, jeden mit derselben Aufteilung in denselben Spalten. Tage, an
+/// denen noch etwas offen ist, lassen sich abhaken und gemeinsam
+/// einplanen. Verschobene Aufträge, deren Planung noch am alten Tag hängt,
+/// sind lila markiert und gesperrt.
+class _Details extends StatefulWidget {
   const _Details({
     required this.deckung,
     required this.zugaenge,
@@ -2114,340 +2127,798 @@ class _Details extends StatelessWidget {
   final void Function(ProduktionsZugang z) onDatenblattKette;
   final VoidCallback onPruefen;
 
-  /// Breite der Spalte mit dem Haken und der mit dem Tag — die Aufträge
-  /// darunter rücken um beide ein.
+  @override
+  State<_Details> createState() => _DetailsState();
+}
+
+/// Welche Spalten die Tabelle eines Artikels zeigt: Produktion und
+/// vorgemerkt nur, wenn dort irgendwo etwas steht, den Balken nur, wenn
+/// Platz ist.
+typedef _Spalten = ({bool produktion, bool vorgemerkt, bool balken});
+
+/// Ein Stück des Deckungsbalkens.
+typedef _Teil = ({double kg, Color farbe, String text});
+
+/// Die Farben der Deckung — dieselben im Balken, in den Spaltenköpfen und
+/// an den Aufträgen.
+class _Farben {
+  _Farben(ThemeData theme)
+      : lager = _gruen(theme),
+        produktion = _gruen(theme).withValues(alpha: 0.45),
+        zuSpaet = _bernstein(theme),
+        vorgemerkt = _blau(theme),
+        fehlt = theme.colorScheme.error,
+        gesperrt = _lila(theme),
+        grau = theme.colorScheme.onSurfaceVariant;
+
+  final Color lager;
+  final Color produktion;
+  final Color zuSpaet;
+  final Color vorgemerkt;
+  final Color fehlt;
+  final Color gesperrt;
+  final Color grau;
+}
+
+class _DetailsState extends State<_Details> {
+  /// Tage, deren Aufträge aufgeklappt sind — anfangs keiner.
+  final Set<DateTime> _aufgeklappt = {};
+
+  /// Spaltenbreiten. Die Aufträge eines Tages rücken um Haken und Tag ein.
   static const double _hakenBreite = 36;
   static const double _tagBreite = 92;
+  static const double _zahlBreite = 92;
+  static const double _balkenBreite = 170;
+
+  /// Ab dieser Breite ist Platz für den Balken.
+  static const double _breitGenugFuerBalken = 980;
+
+  void _umschalten(DateTime tag) => setState(() {
+        if (!_aufgeklappt.remove(tag)) _aufgeklappt.add(tag);
+      });
 
   @override
   Widget build(BuildContext context) {
+    final w = widget;
+    final d = w.deckung;
     final theme = Theme.of(context);
+    final f = _Farben(theme);
+    final grau = theme.textTheme.bodySmall?.copyWith(color: f.grau);
     final klein = theme.textTheme.bodySmall;
-    final grau = klein?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final blass = klein?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.55),
-    );
-    final rot = theme.colorScheme.error;
-    final bernstein = _bernstein(theme);
-    final gruen = _gruen(theme);
-    final blau = _blau(theme);
-    final lila = _lila(theme);
-    final markieren = onMarkieren;
 
     final markierteTage = [
-      for (final t in deckung.tage)
-        if (markiert.contains(t.tag) && t.einplanbar) t,
+      for (final t in d.tage)
+        if (w.markiert.contains(t.tag) && t.einplanbar) t,
     ];
     final offenMarkiert =
         markierteTage.fold<double>(0, (s, t) => s + t.einplanbarKg);
+    final alleOffen =
+        d.tage.isNotEmpty && d.tage.every((t) => _aufgeklappt.contains(t.tag));
+    final trenner = theme.dividerColor.withValues(alpha: 0.5);
 
-    Widget haken(TagesDeckung t) {
-      if (markieren != null && t.einplanbar) {
-        return Checkbox(
-          value: markiert.contains(t.tag),
-          visualDensity: VisualDensity.compact,
-          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          onChanged: (v) => markieren(t.tag, v ?? false),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final _Spalten spalten = (
+          produktion: d.tage.any((t) => t.ausPlanungKg + t.zuSpaetKg >= 0.005),
+          vorgemerkt: d.tage.any((t) => t.vorgemerktKg >= 0.005),
+          balken: constraints.maxWidth >= _breitGenugFuerBalken,
         );
-      }
-      if (t.gesperrtKg >= 0.005) {
-        return Tooltip(
-          message: 'Gesperrt: ein verschobener Auftrag, dessen Planung noch '
-              'am alten Tag hängt. Erst in „Änderungen" umhängen oder '
-              'verwerfen, dann bündeln.',
-          child: Icon(Icons.lock_outline, size: 18, color: lila),
-        );
-      }
-      if (t.eingeplantIn.isNotEmpty) {
-        return Tooltip(
-          message: 'Eingeplant ${_geplantText(t.eingeplantIn)}',
-          child: Icon(Icons.event_available, size: 18, color: gruen),
-        );
-      }
-      if (t.vorgemerktIn.isNotEmpty) {
-        return Tooltip(
-          message: 'Beim Planungsvorschlag vorgemerkt'
-              '${_terminText(t.vorgemerktIn)}',
-          child: Icon(Icons.schedule_rounded, size: 18, color: blau),
-        );
-      }
-      return const SizedBox.shrink();
-    }
 
-    Widget status(TagesDeckung t) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (t.offenKg >= 0.005)
-            Text(
-              'fehlt ${_kg(t.offenKg)} kg',
-              textAlign: TextAlign.right,
-              style: klein?.copyWith(fontWeight: FontWeight.w700, color: rot),
-            ),
-          if (t.gesperrtKg >= 0.005)
-            Text(
-              'davon gesperrt ${_kg(t.gesperrtKg)} kg',
-              textAlign: TextAlign.right,
-              style: klein?.copyWith(color: lila),
-            ),
-          if (t.vorgemerktKg >= 0.005)
-            Text(
-              'vorgemerkt ${_kg(t.vorgemerktKg)} kg',
-              textAlign: TextAlign.right,
-              style: klein?.copyWith(fontWeight: FontWeight.w700, color: blau),
-            ),
-          if (t.zuSpaetKg >= 0.005) ...[
-            Text(
-              'zu spät ${_kg(t.zuSpaetKg)} kg',
-              textAlign: TextAlign.right,
-              style: klein?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: bernstein,
-              ),
-            ),
-            if (t.zuSpaetBis != null)
-              Text(
-                'fertig erst ${_tagKurz(t.zuSpaetBis!)}',
-                textAlign: TextAlign.right,
-                style: grau,
-              ),
-          ],
-          if (!t.offen)
-            Text(
-              t.eingeplantIn.isEmpty ? '—' : 'eingeplant',
-              textAlign: TextAlign.right,
-              style: t.eingeplantIn.isEmpty
-                  ? klein
-                  : klein?.copyWith(fontWeight: FontWeight.w700, color: gruen),
-            ),
-        ],
-      );
-    }
-
-    Widget zeile(ZeilenDeckung z) {
-      final p = z.position;
-      // Grau heißt: eingeplant oder vorgemerkt und damit hier erledigt.
-      // Fehlt trotzdem noch etwas — etwa weil der Kunde nachbestellt
-      // hat —, bleibt die Zeile normal, damit der Rest auffällt.
-      final stil = (z.geplant || z.vorgemerkt) && z.erledigt ? blass : grau;
-      final umzug = verschoben[z.schluessel];
-      final unsicher = umzug != null && !umzug.sicher
-          ? ' Ob es derselbe Auftrag ist, lässt sich nicht sicher sagen.'
-          : '';
-      return Padding(
-        padding: const EdgeInsets.only(left: _hakenBreite + _tagBreite, top: 1),
-        child: Row(
-          children: [
-            SizedBox(width: 90, child: Text(p.beleg, style: stil)),
-            Expanded(
-              child: Text(
-                p.debitor,
-                style: stil,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (umzug != null)
+        return Container(
+          color:
+              theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+          padding: const EdgeInsets.fromLTRB(8, 10, 16, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
               Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Tooltip(
-                  message: 'Stand vorher am ${_tagKurz(umzug.warenausgang)}. '
-                      'Die Planung hängt noch am alten Tag — in „Änderungen" '
-                      'umhängen oder verwerfen. Bis dahin lässt sich der '
-                      'Auftrag nicht bündeln.$unsicher',
-                  child: InkWell(
-                    onTap: onPruefen,
-                    borderRadius: BorderRadius.circular(6),
-                    child: _Marke(
-                      text: 'verschoben vom ${_tagKurz(umzug.warenausgang)}',
-                      farbe: lila,
-                      kraeftig: true,
+                padding: const EdgeInsets.only(left: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _lagerSatz(d),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    if (d.tage.isNotEmpty)
+                      TextButton.icon(
+                        onPressed: () => setState(() {
+                          if (alleOffen) {
+                            _aufgeklappt.clear();
+                          } else {
+                            _aufgeklappt.addAll(d.tage.map((t) => t.tag));
+                          }
+                        }),
+                        icon: Icon(
+                          alleOffen ? Icons.unfold_less : Icons.unfold_more,
+                          size: 18,
+                        ),
+                        label: Text(
+                          alleOffen
+                              ? 'Aufträge einklappen'
+                              : 'Alle Aufträge zeigen',
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (!w.inApp)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
+                  child: Text(
+                    'Diesen Artikel gibt es in der App noch nicht. Erst über '
+                    '„Fehlende anlegen …" anlegen und die Schritte pflegen, '
+                    'dann lässt er sich einplanen.',
+                    style: grau,
+                  ),
+                )
+              else if (d.tage.any((t) => t.einplanbar))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
+                  child: Text(
+                    'Tage abhaken, die zusammen produziert werden sollen, '
+                    'dann „Zur Planung hinzufügen". Ein Klick auf den Tag '
+                    'zeigt seine Aufträge.',
+                    style: grau,
+                  ),
+                ),
+              const SizedBox(height: 8),
+              _kopfzeile(spalten, f, grau),
+              for (final t in d.tage) ...[
+                Divider(height: 1, thickness: 1, color: trenner),
+                _tageszeile(t, spalten, f, theme),
+                if (_aufgeklappt.contains(t.tag))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Column(
+                      children: [
+                        for (final z in t.zeilen)
+                          _auftragszeile(z, spalten, f, theme),
+                      ],
                     ),
                   ),
-                ),
-              ),
-            if (z.geplant)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: _Marke(
-                  text: 'geplant ${_geplantText(z.eingeplantIn)}',
-                  farbe: gruen,
-                ),
-              ),
-            if (z.vorgemerkt)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: Tooltip(
-                  message: 'An den Planungsvorschlag übergeben — er legt '
-                      'die Produktion in einen Tag, nie nach dem Termin.',
-                  child: _Marke(
-                    text: 'vorgemerkt${_terminText(z.vorgemerktIn)}',
-                    farbe: blau,
+              ],
+              if (d.tage.length > 1) ...[
+                Divider(height: 1, thickness: 1, color: theme.dividerColor),
+                _summenzeile(spalten, f, theme),
+              ],
+              if (markierteTage.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                  decoration: BoxDecoration(
+                    color: theme.colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${markierteTage.length} '
+                          '${markierteTage.length == 1 ? 'Tag' : 'Tage'} '
+                          'markiert · fehlen ${_kg(offenMarkiert)} kg',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: theme.colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton.icon(
+                        onPressed: w.onEinplanen,
+                        icon: const Icon(Icons.playlist_add, size: 18),
+                        label: const Text('Zur Planung hinzufügen'),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            Text('${_zahl(p.menge)} ${p.einheit ?? ''}', style: stil),
-            SizedBox(
-              width: 110,
-              child: Text(
-                '${_kg(p.kg)} kg',
-                textAlign: TextAlign.right,
-                style: stil,
+              ],
+              if (w.vormerkungen.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    'Beim Planungsvorschlag vorgemerkt — spätester '
+                    'Produktionstag',
+                    style: klein?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                for (final v in w.vormerkungen)
+                  _VormerkungZeile(
+                    vormerkung: v,
+                    onAufheben: () => w.onAufheben(v),
+                    onDatenblatt: () => w.onDatenblattVormerkung(v),
+                  ),
+              ],
+              if (w.zugaenge.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Text(
+                    'Produktionen in der App — nach Tag der Fertigstellung',
+                    style: klein?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                for (final z in w.zugaenge)
+                  _ZugangZeile(
+                    zugang: z,
+                    onDatenblatt: () => w.onDatenblattKette(z),
+                  ),
+              ],
+              if (d.ueberschussKg >= 0.005)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 6),
+                  child: Text(
+                    '${_kg(d.ueberschussKg)} kg davon brauchen diese '
+                    'Aufträge nicht — Ware fürs Lager oder für Aufträge nach '
+                    'dem Berichtszeitraum.',
+                    style: grau,
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // ── Tabelle ──────────────────────────────────────────────────────────
+
+  /// Eine Zeile der Tabelle — Kopf, Tag, Auftrag oder Summe. Alle haben
+  /// dieselben Spalten, damit die Zahlen untereinander stehen.
+  Widget _reihe(
+    _Spalten spalten, {
+    required Widget mitte,
+    Widget? haken,
+    Widget? tag,
+    Widget? bestellt,
+    Widget? balken,
+    Widget? lager,
+    Widget? produktion,
+    Widget? vorgemerkt,
+    Widget? fehlt,
+  }) {
+    Widget rechts(Widget? kind, double breite) => SizedBox(
+          width: breite,
+          child: kind == null
+              ? null
+              : Align(alignment: Alignment.centerRight, child: kind),
+        );
+
+    return Row(
+      children: [
+        SizedBox(width: _hakenBreite, child: haken),
+        SizedBox(width: _tagBreite, child: tag),
+        Expanded(child: mitte),
+        rechts(bestellt, _zahlBreite),
+        if (spalten.balken) ...[
+          const SizedBox(width: 20),
+          SizedBox(width: _balkenBreite, child: balken),
+        ],
+        const SizedBox(width: 8),
+        rechts(lager, _zahlBreite),
+        if (spalten.produktion) rechts(produktion, _zahlBreite + 8),
+        if (spalten.vorgemerkt) rechts(vorgemerkt, _zahlBreite + 8),
+        rechts(fehlt, _zahlBreite),
+      ],
+    );
+  }
+
+  /// Spaltenköpfe. Die Punkte sind zugleich die Legende des Balkens.
+  Widget _kopfzeile(_Spalten spalten, _Farben f, TextStyle? grau) {
+    Widget titel(String text, [Color? punkt]) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (punkt != null) ...[
+              _Punkt(farbe: punkt),
+              const SizedBox(width: 5),
+            ],
+            Text(text, style: grau),
+          ],
+        );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: _reihe(
+        spalten,
+        tag: Text('Versand', style: grau),
+        mitte: Text('Aufträge', style: grau),
+        bestellt: titel('bestellt'),
+        balken: Text('Deckung', style: grau),
+        lager: titel('aus Lager', f.lager),
+        produktion: titel('Produktion', f.produktion),
+        vorgemerkt: titel('vorgemerkt', f.vorgemerkt),
+        fehlt: titel('fehlt', f.fehlt),
+      ),
+    );
+  }
+
+  /// Ein Versandtag: Summe und Deckung. Ein Klick klappt die Aufträge auf.
+  Widget _tageszeile(
+    TagesDeckung t,
+    _Spalten spalten,
+    _Farben f,
+    ThemeData theme,
+  ) {
+    final w = widget;
+    final klein = theme.textTheme.bodySmall;
+    final fett = klein?.copyWith(fontWeight: FontWeight.w700);
+    final n = t.zeilen.length;
+    final verschobenHier =
+        t.zeilen.where((z) => w.verschoben.containsKey(z.schluessel)).length;
+
+    final inhalt = _reihe(
+      spalten,
+      haken: _haken(t, f),
+      tag: Text(_tagKurz(t.tag), style: fett),
+      mitte: Wrap(
+        spacing: 6,
+        runSpacing: 2,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('$n ${n == 1 ? 'Auftrag' : 'Aufträge'}', style: klein),
+          Icon(
+            _aufgeklappt.contains(t.tag)
+                ? Icons.expand_less
+                : Icons.expand_more,
+            size: 18,
+            color: f.grau,
+          ),
+          if (t.tag.isBefore(w.heute))
+            _Marke(text: 'überfällig', farbe: f.fehlt),
+          if (verschobenHier > 0)
+            _Marke(
+              text: verschobenHier == 1
+                  ? '1 verschoben'
+                  : '$verschobenHier verschoben',
+              farbe: f.gesperrt,
+            ),
+        ],
+      ),
+      bestellt: Text('${_kg(t.kg)} kg', style: fett),
+      balken: _DeckungsBalken(
+        teile: _teile(
+          f,
+          lager: t.ausLagerKg,
+          produktion: t.ausPlanungKg,
+          zuSpaet: t.zuSpaetKg,
+          vorgemerkt: t.vorgemerktKg,
+          offen: t.offenKg,
+          gesperrt: t.gesperrtKg,
+        ),
+      ),
+      lager: _menge(t.ausLagerKg, klein, f),
+      produktion: _produktion(
+        f,
+        klein,
+        rechtzeitig: t.ausPlanungKg,
+        zuSpaet: t.zuSpaetKg,
+        zuSpaetBis: t.zuSpaetBis,
+        knapp: t.knappKg,
+      ),
+      vorgemerkt: _menge(t.vorgemerktKg, klein, f, farbe: f.vorgemerkt),
+      fehlt: _fehlt(
+        f,
+        fett,
+        offen: t.offenKg,
+        gesperrt: t.gesperrtKg,
+        zuSpaet: t.zuSpaetKg,
+      ),
+    );
+
+    // Durchsichtiges Material: Sonst läge die Klick-Welle unter der
+    // getönten Fläche der Details und wäre nicht zu sehen.
+    return Material(
+      type: MaterialType.transparency,
+      child: InkWell(
+        onTap: () => _umschalten(t.tag),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: inhalt,
+        ),
+      ),
+    );
+  }
+
+  /// Ein Auftrag eines aufgeklappten Tages — dieselben Spalten, die Menge
+  /// des einzelnen Auftrags.
+  Widget _auftragszeile(
+    ZeilenDeckung z,
+    _Spalten spalten,
+    _Farben f,
+    ThemeData theme,
+  ) {
+    final w = widget;
+    final p = z.position;
+    // Blass heißt: eingeplant oder vorgemerkt und damit hier erledigt.
+    // Fehlt trotzdem noch etwas — etwa weil der Kunde nachbestellt
+    // hat —, bleibt die Zeile normal, damit der Rest auffällt.
+    final blass = (z.geplant || z.vorgemerkt) && z.erledigt;
+    final stil = theme.textTheme.bodySmall?.copyWith(
+      color: blass ? f.grau.withValues(alpha: 0.55) : f.grau,
+    );
+    final umzug = w.verschoben[z.schluessel];
+    final unsicher = umzug != null && !umzug.sicher
+        ? ' Ob es derselbe Auftrag ist, lässt sich nicht sicher sagen.'
+        : '';
+    // Die Menge in der Verkaufseinheit nur, wenn sie etwas anderes sagt
+    // als die kg daneben.
+    final einheit = (p.einheit ?? '').trim();
+    final mitEinheit = einheit.isNotEmpty && einheit.toUpperCase() != 'KG';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: _reihe(
+        spalten,
+        mitte: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 5),
+              child: _Punkt(farbe: _zeilenFarbe(z, f)),
+            ),
+            const SizedBox(width: 8),
+            SizedBox(width: 96, child: Text(p.beleg, style: stil)),
+            // Kunde und Marken fließen: Ist es zu eng — etwa bei großer
+            // Anzeige —, rutschen die Marken in die nächste Zeile.
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 2,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Text(
+                    p.debitor,
+                    style: stil,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (umzug != null)
+                    Tooltip(
+                      message:
+                          'Stand vorher am ${_tagKurz(umzug.warenausgang)}. '
+                          'Die Planung hängt noch am alten Tag — in '
+                          '„Änderungen" umhängen oder verwerfen. Bis dahin '
+                          'lässt sich der Auftrag nicht bündeln.$unsicher',
+                      child: InkWell(
+                        onTap: w.onPruefen,
+                        borderRadius: BorderRadius.circular(6),
+                        child: _Marke(
+                          text: 'verschoben vom '
+                              '${_tagKurz(umzug.warenausgang)}',
+                          farbe: f.gesperrt,
+                          kraeftig: true,
+                        ),
+                      ),
+                    ),
+                  if (z.geplant)
+                    _Marke(
+                      text: 'geplant ${_geplantText(z.eingeplantIn)}',
+                      farbe: f.lager,
+                    ),
+                  if (z.vorgemerkt)
+                    Tooltip(
+                      message: 'An den Planungsvorschlag übergeben — er legt '
+                          'die Produktion in einen Tag, nie nach dem Termin.',
+                      child: _Marke(
+                        text: 'vorgemerkt${_terminText(z.vorgemerktIn)}',
+                        farbe: f.vorgemerkt,
+                      ),
+                    ),
+                  if (mitEinheit)
+                    Text('${_zahl(p.menge)} $einheit', style: stil),
+                ],
               ),
             ),
           ],
         ),
+        bestellt: Text('${_kg(p.kg)} kg', style: stil),
+        lager: _menge(z.ausLagerKg, stil, f),
+        produktion: _menge(
+          z.ausPlanungKg + z.zuSpaetKg,
+          stil,
+          f,
+          farbe: z.zuSpaetKg >= 0.005 ? f.zuSpaet : null,
+        ),
+        vorgemerkt: _menge(z.vorgemerktKg, stil, f, farbe: f.vorgemerkt),
+        fehlt: _fehlt(
+          f,
+          stil,
+          offen: z.offenKg,
+          gesperrt: z.gesperrt ? z.offenKg : 0.0,
+          zuSpaet: z.zuSpaetKg,
+          ruhig: true,
+        ),
+      ),
+    );
+  }
+
+  /// Unter der Tabelle: alle Tage zusammen.
+  Widget _summenzeile(_Spalten spalten, _Farben f, ThemeData theme) {
+    final d = widget.deckung;
+    final klein = theme.textTheme.bodySmall;
+    final fett = klein?.copyWith(fontWeight: FontWeight.w700);
+    final n = d.tage.fold<int>(0, (s, t) => s + t.zeilen.length);
+    final gesperrt = d.tage.fold<double>(0, (s, t) => s + t.gesperrtKg);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: _reihe(
+        spalten,
+        tag: Text('Gesamt', style: fett),
+        mitte: Text(
+          '$n ${n == 1 ? 'Auftrag' : 'Aufträge'} an ${d.tage.length} Tagen',
+          style: klein,
+        ),
+        bestellt: Text('${_kg(d.auftragKg)} kg', style: fett),
+        balken: _DeckungsBalken(
+          teile: _teile(
+            f,
+            lager: d.ausLagerKg,
+            produktion: d.ausPlanungKg,
+            zuSpaet: d.zuSpaetKg,
+            vorgemerkt: d.vorgemerktKg,
+            offen: d.offenKg,
+            gesperrt: gesperrt,
+          ),
+        ),
+        lager: _menge(d.ausLagerKg, fett, f),
+        produktion: _produktion(
+          f,
+          fett,
+          rechtzeitig: d.ausPlanungKg,
+          zuSpaet: d.zuSpaetKg,
+          knapp: d.knappKg,
+        ),
+        vorgemerkt: _menge(d.vorgemerktKg, fett, f, farbe: f.vorgemerkt),
+        fehlt: _fehlt(
+          f,
+          fett,
+          offen: d.offenKg,
+          gesperrt: gesperrt,
+          zuSpaet: d.zuSpaetKg,
+        ),
+      ),
+    );
+  }
+
+  // ── Zellen ───────────────────────────────────────────────────────────
+
+  /// Abhaken, wenn sich etwas bündeln lässt — sonst ein Symbol dafür,
+  /// warum nicht: gesperrt, eingeplant oder vorgemerkt.
+  Widget? _haken(TagesDeckung t, _Farben f) {
+    final w = widget;
+    final markieren = w.onMarkieren;
+    if (markieren != null && t.einplanbar) {
+      return Checkbox(
+        value: w.markiert.contains(t.tag),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        onChanged: (v) => markieren(t.tag, v ?? false),
       );
     }
+    if (t.gesperrtKg >= 0.005) {
+      return Tooltip(
+        message: 'Gesperrt: ein verschobener Auftrag, dessen Planung noch '
+            'am alten Tag hängt. Erst in „Änderungen" umhängen oder '
+            'verwerfen, dann bündeln.',
+        child: Icon(Icons.lock_outline, size: 18, color: f.gesperrt),
+      );
+    }
+    if (t.eingeplantIn.isNotEmpty) {
+      return Tooltip(
+        message: 'Eingeplant ${_geplantText(t.eingeplantIn)}',
+        child: Icon(Icons.event_available, size: 18, color: f.lager),
+      );
+    }
+    if (t.vorgemerktIn.isNotEmpty) {
+      return Tooltip(
+        message: 'Beim Planungsvorschlag vorgemerkt'
+            '${_terminText(t.vorgemerktIn)}',
+        child: Icon(Icons.schedule_rounded, size: 18, color: f.vorgemerkt),
+      );
+    }
+    return null;
+  }
 
-    return Container(
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (!inApp)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
-              child: Text(
-                'Diesen Artikel gibt es in der App noch nicht. Erst über '
-                '„Fehlende anlegen …" anlegen und die Schritte pflegen, dann '
-                'lässt er sich einplanen.',
-                style: grau,
-              ),
-            )
-          else if (deckung.tage.any((t) => t.einplanbar))
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 2, 0, 4),
-              child: Text(
-                'Tage abhaken, die zusammen produziert werden sollen, dann '
-                '„Zur Planung hinzufügen".',
-                style: grau,
-              ),
-            ),
-          for (final t in deckung.tage) ...[
-            Padding(
-              padding: const EdgeInsets.only(top: 6, bottom: 2),
-              child: Row(
-                children: [
-                  SizedBox(width: _hakenBreite, child: haken(t)),
-                  SizedBox(
-                    width: _tagBreite,
-                    child: Text(
-                      _tagKurz(t.tag),
-                      style: klein?.copyWith(fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  if (t.tag.isBefore(heute))
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: _Marke(text: 'überfällig', farbe: rot),
-                    ),
-                  Expanded(
-                    child: Text(
-                      '${t.zeilen.length} '
-                      '${t.zeilen.length == 1 ? 'Auftrag' : 'Aufträge'}'
-                      ' · ${_kg(t.kg)} kg',
-                      style: klein?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Text('Lager ${_kg(t.ausLagerKg)} kg', style: grau),
-                  if (t.ausPlanungKg >= 0.005) ...[
-                    const SizedBox(width: 12),
-                    Text(
-                      'Produktion ${_kg(t.ausPlanungKg)} kg',
-                      style: grau,
-                    ),
-                  ],
-                  if (t.knappKg >= 0.005) ...[
-                    const SizedBox(width: 6),
-                    Tooltip(
-                      message: '${_kg(t.knappKg)} kg werden erst am '
-                          'Versandtag selbst fertig',
-                      child: _Marke(text: 'knapp', farbe: bernstein),
-                    ),
-                  ],
-                  const SizedBox(width: 12),
-                  SizedBox(width: 150, child: status(t)),
-                ],
-              ),
-            ),
-            for (final z in t.zeilen) zeile(z),
+  /// Eine Menge in kg, „–" für nichts.
+  Widget _menge(double kg, TextStyle? stil, _Farben f, {Color? farbe}) {
+    if (kg < 0.005) {
+      return Text('–', style: stil?.copyWith(color: f.grau));
+    }
+    return Text('${_kg(kg)} kg', style: stil?.copyWith(color: farbe));
+  }
+
+  /// Aus Produktion — bernsteinfarben, wenn etwas davon knapp oder zu
+  /// spät fertig wird; der Hinweis sagt, was.
+  Widget _produktion(
+    _Farben f,
+    TextStyle? stil, {
+    required double rechtzeitig,
+    required double zuSpaet,
+    required double knapp,
+    DateTime? zuSpaetBis,
+  }) {
+    final kg = rechtzeitig + zuSpaet;
+    final hinweis = [
+      if (zuSpaet >= 0.005)
+        '${_kg(zuSpaet)} kg werden zu spät fertig'
+            '${zuSpaetBis == null ? '' : ' — erst ${_tagKurz(zuSpaetBis)}'}',
+      if (knapp >= 0.005)
+        '${_kg(knapp)} kg werden erst am Versandtag selbst fertig',
+    ];
+    final zelle = _menge(
+      kg,
+      stil,
+      f,
+      farbe: hinweis.isEmpty ? null : f.zuSpaet,
+    );
+    if (kg < 0.005 || hinweis.isEmpty) return zelle;
+    return Tooltip(message: hinweis.join('\n'), child: zelle);
+  }
+
+  /// Was noch fehlt — rot, mit Schloss, wenn ein Teil gesperrt ist. Ohne
+  /// Lücke ein Haken oder, bei zu spät Eingeplantem, „zu spät". [ruhig]:
+  /// statt des Hakens nur „–", für die vielen Aufträge eines Tages.
+  Widget _fehlt(
+    _Farben f,
+    TextStyle? stil, {
+    required double offen,
+    required double gesperrt,
+    required double zuSpaet,
+    bool ruhig = false,
+  }) {
+    if (offen >= 0.005) {
+      final zahl = Text(
+        '${_kg(offen)} kg',
+        style: stil?.copyWith(color: f.fehlt, fontWeight: FontWeight.w700),
+      );
+      if (gesperrt < 0.005) return zahl;
+      return Tooltip(
+        message: 'Davon gesperrt ${_kg(gesperrt)} kg — ein verschobener '
+            'Auftrag, erst in „Änderungen" klären.',
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline, size: 14, color: f.gesperrt),
+            const SizedBox(width: 4),
+            zahl,
           ],
-          if (markierteTage.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${markierteTage.length} '
-                      '${markierteTage.length == 1 ? 'Tag' : 'Tage'} '
-                      'markiert · fehlen ${_kg(offenMarkiert)} kg',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onPrimaryContainer,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  FilledButton.icon(
-                    onPressed: onEinplanen,
-                    icon: const Icon(Icons.playlist_add, size: 18),
-                    label: const Text('Zur Planung hinzufügen'),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (vormerkungen.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text(
-                'Beim Planungsvorschlag vorgemerkt — spätester '
-                'Produktionstag',
-                style: klein?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            for (final v in vormerkungen)
-              _VormerkungZeile(
-                vormerkung: v,
-                onAufheben: () => onAufheben(v),
-                onDatenblatt: () => onDatenblattVormerkung(v),
-              ),
-          ],
-          if (zugaenge.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.only(left: 8),
-              child: Text(
-                'Produktionen in der App — nach Tag der Fertigstellung',
-                style: klein?.copyWith(fontWeight: FontWeight.w700),
-              ),
-            ),
-            for (final z in zugaenge)
-              _ZugangZeile(
-                zugang: z,
-                onDatenblatt: () => onDatenblattKette(z),
-              ),
-          ],
-          if (deckung.ueberschussKg >= 0.005)
-            Padding(
-              padding: const EdgeInsets.only(left: 8, top: 6),
-              child: Text(
-                '${_kg(deckung.ueberschussKg)} kg davon brauchen diese '
-                'Aufträge nicht — Ware fürs Lager oder für Aufträge nach '
-                'dem Berichtszeitraum.',
-                style: grau,
-              ),
-            ),
-        ],
+        ),
+      );
+    }
+    if (zuSpaet >= 0.005) {
+      return Text(
+        'zu spät',
+        style: stil?.copyWith(color: f.zuSpaet, fontWeight: FontWeight.w700),
+      );
+    }
+    if (ruhig) return Text('–', style: stil?.copyWith(color: f.grau));
+    return Tooltip(
+      message: 'Gedeckt',
+      child: Icon(Icons.check_rounded, size: 18, color: f.lager),
+    );
+  }
+}
+
+/// Die Stücke des Deckungsbalkens, in der Reihenfolge, in der gerechnet
+/// wird: Lager, Produktion, zu spät Eingeplantes, vorgemerkt, was fehlt.
+List<_Teil> _teile(
+  _Farben f, {
+  required double lager,
+  required double produktion,
+  required double zuSpaet,
+  required double vorgemerkt,
+  required double offen,
+  required double gesperrt,
+}) =>
+    [
+      (kg: lager, farbe: f.lager, text: 'aus Lager'),
+      (kg: produktion, farbe: f.produktion, text: 'aus Produktion'),
+      (kg: zuSpaet, farbe: f.zuSpaet, text: 'Produktion zu spät'),
+      (kg: vorgemerkt, farbe: f.vorgemerkt, text: 'vorgemerkt'),
+      (kg: offen - gesperrt, farbe: f.fehlt, text: 'fehlt'),
+      (kg: gesperrt, farbe: f.gesperrt, text: 'gesperrt'),
+    ];
+
+/// Woran ein einzelner Auftrag ist: rot fehlt (lila, wenn gesperrt),
+/// bernstein zu spät, blau vorgemerkt, grün gedeckt.
+Color _zeilenFarbe(ZeilenDeckung z, _Farben f) {
+  if (z.offenKg >= 0.005) return z.gesperrt ? f.gesperrt : f.fehlt;
+  if (z.zuSpaetKg >= 0.005) return f.zuSpaet;
+  if (z.vorgemerktKg >= 0.005) return f.vorgemerkt;
+  return f.lager;
+}
+
+/// Wie weit der Lagerbestand reicht. Das Lager geht in Versandreihenfolge
+/// an die Aufträge: Es deckt die ersten Tage ganz, höchstens einen Tag zum
+/// Teil und danach nichts mehr.
+String _lagerSatz(ArtikelDeckung d) {
+  final bestand = d.lagerKg;
+  if (bestand < 0.005) return 'Kein Lagerbestand.';
+  if (d.tage.isEmpty) return 'Lagerbestand ${_kg(bestand)} kg.';
+
+  TagesDeckung? letzterGanz;
+  TagesDeckung? teilweise;
+  for (final t in d.tage) {
+    if (t.ausLagerKg >= t.kg - 0.005) {
+      letzterGanz = t;
+      continue;
+    }
+    if (t.ausLagerKg >= 0.005) teilweise = t;
+    break;
+  }
+
+  final bestandText = 'Der Lagerbestand von ${_kg(bestand)} kg';
+  if (teilweise == null && identical(letzterGanz, d.tage.last)) {
+    final rest = bestand - d.ausLagerKg;
+    return '$bestandText deckt alle Aufträge'
+        '${rest >= 0.005 ? ' — ${_kg(rest)} kg bleiben übrig' : ''}.';
+  }
+  final teil = teilweise == null
+      ? ''
+      : 'am ${_tagKurz(teilweise.tag)} ${_kg(teilweise.ausLagerKg)} von '
+          '${_kg(teilweise.kg)} kg';
+  if (letzterGanz == null) {
+    return teil.isEmpty
+        ? 'Lagerbestand ${_kg(bestand)} kg.'
+        : '$bestandText deckt $teil.';
+  }
+  return '$bestandText reicht bis ${_tagKurz(letzterGanz.tag)}'
+      '${teil.isEmpty ? '' : ' und deckt $teil'}.';
+}
+
+/// Wie ein Tag gedeckt ist, als schmaler Balken in den Farben der Spalten.
+/// Der Hinweis nennt die Mengen.
+class _DeckungsBalken extends StatelessWidget {
+  const _DeckungsBalken({required this.teile});
+
+  final List<_Teil> teile;
+
+  @override
+  Widget build(BuildContext context) {
+    final sichtbar = [
+      for (final t in teile)
+        if (t.kg >= 0.005) t,
+    ];
+    final summe = sichtbar.fold<double>(0, (s, t) => s + t.kg);
+    if (summe <= 0) return const SizedBox.shrink();
+    return Tooltip(
+      message: [
+        for (final t in sichtbar) '${t.text}: ${_kg(t.kg)} kg',
+      ].join('\n'),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: SizedBox(
+          height: 8,
+          child: Row(
+            children: [
+              for (final t in sichtbar)
+                Expanded(
+                  flex: max(1, (t.kg / summe * 1000).round()),
+                  child: ColoredBox(color: t.farbe),
+                ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+}
+
+/// Ein farbiger Punkt — Legende im Spaltenkopf, Zustand eines Auftrags.
+class _Punkt extends StatelessWidget {
+  const _Punkt({required this.farbe});
+
+  final Color farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: farbe, shape: BoxShape.circle),
     );
   }
 }
