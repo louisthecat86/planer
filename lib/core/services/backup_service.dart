@@ -276,7 +276,9 @@ class BackupService {
         // ── ab Backup-Version 1.2 ────────────────────────────────────
         'zusatzzeiten': await _exportZusatzzeiten(database),
         // ── ab Backup-Version 1.3 ────────────────────────────────────
-        'navision_umrechnungen': await _exportNavisionUmrechnungen(database),
+        // (Die Navision-Umrechnungsfaktoren gibt es nicht mehr; ältere
+        // Backups mit „navision_umrechnungen" lassen sich weiter einspielen,
+        // der Abschnitt wird übergangen.)
         'demands': await _exportDemands(database),
         'production_history': await _exportProductionHistory(database),
         'week_snapshots': await _exportWeekSnapshots(database),
@@ -372,7 +374,6 @@ class BackupService {
         await _importMachineParameterDefs(database, data);
         await _importParameterGrenzen(database, data);
         await _importZusatzzeiten(database, data);
-        await _importNavisionUmrechnungen(database, data);
         await _importProductSteps(database, data);
         await _importProductStepParameters(database, data);
         await _importProductRawMaterials(database, data);
@@ -668,17 +669,6 @@ class BackupService {
           .map((g) => g.toJson())
           .toList();
 
-  /// Einheiten-Umrechnung für Navision-Artikel (BTL/PACK → kg).
-  /// Der Artikelkatalog selbst wird NICHT gesichert — er ist eine Kopie
-  /// aus Navision und jederzeit neu einlesbar. Die Faktoren dagegen sind
-  /// Handarbeit und wären sonst verloren.
-  static Future<List<Map<String, dynamic>>> _exportNavisionUmrechnungen(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.navisionUmrechnungen).get())
-          .map((u) => u.toJson())
-          .toList();
-
   /// Rüst-/Reinigungszeiten je Tag und Planungsspur.
   static Future<List<Map<String, dynamic>>> _exportZusatzzeiten(
     AppDatabase db,
@@ -689,8 +679,9 @@ class BackupService {
 
   // ── Backup-Version 1.4: Bedarf, Historie, Wochen-Snapshots ─────────
 
-  /// Offener Bedarf (u.a. aus dem Navision-Import). Wurde früher NICHT
-  /// gesichert — ein Restore hat ihn stillschweigend verloren.
+  /// Offener Bedarf (u.a. Planungsaufträge aus dem Auftragsbestand).
+  /// Wurde früher NICHT gesichert — ein Restore hat ihn stillschweigend
+  /// verloren.
   static Future<List<Map<String, dynamic>>> _exportDemands(
     AppDatabase db,
   ) async =>
@@ -938,20 +929,6 @@ class BackupService {
     );
   }
 
-  static Future<void> _importNavisionUmrechnungen(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'navision_umrechnungen');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => NavisionUmrechnung.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.navisionUmrechnungen, eintraege),
-    );
-  }
-
   static Future<void> _importZusatzzeiten(
     AppDatabase db,
     Map<String, dynamic> data,
@@ -1049,7 +1026,6 @@ class BackupService {
     await db.delete(db.products).go();
     await db.delete(db.rawMaterials).go();
     // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
-    await db.delete(db.navisionUmrechnungen).go();
     await db.delete(db.zusatzzeiten).go();
     await db.delete(db.machineParameterDefs).go();
     await db.delete(db.parameterGrenzen).go();

@@ -7,8 +7,15 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auftragsbestand_deckung.dart'
+    show
+        AuftragsBezug,
+        beschreibeBezuege,
+        kQuelleAuftragsbestand,
+        ladeBedarfsPlanung;
 import '../../core/utils/sheet_utils.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../datenblatt/datenblatt.dart';
 
 // ---------------------------------------------------------------------------
 // Modell
@@ -128,25 +135,10 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
       .get();
   final nameById = {for (final p in produkte) p.id: p};
 
-  // Geplante Fertigmengen je Bedarf (nur Ketten-Wurzeln tragen den Wert).
-  // Zusätzlich getrennt: was davon schon PRODUZIERT ist (Tag vorbei).
-  final tasks = await (db.select(db.productionTasks)
-        ..where((t) => t.deletedAt.isNull())
-        ..where((t) => t.bedarfId.isNotNull()))
-      .get();
-  final geplantJeBedarf = <String, double>{};
-  final produziertJeBedarf = <String, double>{};
-  for (final t in tasks) {
-    final bid = t.bedarfId;
-    final menge = t.fertigMengeKg;
-    if (bid == null || menge == null) continue;
-    geplantJeBedarf[bid] = (geplantJeBedarf[bid] ?? 0) + menge;
-    // Produktionstag liegt echt VOR heute → gilt als gelaufen.
-    final tag = DateTime(t.datum.year, t.datum.month, t.datum.day);
-    if (tag.isBefore(heuteNorm)) {
-      produziertJeBedarf[bid] = (produziertJeBedarf[bid] ?? 0) + menge;
-    }
-  }
+  // Geplante Fertigmengen je Bedarf — dieselbe Rechnung wie im
+  // Auftragsbestand und im Planungsvorschlag. Was davon auf einem Tag vor
+  // heute liegt, gilt als produziert.
+  final planung = await ladeBedarfsPlanung(db);
 
   final result = [
     for (final b in bedarfe)
@@ -154,8 +146,8 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
         bedarf: b,
         artikelName: nameById[b.productId]?.artikelbezeichnung ?? 'Unbekannt',
         artikelNummer: nameById[b.productId]?.artikelnummer ?? '—',
-        geplantKg: geplantJeBedarf[b.id] ?? 0,
-        produziertKg: produziertJeBedarf[b.id] ?? 0,
+        geplantKg: planung[b.id]?.kg ?? 0,
+        produziertKg: planung[b.id]?.produziertVor(heuteNorm) ?? 0,
         heute: heuteNorm,
       ),
   ];
@@ -176,6 +168,16 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
   });
   return result;
 });
+
+/// Stammt [b] aus dem früheren Weg „Navision-Artikelübersicht → Bedarf"?
+///
+/// Der Weg ist entfernt; Bedarf aus Navision entsteht jetzt im
+/// Auftragsbestand, je Auftrag und Versandtag. Die alten Einträge trugen
+/// als Notiz „Aus Navision · …". Offen gelassen würden sie neben den
+/// Planungsaufträgen ein zweites Mal gegen dieselbe Ware zählen.
+bool ausAltemNavisionImport(Demand b) =>
+    b.quelle == 'bestellung' &&
+    (b.notizen ?? '').trimLeft().startsWith('Aus Navision');
 
 /// Nur die noch offenen Bedarfe — für die Auswahl beim Planen.
 final offeneBedarfeProvider = FutureProvider<List<BedarfInfo>>((ref) async {
@@ -249,6 +251,10 @@ class BedarfScreen extends ConsumerWidget {
           final offenSumme =
               offen.fold<double>(0, (s, b) => s + b.offenKg);
           final ueberfaellig = offen.where((b) => b.ueberfaellig).length;
+          final altNavision = [
+            for (final b in offen)
+              if (ausAltemNavisionImport(b.bedarf)) b,
+          ];
 
           return Column(
             children: [
@@ -281,6 +287,12 @@ class BedarfScreen extends ConsumerWidget {
                 ),
               ),
               const Divider(height: 1),
+              if (altNavision.isNotEmpty)
+                _AltNavisionBanner(
+                  anzahl: altNavision.length,
+                  onErledigen: () =>
+                      _altNavisionErledigen(context, ref, altNavision),
+                ),
               Expanded(
                 child: ListView.separated(
                   padding: const EdgeInsets.all(12),
@@ -292,6 +304,7 @@ class BedarfScreen extends ConsumerWidget {
                     onErledigt: () => _erledigtUmschalten(ref, liste[i]),
                     onLoeschen: () =>
                         _loeschen(context, ref, liste[i]),
+                    onDatenblatt: () => _datenblatt(context, ref, liste[i]),
                   ),
                 ),
               ),
@@ -302,6 +315,72 @@ class BedarfScreen extends ConsumerWidget {
         error: (e, _) => Center(child: Text('Fehler: $e')),
       ),
     );
+  }
+
+  /// Druckt das Datenblatt des Bedarfs: Artikel, Menge, spätester
+  /// Produktionstag und — bei einem Planungsauftrag — die Aufträge.
+  Future<void> _datenblatt(
+    BuildContext context,
+    WidgetRef ref,
+    BedarfInfo info,
+  ) {
+    final db = ref.read(databaseProvider);
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () => alsListe(datenblattFuerBedarf(db, info.bedarf.id)),
+    );
+  }
+
+  /// Setzt die offenen Bedarfe aus dem früheren Navision-Import auf
+  /// erledigt. Nichts wird gelöscht: Wer einen davon doch braucht, öffnet
+  /// ihn über das Menü der Karte wieder.
+  Future<void> _altNavisionErledigen(
+    BuildContext context,
+    WidgetRef ref,
+    List<BedarfInfo> alte,
+  ) async {
+    final summe = alte.fold<double>(0, (s, b) => s + b.offenKg);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Alte Navision-Bedarfe schließen?'),
+        content: SizedBox(
+          width: 480,
+          child: Text(
+            '${alte.length} offene Bedarfe (${summe.round()} kg) stammen '
+            'noch aus dem früheren Import der Navision-Artikelübersicht. '
+            'Bedarf aus Navision entsteht jetzt im Auftragsbestand — je '
+            'Auftrag und Versandtag. Offen gelassen würden die alten '
+            'Einträge dieselbe Ware ein zweites Mal verlangen.\n\n'
+            'Sie werden als erledigt markiert, nicht gelöscht. Über das '
+            'Menü einer Karte lässt sich jeder wieder öffnen.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Als erledigt markieren'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    final db = ref.read(databaseProvider);
+    final ids = [for (final b in alte) b.bedarf.id];
+    await (db.update(db.demands)..where((b) => b.id.isIn(ids))).write(
+      DemandsCompanion(
+        manuellErledigt: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Alte Navision-Bedarfe erledigt');
+    ref.invalidate(bedarfProvider);
   }
 
   Future<void> _erledigtUmschalten(WidgetRef ref, BedarfInfo info) async {
@@ -322,13 +401,19 @@ class BedarfScreen extends ConsumerWidget {
     WidgetRef ref,
     BedarfInfo info,
   ) async {
+    // Ein Planungsauftrag hält Zeilen im Auftragsbestand fest — die werden
+    // mit dem Löschen wieder frei.
+    final zusatz = info.bedarf.quelle == kQuelleAuftragsbestand
+        ? ' Was davon noch nicht eingeplant ist, ist im Auftragsbestand '
+            'danach wieder offen.'
+        : '';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Bedarf löschen?'),
         content: Text(
           '${info.artikelName}\n${info.bedarf.mengeKgFertig.round()} kg\n\n'
-          'Bereits geplante Aufträge bleiben bestehen.',
+          'Bereits geplante Aufträge bleiben bestehen.$zusatz',
         ),
         actions: [
           TextButton(
@@ -405,17 +490,20 @@ class _BedarfKarte extends StatelessWidget {
     required this.onTap,
     required this.onErledigt,
     required this.onLoeschen,
+    required this.onDatenblatt,
   });
 
   final BedarfInfo info;
   final VoidCallback onTap;
   final VoidCallback onErledigt;
   final VoidCallback onLoeschen;
+  final VoidCallback onDatenblatt;
 
   static const _quellen = {
     'bestellung': 'Bestellung',
     'bestand': 'Bestand',
     'sonstiges': 'Sonstiges',
+    kQuelleAuftragsbestand: 'Auftragsbestand',
   };
 
   String _fortschrittText(BedarfInfo info) {
@@ -503,10 +591,15 @@ class _BedarfKarte extends StatelessWidget {
                     PopupMenuButton<String>(
                       icon: const Icon(Icons.more_vert, size: 18),
                       onSelected: (v) {
+                        if (v == 'datenblatt') onDatenblatt();
                         if (v == 'erledigt') onErledigt();
                         if (v == 'loeschen') onLoeschen();
                       },
                       itemBuilder: (_) => [
+                        const PopupMenuItem(
+                          value: 'datenblatt',
+                          child: Text('Datenblatt drucken'),
+                        ),
                         PopupMenuItem(
                           value: 'erledigt',
                           child: Text(
@@ -592,6 +685,50 @@ class _BedarfKarte extends StatelessWidget {
   }
 }
 
+/// Hinweis auf offene Bedarfe aus dem früheren Navision-Import.
+class _AltNavisionBanner extends StatelessWidget {
+  const _AltNavisionBanner({required this.anzahl, required this.onErledigen});
+
+  final int anzahl;
+  final VoidCallback onErledigen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = theme.brightness == Brightness.dark
+        ? const Color(0xFFFBBF24)
+        : const Color(0xFFB45309);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+      color: farbe.withValues(alpha: 0.10),
+      child: Row(
+        children: [
+          Icon(Icons.history_toggle_off_rounded, size: 20, color: farbe),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              anzahl == 1
+                  ? '1 offener Bedarf stammt noch aus dem früheren '
+                      'Navision-Import. Bedarf aus Navision entsteht jetzt '
+                      'im Auftragsbestand.'
+                  : '$anzahl offene Bedarfe stammen noch aus dem früheren '
+                      'Navision-Import. Bedarf aus Navision entsteht jetzt '
+                      'im Auftragsbestand.',
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+            ),
+          ),
+          const SizedBox(width: 10),
+          OutlinedButton(
+            onPressed: onErledigen,
+            child: const Text('Als erledigt markieren …'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Editor
 // ---------------------------------------------------------------------------
@@ -615,6 +752,10 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
   int _prioritaet = 0;
   DateTime? _termin;
   bool _busy = false;
+
+  /// Planungsauftrag aus dem Auftragsbestand: Artikel und Herkunft stehen
+  /// fest — die gebündelten Auftragszeilen gehören zu genau diesem Artikel.
+  bool get _ausAuftragsbestand => _quelle == kQuelleAuftragsbestand;
 
   @override
   void initState() {
@@ -730,10 +871,13 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                     leading: const Icon(Icons.inventory_2),
                     title: Text(gewaehlt.artikelbezeichnung),
                     subtitle: Text(gewaehlt.artikelnummer),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.close),
-                      onPressed: () => setState(() => _productId = null),
-                    ),
+                    trailing: _ausAuftragsbestand
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close),
+                            onPressed: () =>
+                                setState(() => _productId = null),
+                          ),
                   ),
                 );
               }
@@ -832,17 +976,24 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
           ),
           const SizedBox(height: 16),
 
-          // Quelle
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'bestellung', label: Text('Bestellung')),
-              ButtonSegment(value: 'bestand', label: Text('Bestand')),
-              ButtonSegment(value: 'sonstiges', label: Text('Sonstiges')),
-            ],
-            selected: {_quelle},
-            onSelectionChanged: (s) => setState(() => _quelle = s.first),
-            showSelectedIcon: false,
-          ),
+          // Quelle — ein Planungsauftrag aus dem Auftragsbestand behält
+          // seine Herkunft, sonst verlöre er die Verbindung zu den
+          // Auftragszeilen.
+          if (_ausAuftragsbestand)
+            _AuftragsbestandHinweis(
+              bezuege: AuftragsBezug.dekodiere(widget.bedarf?.auftragsZeilen),
+            )
+          else
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'bestellung', label: Text('Bestellung')),
+                ButtonSegment(value: 'bestand', label: Text('Bestand')),
+                ButtonSegment(value: 'sonstiges', label: Text('Sonstiges')),
+              ],
+              selected: {_quelle},
+              onSelectionChanged: (s) => setState(() => _quelle = s.first),
+              showSelectedIcon: false,
+            ),
           const SizedBox(height: 12),
 
           SwitchListTile(
@@ -875,6 +1026,52 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Text('Speichern'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Herkunft eines Planungsauftrags: welche Aufträge aus dem
+/// Auftragsbestand er bündelt.
+class _AuftragsbestandHinweis extends StatelessWidget {
+  const _AuftragsbestandHinweis({required this.bezuege});
+
+  final List<AuftragsBezug> bezuege;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final beschreibung = beschreibeBezuege(bezuege);
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest
+            .withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.local_shipping_outlined,
+            size: 20,
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Planungsauftrag aus dem Auftragsbestand'
+              '${beschreibung.isEmpty ? '' : ' · $beschreibung'}.\n'
+              'Der Termin ist der späteste Produktionstag — der '
+              'Planungsvorschlag plant nie danach. Wird der Bedarf '
+              'gelöscht, sind die Aufträge im Auftragsbestand wieder offen.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
             ),
           ),
         ],

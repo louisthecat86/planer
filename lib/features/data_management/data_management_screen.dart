@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/providers/database_provider.dart';
@@ -584,6 +585,18 @@ class _DataManagementScreenState
                 onImport: _busy ? null : _katalogImport,
               ),
               _KategorieKachel(
+                icon: Icons.swap_horiz_rounded,
+                titel: 'Navision-Artikel',
+                beschreibung: 'Artikelübersicht aus Navision einlesen: neue '
+                    'Artikel anlegen, Allergene aus dem Suchbegriff '
+                    'übernehmen.',
+                exportLabel: null,
+                importLabel: 'Abgleichen …',
+                onExport: null,
+                onImport:
+                    _busy ? null : () => context.pushNamed('navisionImport'),
+              ),
+              _KategorieKachel(
                 icon: Icons.cloud_upload,
                 titel: 'Komplett-Backup',
                 beschreibung:
@@ -932,6 +945,9 @@ class _KategorieGrid extends StatelessWidget {
 /// Eine Datenkategorie als Kachel: Titel, kurze Erklärung und unten zwei
 /// kleine Knöpfe für Export und Import. Dadurch steht je Bereich EINE
 /// Kachel statt drei bildschirmbreiter Abschnitte.
+///
+/// Ohne [exportLabel] gibt es nur den Import-Knopf — für Bereiche, die nur
+/// eingelesen werden.
 class _KategorieKachel extends StatelessWidget {
   const _KategorieKachel({
     required this.icon,
@@ -949,7 +965,7 @@ class _KategorieKachel extends StatelessWidget {
   final IconData icon;
   final String titel;
   final String beschreibung;
-  final String exportLabel;
+  final String? exportLabel;
   final String importLabel;
   final VoidCallback? onExport;
   final VoidCallback? onImport;
@@ -1020,23 +1036,25 @@ class _KategorieKachel extends StatelessWidget {
             const SizedBox(height: 12),
             Row(
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onExport,
-                    icon: const Icon(Icons.file_upload_outlined, size: 17),
-                    label: Text(
-                      exportLabel,
-                      style: const TextStyle(fontSize: 12.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      visualDensity: VisualDensity.compact,
+                if (exportLabel != null) ...[
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onExport,
+                      icon: const Icon(Icons.file_upload_outlined, size: 17),
+                      label: Text(
+                        exportLabel!,
+                        style: const TextStyle(fontSize: 12.5),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        visualDensity: VisualDensity.compact,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
+                  const SizedBox(width: 8),
+                ],
                 Expanded(
                   child: FilledButton.tonalIcon(
                     onPressed: onImport,

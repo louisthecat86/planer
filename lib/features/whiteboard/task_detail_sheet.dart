@@ -7,8 +7,10 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
+import '../datenblatt/datenblatt.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
@@ -162,7 +164,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
             final dauer = dauerJeTag(auswahl);
             final tagesliste = List.generate(
               auswahl,
-              (i) => fmtTag(task.datum.add(Duration(days: i))),
+              (i) => fmtTag(tagPlus(task.datum, i)),
             ).join(' · ');
             return AlertDialog(
               title: const Text('Auf mehrere Tage verteilen'),
@@ -265,7 +267,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                   id: Value(uuid.v4()),
                   productId: Value(task.productId),
                   mengeKg: Value(teilMenge),
-                  datum: Value(task.datum.add(Duration(days: i))),
+                  // Über die Tageszahl: Über das Wochenende der
+                  // Zeitumstellung landete ein Teil sonst einen Tag zu
+                  // früh (Sonntag 23:00 statt Montag).
+                  datum: Value(tagPlus(task.datum, i)),
                   abteilung: Value(task.abteilung),
                   // Ohne die Anlage landen die Folgetage in der Sammelspur
                   // der Abteilung statt auf der Maschine — die Auslastung
@@ -374,6 +379,18 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  /// Druckt das Datenblatt der Kette, zu der dieser Auftrag gehört.
+  /// Gedruckt wird der gespeicherte Stand — ungespeicherte Änderungen im
+  /// Formular sind noch nicht drauf.
+  Future<void> _datenblatt() {
+    final db = ref.read(databaseProvider);
+    final id = widget.wbTask.task.id;
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () => alsListe(datenblattFuerKette(db, id)),
+    );
   }
 
   /// Löscht den Task (Soft-Delete). Fragt, ob nur dieser Schritt oder die
@@ -645,6 +662,19 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                   onPressed: _isSaving ? null : _verteileAufTageDialog,
                   icon: const Icon(Icons.date_range, size: 18),
                   label: const Text('Auf mehrere Tage verteilen'),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Datenblatt der ganzen Produktion (alle Abteilungen der
+              // Kette) — zum Mitgeben in die Produktion.
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _datenblatt,
+                  icon: const Icon(Icons.print_outlined, size: 18),
+                  label: const Text('Datenblatt drucken'),
                 ),
               ),
 

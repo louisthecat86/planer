@@ -140,12 +140,20 @@ class AuftragsbestandImportService {
 
   final AppDatabase _db;
 
-  /// Liest [bytes] und ersetzt den gespeicherten Auftragsbestand.
+  /// Liest [bytes] und ersetzt den gespeicherten Auftragsbestand — kurz
+  /// für [lese] und [speichere] ohne Rückfrage dazwischen.
   ///
   /// Wirft eine [FormatException] mit lesbarer Meldung, wenn die Datei
   /// kein Auftragsbestand ist oder die Prüfung fehlschlägt. In dem Fall
   /// bleibt der bisherige Stand unverändert.
-  Future<AuftragsbestandErgebnis> importiere(Uint8List bytes) async {
+  Future<AuftragsbestandErgebnis> importiere(Uint8List bytes) async =>
+      speichere(await lese(bytes));
+
+  /// Liest und prüft den Bericht in [bytes], ohne etwas zu speichern.
+  ///
+  /// So lässt sich der neue Bericht erst mit dem bisherigen vergleichen —
+  /// etwa um zu fragen, ob er gefiltert ist —, bevor er ihn ersetzt.
+  Future<AuftragsbestandBericht> lese(Uint8List bytes) async {
     // Echte .xlsx-Dateien sind ZIP-Pakete und beginnen mit „PK".
     if (bytes.length < 4 || bytes[0] != 0x50 || bytes[1] != 0x4B) {
       throw const FormatException(
@@ -153,11 +161,70 @@ class AuftragsbestandImportService {
         '„Auftragsbestand" über „Speichern unter → Excel" sichern.',
       );
     }
+    return _leseImIsolate(bytes);
+  }
 
-    final bericht = await _leseImIsolate(bytes);
+  /// Ersetzt den gespeicherten Auftragsbestand durch [bericht].
+  ///
+  /// Der bisherige Stand wandert vorher in die Vorher-Tabellen — daraus
+  /// rechnet die Änderungsansicht, was sich geändert hat. Liest jemand
+  /// denselben Bericht ein zweites Mal ein (gleicher Stand), bleibt das
+  /// Vorher stehen: Sonst zeigte die Ansicht danach „keine Änderungen" und
+  /// die echten wären weg.
+  ///
+  /// Alles in einer Transaktion: Scheitert etwas, bleibt der alte Stand,
+  /// wie er war.
+  Future<AuftragsbestandErgebnis> speichere(
+    AuftragsbestandBericht bericht,
+  ) async {
     final jetzt = DateTime.now();
 
     await _db.transaction(() async {
+      final altArtikel = await _db.select(_db.auftragsbestandArtikel).get();
+      final stand = bericht.stand;
+      final standAlt =
+          altArtikel.isEmpty ? null : altArtikel.first.berichtStand;
+      final gleicherStand = stand != null &&
+          standAlt != null &&
+          standAlt.isAtSameMomentAs(stand);
+      if (!gleicherStand) {
+        final altPositionen =
+            await _db.select(_db.auftragsbestandPositionen).get();
+        await _db.delete(_db.auftragsbestandPositionenVorher).go();
+        await _db.delete(_db.auftragsbestandArtikelVorher).go();
+        await _db.batch((b) {
+          b.insertAll(_db.auftragsbestandArtikelVorher, [
+            for (final a in altArtikel)
+              AuftragsbestandArtikelVorherCompanion.insert(
+                artikelnummer: a.artikelnummer,
+                bezeichnung: Value(a.bezeichnung),
+                bezeichnung2: Value(a.bezeichnung2),
+                lagerKg: Value(a.lagerKg),
+                auftragKg: Value(a.auftragKg),
+                auftragMenge: Value(a.auftragMenge),
+                auftragEinheit: Value(a.auftragEinheit),
+                berichtStand: Value(a.berichtStand),
+                zeitraumVon: Value(a.zeitraumVon),
+                zeitraumBis: Value(a.zeitraumBis),
+                importiertAm: Value(a.importiertAm),
+              ),
+          ]);
+          b.insertAll(_db.auftragsbestandPositionenVorher, [
+            for (final p in altPositionen)
+              AuftragsbestandPositionenVorherCompanion.insert(
+                artikelnummer: p.artikelnummer,
+                beleg: p.beleg,
+                debitor: Value(p.debitor),
+                warenausgang: p.warenausgang,
+                lieferdatum: Value(p.lieferdatum),
+                menge: Value(p.menge),
+                einheit: Value(p.einheit),
+                kg: Value(p.kg),
+              ),
+          ]);
+        });
+      }
+
       await _db.delete(_db.auftragsbestandPositionen).go();
       await _db.delete(_db.auftragsbestandArtikel).go();
       await _db.batch((b) {

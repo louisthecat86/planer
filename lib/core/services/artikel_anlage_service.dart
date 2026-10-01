@@ -9,6 +9,7 @@ class FehlenderArtikel {
     required this.nummer,
     required this.bezeichnung,
     this.bezeichnung2,
+    this.allergene,
   });
 
   final String nummer;
@@ -16,6 +17,10 @@ class FehlenderArtikel {
 
   /// Zweite Zeile der Navision-Bezeichnung, z.B. „geschnitten, 500g Pack".
   final String? bezeichnung2;
+
+  /// Allergene als Kommaliste der dbValues (`artikel_merkmale.dart`), etwa
+  /// aus dem Navision-Suchbegriff. null: nicht gepflegt.
+  final String? allergene;
 }
 
 /// Was beim Anlegen passiert ist.
@@ -24,6 +29,7 @@ class ArtikelAnlageErgebnis {
     this.angelegt = 0,
     this.reaktiviert = 0,
     this.schonVorhanden = 0,
+    this.allergeneGesetzt = 0,
   });
 
   /// Neu angelegte Artikelmasken.
@@ -35,7 +41,14 @@ class ArtikelAnlageErgebnis {
   /// Gab es schon als aktiven Artikel — nichts geändert.
   final int schonVorhanden;
 
+  /// Bestehende Artikel, deren Allergene gesetzt wurden.
+  final int allergeneGesetzt;
+
+  /// Angelegte und wieder aktivierte Artikel.
   int get gesamt => angelegt + reaktiviert;
+
+  /// Irgendetwas wurde geschrieben.
+  bool get geaendert => gesamt > 0 || allergeneGesetzt > 0;
 }
 
 /// Legt Artikel an, die Navision kennt, die App aber noch nicht.
@@ -55,11 +68,20 @@ class ArtikelAnlageService {
   /// aktiviert statt neu angelegt — die Nummer ist in der Datenbank
   /// eindeutig und auch nach dem Löschen noch belegt. So verhält sich auch
   /// „Neuer Artikel" in der Artikelliste. Seine alten Prozessschritte
-  /// bleiben gelöscht, seine Produktionshistorie hängt wieder daran.
-  Future<ArtikelAnlageErgebnis> legeAn(List<FehlenderArtikel> artikel) async {
+  /// bleiben gelöscht, seine Produktionshistorie hängt wieder daran; seine
+  /// Allergene bleiben, wenn sie gepflegt waren.
+  ///
+  /// [allergeneJeId]: Artikel-ID → Allergene als Kommaliste, für
+  /// bestehende Artikel (Vorschläge aus dem Navision-Abgleich). In derselben
+  /// Transaktion — entweder kommt alles an oder nichts.
+  Future<ArtikelAnlageErgebnis> legeAn(
+    List<FehlenderArtikel> artikel, {
+    Map<String, String> allergeneJeId = const {},
+  }) async {
     var angelegt = 0;
     var reaktiviert = 0;
     var schonVorhanden = 0;
+    var allergeneGesetzt = 0;
     final jetzt = DateTime.now();
 
     await _db.transaction(() async {
@@ -80,8 +102,12 @@ class ArtikelAnlageService {
           continue;
         }
 
+        final allergene = _allergene(a.allergene);
+
         if (vorhanden != null) {
           final id = vorhanden.id;
+          final alteGepflegt =
+              (vorhanden.allergene ?? '').trim().isNotEmpty;
           await (_db.update(_db.products)..where((p) => p.id.equals(id)))
               .write(
             ProductsCompanion(
@@ -89,6 +115,9 @@ class ArtikelAnlageService {
               // Die alten Schritte bleiben gelöscht — der Artikel ist also
               // wieder eine Hülle, die gepflegt werden muss.
               istEingepflegt: const Value(false),
+              allergene: allergene != null && !alteGepflegt
+                  ? Value(allergene)
+                  : const Value.absent(),
               updatedAt: Value(jetzt),
             ),
           );
@@ -105,9 +134,25 @@ class ArtikelAnlageService {
                 artikelbezeichnung: bezeichnung.isEmpty ? nummer : bezeichnung,
                 beschreibung: Value(zweite.isEmpty ? null : zweite),
                 istEingepflegt: const Value(false),
+                allergene: Value(allergene),
               ),
             );
         angelegt++;
+      }
+
+      for (final e in allergeneJeId.entries) {
+        final allergene = _allergene(e.value);
+        if (allergene == null) continue;
+        final geaendert = await (_db.update(_db.products)
+              ..where((p) => p.id.equals(e.key))
+              ..where((p) => p.deletedAt.isNull()))
+            .write(
+          ProductsCompanion(
+            allergene: Value(allergene),
+            updatedAt: Value(jetzt),
+          ),
+        );
+        allergeneGesetzt += geaendert;
       }
     });
 
@@ -115,6 +160,13 @@ class ArtikelAnlageService {
       angelegt: angelegt,
       reaktiviert: reaktiviert,
       schonVorhanden: schonVorhanden,
+      allergeneGesetzt: allergeneGesetzt,
     );
+  }
+
+  /// Leere Angaben zählen als „nicht gepflegt" (null).
+  static String? _allergene(String? text) {
+    final t = text?.trim();
+    return (t == null || t.isEmpty) ? null : t;
   }
 }

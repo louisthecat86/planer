@@ -6,6 +6,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart' show AuftragsBezug;
+import '../../core/utils/datum.dart';
 
 // ---------------------------------------------------------------------------
 // Datums-Auswahl
@@ -18,10 +19,7 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
 });
 
 /// Montag der Woche des gewählten Datums (abgeleitet).
-DateTime mondayOfWeek(DateTime date) {
-  final d = date.subtract(Duration(days: date.weekday - 1));
-  return DateTime(d.year, d.month, d.day);
-}
+DateTime mondayOfWeek(DateTime date) => tagPlus(date, -(date.weekday - 1));
 
 // ---------------------------------------------------------------------------
 // Whiteboard-Task-Modell
@@ -62,7 +60,7 @@ class WhiteboardTask {
 final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
   final db = ref.watch(databaseProvider);
   final date = ref.watch(selectedDateProvider);
-  final nextDay = date.add(const Duration(days: 1));
+  final nextDay = tagPlus(date, 1);
 
   final query = db.select(db.productionTasks).join([
     innerJoin(
@@ -656,7 +654,10 @@ Future<double?> durchschnittsVerlust(
 /// [auftragsBezuege]: Auftragszeilen aus dem Auftragsbestand, für die die
 /// Produktion eingeplant wird. Sie stehen wie die Fertigmenge an der
 /// Wurzel.
-Future<void> erstelleTasksAusPlan({
+///
+/// Gibt die ID der Wurzel zurück — etwa für das Datenblatt der neuen
+/// Produktion. null, wenn es keine Schritte gab.
+Future<String?> erstelleTasksAusPlan({
   required AppDatabase db,
   required String productId,
   required List<GeplanterSchritt> schritte,
@@ -667,8 +668,9 @@ Future<void> erstelleTasksAusPlan({
   const uuid = Uuid();
   final sortiert = [...schritte]
     ..sort((a, b) => a.reihenfolge.compareTo(b.reihenfolge));
-  if (sortiert.isEmpty) return;
+  if (sortiert.isEmpty) return null;
 
+  String? wurzelId;
   await db.transaction(() async {
     String? previousTaskId;
     for (final s in sortiert) {
@@ -698,9 +700,11 @@ Future<void> erstelleTasksAusPlan({
               notizen: Value(s.notizen),
             ),
           );
+      wurzelId ??= taskId;
       previousTaskId = taskId;
     }
   });
+  return wurzelId;
 }
 
 /// Komfort-Funktion: berechnet den Plan und legt alle Schritte auf [datum] an.

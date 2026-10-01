@@ -1274,8 +1274,6 @@ class _Navigation extends StatefulWidget {
       [
         _Ziel(Icons.playlist_add_check_rounded, 'Bedarf',
             'Was produziert werden muss', 'bedarf',),
-        _Ziel(Icons.swap_horiz_rounded, 'Navision-Import',
-            'Artikel und Bedarf aus der Warenwirtschaft', 'navisionImport',),
         _Ziel(Icons.local_shipping_outlined, 'Auftragsbestand',
             'Aufträge nach Versandtag gegen das Lager', 'auftragsbestand',),
         _Ziel(Icons.auto_awesome_rounded, 'Planungsvorschlag',
@@ -1303,6 +1301,9 @@ class _Navigation extends StatefulWidget {
       [
         _Ziel(Icons.inventory_2_outlined, 'Artikel',
             'Abläufe, Maschinen, Zeiten', 'articles',),
+        _Ziel(Icons.swap_horiz_rounded, 'Navision-Artikel',
+            'Neue Artikel und Allergene aus der Warenwirtschaft',
+            'navisionImport',),
         _Ziel(Icons.precision_manufacturing_outlined, 'Maschinen-Katalog',
             'Anlagen und Steckbriefe', 'maschinen',),
         _Ziel(Icons.settings_outlined, 'Einstellungen',

@@ -24,8 +24,9 @@ class Demands extends Table {
   /// Wunschtermin: bis wann soll es fertig sein.
   DateTimeColumn get termin => dateTime().nullable()();
 
-  /// Woher kommt der Bedarf: 'bestellung', 'bestand' oder 'sonstiges'.
-  /// Rein informativ — hilft beim Priorisieren.
+  /// Woher kommt der Bedarf: 'bestellung', 'bestand', 'sonstiges' — oder
+  /// 'auftragsbestand' für einen Planungsauftrag, der im Auftragsbestand
+  /// aus abgehakten Versandtagen entstanden ist.
   TextColumn get quelle => text().withDefault(const Constant('bestellung'))();
 
   /// Priorität: 0 = normal, 1 = hoch (wird oben einsortiert).
@@ -33,6 +34,11 @@ class Demands extends Table {
 
   /// Freitext: Kunde, Auftragsnummer, Besonderheiten.
   TextColumn get notizen => text().nullable()();
+
+  /// Bei einem Planungsauftrag aus dem Auftragsbestand: die gebündelten
+  /// Auftragszeilen als JSON-Liste (siehe `AuftragsBezug`). Plant der
+  /// Planungsvorschlag den Auftrag ein, wandern sie an die Produktion.
+  TextColumn get auftragsZeilen => text().nullable()();
 
   /// Manuell auf „erledigt" gesetzt (unabhängig von der geplanten Menge) —
   /// z.B. wenn ein Auftrag storniert wurde oder aus Lagerbestand gedeckt

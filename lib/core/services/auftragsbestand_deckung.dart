@@ -96,6 +96,305 @@ class AuftragsBezug {
   }
 }
 
+/// Quelle eines Bedarfs, der im Auftragsbestand aus abgehakten
+/// Versandtagen entstanden ist — ein Planungsauftrag für den
+/// Planungsvorschlag.
+const String kQuelleAuftragsbestand = 'auftragsbestand';
+
+/// Kurzbeschreibung gebündelter Auftragszeilen für die Bedarfsliste, etwa
+/// „Versand Mi 02.10.–Fr 04.10. · 5 Aufträge · Kunde A, Kunde B, …".
+String beschreibeBezuege(List<AuftragsBezug> bezuege) {
+  if (bezuege.isEmpty) return '';
+  final tage = [for (final b in bezuege) b.warenausgang]..sort();
+  final von = tage.first;
+  final bis = tage.last;
+  final zeitraum = von.isAtSameMomentAs(bis)
+      ? _tagKurz(von)
+      : '${_tagKurz(von)}–${_tagKurz(bis)}';
+  final kunden = <String>[];
+  for (final b in bezuege) {
+    final k = b.debitor.trim();
+    if (k.isNotEmpty && !kunden.contains(k)) kunden.add(k);
+  }
+  final n = bezuege.length;
+  return [
+    'Versand $zeitraum',
+    n == 1 ? '1 Auftrag' : '$n Aufträge',
+    if (kunden.isNotEmpty)
+      kunden.length <= 3
+          ? kunden.join(', ')
+          : '${kunden.take(3).join(', ')} …',
+  ].join(' · ');
+}
+
+/// Was von den Auftragszeilen [alle] noch nicht an Produktionen vergeben
+/// ist: je Zeile die Menge abzüglich dessen, was [vergeben] für dieselbe
+/// Zeile trägt.
+///
+/// Wird ein Planungsauftrag in Teilen eingeplant, trägt jede Produktion
+/// ihren Teil der Zeilen. Der Rest bleibt beim Planungsauftrag.
+List<AuftragsBezug> restBezuege(
+  List<AuftragsBezug> alle,
+  List<AuftragsBezug> vergeben,
+) {
+  if (vergeben.isEmpty) return alle;
+  final weg = <String, double>{};
+  for (final b in vergeben) {
+    weg[b.schluessel] = (weg[b.schluessel] ?? 0) + b.kg;
+  }
+  final rest = <AuftragsBezug>[];
+  for (final b in alle) {
+    final abzug = min(weg[b.schluessel] ?? 0.0, b.kg);
+    if (abzug > 0) weg[b.schluessel] = weg[b.schluessel]! - abzug;
+    final kg = b.kg - abzug;
+    if (kg < _schwelle) continue;
+    rest.add(
+      abzug > 0
+          ? AuftragsBezug(
+              beleg: b.beleg,
+              warenausgang: b.warenausgang,
+              kg: kg,
+              debitor: b.debitor,
+            )
+          : b,
+    );
+  }
+  return rest;
+}
+
+/// Verteilt [kg] auf die Auftragszeilen [bezuege], der früheste
+/// Warenausgang zuerst. Reicht die Menge nicht für alle, bekommt die letzte
+/// Zeile nur den Rest, und die übrigen gehen leer aus. Mehr als ihre eigene
+/// Menge bekommt keine Zeile.
+///
+/// So trägt eine Produktion, die nur einen Teil eines Planungsauftrags
+/// abdeckt, auch nur die Zeilen, die sie wirklich bedient.
+List<AuftragsBezug> teileBezuegeZu(List<AuftragsBezug> bezuege, double kg) {
+  final sortiert = [...bezuege]..sort((a, b) {
+      final t = a.warenausgang.compareTo(b.warenausgang);
+      return t != 0 ? t : a.beleg.compareTo(b.beleg);
+    });
+  final ergebnis = <AuftragsBezug>[];
+  var rest = kg;
+  for (final b in sortiert) {
+    if (rest < _schwelle) break;
+    if (b.kg <= rest + _epsilon) {
+      ergebnis.add(b);
+      rest -= b.kg;
+    } else {
+      ergebnis.add(
+        AuftragsBezug(
+          beleg: b.beleg,
+          warenausgang: b.warenausgang,
+          kg: rest,
+          debitor: b.debitor,
+        ),
+      );
+      rest = 0;
+    }
+  }
+  return ergebnis;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Vormerkungen: an den Planungsvorschlag übergeben, noch nicht eingeplant
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Was für einen Bedarf schon im Board steht.
+class BedarfsPlanung {
+  const BedarfsPlanung({required this.ketten, required this.bezuege});
+
+  /// Je Kette mit diesem Bedarf: Tag der Wurzel und eingeplante
+  /// Fertigmenge.
+  final List<({DateTime tag, double kg})> ketten;
+
+  /// Die Auftragszeilen, die diese Ketten tragen.
+  final List<AuftragsBezug> bezuege;
+
+  /// Eingeplante Fertigmenge aller Ketten.
+  double get kg => ketten.fold<double>(0, (s, k) => s + k.kg);
+
+  /// Davon auf Tagen vor [heute] — gilt als produziert.
+  double produziertVor(DateTime heute) {
+    final h = _tag(heute);
+    return ketten.fold<double>(
+      0,
+      (s, k) => _tag(k.tag).isBefore(h) ? s + k.kg : s,
+    );
+  }
+}
+
+/// Je Bedarf die eingeplanten Ketten und die Auftragszeilen, die sie
+/// tragen.
+///
+/// Bedarf, Fertigmenge und Auftragszeilen stehen an der Wurzel einer
+/// Kette. Eine Kette zählt, solange einer ihrer Schritte lebt — auch wenn
+/// die Wurzel selbst gelöscht ist: Wer im Board nur den ersten Schritt
+/// löscht, etwa die Zerlegung, weil das Fleisch schon zerlegt kommt,
+/// produziert trotzdem. Sonst stünde der Bedarf wieder als offen da und
+/// würde ein zweites Mal eingeplant.
+///
+/// Bedarfsliste, Auftragsbestand und Planungsvorschlag rechnen alle
+/// hiermit, damit sie dieselbe Menge als eingeplant sehen.
+Future<Map<String, BedarfsPlanung>> ladeBedarfsPlanung(AppDatabase db) async {
+  final wurzeln = await (db.select(db.productionTasks)
+        ..where((t) => t.bedarfId.isNotNull()))
+      .get();
+  final lebtNoch = await _lebendeKetten(db, [
+    for (final w in wurzeln)
+      if (w.deletedAt != null) w.id,
+  ]);
+
+  final ketten = <String, List<({DateTime tag, double kg})>>{};
+  final bezuege = <String, List<AuftragsBezug>>{};
+  for (final w in wurzeln) {
+    final bid = w.bedarfId;
+    if (bid == null) continue;
+    if (w.deletedAt != null && !lebtNoch.contains(w.id)) continue;
+    ketten
+        .putIfAbsent(bid, () => [])
+        .add((tag: w.datum, kg: w.fertigMengeKg ?? 0.0));
+    bezuege
+        .putIfAbsent(bid, () => <AuftragsBezug>[])
+        .addAll(AuftragsBezug.dekodiere(w.auftragsZeilen));
+  }
+  return {
+    for (final e in ketten.entries)
+      e.key: BedarfsPlanung(
+        ketten: e.value,
+        bezuege: bezuege[e.key] ?? const [],
+      ),
+  };
+}
+
+/// Welche der gelöschten Wurzeln [wurzelIds] noch einen lebenden Schritt
+/// in ihrer Kette haben. Ebene für Ebene abwärts über `parentTaskId` —
+/// Ketten sind kurz, ein paar Abfragen reichen.
+Future<Set<String>> _lebendeKetten(
+  AppDatabase db,
+  List<String> wurzelIds,
+) async {
+  final lebt = <String>{};
+  // Schritt-ID → ID der Wurzel, zu der er gehört.
+  var ebene = {for (final id in wurzelIds) id: id};
+  // Sicherung gegen Kreise in den Daten.
+  for (var tiefe = 0; ebene.isNotEmpty && tiefe < 20; tiefe++) {
+    final ids = ebene.keys.toList();
+    final naechste = <String, String>{};
+    for (var i = 0; i < ids.length; i += _blockGroesse) {
+      final block = ids.sublist(i, min(i + _blockGroesse, ids.length));
+      final kinder = await (db.select(db.productionTasks)
+            ..where((t) => t.parentTaskId.isIn(block)))
+          .get();
+      for (final k in kinder) {
+        final wurzel = ebene[k.parentTaskId];
+        if (wurzel == null || lebt.contains(wurzel)) continue;
+        if (k.deletedAt == null) {
+          lebt.add(wurzel);
+        } else {
+          naechste[k.id] = wurzel;
+        }
+      }
+    }
+    naechste.removeWhere((_, wurzel) => lebt.contains(wurzel));
+    ebene = naechste;
+  }
+  return lebt;
+}
+
+/// Höchstens so viele IDs je Abfrage — SQLite begrenzt die Zahl der
+/// Platzhalter.
+const int _blockGroesse = 500;
+
+/// Die Auftragszeilen, die eine neue Produktion über [fertigKg] für
+/// [bedarf] trägt: von den Zeilen, die noch keine Kette trägt, die
+/// frühesten — so viele, wie die Menge bedient.
+///
+/// Für einen Planungsauftrag, der nicht über den Planungsvorschlag,
+/// sondern von Hand im Board eingeplant wird. Leer bei einem Bedarf ohne
+/// Auftragszeilen.
+Future<List<AuftragsBezug>> bezuegeFuerNeueProduktion(
+  AppDatabase db,
+  Demand bedarf,
+  double fertigKg,
+) async {
+  final alle = AuftragsBezug.dekodiere(bedarf.auftragsZeilen);
+  if (alle.isEmpty || fertigKg <= 0) return const [];
+  final planung = await ladeBedarfsPlanung(db);
+  return teileBezuegeZu(
+    restBezuege(alle, planung[bedarf.id]?.bezuege ?? const []),
+    fertigKg,
+  );
+}
+
+/// Ein offener Planungsauftrag aus dem Auftragsbestand: Die Versandtage
+/// sind gebündelt und an den Planungsvorschlag übergeben, eingeplant ist
+/// (noch) nichts oder nur ein Teil.
+///
+/// Er deckt nichts — dafür gibt es noch keine Produktion —, hält die
+/// Zeilen aber fest, damit sie niemand ein zweites Mal bündelt.
+class Vormerkung {
+  const Vormerkung({
+    required this.bedarfId,
+    required this.offenKg,
+    required this.bezuege,
+    this.termin,
+  });
+
+  final String bedarfId;
+
+  /// Was vom Planungsauftrag noch nicht eingeplant ist, in kg.
+  final double offenKg;
+
+  /// Spätester Produktionstag.
+  final DateTime? termin;
+
+  /// Die Auftragszeilen, die noch keine Produktion trägt.
+  final List<AuftragsBezug> bezuege;
+}
+
+/// Lädt die offenen Planungsaufträge, gruppiert nach Artikelnummer.
+///
+/// Offen heißt: nicht gelöscht, nicht von Hand erledigt, und die
+/// eingeplante Menge reicht noch nicht. Ist er ganz eingeplant, tragen die
+/// Ketten die Zeilen weiter — dann ist hier nichts mehr vorzumerken. Ist
+/// er zum Teil eingeplant, bleiben nur die Zeilen, die noch keine Kette
+/// trägt.
+Future<Map<String, List<Vormerkung>>> ladeVormerkungen(AppDatabase db) async {
+  final bedarfe = await (db.select(db.demands)
+        ..where((d) => d.deletedAt.isNull())
+        ..where((d) => d.manuellErledigt.equals(false))
+        ..where((d) => d.auftragsZeilen.isNotNull()))
+      .get();
+  if (bedarfe.isEmpty) return const {};
+
+  final planung = await ladeBedarfsPlanung(db);
+  final produkte = await db.select(db.products).get();
+  final nummerJeId = {for (final p in produkte) p.id: p.artikelnummer};
+
+  final ergebnis = <String, List<Vormerkung>>{};
+  for (final d in bedarfe) {
+    final geplant = planung[d.id];
+    final offen = d.mengeKgFertig - (geplant?.kg ?? 0);
+    if (offen <= 0.5) continue;
+    final bezuege = restBezuege(
+      AuftragsBezug.dekodiere(d.auftragsZeilen),
+      geplant?.bezuege ?? const [],
+    );
+    final nummer = nummerJeId[d.productId];
+    if (bezuege.isEmpty || nummer == null) continue;
+    ergebnis.putIfAbsent(nummer, () => []).add(
+          Vormerkung(
+            bedarfId: d.id,
+            offenKg: offen,
+            termin: d.termin,
+            bezuege: bezuege,
+          ),
+        );
+  }
+  return ergebnis;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Produktionen der App
 // ═══════════════════════════════════════════════════════════════════════════
@@ -342,6 +641,9 @@ class ZeilenDeckung {
     this.zuSpaetKg = 0,
     this.zuSpaetBis,
     this.eingeplantIn = const [],
+    this.vorgemerktKg = 0,
+    this.vorgemerktIn = const [],
+    this.gesperrt = false,
   });
 
   final AuftragsPosition position;
@@ -364,6 +666,20 @@ class ZeilenDeckung {
   /// Produktionen, die ausdrücklich für diese Zeile eingeplant wurden.
   final List<ProduktionsZugang> eingeplantIn;
 
+  /// Teil von [fehltKg], der an den Planungsvorschlag übergeben ist —
+  /// gebündelt, aber noch nicht eingeplant.
+  final double vorgemerktKg;
+
+  /// Die Planungsaufträge dazu.
+  final List<Vormerkung> vorgemerktIn;
+
+  /// Ein verschobener Auftrag, dessen Planung noch am alten Versandtag
+  /// hängt (siehe „Planung prüfen"). Bis die Verschiebung übernommen oder
+  /// verworfen ist, lässt sich die Zeile nicht bündeln — sonst würde
+  /// dieselbe Menge ein zweites Mal eingeplant. Was fehlt, zählt trotzdem
+  /// als offen.
+  final bool gesperrt;
+
   double get kg => position.kg;
 
   String get schluessel =>
@@ -375,11 +691,24 @@ class ZeilenDeckung {
     return rest > 0 ? rest : 0.0;
   }
 
+  /// Was noch niemand angefasst hat: fehlt und ist auch nicht an den
+  /// Planungsvorschlag übergeben. Das ist noch zu bündeln.
+  double get offenKg {
+    final rest = fehltKg - vorgemerktKg;
+    return rest > 0 ? rest : 0.0;
+  }
+
   /// Ausdrücklich für diese Zeile eingeplant.
   bool get geplant => eingeplantIn.isNotEmpty;
 
+  /// An den Planungsvorschlag übergeben.
+  bool get vorgemerkt => vorgemerktIn.isNotEmpty;
+
   /// Nicht rechtzeitig gedeckt: fehlt oder kommt zu spät.
   bool get offen => fehltKg + zuSpaetKg >= _schwelle;
+
+  /// Nichts mehr zu tun: nichts offen, nichts zu spät.
+  bool get erledigt => offenKg < _schwelle && zuSpaetKg < _schwelle;
 }
 
 /// Aufträge eines Artikels an einem Warenausgangstag.
@@ -399,8 +728,21 @@ class TagesDeckung {
   double get knappKg => _summe((z) => z.knappKg);
   double get zuSpaetKg => _summe((z) => z.zuSpaetKg);
 
-  /// Weder im Lager noch eingeplant — das ist noch einzuplanen.
+  /// Weder im Lager noch eingeplant.
   double get fehltKg => _summe((z) => z.fehltKg);
+
+  /// Davon an den Planungsvorschlag übergeben.
+  double get vorgemerktKg => _summe((z) => z.vorgemerktKg);
+
+  /// Davon noch zu bündeln.
+  double get offenKg => _summe((z) => z.offenKg);
+
+  /// Davon an gesperrten Zeilen — erst zu bündeln, wenn die Verschiebung
+  /// geklärt ist.
+  double get gesperrtKg => _summe((z) => z.gesperrt ? z.offenKg : 0.0);
+
+  /// Was sich jetzt bündeln lässt: offen und nicht gesperrt.
+  double get einplanbarKg => _summe((z) => z.gesperrt ? 0.0 : z.offenKg);
 
   double _summe(double Function(ZeilenDeckung z) wert) =>
       zeilen.fold<double>(0, (s, z) => s + wert(z));
@@ -418,8 +760,22 @@ class TagesDeckung {
   /// Nicht rechtzeitig gedeckt: fehlt oder kommt zu spät.
   bool get offen => fehltKg + zuSpaetKg >= _schwelle;
 
-  /// Für diesen Tag lässt sich noch etwas einplanen.
-  bool get einplanbar => fehltKg >= _schwelle;
+  /// Für diesen Tag lässt sich noch etwas einplanen: Es fehlt etwas, das
+  /// weder eingeplant noch an den Planungsvorschlag übergeben ist — und
+  /// nicht an einer gesperrten Zeile hängt.
+  bool get einplanbar => einplanbarKg >= _schwelle;
+
+  /// Planungsaufträge, die Zeilen dieses Tages vorgemerkt haben — jeder
+  /// nur einmal.
+  List<Vormerkung> get vorgemerktIn {
+    final liste = <Vormerkung>[];
+    for (final z in zeilen) {
+      for (final v in z.vorgemerktIn) {
+        if (!liste.contains(v)) liste.add(v);
+      }
+    }
+    return liste;
+  }
 
   /// Produktionen, die ausdrücklich für Zeilen dieses Tages eingeplant
   /// wurden — jede nur einmal.
@@ -461,8 +817,14 @@ class ArtikelDeckung {
   double get knappKg => _summe((t) => t.knappKg);
   double get zuSpaetKg => _summe((t) => t.zuSpaetKg);
 
-  /// Noch einzuplanen: weder im Lager noch in einer Produktion der App.
+  /// Weder im Lager noch in einer Produktion der App.
   double get fehltKg => _summe((t) => t.fehltKg);
+
+  /// Davon an den Planungsvorschlag übergeben.
+  double get vorgemerktKg => _summe((t) => t.vorgemerktKg);
+
+  /// Davon noch zu bündeln — die eigentliche Arbeit im Auftragsbestand.
+  double get offenKg => _summe((t) => t.offenKg);
 
   double _summe(double Function(TagesDeckung t) wert) =>
       tage.fold<double>(0, (s, t) => s + wert(t));
@@ -473,6 +835,10 @@ class ArtikelDeckung {
   /// Das Lager allein trägt alle Aufträge.
   bool get lagerReicht => gedeckt && ausPlanungKg < _schwelle;
 
+  /// Im Auftragsbestand nichts mehr zu tun: Was fehlt, ist eingeplant
+  /// oder an den Planungsvorschlag übergeben, und nichts kommt zu spät.
+  bool get erledigt => offenKg < _schwelle && zuSpaetKg < _schwelle;
+
   /// Erster Warenausgang, der nicht rechtzeitig gedeckt ist.
   DateTime? get ersterEngpass => _ersterTag((t) => t.offen);
 
@@ -482,6 +848,23 @@ class ArtikelDeckung {
 
   /// Erster Warenausgang, dessen Ware zu spät fertig wird.
   DateTime? get ersterZuSpaet => _ersterTag((t) => t.zuSpaetKg >= _schwelle);
+
+  /// Erster Warenausgang mit etwas, das noch zu bündeln ist.
+  DateTime? get ersterOffenTag => _ersterTag((t) => t.offenKg >= _schwelle);
+
+  /// Frühester Termin der Planungsaufträge, die hier etwas vormerken.
+  DateTime? get fruehesterVormerkTermin {
+    DateTime? frueh;
+    for (final t in tage) {
+      for (final v in t.vorgemerktIn) {
+        final termin = v.termin;
+        if (termin != null && (frueh == null || termin.isBefore(frueh))) {
+          frueh = termin;
+        }
+      }
+    }
+    return frueh;
+  }
 
   DateTime? _ersterTag(bool Function(TagesDeckung t) passt) {
     for (final t in tage) {
@@ -513,10 +896,20 @@ class ArtikelDeckung {
 /// Mengen zählen nur von Produktionen mit [ProduktionsZugang.zaehlt]. Die
 /// Markierung „eingeplant für" bekommt eine Zeile aber von jeder
 /// Produktion, die für sie angelegt wurde.
+///
+/// 5. **Vormerkungen** zuletzt: Was danach noch fehlt, kann ein offener
+///    Planungsauftrag ([Vormerkung]) für sich reservieren. Er deckt
+///    nichts, die Zeile gilt aber als übergeben und lässt sich nicht ein
+///    zweites Mal bündeln.
+///
+/// [gesperrt] sind Schlüssel von Zeilen, die sich nicht bündeln lassen
+/// (siehe [ZeilenDeckung.gesperrt]). An der Rechnung ändern sie nichts.
 ArtikelDeckung berechneDeckung({
   required double lagerKg,
   required List<AuftragsPosition> positionen,
   List<ProduktionsZugang> zugaenge = const [],
+  List<Vormerkung> vormerkungen = const [],
+  Set<String> gesperrt = const {},
 }) {
   // Zeilen in Versandreihenfolge: Tag, dann Beleg.
   final zeilen = [...positionen]..sort((a, b) {
@@ -617,6 +1010,37 @@ ArtikelDeckung berechneDeckung({
   final ueberschuss =
       rest.fold<double>(0, (s, r) => s + (r > _epsilon ? r : 0.0));
 
+  // 5. Vormerkungen reservieren, was noch fehlt — frühester Termin zuerst.
+  final vorgemerkt = List<double>.filled(n, 0.0);
+  final vorgemerktIn =
+      List<List<Vormerkung>>.generate(n, (_) => <Vormerkung>[]);
+  final nachTermin = [...vormerkungen]..sort((a, b) {
+      final ta = a.termin, tb = b.termin;
+      if (ta == null && tb == null) return 0;
+      if (ta == null) return 1;
+      if (tb == null) return -1;
+      return ta.compareTo(tb);
+    });
+  for (final v in nachTermin) {
+    var verfuegbar = v.offenKg;
+    for (final b in v.bezuege) {
+      final treffer = jeSchluessel[b.schluessel];
+      if (treffer == null) continue;
+      var anteil = b.kg;
+      for (final i in treffer) {
+        if (!vorgemerktIn[i].contains(v)) vorgemerktIn[i].add(v);
+        final frei = offen[i] - vorgemerkt[i];
+        if (anteil <= _epsilon || verfuegbar <= _epsilon || frei <= _epsilon) {
+          continue;
+        }
+        final nimm = min(anteil, min(verfuegbar, frei));
+        vorgemerkt[i] += nimm;
+        anteil -= nimm;
+        verfuegbar -= nimm;
+      }
+    }
+  }
+
   // Zu Tagen bündeln.
   final tage = <TagesDeckung>[];
   var k = 0;
@@ -633,6 +1057,11 @@ ArtikelDeckung berechneDeckung({
           zuSpaetKg: zuSpaet[k],
           zuSpaetBis: zuSpaetBis[k],
           eingeplantIn: eingeplantIn[k],
+          vorgemerktKg: vorgemerkt[k],
+          vorgemerktIn: vorgemerktIn[k],
+          gesperrt: gesperrt.contains(
+            auftragsZeilenSchluessel(zeilen[k].beleg, zeilen[k].warenausgang),
+          ),
         ),
       );
       k++;
@@ -648,9 +1077,10 @@ ArtikelDeckung berechneDeckung({
   );
 }
 
-/// Die Auftragszeilen der gewählten Tage, für die noch etwas fehlt — mit
-/// genau der fehlenden Menge. Das wird beim Einplanen an die Produktion
-/// gehängt.
+/// Die Auftragszeilen der gewählten Tage, für die noch etwas fehlt, das
+/// weder eingeplant noch vorgemerkt ist — mit genau dieser Menge. Das wird
+/// beim Einplanen an die Produktion oder den Planungsauftrag gehängt.
+/// Gesperrte Zeilen bleiben draußen.
 List<AuftragsBezug> bezuegeFuerTage(
   ArtikelDeckung deckung,
   Set<DateTime> tage,
@@ -660,17 +1090,24 @@ List<AuftragsBezug> bezuegeFuerTage(
     for (final t in deckung.tage)
       if (gewaehlt.contains(t.tag))
         for (final z in t.zeilen)
-          if (z.fehltKg >= _schwelle)
+          if (z.offenKg >= _schwelle && !z.gesperrt)
             AuftragsBezug(
               beleg: z.position.beleg,
               warenausgang: t.tag,
-              kg: z.fehltKg,
+              kg: z.offenKg,
               debitor: z.position.debitor,
             ),
   ];
 }
 
 DateTime _tag(DateTime d) => DateTime(d.year, d.month, d.day);
+
+const _wochentage = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+/// „Mi 02.10."
+String _tagKurz(DateTime d) => '${_wochentage[d.weekday - 1]} '
+    '${d.day.toString().padLeft(2, '0')}.'
+    '${d.month.toString().padLeft(2, '0')}.';
 
 String _datumText(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
     '${d.month.toString().padLeft(2, '0')}-'

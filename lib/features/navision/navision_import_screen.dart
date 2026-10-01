@@ -1,108 +1,32 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart' hide Column;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
-import '../../core/constants/abteilungen.dart';
+import '../../core/constants/artikel_merkmale.dart';
 import '../../core/database/database.dart';
+import '../../core/providers/artikel_providers.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/artikel_anlage_service.dart';
+import '../../core/services/artikelstamm_abgleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
-import '../../core/services/bedarf_uebernahme_service.dart';
 import '../../core/services/navision_import_service.dart';
-import '../bedarf/bedarf_screen.dart';
+import '../articles/article_list_screen.dart' show articlesProvider;
+import '../auftragsbestand/auftragsbestand_screen.dart'
+    show auftragsbestandProvider;
 
-/// Der eingelesene Navision-Katalog.
-final navisionKatalogProvider =
-    FutureProvider<List<NavisionArtikel>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  return (db.select(db.navisionArtikelKatalog)
-        ..orderBy([(t) => OrderingTerm.asc(t.nummer)]))
-      .get();
-});
-
-/// Artikelnummern, die es in der App bereits als Prozessartikel gibt —
-/// nur für die brauchen wir keine Neuanlage.
-final appArtikelnummernProvider = FutureProvider<Set<String>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final liste = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
-  return liste.map((p) => p.artikelnummer).toSet();
-});
-
-/// Abteilungen je Artikelnummer, abgeleitet aus den Prozessschritten.
+/// Navision-Artikel: die Artikelübersicht aus Navision mit dem Artikelstamm
+/// der App abgleichen.
 ///
-/// Damit lässt sich die Navision-Liste nach Abteilung filtern: Ein Artikel
-/// gehört zur Bratstraße, wenn irgendein Schritt seines Prozesses dort
-/// läuft. Ein Artikel ohne Prozess — etwa eine frische Hülle aus dem
-/// Navision-Abgleich — hat keinen Eintrag und fällt bei gesetztem Filter
-/// heraus; genau das ist gewollt, denn für ihn gibt es in der Abteilung
-/// noch nichts zu tun.
+/// Zwei Dinge kommen von hier: neue Artikel (als Hülle, „nicht
+/// eingepflegt") und Allergene aus dem Navision-Suchbegriff — beides nur,
+/// was der Anwender auswählt. Bestand und offene Aufträge liefert der
+/// Auftragsbestand, genauer, nämlich je Auftrag und Versandtag. Bedarf
+/// entsteht deshalb nicht mehr hier.
 ///
-/// Verknüpft wird über die Artikelnummer, weil der Navision-Katalog die
-/// App-Artikel-ID nicht kennt.
-///
-/// `autoDispose`, damit die Zuordnung beim nächsten Öffnen des Bildschirms
-/// neu gelesen wird. Wer zwischendurch in einem Artikel einen Schritt
-/// ergänzt, soll ihn hier sofort unter der neuen Abteilung finden und nicht
-/// erst nach einem Neustart.
-final abteilungenJeArtikelProvider =
-    FutureProvider.autoDispose<Map<String, Set<String>>>((ref) async {
-  final db = ref.watch(databaseProvider);
-
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
-  final schritte = await (db.select(db.productSteps)
-        ..where((s) => s.deletedAt.isNull()))
-      .get();
-
-  final nummerJeId = {for (final p in produkte) p.id: p.artikelnummer};
-  final map = <String, Set<String>>{};
-  for (final s in schritte) {
-    final nummer = nummerJeId[s.productId];
-    if (nummer == null || nummer.isEmpty) continue;
-    map.putIfAbsent(nummer, () => <String>{}).add(s.abteilung);
-  }
-  return map;
-});
-
-/// Bereits im Bedarf liegende Fertigmenge je Artikelnummer, in kg — abgeleitet
-/// aus dem [bedarfProvider], damit sich die Netto-Rechnung automatisch
-/// aktualisiert, sobald im Bedarf-Screen etwas gelöscht, ergänzt oder abgehakt
-/// wird. Manuell erledigte Positionen zählen nicht mehr als deckend; gelöschte
-/// tauchen gar nicht erst auf und geben den Navision-Bedarf wieder frei.
-final imBedarfKgProvider = FutureProvider<Map<String, double>>((ref) async {
-  final bedarfe = await ref.watch(bedarfProvider.future);
-  final map = <String, double>{};
-  for (final b in bedarfe) {
-    if (b.bedarf.manuellErledigt) continue;
-    if (b.artikelNummer.isEmpty || b.artikelNummer == '—') continue;
-    map[b.artikelNummer] =
-        (map[b.artikelNummer] ?? 0) + b.bedarf.mengeKgFertig;
-  }
-  return map;
-});
-
-/// Gespeicherte Umrechnungsfaktoren (Artikelnummer → kg je Basiseinheit).
-/// Nur ein Anzeige-Hinweis für die Netto-Rechnung bei nicht-kg-Artikeln;
-/// die verbindliche Umrechnung passiert beim Übernehmen mit Einheitenprüfung.
-final umrechnungsFaktorenProvider =
-    FutureProvider<Map<String, double>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  final rows = await db.select(db.navisionUmrechnungen).get();
-  return {for (final u in rows) u.nummer: u.kgJeEinheit};
-});
-
-/// Navision-Import: Artikelkatalog ansehen, filtern und Bedarf übernehmen.
-///
-/// Bewusst als eigener Bereich neben den App-Artikeln: Navision liefert
-/// *was* gebraucht wird (Bestand, offene Aufträge), die App-Artikel
-/// beschreiben *wie* produziert wird. Hier ist die Brücke — von hier aus
-/// zieht man Positionen in den Bedarf, der Rest bleibt unberührt.
+/// Die Datei wird nicht gespeichert: Der Abgleich gilt für diese Sitzung,
+/// danach zählen nur die Artikel der App.
 class NavisionImportScreen extends ConsumerStatefulWidget {
   const NavisionImportScreen({super.key});
 
@@ -111,40 +35,39 @@ class NavisionImportScreen extends ConsumerStatefulWidget {
       _NavisionImportScreenState();
 }
 
-/// Sortierkriterien der Navision-Liste.
-enum _NavSort {
-  bedarfAbst('Offener Bedarf ↓'),
-  bedarfAufst('Offener Bedarf ↑'),
-  nummer('Artikelnummer'),
-  bezeichnung('Bezeichnung A–Z'),
-  bestandAbst('Lagerbestand ↓'),
-  auftragAbst('Menge in Auftrag ↓');
-
-  const _NavSort(this.label);
-  final String label;
-}
+/// Die drei Listen des Abgleichs.
+enum _Ansicht { neu, ergaenzen, abweichend }
 
 class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   final _suche = TextEditingController();
-  String? _produktgruppe;
-  String? _kategorie;
-  String? _buchungsgruppe;
-  String? _einheit;
 
-  /// dbValue der gewählten Abteilung (null = alle).
-  String? _abteilung;
-  // Standardmäßig alle importierten Navision-Artikel anzeigen. Viele
-  // Navision-Exporte enthalten vor allem Null-/0-Bedarf-Zeilen; der Filter
-  // „Nur mit Bedarf“ würde sonst sofort die komplette Liste verbergen und
-  // den Eindruck erwecken, der Import sei fehlgeschlagen.
-  bool _nurBedarf = false;
-  bool _nurBestand = false;
-  _NavSort _sort = _NavSort.bedarfAbst;
-  bool _busy = false;
+  NavisionKatalog? _katalog;
+  ArtikelstammAbgleich? _abgleich;
+  String? _dateiname;
 
-  /// Zwischenstand eines laufenden Navision-Imports (null = keiner läuft).
+  /// Zählt die Einlesevorgänge — setzt Auswahlfelder beim nächsten
+  /// Einlesen zurück.
+  int _durchlauf = 0;
+
+  /// Zwischenstand beim Einlesen (null = es läuft keins).
   NavisionFortschritt? _fortschritt;
-  final Set<String> _markiert = {};
+  bool _speichert = false;
+  String? _fehler;
+
+  _Ansicht _ansicht = _Ansicht.neu;
+  bool _nurAuftragsbestand = false;
+  String? _produktgruppe;
+
+  /// Allergen-Vorschläge aus dem Suchbegriff beim Anlegen mitnehmen.
+  bool _allergeneMitAnlegen = true;
+
+  /// Gewählte neue Artikel (Artikelnummern).
+  final Set<String> _neuGewaehlt = {};
+
+  /// Gewählte Allergen-Vorschläge (IDs der App-Artikel).
+  final Set<String> _allergenGewaehlt = {};
+
+  bool get _beschaeftigt => _fortschritt != null || _speichert;
 
   @override
   void dispose() {
@@ -152,302 +75,1226 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     super.dispose();
   }
 
-  List<NavisionArtikel> _gefiltert(
-    List<NavisionArtikel> alle,
-    Map<String, double> imBedarfKg,
-    Map<String, double> faktoren,
-    Map<String, Set<String>> abteilungen,
-  ) {
-    final suchText = _suche.text.trim().toLowerCase();
-    final gewaehlteAbteilung = _abteilung;
-    final liste = alle.where((a) {
-      if (gewaehlteAbteilung != null) {
-        final eigene = abteilungen[a.nummer];
-        if (eigene == null || !eigene.contains(gewaehlteAbteilung)) {
-          return false;
-        }
-      }
-      if (_nurBedarf) {
-        final netto = nettoOffenKg(a, imBedarfKg, faktoren);
-        // netto == null → mangels Faktor nicht bestimmbar → sichtbar
-        // lassen, solange Navision überhaupt Bedarf zeigt.
-        if (netto == null) {
-          if (offenerBedarf(a) <= 0) return false;
-        } else if (netto <= 0) {
-          return false;
-        }
-      }
-      if (_nurBestand && a.lagerbestand <= 0) return false;
-      if (_produktgruppe != null && a.produktgruppe != _produktgruppe) {
-        return false;
-      }
-      if (_kategorie != null && a.artikelkategorie != _kategorie) return false;
-      if (_buchungsgruppe != null &&
-          a.produktbuchungsgruppe != _buchungsgruppe) {
-        return false;
-      }
-      if (_einheit != null && a.basiseinheit != _einheit) return false;
-      if (suchText.isEmpty) return true;
-      return a.nummer.toLowerCase().contains(suchText) ||
-          a.beschreibung.toLowerCase().contains(suchText) ||
-          (a.beschreibung2 ?? '').toLowerCase().contains(suchText);
-    }).toList();
+  // ── Einlesen ─────────────────────────────────────────────────────────
 
-    // Sortierung. Beim Bedarf wird der NETTO-Wert genutzt (Navision minus
-    // was schon im Bedarf liegt) — das ist die Zahl, die tatsächlich
-    // Arbeit bedeutet. Fehlt der Umrechnungsfaktor, greift ersatzweise
-    // der reine Navision-Bedarf.
-    double netto(NavisionArtikel a) =>
-        nettoOffenKg(a, imBedarfKg, faktoren) ?? offenerBedarf(a);
-
-    switch (_sort) {
-      case _NavSort.bedarfAbst:
-        liste.sort((a, b) => netto(b).compareTo(netto(a)));
-      case _NavSort.bedarfAufst:
-        liste.sort((a, b) => netto(a).compareTo(netto(b)));
-      case _NavSort.nummer:
-        liste.sort(
-          (a, b) => a.nummer.toLowerCase().compareTo(b.nummer.toLowerCase()),
-        );
-      case _NavSort.bezeichnung:
-        liste.sort(
-          (a, b) => a.beschreibung
-              .toLowerCase()
-              .compareTo(b.beschreibung.toLowerCase()),
-        );
-      case _NavSort.bestandAbst:
-        liste.sort((a, b) => b.lagerbestand.compareTo(a.lagerbestand));
-      case _NavSort.auftragAbst:
-        liste.sort((a, b) => b.mengeInAuftrag.compareTo(a.mengeInAuftrag));
-    }
-    return liste;
-  }
-
-  Future<void> _import() async {
-    final picked = await FilePicker.pickFiles(
+  Future<void> _einlesen() async {
+    final db = ref.read(databaseProvider);
+    final gewaehlt = await FilePicker.pickFiles(
       type: FileType.custom,
-      allowedExtensions: ['xlsx', 'xls'],
-      withData: true, // Desktop liefert sonst teils nur einen Pfad, keine Bytes
+      allowedExtensions: ['xlsx'],
+      withData: true,
     );
-    if (picked == null) return; // Auswahl abgebrochen — bewusst still
-
-    final datei = picked.files.isNotEmpty ? picked.files.first : null;
+    if (gewaehlt == null || !mounted) return;
+    final datei = gewaehlt.files.isNotEmpty ? gewaehlt.files.first : null;
     var bytes = datei?.bytes;
-
-    // Fallback: füllt eine Plattform die Bytes trotz withData nicht, liefert
-    // aber einen Pfad, dann lesen wir die Datei selbst ein.
-    if (bytes == null && datei?.path != null) {
+    final pfad = datei?.path;
+    // Füllt eine Plattform die Bytes trotz withData nicht, liefert aber
+    // einen Pfad, wird die Datei selbst gelesen.
+    if (bytes == null && pfad != null) {
       try {
-        bytes = await File(datei!.path!).readAsBytes();
-      } catch (e) {
-        debugPrint('[NAV] Datei über Pfad lesen fehlgeschlagen: $e');
+        bytes = await File(pfad).readAsBytes();
+      } catch (_) {
+        bytes = null;
       }
-    }
-
-    if (bytes == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Die gewählte Datei ließ sich nicht lesen (weder Inhalt noch '
-            'Pfad verfügbar). Bitte erneut versuchen.',
-          ),
-        ),
-      );
+    }
+    if (bytes == null) {
+      setState(() => _fehler = 'Die gewählte Datei ließ sich nicht lesen.');
       return;
     }
 
-    debugPrint('[NAV] Datei gewählt: ${datei?.name} · ${bytes.length} Bytes');
     setState(() {
-      _busy = true;
+      _fehler = null;
       _fortschritt = const NavisionFortschritt(phase: NavisionPhase.datei);
     });
     try {
-      final service = NavisionImportService(ref.read(databaseProvider));
-      final res = await service.importiere(
+      final katalog = await NavisionImportService.lese(
         bytes,
         onFortschritt: (stand) {
-          if (!mounted) return;
-          setState(() => _fortschritt = stand);
+          if (mounted) setState(() => _fortschritt = stand);
         },
       );
-      ref.invalidate(navisionKatalogProvider);
-      ref
-          .read(autoBackupTriggerProvider)
-          .fireDebounced(reason: 'Navision-Import');
+      final abgleich = await _gleicheAb(db, katalog);
       if (!mounted) return;
-      final warnHinweis =
-          res.warnungen.isEmpty ? '' : ' · ${res.warnungen.length} Hinweis(e)';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 5),
-          content: Text(
-            res.uebernommen == 0
-                ? 'Keine Artikel eingelesen (${res.gelesen} Datenzeilen '
-                    'geprüft). Details siehe Log-Ausgabe.'
-                : '${res.uebernommen} Artikel übernommen · '
-                    '${res.mitAuftrag} mit offenen Aufträgen$warnHinweis',
-          ),
-        ),
-      );
-    } catch (e, st) {
-      debugPrint('[NAV] Import fehlgeschlagen: $e\n$st');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 6),
-          content: Text('Import fehlgeschlagen: $e'),
-        ),
-      );
+      setState(() {
+        _katalog = katalog;
+        _abgleich = abgleich;
+        _dateiname = datei?.name;
+        _durchlauf++;
+        // Vorausgewählt: was im Auftragsbestand steht und damit gebraucht
+        // wird. Allergene nur auf ausdrücklichen Klick.
+        _neuGewaehlt
+          ..clear()
+          ..addAll([
+            for (final n in abgleich.neu)
+              if (n.imAuftragsbestand) n.nummer,
+          ]);
+        _allergenGewaehlt.clear();
+        _nurAuftragsbestand = abgleich.neu.any((n) => n.imAuftragsbestand);
+        _produktgruppe = null;
+        _suche.clear();
+        _ansicht = abgleich.neu.isNotEmpty
+            ? _Ansicht.neu
+            : abgleich.ergaenzen.isNotEmpty
+                ? _Ansicht.ergaenzen
+                : abgleich.abweichend.isNotEmpty
+                    ? _Ansicht.abweichend
+                    : _Ansicht.neu;
+      });
+    } on FormatException catch (e) {
+      if (mounted) setState(() => _fehler = e.message);
+    } catch (e) {
+      if (mounted) setState(() => _fehler = 'Einlesen fehlgeschlagen: $e');
     } finally {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _fortschritt = null;
-        });
-      }
+      if (mounted) setState(() => _fortschritt = null);
     }
   }
 
-  /// Überträgt die markierten Positionen als Bedarf.
-  ///
-  /// Der Screen macht hier nur noch drei Dinge: nach fehlenden
-  /// Umrechnungsfaktoren fragen, den Service anstoßen und das Ergebnis
-  /// melden. Gerechnet und geschrieben wird in
-  /// [BedarfUebernahmeService] — dort ist es ohne Widget prüfbar.
-  Future<void> _inBedarf(List<NavisionArtikel> kandidaten) async {
-    final offen = kandidaten.where((a) => offenerBedarf(a) > 0).toList();
-    if (offen.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keine der Positionen hat Bedarf.')),
-      );
-      return;
-    }
-
-    final service = BedarfUebernahmeService(ref.read(databaseProvider));
-    final bekannt = await service.ladeUmrechnungen();
-    final faktorVon = {...bekannt.faktoren};
-
-    // Für Positionen in Beutel, Pack oder Stück braucht es kg — sonst lässt
-    // sich daraus keine Produktionsmenge ableiten.
-    final fehlende = service.fehlendeUmrechnungen(offen, bekannt);
-    if (fehlende.isNotEmpty) {
-      if (!mounted) return;
-      final eingaben = await showDialog<Map<String, double>>(
-        context: context,
-        builder: (_) => _UmrechnungDialog(artikel: fehlende),
-      );
-      if (eingaben == null) return; // abgebrochen
-
-      faktorVon.addAll(eingaben);
-      await service.merkeFaktoren(
-        eingaben,
-        {
-          for (final e in eingaben.entries)
-            e.key: offen.firstWhere((a) => a.nummer == e.key).basiseinheit ??
-                '',
-        },
-      );
-    }
-
-    final BedarfUebernahmeErgebnis res;
-    try {
-      res = await service.uebernehmen(
-        kandidaten: offen,
-        faktorVon: faktorVon,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          content: Text(
-            'Übernahme fehlgeschlagen — es wurde nichts gespeichert. '
-            'Die Markierung bleibt erhalten, du kannst es erneut '
-            'versuchen. ($e)',
-          ),
-        ),
-      );
-      return;
-    }
-
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf aus NAV');
-    ref.invalidate(appArtikelnummernProvider);
-    ref.invalidate(abteilungenJeArtikelProvider);
-    ref.invalidate(bedarfProvider);
-    ref.invalidate(imBedarfKgProvider);
-    ref.invalidate(umrechnungsFaktorenProvider);
-    if (!mounted) return;
-    setState(_markiert.clear);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '${res.uebernommen} Bedarfspositionen angelegt'
-          '${res.angelegt > 0 ? ' · ${res.angelegt} Artikel neu erstellt' : ''}'
-          '${res.bereitsGedeckt > 0 ? ' · ${res.bereitsGedeckt} bereits '
-              'gedeckt' : ''}'
-          '${res.uebersprungen > 0 ? ' · ${res.uebersprungen} ohne '
-              'Umrechnung übersprungen' : ''}',
-        ),
-      ),
+  /// Gleicht [katalog] mit dem aktuellen Stand der App ab: alle Artikel
+  /// (auch gelöschte) und die Nummern des eingelesenen Auftragsbestands.
+  Future<ArtikelstammAbgleich> _gleicheAb(
+    AppDatabase db,
+    NavisionKatalog katalog,
+  ) async {
+    final produkte = await db.select(db.products).get();
+    final auftrag = await db.select(db.auftragsbestandArtikel).get();
+    return gleicheArtikelstammAb(
+      katalog: katalog,
+      produkte: produkte,
+      imAuftragsbestand: {for (final a in auftrag) a.artikelnummer.trim()},
     );
   }
 
-  /// Liegt im Service, damit Meldungstexte und Bedarfsnotizen dieselbe
-  /// Formatierung benutzen.
-  static String _fmt(double v) => formatMenge(v);
+  // ── Übernehmen ───────────────────────────────────────────────────────
+
+  Future<void> _uebernehmen() async {
+    final abgleich = _abgleich;
+    final katalog = _katalog;
+    if (abgleich == null || katalog == null) return;
+
+    final neue = [
+      for (final n in abgleich.neu)
+        if (_neuGewaehlt.contains(n.nummer)) n,
+    ];
+    final vorschlaege = [
+      for (final v in [...abgleich.ergaenzen, ...abgleich.abweichend])
+        if (_allergenGewaehlt.contains(v.produkt.id)) v,
+    ];
+    if (neue.isEmpty && vorschlaege.isEmpty) return;
+    final mitAllergenen = _allergeneMitAnlegen;
+
+    // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
+    // jemand den Bildschirm währenddessen schließt.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final db = ref.read(databaseProvider);
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => _BestaetigenDialog(
+        neue: neue.length,
+        wiederAktiviert: neue.where((n) => n.geloescht).length,
+        neueMitAllergenen: mitAllergenen
+            ? neue.where((n) => n.allergene.isNotEmpty).length
+            : 0,
+        allergene: vorschlaege.length,
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    setState(() => _speichert = true);
+    try {
+      final ergebnis = await ArtikelAnlageService(db).legeAn(
+        [
+          for (final n in neue)
+            FehlenderArtikel(
+              nummer: n.nummer,
+              bezeichnung: n.zeile.beschreibung,
+              bezeichnung2: n.zeile.beschreibung2,
+              allergene: mitAllergenen
+                  ? merkmaleZuText(n.allergene, kAllergene)
+                  : null,
+            ),
+        ],
+        allergeneJeId: {
+          for (final v in vorschlaege)
+            if (v.ergebnis != null) v.produkt.id: v.ergebnis!,
+        },
+      );
+      container.invalidate(appArtikelnummernProvider);
+      container.invalidate(articlesProvider);
+      container.invalidate(auftragsbestandProvider);
+      if (ergebnis.geaendert) {
+        container
+            .read(autoBackupTriggerProvider)
+            .fireDebounced(reason: 'Artikel aus Navision abgeglichen');
+      }
+
+      final teile = [
+        if (ergebnis.angelegt > 0) '${ergebnis.angelegt} Artikel angelegt',
+        if (ergebnis.reaktiviert > 0)
+          '${ergebnis.reaktiviert} früher gelöschte wieder aktiviert',
+        if (ergebnis.schonVorhanden > 0)
+          '${ergebnis.schonVorhanden} gab es schon',
+        if (ergebnis.allergeneGesetzt > 0)
+          'Allergene bei ${ergebnis.allergeneGesetzt} Artikeln gesetzt',
+      ];
+      final pflege = ergebnis.gesamt > 0
+          ? ' Neue Artikel sind als „nicht eingepflegt" markiert — Schritte '
+              'und Stammdaten in der Artikelliste nachtragen.'
+          : '';
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 7),
+          content: Text(
+            teile.isEmpty
+                ? 'Nichts geändert.'
+                : '${teile.join(' · ')}.$pflege',
+          ),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Übernehmen fehlgeschlagen — es wurde nichts gespeichert. ($e)',
+          ),
+        ),
+      );
+      if (mounted) setState(() => _speichert = false);
+      return;
+    }
+
+    // Neu abgleichen: Was übernommen ist, verschwindet aus den Listen.
+    // Scheitert das, ist trotzdem alles gespeichert — die Listen zeigen
+    // dann bis zum nächsten Einlesen den alten Stand.
+    ArtikelstammAbgleich? neu;
+    try {
+      neu = await _gleicheAb(db, katalog);
+    } catch (_) {
+      neu = null;
+    }
+    if (!mounted) return;
+    final aktuell = neu;
+    setState(() {
+      if (aktuell != null) _abgleich = aktuell;
+      _neuGewaehlt.removeAll([for (final n in neue) n.nummer]);
+      _allergenGewaehlt.removeAll([for (final v in vorschlaege) v.produkt.id]);
+      _speichert = false;
+    });
+  }
+
+  // ── Filtern ──────────────────────────────────────────────────────────
+
+  static bool _passt(String suche, List<String?> felder) {
+    if (suche.isEmpty) return true;
+    for (final f in felder) {
+      if (f != null && f.toLowerCase().contains(suche)) return true;
+    }
+    return false;
+  }
+
+  List<NeuerNavisionArtikel> _neuGefiltert(ArtikelstammAbgleich a) {
+    final suche = _suche.text.trim().toLowerCase();
+    final gruppe = _produktgruppe;
+    return [
+      for (final n in a.neu)
+        if ((!_nurAuftragsbestand || n.imAuftragsbestand) &&
+            (gruppe == null || n.zeile.produktgruppe == gruppe) &&
+            _passt(suche, [
+              n.nummer,
+              n.zeile.beschreibung,
+              n.zeile.beschreibung2,
+              n.zeile.suchbegriff,
+            ]))
+          n,
+    ];
+  }
+
+  List<AllergenVorschlag> _vorschlaegeGefiltert(
+    List<AllergenVorschlag> liste,
+  ) {
+    final suche = _suche.text.trim().toLowerCase();
+    return [
+      for (final v in liste)
+        if (_passt(suche, [
+          v.produkt.artikelnummer,
+          v.produkt.artikelbezeichnung,
+          v.zeile.beschreibung,
+          v.zeile.suchbegriff,
+        ]))
+          v,
+    ];
+  }
+
+  // ── Aufbau ───────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final katalog = ref.watch(navisionKatalogProvider);
-    final appNummern = ref.watch(appArtikelnummernProvider).valueOrNull ??
-        const <String>{};
-    final imBedarfKg = ref.watch(imBedarfKgProvider).valueOrNull ??
-        const <String, double>{};
-    final faktoren = ref.watch(umrechnungsFaktorenProvider).valueOrNull ??
-        const <String, double>{};
-    final abteilungen = ref.watch(abteilungenJeArtikelProvider).valueOrNull ??
-        const <String, Set<String>>{};
-
+    final abgleich = _abgleich;
     final fortschritt = _fortschritt;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Navision-Import'),
+        title: const Text('Navision-Artikel'),
         actions: [
           TextButton.icon(
-            onPressed: _busy ? null : _import,
+            onPressed: _beschaeftigt ? null : _einlesen,
             icon: const Icon(Icons.upload_file, size: 18),
-            label: const Text('Artikelübersicht einlesen'),
+            label: Text(
+              abgleich == null
+                  ? 'Artikelübersicht einlesen'
+                  : 'Neu einlesen',
+            ),
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: Stack(
         children: [
-          _inhalt(
-            context,
-            katalog,
-            appNummern,
-            imBedarfKg,
-            faktoren,
-            abteilungen,
-          ),
-          if (fortschritt != null) _fortschrittsSchleier(context, fortschritt),
+          if (abgleich == null)
+            _Einstieg(
+              fehler: _fehler,
+              onEinlesen: _beschaeftigt ? null : _einlesen,
+            )
+          else
+            _inhalt(context, abgleich),
+          if (fortschritt != null) _Fortschritt(stand: fortschritt),
         ],
       ),
     );
   }
 
-  /// Halbtransparenter Schleier mit Ladebalken über der Liste.
-  ///
-  /// Bewusst kein Dialog: Der Schleier sperrt die Bedienung, ohne den
-  /// Navigations-Stack anzufassen — und wenn der Import scheitert, gibt es
-  /// keinen offenen Dialog, der aus Versehen stehen bleibt.
-  Widget _fortschrittsSchleier(
+  Widget _inhalt(BuildContext context, ArtikelstammAbgleich a) {
+    final theme = Theme.of(context);
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    final Widget liste;
+    final Widget filter;
+    switch (_ansicht) {
+      case _Ansicht.neu:
+        final sichtbar = _neuGefiltert(a);
+        filter = _neuFilter(context, a, sichtbar);
+        liste = sichtbar.isEmpty
+            ? _LeereListe(
+                text: a.neu.isEmpty
+                    ? 'Alle Artikel der Datei gibt es in der App.'
+                    : 'Keine neuen Artikel passen zu den Filtern.',
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 16),
+                itemCount: sichtbar.length,
+                itemBuilder: (context, i) {
+                  final n = sichtbar[i];
+                  return _NeuZeile(
+                    artikel: n,
+                    gewaehlt: _neuGewaehlt.contains(n.nummer),
+                    mitAllergenen: _allergeneMitAnlegen,
+                    onChanged: (an) => setState(() {
+                      if (an) {
+                        _neuGewaehlt.add(n.nummer);
+                      } else {
+                        _neuGewaehlt.remove(n.nummer);
+                      }
+                    }),
+                  );
+                },
+              );
+      case _Ansicht.ergaenzen:
+      case _Ansicht.abweichend:
+        final ergaenzen = _ansicht == _Ansicht.ergaenzen;
+        final alle = ergaenzen ? a.ergaenzen : a.abweichend;
+        final sichtbar = _vorschlaegeGefiltert(alle);
+        filter = _allergenFilter(context, sichtbar, ergaenzen: ergaenzen);
+        liste = sichtbar.isEmpty
+            ? _LeereListe(
+                text: alle.isEmpty
+                    ? (ergaenzen
+                        ? 'Kein Artikel der App ohne Allergene, für den der '
+                            'Suchbegriff welche nennt.'
+                        : 'Keine Abweichungen zwischen App und Navision.')
+                    : 'Keine Artikel passen zur Suche.',
+              )
+            : ListView.builder(
+                padding: const EdgeInsets.only(bottom: 16),
+                itemCount: sichtbar.length,
+                itemBuilder: (context, i) {
+                  final v = sichtbar[i];
+                  return _AllergenZeile(
+                    vorschlag: v,
+                    gewaehlt: _allergenGewaehlt.contains(v.produkt.id),
+                    onChanged: (an) => setState(() {
+                      if (an) {
+                        _allergenGewaehlt.add(v.produkt.id);
+                      } else {
+                        _allergenGewaehlt.remove(v.produkt.id);
+                      }
+                    }),
+                  );
+                },
+              );
+    }
+
+    final neuWahl = _neuGewaehlt.length;
+    final allergenWahl = _allergenGewaehlt.length;
+
+    return Column(
+      children: [
+        if (_fehler != null)
+          _Meldung(
+            text: _fehler!,
+            onSchliessen: () => setState(() => _fehler = null),
+          ),
+        _Kopf(abgleich: a, dateiname: _dateiname),
+        if (a.warnungen.isNotEmpty) _Hinweise(warnungen: a.warnungen),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
+          child: Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SegmentedButton<_Ansicht>(
+                showSelectedIcon: false,
+                segments: [
+                  ButtonSegment(
+                    value: _Ansicht.neu,
+                    icon: const Icon(Icons.new_releases_outlined, size: 18),
+                    label: Text('Neu (${a.neu.length})'),
+                  ),
+                  ButtonSegment(
+                    value: _Ansicht.ergaenzen,
+                    icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                    label: Text('Allergene fehlen (${a.ergaenzen.length})'),
+                  ),
+                  ButtonSegment(
+                    value: _Ansicht.abweichend,
+                    icon: const Icon(Icons.compare_arrows_rounded, size: 18),
+                    label: Text('Abweichungen (${a.abweichend.length})'),
+                  ),
+                ],
+                selected: {_ansicht},
+                onSelectionChanged: (s) => setState(() => _ansicht = s.first),
+              ),
+              SizedBox(
+                width: 300,
+                child: TextField(
+                  controller: _suche,
+                  decoration: const InputDecoration(
+                    labelText: 'Suche (Nummer, Bezeichnung, Suchbegriff)',
+                    prefixIcon: Icon(Icons.search, size: 18),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+            ],
+          ),
+        ),
+        filter,
+        const Divider(height: 1),
+        Expanded(child: liste),
+        Container(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surfaceContainerHigh,
+            border: Border(top: BorderSide(color: theme.dividerColor)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '$neuWahl ${neuWahl == 1 ? 'neuer Artikel' : 'neue Artikel'}'
+                  ' · $allergenWahl '
+                  '${allergenWahl == 1 ? 'Allergenangabe' : 'Allergenangaben'}'
+                  ' ausgewählt',
+                  style: grau,
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilledButton.icon(
+                onPressed: neuWahl + allergenWahl == 0 || _beschaeftigt
+                    ? null
+                    : _uebernehmen,
+                icon: _speichert
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.done_all_rounded, size: 18),
+                label: const Text('Übernehmen …'),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _neuFilter(
     BuildContext context,
-    NavisionFortschritt stand,
+    ArtikelstammAbgleich a,
+    List<NeuerNavisionArtikel> sichtbar,
   ) {
+    final theme = Theme.of(context);
+    final imAuftrag = a.neu.where((n) => n.imAuftragsbestand).length;
+    final gruppen = {
+      for (final n in a.neu)
+        if ((n.zeile.produktgruppe ?? '').isNotEmpty) n.zeile.produktgruppe!,
+    }.toList()
+      ..sort();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          FilterChip(
+            label: Text('Nur im Auftragsbestand ($imAuftrag)'),
+            tooltip: 'Artikel, die im eingelesenen Auftragsbestand stehen — '
+                'sie werden gebraucht und sind vorausgewählt.',
+            selected: _nurAuftragsbestand,
+            onSelected: (v) => setState(() => _nurAuftragsbestand = v),
+          ),
+          if (gruppen.isNotEmpty)
+            SizedBox(
+              width: 220,
+              child: DropdownButtonFormField<String>(
+                // Neuer Schlüssel je Einlesen: Die Auswahl gilt für eine
+                // Datei, nicht darüber hinaus.
+                key: ValueKey('gruppe-$_durchlauf'),
+                initialValue: _produktgruppe,
+                isExpanded: true,
+                decoration: const InputDecoration(
+                  labelText: 'Produktgruppe (Navision)',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                // Farbe ausdrücklich — ohne sie erbt der Text im hellen
+                // Modus Weiß.
+                style: TextStyle(
+                  fontSize: 13,
+                  color: theme.colorScheme.onSurface,
+                ),
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('Alle')),
+                  for (final g in gruppen)
+                    DropdownMenuItem(
+                      value: g,
+                      child: Text(g, overflow: TextOverflow.ellipsis),
+                    ),
+                ],
+                onChanged: (v) => setState(() => _produktgruppe = v),
+              ),
+            ),
+          Tooltip(
+            message: 'Erkannte Allergene aus dem Suchbegriff gleich beim '
+                'Anlegen speichern. Ohne: Die neuen Artikel bekommen keine '
+                'Allergenangabe.',
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Switch(
+                  value: _allergeneMitAnlegen,
+                  onChanged: (v) => setState(() => _allergeneMitAnlegen = v),
+                ),
+                const SizedBox(width: 4),
+                const Text('Allergen-Vorschläge mitnehmen'),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: sichtbar.isEmpty
+                ? null
+                : () => setState(
+                      () => _neuGewaehlt
+                          .addAll([for (final n in sichtbar) n.nummer]),
+                    ),
+            child: Text('Alle ${sichtbar.length} auswählen'),
+          ),
+          TextButton(
+            onPressed: _neuGewaehlt.isEmpty
+                ? null
+                : () => setState(_neuGewaehlt.clear),
+            child: const Text('Auswahl aufheben'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _allergenFilter(
+    BuildContext context,
+    List<AllergenVorschlag> sichtbar, {
+    required bool ergaenzen,
+  }) {
+    final theme = Theme.of(context);
+    final ids = [for (final v in sichtbar) v.produkt.id];
+    final alleGewaehlt =
+        ids.isNotEmpty && ids.every(_allergenGewaehlt.contains);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Text(
+              ergaenzen
+                  ? 'In der App sind hier keine Allergene gepflegt, der '
+                      'Navision-Suchbegriff nennt welche. Übernommen wird '
+                      'nur, was du auswählst. Was Navision nicht nennt, '
+                      'fehlt auch hier — die Angabe in der Artikelmaske '
+                      'prüfen.'
+                  : 'In der App gepflegt, aber Navision nennt weitere '
+                      'Allergene — oder die App sagt „keine". Übernehmen '
+                      'ergänzt sie; was die App mehr weiß, bleibt stehen.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+                height: 1.35,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          TextButton(
+            onPressed: sichtbar.isEmpty || alleGewaehlt
+                ? null
+                : () => setState(() => _allergenGewaehlt.addAll(ids)),
+            child: Text('Alle ${sichtbar.length} auswählen'),
+          ),
+          TextButton(
+            onPressed: ids.any(_allergenGewaehlt.contains)
+                ? () => setState(() => _allergenGewaehlt.removeAll(ids))
+                : null,
+            child: const Text('Auswahl aufheben'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Bausteine
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Klartext einer Allergen-Auswahl, z.B. „Eier, Milch".
+String _allergenText(Set<String> werte) =>
+    merkmaleLabel(merkmaleZuText(werte, kAllergene), kAllergene);
+
+/// Blau wie „vorgemerkt" im Auftragsbestand.
+Color _blau(ThemeData theme) => theme.brightness == Brightness.dark
+    ? const Color(0xFF60A5FA)
+    : const Color(0xFF1D4ED8);
+
+/// Bernstein — dunkel genug für hellen Grund.
+Color _bernstein(ThemeData theme) => theme.brightness == Brightness.dark
+    ? const Color(0xFFFBBF24)
+    : const Color(0xFFB45309);
+
+/// Vor dem ersten Einlesen: was hier passiert, und der Knopf.
+class _Einstieg extends StatelessWidget {
+  const _Einstieg({required this.fehler, required this.onEinlesen});
+
+  final String? fehler;
+  final VoidCallback? onEinlesen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = theme.textTheme.bodyMedium?.copyWith(height: 1.4);
+
+    Widget punkt(String t) => Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.only(top: 7, right: 10),
+                child: Icon(
+                  Icons.circle,
+                  size: 6,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+              Expanded(child: Text(t, style: text)),
+            ],
+          ),
+        );
+
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 580),
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.swap_horiz_rounded,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Artikelstamm aus Navision abgleichen',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Die Artikelübersicht aus Navision (als Excel '
+                    'exportiert) wird mit den Artikeln der App verglichen:',
+                    style: text,
+                  ),
+                  punkt(
+                    'Neue Artikel anlegen — vorausgewählt sind die, die im '
+                    'Auftragsbestand stehen.',
+                  ),
+                  punkt(
+                    'Allergene aus dem Suchbegriff vorschlagen, etwa „EI" '
+                    '→ Eier, „LAKTOSE" → Milch, „SENFSAAT" → Senf. '
+                    'Übernommen wird nur, was du auswählst.',
+                  ),
+                  punkt(
+                    'Bestand und offene Aufträge kommen nicht von hier, '
+                    'sondern aus dem Auftragsbestand — je Auftrag und '
+                    'Versandtag.',
+                  ),
+                  if (fehler != null) ...[
+                    const SizedBox(height: 14),
+                    Text(
+                      fehler!,
+                      style: text?.copyWith(color: theme.colorScheme.error),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
+                  FilledButton.icon(
+                    onPressed: onEinlesen,
+                    icon: const Icon(Icons.upload_file, size: 18),
+                    label: const Text('Artikelübersicht einlesen'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Datei und Kennzahlen des Abgleichs.
+class _Kopf extends StatelessWidget {
+  const _Kopf({required this.abgleich, required this.dateiname});
+
+  final ArtikelstammAbgleich abgleich;
+  final String? dateiname;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final a = abgleich;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (dateiname != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                dateiname!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          Wrap(
+            spacing: 26,
+            runSpacing: 8,
+            children: [
+              _Kennzahl(wert: '${a.gelesen}', label: 'Artikel gelesen'),
+              _Kennzahl(wert: '${a.neu.length}', label: 'neu'),
+              _Kennzahl(
+                wert: '${a.ergaenzen.length}',
+                label: 'Allergene fehlen',
+              ),
+              _Kennzahl(
+                wert: '${a.abweichend.length}',
+                label: 'Abweichungen',
+              ),
+              _Kennzahl(wert: '${a.unveraendert}', label: 'unverändert'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Kennzahl extends StatelessWidget {
+  const _Kennzahl({required this.wert, required this.label});
+
+  final String wert;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          wert,
+          style: theme.textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Hinweise vom Einlesen, z.B. eine fehlende Spalte.
+class _Hinweise extends StatelessWidget {
+  const _Hinweise({required this.warnungen});
+
+  final List<String> warnungen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = _bernstein(theme);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      color: farbe.withValues(alpha: 0.10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 18, color: farbe),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              [
+                ...warnungen.take(4),
+                if (warnungen.length > 4)
+                  '… und ${warnungen.length - 4} weitere',
+              ].join('\n'),
+              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Fehler über der Liste, zum Wegklicken.
+class _Meldung extends StatelessWidget {
+  const _Meldung({required this.text, required this.onSchliessen});
+
+  final String text;
+  final VoidCallback onSchliessen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
+      color: theme.colorScheme.errorContainer,
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(color: theme.colorScheme.onErrorContainer),
+            ),
+          ),
+          IconButton(
+            onPressed: onSchliessen,
+            icon: const Icon(Icons.close, size: 18),
+            tooltip: 'Schließen',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LeereListe extends StatelessWidget {
+  const _LeereListe({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Kleine Beschriftung mit Rahmen.
+class _Marke extends StatelessWidget {
+  const _Marke({required this.text, required this.farbe});
+
+  final String text;
+  final Color farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: farbe.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: farbe.withValues(alpha: 0.45)),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: farbe,
+        ),
+      ),
+    );
+  }
+}
+
+/// Ein neuer Artikel aus Navision.
+class _NeuZeile extends StatelessWidget {
+  const _NeuZeile({
+    required this.artikel,
+    required this.gewaehlt,
+    required this.mitAllergenen,
+    required this.onChanged,
+  });
+
+  final NeuerNavisionArtikel artikel;
+  final bool gewaehlt;
+
+  /// Die Allergen-Vorschläge werden beim Anlegen mitgenommen.
+  final bool mitAllergenen;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final z = artikel.zeile;
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final angaben = [
+      'Suchbegriff: ${z.suchbegriff ?? '—'}',
+      if ((z.produktgruppe ?? '').isNotEmpty) 'Produktgruppe ${z.produktgruppe}',
+      if ((z.basiseinheit ?? '').isNotEmpty) 'Einheit ${z.basiseinheit}',
+    ].join(' · ');
+
+    return InkWell(
+      onTap: () => onChanged(!gewaehlt),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 14, 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: gewaehlt,
+              onChanged: (v) => onChanged(v ?? false),
+            ),
+            SizedBox(
+              width: 96,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  z.nummer,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      z.beschreibung.isEmpty
+                          ? '(ohne Beschreibung)'
+                          : z.beschreibung,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    if ((z.beschreibung2 ?? '').isNotEmpty)
+                      Text(z.beschreibung2!, style: grau),
+                    Text(angaben, style: grau),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 300),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  alignment: WrapAlignment.end,
+                  children: [
+                    if (artikel.imAuftragsbestand)
+                      _Marke(
+                        text: 'im Auftragsbestand',
+                        farbe: _blau(theme),
+                      ),
+                    if (artikel.geloescht)
+                      _Marke(
+                        text: 'früher gelöscht — wird wieder aktiviert',
+                        farbe: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    if (artikel.allergene.isEmpty)
+                      _Marke(
+                        text: 'keine Allergene im Suchbegriff',
+                        farbe: theme.colorScheme.onSurfaceVariant,
+                      )
+                    else
+                      Tooltip(
+                        message: mitAllergenen
+                            ? 'Wird beim Anlegen als Allergenangabe '
+                                'gespeichert.'
+                            : 'Wird nicht gespeichert — „Allergen-Vorschläge '
+                                'mitnehmen" ist aus.',
+                        child: _Marke(
+                          text: 'Allergene: '
+                              '${_allergenText(artikel.allergene)}',
+                          farbe: mitAllergenen
+                              ? _bernstein(theme)
+                              : theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ein Artikel der App mit einem Allergen-Vorschlag aus Navision.
+class _AllergenZeile extends StatelessWidget {
+  const _AllergenZeile({
+    required this.vorschlag,
+    required this.gewaehlt,
+    required this.onChanged,
+  });
+
+  final AllergenVorschlag vorschlag;
+  final bool gewaehlt;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final v = vorschlag;
+    final p = v.produkt;
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    final navision = [
+      if (v.zeile.beschreibung.isNotEmpty) 'Navision: ${v.zeile.beschreibung}',
+      'Suchbegriff: ${v.zeile.suchbegriff ?? '—'}',
+    ].join(' · ');
+    final bisher = v.bisher.isEmpty
+        ? 'nicht gepflegt'
+        : _allergenText(v.bisher);
+
+    return InkWell(
+      onTap: () => onChanged(!gewaehlt),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(6, 4, 14, 6),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Checkbox(
+              value: gewaehlt,
+              onChanged: (x) => onChanged(x ?? false),
+            ),
+            SizedBox(
+              width: 96,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  p.artikelnummer,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      p.artikelbezeichnung,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                    Text(navision, style: grau),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 320),
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'App: $bisher',
+                      textAlign: TextAlign.right,
+                      style: v.widerspruch
+                          ? grau?.copyWith(
+                              color: theme.colorScheme.error,
+                              fontWeight: FontWeight.w700,
+                            )
+                          : grau,
+                    ),
+                    const SizedBox(height: 3),
+                    _Marke(
+                      text: '+ ${_allergenText(v.neu)}',
+                      farbe: _bernstein(theme),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Rückfrage vor dem Schreiben.
+class _BestaetigenDialog extends StatelessWidget {
+  const _BestaetigenDialog({
+    required this.neue,
+    required this.wiederAktiviert,
+    required this.neueMitAllergenen,
+    required this.allergene,
+  });
+
+  final int neue;
+  final int wiederAktiviert;
+  final int neueMitAllergenen;
+  final int allergene;
+
+  @override
+  Widget build(BuildContext context) {
+    final davonAktiviert = wiederAktiviert > 0
+        ? ' (davon $wiederAktiviert früher gelöschte wieder aktivieren)'
+        : '';
+    final mitAllergenen = neueMitAllergenen > 0
+        ? ', $neueMitAllergenen mit Allergenen aus dem Suchbegriff'
+        : '';
+    final bestehende = allergene == 1 ? 'Artikel' : 'Artikeln';
+    final punkte = [
+      if (neue > 0) '$neue Artikel anlegen$davonAktiviert$mitAllergenen.',
+      if (allergene > 0)
+        'Bei $allergene bestehenden $bestehende die Allergene aus Navision '
+            'übernehmen.',
+    ];
+    return AlertDialog(
+      title: const Text('Übernehmen?'),
+      content: SizedBox(
+        width: 480,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final p in punkte)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('• $p'),
+              ),
+            if (neue > 0)
+              Text(
+                'Neue Artikel sind danach als „nicht eingepflegt" markiert. '
+                'Prozessschritte und Stammdaten in der Artikelliste '
+                'nachtragen, dann lassen sie sich einplanen.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Übernehmen'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Halbtransparenter Schleier mit Ladebalken beim Einlesen.
+///
+/// Bewusst kein Dialog: Der Schleier sperrt die Bedienung, ohne den
+/// Navigations-Stack anzufassen — scheitert das Einlesen, bleibt kein
+/// offener Dialog stehen.
+class _Fortschritt extends StatelessWidget {
+  const _Fortschritt({required this.stand});
+
+  final NavisionFortschritt stand;
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Positioned.fill(
       child: ColoredBox(
@@ -469,10 +1316,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 18),
-                    // anteil == null → unbestimmter Balken. Genau das ist
-                    // beim Öffnen der Datei richtig: Das Excel-Paket liest
-                    // am Stück und meldet unterwegs nichts. Ein Prozentwert
-                    // wäre dort frei erfunden.
+                    // anteil == null → unbestimmter Balken: Das Öffnen der
+                    // Datei meldet keine Zwischenstände.
                     LinearProgressIndicator(
                       value: stand.anteil,
                       minHeight: 8,
@@ -484,14 +1329,6 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                       style: theme.textTheme.bodyMedium,
                       textAlign: TextAlign.center,
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Das kann bei großen Dateien eine Weile dauern.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
                   ],
                 ),
               ),
@@ -501,846 +1338,4 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
       ),
     );
   }
-
-  Widget _inhalt(
-    BuildContext context,
-    AsyncValue<List<NavisionArtikel>> katalog,
-    Set<String> appNummern,
-    Map<String, double> imBedarfKg,
-    Map<String, double> faktoren,
-    Map<String, Set<String>> abteilungen,
-  ) {
-    return katalog.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Fehler: $e')),
-      data: (alle) {
-        if (alle.isEmpty) return _leerHinweis(context);
-        final liste = _gefiltert(alle, imBedarfKg, faktoren, abteilungen);
-        final markierte =
-            liste.where((a) => _markiert.contains(a.nummer)).toList();
-        final fehlendeMitBedarf = alle
-            .where(
-              (a) => offenerBedarf(a) > 0 && !appNummern.contains(a.nummer),
-            )
-            .toList();
-
-        return Column(
-          children: [
-            _filterLeiste(context, alle, liste.length, abteilungen),
-            if (fehlendeMitBedarf.isNotEmpty)
-              _fehlendeBanner(context, fehlendeMitBedarf),
-            const Divider(height: 1),
-            Expanded(
-              child: _tabelle(
-                context,
-                liste,
-                appNummern,
-                imBedarfKg,
-                faktoren,
-              ),
-            ),
-            if (markierte.isNotEmpty)
-              _aktionsLeiste(context, markierte),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _leerHinweis(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.table_view,
-              size: 46,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Noch kein Navision-Stand eingelesen.',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Zieh in Navision die Artikelübersicht nach Excel und lies '
-              'sie hier ein. Aus Bestand, Menge in Auftrag und Menge in FA '
-              'errechnet die App den offenen Bedarf.',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 18),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _filterLeiste(
-    BuildContext context,
-    List<NavisionArtikel> alle,
-    int treffer,
-    Map<String, Set<String>> abteilungenJeArtikel,
-  ) {
-    final theme = Theme.of(context);
-
-    // Wie viele der eingelesenen Artikel jede Abteilung betreffen. Die Zahl
-    // steht in der Auswahl und beantwortet die eigentliche Frage schon vor
-    // dem Klick: „Habe ich heute überhaupt etwas für die Schneideabteilung?"
-    //
-    // Gezählt wird gegen den ganzen Katalog, nicht gegen die übrigen Filter
-    // — sonst änderte sich die Zahl bei jedem Tastendruck in der Suche.
-    //
-    // Angeboten werden immer alle Abteilungen, auch die mit Null. Eine
-    // Auswahl, die je nach Datenlage verschwindet, würde den gesetzten
-    // Filter unsichtbar machen und die Liste ohne erkennbaren Grund leer
-    // lassen.
-    final anzahlJeAbteilung = <String, int>{};
-    for (final a in alle) {
-      final eigene = abteilungenJeArtikel[a.nummer];
-      if (eigene == null) continue;
-      for (final d in eigene) {
-        anzahlJeAbteilung[d] = (anzahlJeAbteilung[d] ?? 0) + 1;
-      }
-    }
-    List<String> werte(String? Function(NavisionArtikel) f) {
-      final s = <String>{};
-      for (final a in alle) {
-        final v = f(a);
-        if (v != null && v.trim().isNotEmpty) s.add(v);
-      }
-      final l = s.toList()..sort();
-      return l;
-    }
-
-    Widget dropdown(
-      String label,
-      String? wert,
-      List<String> optionen,
-      ValueChanged<String?> onChanged,
-    ) {
-      return SizedBox(
-        width: 210,
-        child: DropdownButtonFormField<String>(
-          initialValue: wert,
-          isExpanded: true,
-          decoration: InputDecoration(
-            labelText: label,
-            border: const OutlineInputBorder(),
-            isDense: true,
-          ),
-          items: [
-            const DropdownMenuItem(value: null, child: Text('Alle')),
-            for (final o in optionen)
-              DropdownMenuItem(value: o, child: Text(o)),
-          ],
-          onChanged: (v) => setState(() => onChanged(v)),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 280,
-                child: TextField(
-                  controller: _suche,
-                  decoration: const InputDecoration(
-                    labelText: 'Suche (Nummer oder Bezeichnung)',
-                    prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  onChanged: (_) => setState(() {}),
-                ),
-              ),
-              dropdown(
-                'Produktgruppe',
-                _produktgruppe,
-                werte((a) => a.produktgruppe),
-                (v) => _produktgruppe = v,
-              ),
-              dropdown(
-                'Kategorie',
-                _kategorie,
-                werte((a) => a.artikelkategorie),
-                (v) => _kategorie = v,
-              ),
-              dropdown(
-                'Buchungsgruppe',
-                _buchungsgruppe,
-                werte((a) => a.produktbuchungsgruppe),
-                (v) => _buchungsgruppe = v,
-              ),
-              dropdown(
-                'Einheit',
-                _einheit,
-                werte((a) => a.basiseinheit),
-                (v) => _einheit = v,
-              ),
-              SizedBox(
-                width: 230,
-                child: DropdownButtonFormField<String>(
-                  initialValue: _abteilung,
-                  isExpanded: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Abteilung',
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                  items: [
-                    const DropdownMenuItem(
-                      value: null,
-                      child: Text('Alle'),
-                    ),
-                    for (final a in Abteilung.values)
-                      DropdownMenuItem(
-                        value: a.dbValue,
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: a.farbe,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Flexible(
-                              child: Text(
-                                '${a.anzeigeName} '
-                                '(${anzahlJeAbteilung[a.dbValue] ?? 0})',
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                  onChanged: (v) => setState(() => _abteilung = v),
-                ),
-              ),
-              FilterChip(
-                label: const Text('Nur mit Bedarf'),
-                selected: _nurBedarf,
-                onSelected: (v) => setState(() => _nurBedarf = v),
-              ),
-              FilterChip(
-                label: const Text('Nur mit Bestand'),
-                selected: _nurBestand,
-                onSelected: (v) => setState(() => _nurBestand = v),
-              ),
-              // Sortierung der Liste
-              SizedBox(
-                height: 38,
-                child: DropdownButtonFormField<_NavSort>(
-                  initialValue: _sort,
-                  isDense: true,
-                  decoration: const InputDecoration(
-                    labelText: 'Sortierung',
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  ),
-                  // Farbe ausdrücklich setzen: Ohne sie erbte der Text die
-                  // Standardfarbe der Umgebung und stand im hellen Modus
-                  // weiß auf hellem Grund — unlesbar. Die anderen
-                  // Auswahlfelder haben kein eigenes `style` und waren
-                  // deshalb nie betroffen.
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: theme.colorScheme.onSurface,
-                  ),
-                  items: [
-                    for (final s in _NavSort.values)
-                      DropdownMenuItem(value: s, child: Text(s.label)),
-                  ],
-                  onChanged: (v) =>
-                      setState(() => _sort = v ?? _NavSort.bedarfAbst),
-                ),
-              ),
-              if (_produktgruppe != null ||
-                  _kategorie != null ||
-                  _buchungsgruppe != null ||
-                  _einheit != null ||
-                  _abteilung != null ||
-                  _suche.text.isNotEmpty)
-                TextButton.icon(
-                  onPressed: () => setState(() {
-                    _produktgruppe = null;
-                    _kategorie = null;
-                    _buchungsgruppe = null;
-                    _einheit = null;
-                    _abteilung = null;
-                    _suche.clear();
-                  }),
-                  icon: const Icon(Icons.filter_alt_off, size: 18),
-                  label: const Text('Filter zurücksetzen'),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '$treffer von ${alle.length} Artikeln'
-            '${alle.isEmpty ? '' : ' · Stand '
-                '${_fmtDatum(alle.first.importiertAm)}'}',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          if (_abteilung != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                'Gezeigt werden nur Artikel, deren Prozess einen Schritt in '
-                'dieser Abteilung hat. Artikel ohne gepflegten Prozess '
-                'erscheinen nicht.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  static String _fmtDatum(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}.'
-      '${d.month.toString().padLeft(2, '0')}.${d.year}';
-
-  Widget _tabelle(
-    BuildContext context,
-    List<NavisionArtikel> liste,
-    Set<String> appNummern,
-    Map<String, double> imBedarfKg,
-    Map<String, double> faktoren,
-  ) {
-    final theme = Theme.of(context);
-    if (liste.isEmpty) {
-      return Center(
-        child: Text(
-          'Keine Artikel passen zu den Filtern.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-    return ListView.builder(
-      itemCount: liste.length,
-      itemBuilder: (context, i) {
-        final a = liste[i];
-        final bedarf = offenerBedarf(a);
-        final inApp = appNummern.contains(a.nummer);
-        final bereitsKg = imBedarfKg[a.nummer] ?? 0;
-        final nettoKg = nettoOffenKg(a, imBedarfKg, faktoren);
-        final imBedarfBereits = bereitsKg > 0;
-        final gedeckt = imBedarfBereits && nettoKg != null && nettoKg <= 0;
-        final markiert = _markiert.contains(a.nummer);
-        return InkWell(
-          onTap: () => setState(() {
-            markiert ? _markiert.remove(a.nummer) : _markiert.add(a.nummer);
-          }),
-          child: Container(
-            decoration: BoxDecoration(
-              color: markiert
-                  ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
-                  : (gedeckt
-                      ? Colors.green.withValues(alpha: 0.07)
-                      : null),
-              border: Border(bottom: BorderSide(color: theme.dividerColor)),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            child: Row(
-              children: [
-                SizedBox(
-                  width: 26,
-                  child: Icon(
-                    markiert
-                        ? Icons.check_box
-                        : Icons.check_box_outline_blank,
-                    size: 18,
-                    color: markiert
-                        ? theme.colorScheme.primary
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                SizedBox(
-                  width: 84,
-                  child: Text(
-                    a.nummer,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.primary,
-                      fontSize: 12.5,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        a.beschreibung,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if ((a.beschreibung2 ?? '').isNotEmpty)
-                        Text(
-                          a.beschreibung2!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      if (imBedarfBereits)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 3),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                gedeckt
-                                    ? Icons.check_circle
-                                    : Icons.playlist_add_check,
-                                size: 13,
-                                color: gedeckt
-                                    ? Colors.green.shade700
-                                    : Colors.orange.shade800,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                nettoKg == null
-                                    ? 'im Bedarf: ${_fmt(bereitsKg)} kg'
-                                    : (gedeckt
-                                        ? 'komplett im Bedarf '
-                                            '(${_fmt(bereitsKg)} kg)'
-                                        : 'im Bedarf ${_fmt(bereitsKg)} kg · '
-                                            'offen ${_fmt(nettoKg)} kg'),
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: gedeckt
-                                      ? Colors.green.shade700
-                                      : Colors.orange.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                SizedBox(
-                  width: 62,
-                  child: Tooltip(
-                    message: istKg(a)
-                        ? 'Basiseinheit Kilogramm'
-                        : 'Basiseinheit ${a.basiseinheit} — '
-                            'muss für die Planung in kg umgerechnet werden',
-                    child: Text(
-                      a.basiseinheit ?? '—',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: istKg(a)
-                            ? theme.colorScheme.onSurfaceVariant
-                            : Colors.orange.shade800,
-                      ),
-                    ),
-                  ),
-                ),
-                _zahlSpalte('Bestand', a.lagerbestand, theme),
-                _zahlSpalte(
-                  'Auftrag',
-                  a.mengeInAuftrag,
-                  theme,
-                ),
-                _zahlSpalte(
-                  'Bedarf',
-                  bedarf,
-                  theme,
-                  hervorheben: bedarf > 0,
-                ),
-                SizedBox(
-                  width: 34,
-                  child: inApp
-                      ? Tooltip(
-                          message: 'Prozess in der App vorhanden',
-                          child: Icon(
-                            Icons.link,
-                            size: 16,
-                            color: theme.colorScheme.primary,
-                          ),
-                        )
-                      : Tooltip(
-                          message: 'Noch kein App-Artikel — '
-                              'wird bei Übernahme angelegt',
-                          child: Icon(
-                            Icons.link_off,
-                            size: 16,
-                            color: theme.colorScheme.onSurfaceVariant
-                                .withValues(alpha: 0.5),
-                          ),
-                        ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _zahlSpalte(
-    String label,
-    double wert,
-    ThemeData theme, {
-    bool hervorheben = false,
-  }) {
-    return SizedBox(
-      width: 92,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 9.5,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-          Text(
-            _fmt(wert),
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: hervorheben ? FontWeight.w800 : FontWeight.w500,
-              color: hervorheben ? theme.colorScheme.primary : null,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _aktionsLeiste(
-    BuildContext context,
-    List<NavisionArtikel> markierte,
-  ) {
-    final summe = markierte.fold<double>(0, (s, a) => s + offenerBedarf(a));
-    return Material(
-      elevation: 3,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-        child: Row(
-          children: [
-            Text(
-              '${markierte.length} markiert · ${_fmt(summe)} kg Bedarf',
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
-            const Spacer(),
-            TextButton(
-              onPressed: () => setState(_markiert.clear),
-              child: const Text('Auswahl aufheben'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: () => _inBedarf(markierte),
-              icon: const Icon(Icons.playlist_add, size: 18),
-              label: const Text('In Bedarf übernehmen'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Kompakter Hinweis über der Tabelle: N Artikel mit offenem Bedarf haben
-  /// noch keine Artikelmaske. Ein Klick legt für alle eine Stub-Maske an.
-  Widget _fehlendeBanner(
-    BuildContext context,
-    List<NavisionArtikel> fehlende,
-  ) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.tertiaryContainer,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
-        child: Row(
-          children: [
-            Icon(
-              Icons.info_outline,
-              size: 18,
-              color: theme.colorScheme.onTertiaryContainer,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '${fehlende.length} Artikel mit Bedarf haben noch keine '
-                'Artikelmaske in der App.',
-                style: TextStyle(
-                  color: theme.colorScheme.onTertiaryContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            FilledButton.icon(
-              onPressed: _busy ? null : () => _fehlendeAnlegen(fehlende),
-              icon: const Icon(Icons.playlist_add_check, size: 18),
-              label: Text('Fehlende anlegen (${fehlende.length})'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  /// Legt für alle übergebenen Navision-Artikel eine „nicht eingepflegte"
-  /// Stub-Artikelmaske an — aber nur, wenn die Artikelnummer noch nicht
-  /// existiert. Der Abgleich läuft über die eindeutige Artikelnummer, es
-  /// wird also nichts doppelt angelegt und keine bereits gepflegte Maske
-  /// überschrieben.
-  Future<void> _fehlendeAnlegen(List<NavisionArtikel> fehlende) async {
-    final anzahl = fehlende.length;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Fehlende Artikel anlegen?'),
-        content: Text(
-          'Für $anzahl Artikel mit offenem Bedarf, die es in der Artikelliste '
-          'noch nicht gibt, wird je eine Artikelmaske angelegt und als '
-          '„nicht eingepflegt" markiert. Bereits vorhandene Artikel bleiben '
-          'unberührt.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text('$anzahl anlegen'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-
-    setState(() => _busy = true);
-    try {
-      final db = ref.read(databaseProvider);
-      var angelegt = 0;
-      await db.transaction(() async {
-        // Alle bestehenden Nummern EINMAL laden (inkl. soft-deleted — die
-        // Unique-Spalte artikelnummer ist auch dann noch belegt).
-        final vorhandene = await db.select(db.products).get();
-        final nummern = vorhandene.map((p) => p.artikelnummer).toSet();
-        for (final a in fehlende) {
-          if (nummern.contains(a.nummer)) continue;
-          await db.into(db.products).insert(
-                ProductsCompanion.insert(
-                  id: const Uuid().v4(),
-                  artikelnummer: a.nummer,
-                  artikelbezeichnung:
-                      a.beschreibung.isEmpty ? a.nummer : a.beschreibung,
-                  beschreibung: Value(a.beschreibung2),
-                  istEingepflegt: const Value(false),
-                ),
-              );
-          nummern.add(a.nummer);
-          angelegt++;
-        }
-      });
-      ref.invalidate(appArtikelnummernProvider);
-      ref
-          .read(autoBackupTriggerProvider)
-          .fireDebounced(reason: 'Navision-Stubs angelegt');
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 5),
-          content: Text(
-            '$angelegt Artikelmaske(n) angelegt · als „nicht eingepflegt" '
-            'markiert. Du findest sie in der Artikelliste.',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Anlegen fehlgeschlagen: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
 }
-
-/// Fragt für Artikel ohne Kilogramm-Basiseinheit den Umrechnungsfaktor ab.
-///
-/// Navision führt viele Fertigwaren in Beutel oder Pack. Für die Planung
-/// zählt aber, wie viel Masse durch die Anlagen geht — deshalb hier die
-/// einmalige Angabe „wie viel kg ist eine Einheit". Der Wert wird
-/// gespeichert und beim nächsten Import wiederverwendet.
-class _UmrechnungDialog extends StatefulWidget {
-  const _UmrechnungDialog({required this.artikel});
-
-  final List<NavisionArtikel> artikel;
-
-  @override
-  State<_UmrechnungDialog> createState() => _UmrechnungDialogState();
-}
-
-class _UmrechnungDialogState extends State<_UmrechnungDialog> {
-  final Map<String, TextEditingController> _felder = {};
-
-  @override
-  void initState() {
-    super.initState();
-    for (final a in widget.artikel) {
-      _felder[a.nummer] = TextEditingController();
-    }
-  }
-
-  @override
-  void dispose() {
-    for (final c in _felder.values) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Map<String, double> _werte() {
-    final res = <String, double>{};
-    for (final e in _felder.entries) {
-      final v = double.tryParse(e.value.text.trim().replaceAll(',', '.'));
-      if (v != null && v > 0) res[e.key] = v;
-    }
-    return res;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final gefuellt = _werte().length;
-    return AlertDialog(
-      title: const Text('Einheiten umrechnen'),
-      content: SizedBox(
-        width: 560,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Diese Artikel führt Navision nicht in Kilogramm. Trag ein, '
-              'wie viel kg eine Einheit entspricht — die Angabe wird '
-              'gespeichert und künftig automatisch verwendet. '
-              'Leer gelassene Zeilen werden übersprungen.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: widget.artikel.length,
-                itemBuilder: (context, i) {
-                  final a = widget.artikel[i];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 76,
-                          child: Text(
-                            a.nummer,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 12.5,
-                              color: theme.colorScheme.primary,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text(
-                            a.beschreibung,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        SizedBox(
-                          width: 128,
-                          child: TextField(
-                            controller: _felder[a.nummer],
-                            keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true,
-                            ),
-                            textAlign: TextAlign.end,
-                            decoration: InputDecoration(
-                              labelText: 'kg je ${a.basiseinheit}',
-                              border: const OutlineInputBorder(),
-                              isDense: true,
-                            ),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_werte()),
-          child: Text(
-            gefuellt == 0
-                ? 'Ohne Umrechnung fortfahren'
-                : '$gefuellt übernehmen',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-
-
-
-
-

@@ -85,31 +85,6 @@ Future<void> seedAnlage(
       );
 }
 
-/// Legt eine Navision-Katalogzeile an.
-///
-/// [mengeInAuftrag] minus [lagerbestand] ergibt den offenen Bedarf — in der
-/// Basiseinheit, nicht zwingend in Kilogramm.
-Future<void> seedNavisionArtikel(
-  AppDatabase db, {
-  required String nummer,
-  String beschreibung = 'Navision-Testartikel',
-  String basiseinheit = 'KG',
-  double lagerbestand = 0,
-  double mengeInAuftrag = 0,
-  double mengeInFa = 0,
-}) async {
-  await db.into(db.navisionArtikelKatalog).insert(
-        NavisionArtikelKatalogCompanion.insert(
-          nummer: nummer,
-          beschreibung: Value(beschreibung),
-          basiseinheit: Value(basiseinheit),
-          lagerbestand: Value(lagerbestand),
-          mengeInAuftrag: Value(mengeInAuftrag),
-          mengeInFa: Value(mengeInFa),
-        ),
-      );
-}
-
 /// Legt eine Bedarfsposition an.
 Future<void> seedBedarf(
   AppDatabase db, {
@@ -127,7 +102,3 @@ Future<void> seedBedarf(
         ),
       );
 }
-
-/// Liest den Navision-Katalog als Liste.
-Future<List<NavisionArtikel>> ladeNavisionArtikel(AppDatabase db) =>
-    db.select(db.navisionArtikelKatalog).get();

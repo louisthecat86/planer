@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 
+import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/zeit.dart';
 
 import 'board_providers.dart';
@@ -78,7 +79,10 @@ class BoardPrintService {
   // -------------------------------------------------------------------------
 
   static pw.Widget _wocheContent(WeekBoard board) {
-    final kw = _isoKw(board.wochenStart);
+    // Die gemeinsame Berechnung der App: Die eigene Fassung hier zählte
+    // im Sommer über die Zeitumstellung einen Tag zu wenig und druckte
+    // manche Woche mit der Nummer der Vorwoche.
+    final kw = isoKalenderwoche(board.wochenStart);
     final mo = board.tage.first;
     final fr = board.tage.last;
 
@@ -328,16 +332,4 @@ class BoardPrintService {
     return Zeit.kurzOhneEinheit(minuten);
   }
 
-  static int _isoKw(DateTime date) {
-    final d = DateTime(date.year, date.month, date.day);
-    final dayOfYear = d.difference(DateTime(d.year, 1, 1)).inDays + 1;
-    final wday = d.weekday;
-    final wn = ((dayOfYear - wday + 10) / 7).floor();
-    if (wn < 1) return _isoKw(DateTime(d.year - 1, 12, 31));
-    if (wn > 52) {
-      final dec31 = DateTime(d.year, 12, 31);
-      if (dec31.weekday < 4) return 1;
-    }
-    return wn;
-  }
 }

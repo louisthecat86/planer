@@ -19,8 +19,6 @@ import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
 import 'tables/task_dependencies.dart';
 import 'tables/week_snapshots.dart';
-import 'tables/navision_artikel_katalog.dart';
-import 'tables/navision_umrechnungen.dart';
 import 'tables/zusatzzeiten.dart';
 
 part 'database.g.dart';
@@ -53,10 +51,10 @@ part 'database.g.dart';
     ParameterGrenzen,
     MachineParameterDefs,
     Zusatzzeiten,
-    NavisionArtikelKatalog,
-    NavisionUmrechnungen,
     AuftragsbestandArtikel,
     AuftragsbestandPositionen,
+    AuftragsbestandArtikelVorher,
+    AuftragsbestandPositionenVorher,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -74,7 +72,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 30;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -339,17 +337,10 @@ class AppDatabase extends _$AppDatabase {
             await m.createTable(zusatzzeiten);
           }
 
-          // --- v14 -> v15: Artikelkatalog aus Navision -----------------
-          if (from < 15) {
-            await m.createTable(navisionArtikelKatalog);
-          }
-
-          // --- v15 -> v16: Einheiten-Umrechnung (BTL/PACK → kg) --------
-          // Eigene Tabelle, weil der Katalog bei jedem Import ersetzt wird
-          // und die mühsam erfassten Faktoren sonst verloren gingen.
-          if (from < 16) {
-            await m.createTable(navisionUmrechnungen);
-          }
+          // --- v14 -> v15 und v15 -> v16: Navision-Katalog und
+          // Einheiten-Umrechnung. Beide Tabellen gehörten zum Weg
+          // „Navision → Bedarf" und sind seit v29 entfernt — für ältere
+          // Datenbanken ist hier nichts mehr anzulegen.
           // --- v16 -> v17: Pflegestatus für Artikel ----------------
           // Stub-Artikel aus dem Navision-Abgleich werden mit
           // ist_eingepflegt = 0 angelegt. Bestehende Artikel gelten
@@ -472,6 +463,36 @@ class AppDatabase extends _$AppDatabase {
               'auftrags_zeilen',
               'TEXT',
             );
+          }
+
+          // --- v27 → v28: Planungsaufträge für den Planungsvorschlag ---
+          // Ein Bedarf kann die gebündelten Auftragszeilen tragen, aus
+          // denen er im Auftragsbestand entstanden ist.
+          if (from < 28) {
+            await _addColumnIfNotExists('demands', 'auftrags_zeilen', 'TEXT');
+          }
+
+          // --- v28 → v29: Navision-Bedarfsweg entfernt ------------------
+          // Katalog und Umrechnungsfaktoren dienten nur dazu, aus der
+          // Navision-Artikelübersicht Bedarf zu machen. Bedarf entsteht
+          // jetzt im Auftragsbestand; die Artikelübersicht liefert nur
+          // noch Stammdaten und wird nicht mehr gespeichert.
+          if (from < 29) {
+            await customStatement(
+              'DROP TABLE IF EXISTS navision_artikel_katalog',
+            );
+            await customStatement(
+              'DROP TABLE IF EXISTS navision_umrechnungen',
+            );
+          }
+
+          // --- v29 → v30: Auftragsbestand vor dem letzten Einlesen ------
+          // Grundlage der Änderungsansicht: Jedes Einlesen kopiert den
+          // bisherigen Stand dorthin, bevor es ihn ersetzt. createTable
+          // arbeitet mit IF NOT EXISTS.
+          if (from < 30) {
+            await m.createTable(auftragsbestandArtikelVorher);
+            await m.createTable(auftragsbestandPositionenVorher);
           }
         },
         beforeOpen: (details) async {

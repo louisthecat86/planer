@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 
 /// Standard-Kapazität pro Abteilung und Tag in Minuten (10 h), wenn für die
@@ -356,11 +357,10 @@ final weekBoardProvider = FutureProvider.autoDispose
   final db = ref.watch(databaseProvider);
 
   final wochenStart = _montag(anyDayInWeek);
-  final tage = List.generate(
-    5,
-    (i) => wochenStart.add(Duration(days: i)),
-  );
-  final wochenEndeExkl = wochenStart.add(const Duration(days: 7));
+  // Über die Tageszahl, nicht per Duration — sonst verrutscht das Ende der
+  // Woche am Wochenende der Zeitumstellung um eine Stunde.
+  final tage = List.generate(5, (i) => tagPlus(wochenStart, i));
+  final wochenEndeExkl = tagPlus(wochenStart, 7);
 
   final alleTasks = await _ladeBoardTasks(db, wochenStart, wochenEndeExkl);
 
@@ -444,7 +444,7 @@ final dayBoardProvider = FutureProvider.autoDispose
   final db = ref.watch(databaseProvider);
 
   final tag = DateTime(datum.year, datum.month, datum.day);
-  final naechsterTag = tag.add(const Duration(days: 1));
+  final naechsterTag = tagPlus(tag, 1);
 
   final alleTasks = await _ladeBoardTasks(db, tag, naechsterTag);
   final planungsAnlagen = await _ladePlanungsAnlagen(db);
@@ -709,10 +709,7 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
 
 
 /// Montag der Woche von [d], normalisiert auf 00:00 Uhr.
-DateTime _montag(DateTime d) {
-  final tag = DateTime(d.year, d.month, d.day);
-  return tag.subtract(Duration(days: tag.weekday - 1));
-}
+DateTime _montag(DateTime d) => tagPlus(d, -(d.weekday - 1));
 
 /// Eindeutiger Schlüssel einer Wochenboard-Zelle.
 String _cellKey(BoardSpur spur, DateTime tag) {
@@ -815,7 +812,7 @@ Future<Map<String, double>> tageskapazitaetJeAbteilung(
   required DateTime wochenStart,
 }) async {
   final start = _montag(wochenStart);
-  final endeExkl = start.add(const Duration(days: 7));
+  final endeExkl = tagPlus(start, 7);
 
   final tasks = await _ladeBoardTasks(db, start, endeExkl);
   final planungsAnlagen = await _ladePlanungsAnlagen(db);

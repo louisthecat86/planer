@@ -8,9 +8,13 @@ import 'package:produktion_planer/features/auftragsbestand/auftrags_einplanung.d
 
 import 'helpers/test_db.dart';
 
-/// Tests für „Zur Planung hinzufügen" im Auftragsbestand: Die Produktion
-/// entsteht im Board, trägt die Auftragszeilen an der Wurzel, und die
-/// Zeilen sind damit eingeplant — bis die Produktion gelöscht wird.
+/// Tests für „Zur Planung hinzufügen" im Auftragsbestand — beide Wege:
+///
+/// * Fester Tag: Die Produktion entsteht im Board, trägt die
+///   Auftragszeilen an der Wurzel, und die Zeilen sind damit eingeplant —
+///   bis die Produktion gelöscht wird.
+/// * Planungsvorschlag: Es entsteht ein Planungsauftrag, die Zeilen sind
+///   vorgemerkt — bis er eingeplant oder aufgehoben wird.
 void main() {
   late AppDatabase db;
 
@@ -147,6 +151,73 @@ void main() {
       throwsA(isA<StateError>()),
     );
     expect(await db.select(db.productionTasks).get(), isEmpty);
+  });
+
+  group('An den Planungsvorschlag übergeben', () {
+    test('legt einen Planungsauftrag mit Zeilen und Termin an', () async {
+      final id = await uebergebeAnPlanungsvorschlag(
+        db: db,
+        productId: 'p1',
+        fertigKg: 250,
+        termin: DateTime(2026, 10, 2, 14, 30),
+        bezuege: [bezug],
+      );
+
+      final d = await (db.select(db.demands)..where((x) => x.id.equals(id)))
+          .getSingle();
+      expect(d.quelle, kQuelleAuftragsbestand);
+      expect(d.mengeKgFertig, 250);
+      expect(d.termin, DateTime(2026, 10, 2));
+      expect(AuftragsBezug.dekodiere(d.auftragsZeilen).single.beleg, 'VA1');
+      expect(d.notizen, contains('Kunde 1'));
+      // Im Board steht noch nichts — das legt erst der Vorschlag an.
+      expect(await db.select(db.productionTasks).get(), isEmpty);
+    });
+
+    test('die Zeile ist vorgemerkt und lässt sich nicht erneut bündeln',
+        () async {
+      await uebergebeAnPlanungsvorschlag(
+        db: db,
+        productId: 'p1',
+        fertigKg: 250,
+        termin: DateTime(2026, 10, 2),
+        bezuege: [bezug],
+      );
+
+      final v = await ladeVormerkungen(db);
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [position],
+        zugaenge: await zugaenge(),
+        vormerkungen: v['12981'] ?? const [],
+      );
+      final z = d.tage.single.zeilen.single;
+      expect(z.vorgemerkt, isTrue);
+      expect(z.geplant, isFalse);
+      expect(d.tage.single.einplanbar, isFalse);
+      expect(d.erledigt, isTrue);
+      expect(d.fruehesterVormerkTermin, DateTime(2026, 10, 2));
+    });
+
+    test('Vormerkung aufgehoben: die Zeile ist wieder offen', () async {
+      final id = await uebergebeAnPlanungsvorschlag(
+        db: db,
+        productId: 'p1',
+        fertigKg: 250,
+        termin: DateTime(2026, 10, 2),
+        bezuege: [bezug],
+      );
+      await hebeVormerkungAuf(db: db, bedarfId: id);
+
+      final v = await ladeVormerkungen(db);
+      expect(v, isEmpty);
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [position],
+        vormerkungen: v['12981'] ?? const [],
+      );
+      expect(d.tage.single.einplanbar, isTrue);
+    });
   });
 
   group('Vorschlag für den Produktionstag', () {

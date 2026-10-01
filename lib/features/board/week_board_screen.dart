@@ -7,6 +7,8 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/utils/zeit.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auftragsbestand_deckung.dart'
+    show AuftragsBezug, bezuegeFuerNeueProduktion;
 import '../../core/services/auto_backup_trigger.dart';
 import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
@@ -133,18 +135,22 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
 
   // ---- Navigation (je nach Modus Woche oder Tag) ----
 
+  // Über die Tageszahl gerechnet, nicht mit `Duration`: Am Wochenende der
+  // Zeitumstellung hat ein Tag 23 oder 25 Stunden. `add(Duration(days: 7))`
+  // landete dann auf 23:00 des Sonntags — und „nächste Woche" zeigte
+  // dieselbe Woche noch einmal.
   void _zurueck() {
     final d = ref.read(selectedDateProvider);
     final delta = _modus == _Modus.woche ? 7 : 1;
     ref.read(selectedDateProvider.notifier).state =
-        d.subtract(Duration(days: delta));
+        DateTime(d.year, d.month, d.day - delta);
   }
 
   void _vor() {
     final d = ref.read(selectedDateProvider);
     final delta = _modus == _Modus.woche ? 7 : 1;
     ref.read(selectedDateProvider.notifier).state =
-        d.add(Duration(days: delta));
+        DateTime(d.year, d.month, d.day + delta);
   }
 
   void _heute() {
@@ -2455,13 +2461,20 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     // ist. Bei Rohware- oder Zeiteingabe ohne Ausbeute bleibt sie 0, dann
     // wird nichts vom Bedarf abgezogen.
     final fertigMenge = _planFertigBekannt ? _planFertigKg : 0.0;
+    final bedarf = _bedarf?.bedarf;
     try {
+      // Ein Planungsauftrag aus dem Auftragsbestand gibt seine Zeilen an
+      // die Kette weiter — dort stehen sie dann als „geplant am …".
+      final bezuege = bedarf == null
+          ? const <AuftragsBezug>[]
+          : await bezuegeFuerNeueProduktion(db, bedarf, fertigMenge);
       await erstelleTasksAusPlan(
         db: db,
         productId: produkt.id,
         schritte: _plan,
-        bedarfId: _bedarf?.bedarf.id,
+        bedarfId: bedarf?.id,
         fertigMengeKg: fertigMenge,
+        auftragsBezuege: bezuege,
       );
     } catch (e) {
       // Die Kette wird transaktional angelegt — ein Fehler bedeutet also,
@@ -2502,7 +2515,11 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   }
 
   void _schiebeTag(GeplanterSchritt s, int deltaTage) {
-    setState(() => s.tag = s.tag.add(Duration(days: deltaTage)));
+    // Über die Tageszahl, nicht per Duration — sonst bleibt ein Schritt am
+    // Wochenende der Zeitumstellung auf dem Sonntag hängen.
+    setState(
+      () => s.tag = DateTime(s.tag.year, s.tag.month, s.tag.day + deltaTage),
+    );
   }
 
   Future<void> _waehleTag(GeplanterSchritt s) async {

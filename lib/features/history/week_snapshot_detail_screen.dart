@@ -6,6 +6,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/zeit.dart';
 
 const _wkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -104,7 +105,7 @@ class _WeekSnapshotDetailScreenState
     WochenSnapshotDaten daten,
   ) {
     final colors = Theme.of(context).colorScheme;
-    final ende = snap.wochenStart.add(const Duration(days: 6));
+    final ende = tagPlus(snap.wochenStart, 6);
     final aktiveAbteilungen = [
       for (final a in Abteilung.values)
         if ((daten.belegtMinutenJeAbteilung[a.dbValue] ?? 0) > 0) a,

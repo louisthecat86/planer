@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../whiteboard/produktion_erfassen_sheet.dart';
@@ -30,8 +31,7 @@ class GeplanteProduktion {
 /// Die zu erfassende Woche (Montag). Standard: aktuelle Woche.
 final erfassungWocheProvider = StateProvider<DateTime>((ref) {
   final now = DateTime.now();
-  final montag = now.subtract(Duration(days: now.weekday - 1));
-  return DateTime(montag.year, montag.month, montag.day);
+  return tagPlus(now, -(now.weekday - 1));
 });
 
 /// Alle geplanten Produktionen (Ketten-Wurzeln) der gewählten Woche,
@@ -41,7 +41,7 @@ final erfassungWocheDatenProvider = FutureProvider<
     Map<DateTime, List<GeplanteProduktion>>>((ref) async {
   final db = ref.watch(databaseProvider);
   final montag = ref.watch(erfassungWocheProvider);
-  final freitagEnde = montag.add(const Duration(days: 5));
+  final freitagEnde = tagPlus(montag, 5);
 
   // Nur Ketten-Wurzeln: sie tragen die Fertigmenge und stehen für die
   // gesamte Produktion.
@@ -151,7 +151,7 @@ class _ProduktionErfassungScreenState
                   tooltip: 'Vorige Woche',
                   onPressed: () => ref
                       .read(erfassungWocheProvider.notifier)
-                      .state = montag.subtract(const Duration(days: 7)),
+                      .state = tagPlus(montag, -7),
                 ),
                 Expanded(
                   child: Text(
@@ -166,7 +166,7 @@ class _ProduktionErfassungScreenState
                   tooltip: 'Nächste Woche',
                   onPressed: () => ref
                       .read(erfassungWocheProvider.notifier)
-                      .state = montag.add(const Duration(days: 7)),
+                      .state = tagPlus(montag, 7),
                 ),
               ],
             ),
@@ -214,9 +214,9 @@ class _ProduktionErfassungScreenState
                 ..._tagAbschnitt(
                   context,
                   ref,
-                  montag.add(Duration(days: i)),
+                  tagPlus(montag, i),
                   _wochentage[i],
-                  gruppen[montag.add(Duration(days: i))] ?? const [],
+                  gruppen[tagPlus(montag, i)] ?? const [],
                 ),
             ],
           );

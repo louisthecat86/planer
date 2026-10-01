@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 import '../shell/home_screen.dart';
@@ -237,7 +238,10 @@ class _WeekSnapshotArchiveScreenState
     final wochen = <DateTime>[];
     while (!montag.isAfter(letzterDesMonats)) {
       wochen.add(montag);
-      montag = montag.add(const Duration(days: 7));
+      // Über die Tageszahl: Mit Duration landete die Woche nach der
+      // Zeitumstellung auf Sonntag 23:00, und der Kalender zeigte eine
+      // Woche doppelt und die folgende gar nicht.
+      montag = tagPlus(montag, 7);
     }
 
     return ListView(
@@ -327,7 +331,7 @@ class _SnapshotKarte extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final daten = dekodiereSnapshot(snap);
-    final ende = snap.wochenStart.add(const Duration(days: 6));
+    final ende = tagPlus(snap.wochenStart, 6);
     final stunden = Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten);
 
     return Card(
@@ -491,7 +495,7 @@ class _KalenderWoche extends StatelessWidget {
     final hatSnap = snap != null;
     final heute = DateTime.now();
     final daten = hatSnap ? dekodiereSnapshot(snap) : null;
-    final tage = [for (var i = 0; i < 7; i++) montag.add(Duration(days: i))];
+    final tage = [for (var i = 0; i < 7; i++) tagPlus(montag, i)];
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),

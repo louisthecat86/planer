@@ -474,7 +474,9 @@ class StammdatenImportService {
     // Reine Zahl: Excel-Tageswert seit dem 30.12.1899.
     final zahl = double.tryParse(t.replaceAll(',', '.'));
     if (zahl != null && zahl > 20000 && zahl < 80000) {
-      return DateTime(1899, 12, 30).add(Duration(days: zahl.floor()));
+      // Über die Tageszahl: Mit Duration käme im Sommer 01:00 statt
+      // Mitternacht heraus.
+      return DateTime(1899, 12, 30 + zahl.floor());
     }
     return null;
   }

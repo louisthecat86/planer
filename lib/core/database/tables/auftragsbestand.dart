@@ -2,9 +2,9 @@ import 'package:drift/drift.dart';
 
 /// Auftragsbestand aus Navision (Bericht 50018), je Artikel.
 ///
-/// Ein Abbild des zuletzt eingelesenen Berichts — wie der Navision-
-/// Artikelkatalog: Jeder Import ersetzt den kompletten Stand, deshalb gibt
-/// es hier keine Sync-Felder und kein Soft-Delete.
+/// Ein Abbild des zuletzt eingelesenen Berichts: Jeder Import ersetzt den
+/// kompletten Stand, deshalb gibt es hier keine Sync-Felder und kein
+/// Soft-Delete. Den Stand davor hält [AuftragsbestandArtikelVorher].
 ///
 /// Stand und Zeitraum des Berichts stehen bewusst an jeder Zeile und nicht
 /// in den App-Einstellungen. Die Einstellungen stellt ein Backup wieder
@@ -73,5 +73,46 @@ class AuftragsbestandPositionen extends Table {
   TextColumn get einheit => text().nullable()();
 
   /// Nettogewicht in kg.
+  RealColumn get kg => real().withDefault(const Constant(0))();
+}
+
+/// Der Auftragsbestand vor dem letzten Einlesen, je Artikel — dieselben
+/// Spalten wie [AuftragsbestandArtikel].
+///
+/// Jedes Einlesen kopiert den bisherigen Stand hierher, bevor es ihn
+/// ersetzt. Daraus rechnet die Änderungsansicht, was sich seit dem vorigen
+/// Bericht geändert hat. Es gibt also immer genau ein Vorher: das des
+/// letzten Wechsels.
+@DataClassName('AuftragsArtikelVorher')
+class AuftragsbestandArtikelVorher extends Table {
+  TextColumn get artikelnummer => text()();
+  TextColumn get bezeichnung => text().withDefault(const Constant(''))();
+  TextColumn get bezeichnung2 => text().nullable()();
+  RealColumn get lagerKg => real().withDefault(const Constant(0))();
+  RealColumn get auftragKg => real().withDefault(const Constant(0))();
+  RealColumn get auftragMenge => real().nullable()();
+  TextColumn get auftragEinheit => text().nullable()();
+  DateTimeColumn get berichtStand => dateTime().nullable()();
+  DateTimeColumn get zeitraumVon => dateTime().nullable()();
+  DateTimeColumn get zeitraumBis => dateTime().nullable()();
+  DateTimeColumn get importiertAm =>
+      dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {artikelnummer};
+}
+
+/// Die Auftragszeilen vor dem letzten Einlesen — dieselben Spalten wie
+/// [AuftragsbestandPositionen].
+@DataClassName('AuftragsPositionVorher')
+class AuftragsbestandPositionenVorher extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get artikelnummer => text()();
+  TextColumn get beleg => text()();
+  TextColumn get debitor => text().withDefault(const Constant(''))();
+  DateTimeColumn get warenausgang => dateTime()();
+  DateTimeColumn get lieferdatum => dateTime().nullable()();
+  RealColumn get menge => real().withDefault(const Constant(0))();
+  TextColumn get einheit => text().nullable()();
   RealColumn get kg => real().withDefault(const Constant(0))();
 }

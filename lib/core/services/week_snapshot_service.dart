@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../database/database.dart';
 import '../providers/database_provider.dart';
+import '../utils/datum.dart';
 import '../utils/kalenderwoche.dart';
 
 // Früher hier definiert — jetzt zentral, hier nur weitergereicht.
@@ -204,7 +205,7 @@ Future<void> erstelleWochenSnapshot({
   String? titel,
 }) async {
   final start = montagDerWoche(wochenStart);
-  final endeExkl = start.add(const Duration(days: 7));
+  final endeExkl = tagPlus(start, 7);
 
   final rows = await (db.select(db.productionTasks)
         ..where((t) => t.deletedAt.isNull())
@@ -326,10 +327,7 @@ final weekSnapshotProvider =
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Montag der Woche von [d], normalisiert auf 00:00 Uhr.
-DateTime montagDerWoche(DateTime d) {
-  final tag = DateTime(d.year, d.month, d.day);
-  return tag.subtract(Duration(days: tag.weekday - 1));
-}
+DateTime montagDerWoche(DateTime d) => tagPlus(d, -(d.weekday - 1));
 
 
 

@@ -265,6 +265,315 @@ void main() {
     });
   });
 
+  group('Vormerkungen für den Planungsvorschlag', () {
+    Vormerkung vormerkung(
+      double offenKg,
+      List<AuftragsBezug> bezuege, {
+      DateTime? termin,
+    }) =>
+        Vormerkung(
+          bedarfId: 'b1',
+          offenKg: offenKg,
+          bezuege: bezuege,
+          termin: termin,
+        );
+
+    test('eine Vormerkung hält die Zeile fest, deckt aber nichts', () {
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 250)],
+        vormerkungen: [
+          vormerkung(250, [_fuer(1, _tag(35), 250)], termin: _tag(32)),
+        ],
+      );
+
+      final z = d.tage.single.zeilen.single;
+      expect(z.fehltKg, 250);
+      expect(z.vorgemerktKg, 250);
+      expect(z.offenKg, 0);
+      expect(z.vorgemerkt, isTrue);
+      expect(z.erledigt, isTrue);
+      expect(d.tage.single.einplanbar, isFalse);
+      // Gedeckt ist nichts — erledigt ist es hier trotzdem.
+      expect(d.gedeckt, isFalse);
+      expect(d.erledigt, isTrue);
+      expect(d.offenKg, 0);
+      expect(d.vorgemerktKg, 250);
+      expect(d.fruehesterVormerkTermin, _tag(32));
+      // Ein zweites Mal bündeln lässt sich die Zeile nicht.
+      expect(bezuegeFuerTage(d, {_tag(35)}), isEmpty);
+    });
+
+    test('bestellt der Kunde nach, ist nur der Rest wieder offen', () {
+      // Übergeben wurden 100 kg, inzwischen stehen 250 kg im Auftrag.
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 250)],
+        vormerkungen: [
+          vormerkung(100, [_fuer(1, _tag(35), 100)]),
+        ],
+      );
+
+      final t = d.tage.single;
+      expect(t.vorgemerktKg, 100);
+      expect(t.offenKg, 150);
+      expect(t.einplanbar, isTrue);
+      expect(d.erledigt, isFalse);
+      expect(d.ersterOffenTag, _tag(35));
+      expect(bezuegeFuerTage(d, {_tag(35)}).single.kg, closeTo(150, 1e-9));
+    });
+
+    test('was das Lager inzwischen deckt, wird nicht vorgemerkt', () {
+      final d = berechneDeckung(
+        lagerKg: 300,
+        positionen: [_pos(1, _tag(35), 250)],
+        vormerkungen: [
+          vormerkung(250, [_fuer(1, _tag(35), 250)]),
+        ],
+      );
+
+      final z = d.tage.single.zeilen.single;
+      expect(z.vorgemerktKg, 0);
+      // Die Marke bleibt — sie zeigt, dass der Planungsauftrag jetzt
+      // überflüssig ist.
+      expect(z.vorgemerkt, isTrue);
+      expect(d.gedeckt, isTrue);
+    });
+
+    test('eine Produktion geht vor, vorgemerkt wird der Rest', () {
+      // Zeile 1 fest eingeplant, Zeile 2 an den Vorschlag übergeben.
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100), _pos(2, _tag(36), 100)],
+        zugaenge: [
+          _zugang(_tag(32), 100, fuer: [_fuer(1, _tag(35), 100)]),
+        ],
+        vormerkungen: [
+          vormerkung(100, [_fuer(2, _tag(36), 100)]),
+        ],
+      );
+
+      expect(d.tage[0].zeilen.single.geplant, isTrue);
+      expect(d.tage[0].zeilen.single.vorgemerkt, isFalse);
+      expect(d.tage[1].zeilen.single.vorgemerkt, isTrue);
+      expect(d.tage[1].vorgemerktKg, 100);
+      expect(d.erledigt, isTrue);
+    });
+  });
+
+  group('Gesperrte Zeilen', () {
+    // Gesperrt ist ein verschobener Auftrag, dessen Planung noch am alten
+    // Tag hängt — bis die Verschiebung geklärt ist.
+    final va1 = {auftragsZeilenSchluessel('VA1', _tag(35))};
+
+    test('zählen als offen, lassen sich aber nicht bündeln', () {
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100), _pos(2, _tag(35), 50)],
+        gesperrt: va1,
+      );
+
+      final t = d.tage.single;
+      expect(t.zeilen.map((z) => z.gesperrt), [true, false]);
+      expect(t.offenKg, 150);
+      expect(t.gesperrtKg, 100);
+      expect(t.einplanbarKg, 50);
+      expect(t.einplanbar, isTrue);
+      // Was fehlt, bleibt sichtbar.
+      expect(d.offenKg, 150);
+      expect(d.erledigt, isFalse);
+      expect(bezuegeFuerTage(d, {_tag(35)}).map((b) => b.beleg), ['VA2']);
+    });
+
+    test('ist nur die gesperrte Zeile offen, lässt sich der Tag nicht abhaken',
+        () {
+      final d = berechneDeckung(
+        lagerKg: 0,
+        positionen: [_pos(1, _tag(35), 100)],
+        gesperrt: va1,
+      );
+
+      expect(d.tage.single.einplanbar, isFalse);
+      expect(bezuegeFuerTage(d, {_tag(35)}), isEmpty);
+    });
+
+    test('die Rechnung selbst ändert sich nicht', () {
+      final d = berechneDeckung(
+        lagerKg: 60,
+        positionen: [_pos(1, _tag(35), 100)],
+        gesperrt: va1,
+      );
+
+      final z = d.tage.single.zeilen.single;
+      expect(z.ausLagerKg, 60);
+      expect(z.fehltKg, 40);
+      expect(z.offenKg, 40);
+      expect(z.gesperrt, isTrue);
+    });
+  });
+
+  group('Planungsaufträge in Teilen', () {
+    final a = AuftragsBezug(beleg: 'VA1', warenausgang: _tag(35), kg: 100);
+    final b = AuftragsBezug(beleg: 'VA2', warenausgang: _tag(36), kg: 200);
+
+    test('eine Teilmenge trägt die frühesten Zeilen', () {
+      final teil = teileBezuegeZu([b, a], 150);
+
+      expect(teil.map((x) => x.beleg), ['VA1', 'VA2']);
+      expect(teil[0].kg, 100);
+      expect(teil[1].kg, closeTo(50, 1e-9));
+    });
+
+    test('reicht die Menge für alle, bekommt jede Zeile ihre', () {
+      expect(teileBezuegeZu([a, b], 500).map((x) => x.kg), [100, 200]);
+      expect(teileBezuegeZu([a, b], 0), isEmpty);
+    });
+
+    test('der Rest bleibt beim Planungsauftrag', () {
+      final rest = restBezuege([a, b], teileBezuegeZu([a, b], 150));
+
+      expect(rest.single.beleg, 'VA2');
+      expect(rest.single.kg, closeTo(150, 1e-9));
+      expect(restBezuege([a, b], const []), [a, b]);
+      expect(restBezuege([a, b], [a, b]), isEmpty);
+    });
+  });
+
+  group('Planungsaufträge laden', () {
+    late AppDatabase db;
+
+    setUp(() async {
+      db = testDatenbank();
+      await seedArtikel(db, id: 'p1', nummer: '12981');
+    });
+    tearDown(() => db.close());
+
+    Future<void> planungsauftrag(
+      String id,
+      double kg,
+      List<AuftragsBezug> bezuege, {
+      bool erledigt = false,
+      bool geloescht = false,
+    }) async {
+      await db.into(db.demands).insert(
+            DemandsCompanion.insert(
+              id: id,
+              productId: 'p1',
+              mengeKgFertig: kg,
+              termin: Value(_tag(32)),
+              quelle: const Value(kQuelleAuftragsbestand),
+              auftragsZeilen: Value(AuftragsBezug.kodiere(bezuege)),
+              manuellErledigt: Value(erledigt),
+              deletedAt: Value(geloescht ? DateTime(2026, 9, 1) : null),
+            ),
+          );
+    }
+
+    test('offen ist nur, was noch keine Kette trägt', () async {
+      final a = _fuer(1, _tag(35), 100);
+      final b = _fuer(2, _tag(36), 200);
+      await planungsauftrag('offen', 300, [a, b]);
+      await planungsauftrag('geloescht', 100, [a], geloescht: true);
+      await planungsauftrag('abgehakt', 100, [a], erledigt: true);
+      // 150 kg sind schon eingeplant: VA1 ganz, von VA2 50 kg.
+      await _kette(
+        db,
+        id: 'k1',
+        tage: [_tag(33)],
+        fertigKg: 150,
+        bedarfId: 'offen',
+        bezuege: teileBezuegeZu([a, b], 150),
+      );
+
+      final v = (await ladeVormerkungen(db))['12981']!;
+
+      expect(v, hasLength(1));
+      expect(v.single.bedarfId, 'offen');
+      expect(v.single.offenKg, 150);
+      expect(v.single.termin, _tag(32));
+      expect(v.single.bezuege.single.beleg, 'VA2');
+      expect(v.single.bezuege.single.kg, closeTo(150, 1e-9));
+    });
+
+    test('ganz eingeplant: nichts mehr vorgemerkt', () async {
+      final a = _fuer(1, _tag(35), 100);
+      await planungsauftrag('b1', 100, [a]);
+      await _kette(
+        db,
+        id: 'k1',
+        tage: [_tag(33)],
+        fertigKg: 100,
+        bedarfId: 'b1',
+        bezuege: [a],
+      );
+
+      expect(await ladeVormerkungen(db), isEmpty);
+    });
+
+    test('nur der erste Schritt gelöscht: die Kette zählt weiter', () async {
+      // Etwa die Zerlegung entfällt, weil das Fleisch zerlegt kommt. Die
+      // Kette produziert trotzdem — der Bedarf ist weiter eingeplant und
+      // darf nicht ein zweites Mal im Vorschlag landen.
+      final a = _fuer(1, _tag(35), 100);
+      await planungsauftrag('b1', 100, [a]);
+      await _kette(
+        db,
+        id: 'k1',
+        tage: [_tag(33), _tag(34)],
+        fertigKg: 100,
+        bedarfId: 'b1',
+        bezuege: [a],
+        wurzelGeloescht: true,
+      );
+
+      final planung = await ladeBedarfsPlanung(db);
+      expect(planung['b1']!.kg, 100);
+      expect(planung['b1']!.bezuege.single.beleg, 'VA1');
+      expect(await ladeVormerkungen(db), isEmpty);
+    });
+
+    test('produziert ist, was auf einem Tag vor heute liegt', () async {
+      final a = _fuer(1, _tag(35), 100);
+      await planungsauftrag('b1', 300, [a]);
+      await _kette(
+        db,
+        id: 'gestern',
+        tage: [_tag(29)],
+        fertigKg: 100,
+        bedarfId: 'b1',
+      );
+      await _kette(
+        db,
+        id: 'morgen',
+        tage: [_tag(31)],
+        fertigKg: 150,
+        bedarfId: 'b1',
+      );
+
+      final p = (await ladeBedarfsPlanung(db))['b1']!;
+      expect(p.kg, 250);
+      expect(p.produziertVor(DateTime(2026, 9, 30, 15)), 100);
+    });
+
+    test('im Board gelöscht: wieder vorgemerkt', () async {
+      final a = _fuer(1, _tag(35), 100);
+      await planungsauftrag('b1', 100, [a]);
+      await _kette(
+        db,
+        id: 'k1',
+        tage: [_tag(33)],
+        fertigKg: 100,
+        bedarfId: 'b1',
+        bezuege: [a],
+        wurzelGeloescht: true,
+      );
+
+      final v = (await ladeVormerkungen(db))['12981']!;
+      expect(v.single.offenKg, 100);
+      expect(v.single.bezuege.single.beleg, 'VA1');
+    });
+  });
+
   group('Produktionen der App laden', () {
     late AppDatabase db;
 
@@ -530,7 +839,8 @@ AuftragsBezug _fuer(int id, DateTime warenausgang, double kg) =>
     AuftragsBezug(beleg: 'VA$id', warenausgang: warenausgang, kg: kg);
 
 /// Legt eine Auftragskette an: ein Schritt je Tag in [tage], verkettet
-/// wie im Board über `parentTaskId`. Die Fertigmenge steht an der Wurzel.
+/// wie im Board über `parentTaskId`. Fertigmenge, Bedarf und
+/// Auftragszeilen stehen an der Wurzel.
 Future<void> _kette(
   AppDatabase db, {
   required String id,
@@ -538,6 +848,8 @@ Future<void> _kette(
   required double fertigKg,
   String status = 'geplant',
   bool wurzelGeloescht = false,
+  String? bedarfId,
+  List<AuftragsBezug> bezuege = const [],
 }) async {
   String? vorher;
   for (var i = 0; i < tage.length; i++) {
@@ -550,6 +862,10 @@ Future<void> _kette(
             datum: tage[i],
             abteilung: 'bratstrasse',
             fertigMengeKg: Value(i == 0 ? fertigKg : null),
+            bedarfId: Value(i == 0 ? bedarfId : null),
+            auftragsZeilen: Value(
+              i == 0 ? AuftragsBezug.kodiere(bezuege) : null,
+            ),
             geplanteDauerMinuten: 60,
             geplanteMitarbeiter: 2,
             status: Value(status),

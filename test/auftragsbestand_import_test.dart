@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/services/auftragsbestand_deckung.dart';
 import 'package:produktion_planer/core/services/auftragsbestand_import_service.dart';
+import 'package:produktion_planer/core/services/auftragsbestand_vergleich.dart';
 
 import 'helpers/test_db.dart';
 
@@ -179,6 +180,50 @@ void main() {
 
       final artikel = await db.select(db.auftragsbestandArtikel).get();
       expect(artikel, hasLength(2));
+    });
+
+    test('ein neuer Bericht merkt sich den vorigen', () async {
+      await service.importiere(_mappe(_standardZeilen()));
+      // Eine Stunde später, nur noch die Köttbullar.
+      final spaeter = <int, Map<String, Object>>{
+        for (final e in _standardZeilen().entries)
+          if (e.key < 19 || e.key >= 35) e.key: e.value,
+      };
+      spaeter[2] = {'A': 'Testfirma GmbH', 'O': '13:09:14'};
+      await service.importiere(_mappe(spaeter));
+
+      final vorher = await db.select(db.auftragsbestandArtikelVorher).get();
+      expect(vorher.map((a) => a.artikelnummer).toSet(), {'12981', '13977'});
+      expect(vorher.first.berichtStand, DateTime(2026, 9, 30, 12, 9, 14));
+      final zeilen = await db.select(db.auftragsbestandPositionenVorher).get();
+      expect(zeilen, hasLength(4));
+
+      // Der Vergleich sieht, was weggefallen ist: VA1 am Tag des Berichts
+      // ist raus, VA2 und VA3 am 02.10. sind entfallen.
+      final vergleich = vergleicheBestand(
+        await ladeVorherigenBestand(db),
+        await ladeBestand(db),
+      );
+      expect(vergleich.neu.stand, DateTime(2026, 9, 30, 13, 9, 14));
+      expect(vergleich.anzahl(AenderungsArt.ausgeliefert), 1);
+      expect(vergleich.anzahl(AenderungsArt.entfallen), 2);
+      expect(vergleich.artikel.map((a) => a.artikelnummer), ['12981']);
+      expect(vergleich.artikel.single.nichtMehrImBericht, isTrue);
+    });
+
+    test('derselbe Bericht zweimal lässt das Vorher stehen', () async {
+      await service.importiere(_mappe(_standardZeilen()));
+      final spaeter = _standardZeilen()
+        ..[2] = {'A': 'Testfirma GmbH', 'O': '13:09:14'};
+      await service.importiere(_mappe(spaeter));
+      // Versehentlich noch einmal derselbe Bericht: Das Vorher bleibt der
+      // erste, sonst zeigte die Änderungsansicht „keine Änderungen".
+      await service.importiere(_mappe(spaeter));
+
+      final vorher = await db.select(db.auftragsbestandArtikelVorher).get();
+      expect(vorher.first.berichtStand, DateTime(2026, 9, 30, 12, 9, 14));
+      final jetzt = await db.select(db.auftragsbestandArtikel).get();
+      expect(jetzt.first.berichtStand, DateTime(2026, 9, 30, 13, 9, 14));
     });
   });
 

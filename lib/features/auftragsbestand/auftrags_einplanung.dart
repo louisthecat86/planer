@@ -1,3 +1,6 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:uuid/uuid.dart';
+
 import '../../core/database/database.dart';
 import '../../core/services/auftragsbestand_deckung.dart';
 import '../whiteboard/whiteboard_provider.dart';
@@ -9,6 +12,7 @@ class Einplanung {
     required this.fertigwareKg,
     required this.rohwareKg,
     required this.schritte,
+    this.wurzelId,
   });
 
   /// Produktionstag — alle Schritte der Kette liegen zunächst hier.
@@ -18,6 +22,9 @@ class Einplanung {
 
   /// Anzahl der Abteilungsschritte, die im Board entstanden sind.
   final int schritte;
+
+  /// ID des ersten Schritts der neuen Kette — für das Datenblatt.
+  final String? wurzelId;
 }
 
 /// Plant [fertigKg] Fertigware für die Auftragszeilen [bezuege] ein: eine
@@ -49,7 +56,7 @@ Future<Einplanung> planeAuftragszeilen({
       'in der Artikelliste die Schritte anlegen, dann einplanen.',
     );
   }
-  await erstelleTasksAusPlan(
+  final wurzelId = await erstelleTasksAusPlan(
     db: db,
     productId: productId,
     schritte: plan.schritte,
@@ -61,6 +68,52 @@ Future<Einplanung> planeAuftragszeilen({
     fertigwareKg: fertigKg,
     rohwareKg: plan.rohwareKg,
     schritte: plan.schritte.length,
+    wurzelId: wurzelId,
+  );
+}
+
+/// Übergibt die Auftragszeilen [bezuege] an den Planungsvorschlag: Es
+/// entsteht ein Bedarf über [fertigKg] Fertigware — ein Planungsauftrag —
+/// mit [termin] als spätestem Produktionstag.
+///
+/// Im Board steht danach noch nichts. Die Zeilen sind im Auftragsbestand
+/// vorgemerkt, bis der Planungsvorschlag den Auftrag in einen Tag legt und
+/// der Tag übernommen wird; dann trägt die Produktion die Zeilen.
+///
+/// Gibt die ID des neuen Bedarfs zurück.
+Future<String> uebergebeAnPlanungsvorschlag({
+  required AppDatabase db,
+  required String productId,
+  required double fertigKg,
+  required DateTime termin,
+  required List<AuftragsBezug> bezuege,
+}) async {
+  final id = const Uuid().v4();
+  final beschreibung = beschreibeBezuege(bezuege);
+  await db.into(db.demands).insert(
+        DemandsCompanion.insert(
+          id: id,
+          productId: productId,
+          mengeKgFertig: fertigKg,
+          termin: Value(DateTime(termin.year, termin.month, termin.day)),
+          quelle: const Value(kQuelleAuftragsbestand),
+          notizen: Value(beschreibung.isEmpty ? null : beschreibung),
+          auftragsZeilen: Value(AuftragsBezug.kodiere(bezuege)),
+        ),
+      );
+  return id;
+}
+
+/// Hebt eine Vormerkung auf: Der Planungsauftrag wird gelöscht, seine
+/// Zeilen sind im Auftragsbestand wieder offen. Was davon schon im Board
+/// steht, bleibt dort und trägt seine Zeilen weiter.
+Future<void> hebeVormerkungAuf({
+  required AppDatabase db,
+  required String bedarfId,
+}) async {
+  final jetzt = DateTime.now();
+  await (db.update(db.demands)..where((d) => d.id.equals(bedarfId))).write(
+    DemandsCompanion(deletedAt: Value(jetzt), updatedAt: Value(jetzt)),
   );
 }
 

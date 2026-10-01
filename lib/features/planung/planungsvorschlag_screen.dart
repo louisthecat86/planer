@@ -2,12 +2,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/database/database.dart' show AppDatabase;
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auftragsbestand_deckung.dart'
+    show teileBezuegeZu;
+import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/zeit.dart';
+import '../bedarf/bedarf_screen.dart' show bedarfProvider;
+import '../datenblatt/datenblatt.dart';
+import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
 import 'planungsvorschlag_service.dart';
 
-/// Vorschlagsansicht: zeigt, wie die nächsten Tage aussehen könnten, und
-/// überträgt einzelne Tage ins Board.
+/// Vorschlagsansicht: fragt zuerst, welche offenen Bedarfe hinein sollen,
+/// zeigt dann, wie die nächsten Tage aussehen könnten, und überträgt
+/// einzelne Tage ins Board.
+///
+/// Die Auswahl ist der Handlungsspielraum des Planers: Was noch nicht
+/// dran ist oder wegen der Haltbarkeit nicht mit anderem gebündelt werden
+/// soll, bleibt draußen. Was einen festen Tag braucht, steht schon im
+/// Board — der Vorschlag plant nur drumherum.
 ///
 /// Der Vorschlag ist ein **Entwurf**. Mengen lassen sich ändern, die
 /// Reihenfolge umstellen, Posten entfernen oder auf einen Nachbartag
@@ -30,6 +43,28 @@ class _PlanungsvorschlagScreenState
   bool _laedt = true;
   Object? _fehler;
 
+  /// Die offenen Bedarfe zur Auswahl.
+  List<OffenerBedarf> _bedarfe = const [];
+
+  /// Angehakte Bedarfe — sie kommen in den Vorschlag.
+  final Set<String> _auswahl = <String>{};
+
+  /// Schon einmal angezeigte Bedarfe. Nach dem Neuladen behalten sie ihren
+  /// Haken; nur neu hinzugekommene bekommen die Vorauswahl.
+  final Set<String> _bekannt = <String>{};
+
+  /// Auswahl aufgeklappt. Nach dem Rechnen klappt sie zu einer Zeile
+  /// zusammen.
+  bool _auswahlOffen = true;
+
+  /// Es gibt einen berechneten Vorschlag.
+  bool _berechnet = false;
+
+  /// Die Einstellungen, mit denen er gerechnet wurde. Wer danach „möglichst
+  /// früh" anklickt, sieht im Kopf weiter, wie der angezeigte Vorschlag
+  /// entstanden ist — bis neu gerechnet wird.
+  VorschlagEinstellungen? _berechnetMit;
+
   List<VorschlagTag> _tage = [];
   List<NichtPlanbar> _nichtPlanbar = [];
 
@@ -44,7 +79,49 @@ class _PlanungsvorschlagScreenState
   @override
   void initState() {
     super.initState();
-    _rechne();
+    _ladeBedarfe();
+  }
+
+  /// Lädt die offenen Bedarfe. Liefert false bei einem Fehler.
+  Future<bool> _ladeBedarfe() async {
+    setState(() {
+      _laedt = true;
+      _fehler = null;
+    });
+    try {
+      final db = ref.read(databaseProvider);
+      final bedarfe = await PlanungsvorschlagService(db).ladeOffeneBedarfe();
+      if (!mounted) return false;
+      final vor = vorauswahl(bedarfe, vorschlagsTage(_einstellungen));
+      setState(() {
+        final neu = <String>{
+          for (final b in bedarfe)
+            if (_bekannt.contains(b.bedarfId)
+                ? _auswahl.contains(b.bedarfId)
+                : vor.contains(b.bedarfId))
+              b.bedarfId,
+        };
+        _bedarfe = bedarfe;
+        _auswahl
+          ..clear()
+          ..addAll(neu);
+        _bekannt.addAll([for (final b in bedarfe) b.bedarfId]);
+        if (bedarfe.isEmpty) {
+          _berechnet = false;
+          _tage = [];
+          _nichtPlanbar = [];
+        }
+        _laedt = false;
+      });
+      return true;
+    } catch (e) {
+      if (!mounted) return false;
+      setState(() {
+        _fehler = e;
+        _laedt = false;
+      });
+      return false;
+    }
   }
 
   Future<void> _rechne() async {
@@ -54,14 +131,19 @@ class _PlanungsvorschlagScreenState
     });
     try {
       final db = ref.read(databaseProvider);
-      final v = await PlanungsvorschlagService(db).berechne(_einstellungen);
+      final v = await PlanungsvorschlagService(db).berechne(
+        _einstellungen.kopieMit(bedarfIds: {..._auswahl}),
+      );
       if (!mounted) return;
       setState(() {
         _tage = [...v.tage];
         _nichtPlanbar = [...v.nichtPlanbar];
+        _berechnetMit = v.einstellungen;
         _uebernommen.clear();
         _manuell.clear();
         _geaendert = false;
+        _berechnet = true;
+        _auswahlOffen = false;
         _laedt = false;
       });
     } catch (e) {
@@ -136,9 +218,9 @@ class _PlanungsvorschlagScreenState
     });
   }
 
-  /// Posten auf den Nachbartag schieben. Bewusst nur Nachbarn: Der
-  /// Vorschlag ist fortlaufend, und alles andere bräuchte eine
-  /// Datumsauswahl für wenig Gewinn.
+  /// Posten auf den Nachbartag schieben — den vorigen oder nächsten
+  /// Arbeitstag des Zeitraums. Liegt der nach dem Termin, zeigt die Zeile
+  /// das rot an.
   void _verschiebe(int tagIndex, VorschlagPosten p, int richtung) {
     final ziel = tagIndex + richtung;
     if (ziel < 0 || ziel >= _tage.length) return;
@@ -181,10 +263,19 @@ class _PlanungsvorschlagScreenState
 
   Future<void> _uebernehmen(int tagIndex) async {
     final t = _tage[tagIndex];
+    // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
+    // jemand die Ansicht währenddessen schließt — Bedarfsliste und Board
+    // müssen trotzdem neu laden.
+    final container = ProviderScope.containerOf(context, listen: false);
     final db = ref.read(databaseProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
       final anzahl = await PlanungsvorschlagService(db).uebernehmeTag(t);
+      container.invalidate(bedarfProvider);
+      container.invalidate(dailyTasksProvider);
+      container
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Planungsvorschlag übernommen');
       if (!mounted) return;
       setState(() => _uebernommen.add(_key(t.tag)));
       messenger.showSnackBar(
@@ -203,11 +294,106 @@ class _PlanungsvorschlagScreenState
     }
   }
 
+  // ── Datenblatt ───────────────────────────────────────────────────────
+
+  /// Datenblatt eines Postens: Artikel, Menge und Tag so, wie der
+  /// Vorschlag ihn einplant — mit den Aufträgen, die seine Menge bedient.
+  /// Genau diese Zeilen bekommt die Kette beim Übernehmen.
+  Future<Datenblatt?> _blatt(
+    AppDatabase db,
+    VorschlagTag t,
+    VorschlagPosten p,
+  ) {
+    final termin = p.termin;
+    final status = [
+      if (_uebernommen.contains(_key(t.tag)))
+        'Aus dem Planungsvorschlag ins Board übernommen'
+      else
+        'Planungsvorschlag — noch nicht ins Board übernommen',
+      if (termin != null) 'Termin spätestens ${_tagKurz(termin)}',
+    ].join(' · ');
+    return datenblattFuerMenge(
+      db,
+      productId: p.productId,
+      fertigKg: p.mengeKg,
+      tag: t.tag,
+      bezuege: teileBezuegeZu(p.auftragsBezuege, p.mengeKg),
+      status: status,
+      notiz: _notiz(p),
+    );
+  }
+
+  /// Die Notiz des Bedarfs — nicht bei einem Planungsauftrag aus dem
+  /// Auftragsbestand, dessen Notiz nur die Aufträge aufzählt.
+  String? _notiz(VorschlagPosten p) {
+    for (final b in _bedarfe) {
+      if (b.bedarfId != p.bedarfId) continue;
+      if (b.ausAuftragsbestand) return null;
+      final n = b.notizen?.trim();
+      return (n == null || n.isEmpty) ? null : n;
+    }
+    return null;
+  }
+
+  Future<void> _datenblatt(int tagIndex, VorschlagPosten p) {
+    final db = ref.read(databaseProvider);
+    final t = _tage[tagIndex];
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () => alsListe(_blatt(db, t, p)),
+    );
+  }
+
+  /// Alle Datenblätter eines Tages in einem Druck — ein Blatt je Posten,
+  /// in der Reihenfolge des Tages.
+  Future<void> _datenblaetter(int tagIndex) {
+    final db = ref.read(databaseProvider);
+    final t = _tage[tagIndex];
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () async {
+        final blaetter = <Datenblatt>[];
+        for (final p in t.posten) {
+          final b = await _blatt(db, t, p);
+          if (b != null) blaetter.add(b);
+        }
+        return blaetter;
+      },
+    );
+  }
+
+  // ── Auswahl ──────────────────────────────────────────────────────────
+
+  void _waehle(String bedarfId, bool an) {
+    setState(() {
+      if (an) {
+        _auswahl.add(bedarfId);
+      } else {
+        _auswahl.remove(bedarfId);
+      }
+    });
+  }
+
+  void _setzeAuswahl(Set<String> ids) {
+    setState(() {
+      _auswahl
+        ..clear()
+        ..addAll(ids);
+    });
+  }
+
+  Future<void> _berechneAusAuswahl() async {
+    if (_berechnet && !await _verwerfenOk()) return;
+    if (!mounted) return;
+    await _rechne();
+  }
+
   // ── Aufbau ───────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tage = vorschlagsTage(_einstellungen);
 
     return Scaffold(
       appBar: AppBar(
@@ -219,9 +405,9 @@ class _PlanungsvorschlagScreenState
             tooltip: 'Zeiten und Zeitraum',
           ),
           IconButton(
-            onPressed: _laedt ? null : _bestaetigeNeuberechnung,
+            onPressed: _laedt ? null : _neuLaden,
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Neu berechnen',
+            tooltip: 'Bedarfe neu laden und neu berechnen',
           ),
         ],
       ),
@@ -232,35 +418,73 @@ class _PlanungsvorschlagScreenState
               : ListView(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
                   children: [
-                    _Kopfzeile(
-                      tage: _tage,
-                      einstellungen: _einstellungen,
-                      geaendert: _geaendert,
-                    ),
-                    const SizedBox(height: 14),
-                    if (_tage.every((t) => t.posten.isEmpty))
-                      _LeerKarte(hatReste: _nichtPlanbar.isNotEmpty),
-                    for (var i = 0; i < _tage.length; i++)
-                      if (_tage[i].posten.isNotEmpty)
-                        _TagKarte(
-                          tag: _tage[i],
-                          manuellSortiert:
-                              _manuell.contains(_key(_tage[i].tag)),
-                          uebernommen:
-                              _uebernommen.contains(_key(_tage[i].tag)),
-                          kannZurueck: i > 0,
-                          kannVor: i < _tage.length - 1,
-                          onReorder: (von, nach) => _sortiereNeu(i, von, nach),
-                          onNachRegeln: () => _nachRegeln(i),
-                          onMenge: (p) => _aendereMenge(i, p),
-                          onEntfernen: (p) => _entferne(i, p),
-                          onVerschieben: (p, richtung) =>
-                              _verschiebe(i, p, richtung),
-                          onUebernehmen: () => _uebernehmen(i),
+                    if (_bedarfe.isEmpty)
+                      const _LeerKarte(
+                        text: 'Kein offener Bedarf. Bedarfe entstehen in der '
+                            'Bedarfsliste oder im Auftragsbestand über „Zur '
+                            'Planung hinzufügen".',
+                      )
+                    else
+                      _AuswahlKarte(
+                        bedarfe: _bedarfe,
+                        auswahl: _auswahl,
+                        tage: tage,
+                        offen: _auswahlOffen || !_berechnet,
+                        berechnet: _berechnet,
+                        moeglichstSpaet: _einstellungen.moeglichstSpaet,
+                        onWaehle: _waehle,
+                        onSetze: _setzeAuswahl,
+                        onSpaet: (v) => setState(
+                          () => _einstellungen =
+                              _einstellungen.kopieMit(moeglichstSpaet: v),
                         ),
-                    if (_nichtPlanbar.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      _NichtPlanbarKarte(eintraege: _nichtPlanbar),
+                        onAufklappen: () =>
+                            setState(() => _auswahlOffen = true),
+                        onZuklappen: () =>
+                            setState(() => _auswahlOffen = false),
+                        onBerechnen: _berechneAusAuswahl,
+                      ),
+                    if (_berechnet && _bedarfe.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      _Kopfzeile(
+                        tage: _tage,
+                        einstellungen: _berechnetMit ?? _einstellungen,
+                        geaendert: _geaendert,
+                      ),
+                      const SizedBox(height: 14),
+                      if (_tage.every((t) => t.posten.isEmpty))
+                        _LeerKarte(
+                          text: _nichtPlanbar.isNotEmpty
+                              ? 'Aus der Auswahl lässt sich gerade nichts '
+                                  'einplanen. Die Liste unten nennt zu jedem '
+                                  'Artikel den Grund.'
+                              : 'Nichts einzuplanen.',
+                        ),
+                      for (var i = 0; i < _tage.length; i++)
+                        if (_tage[i].posten.isNotEmpty)
+                          _TagKarte(
+                            tag: _tage[i],
+                            manuellSortiert:
+                                _manuell.contains(_key(_tage[i].tag)),
+                            uebernommen:
+                                _uebernommen.contains(_key(_tage[i].tag)),
+                            kannZurueck: i > 0,
+                            kannVor: i < _tage.length - 1,
+                            onReorder: (von, nach) =>
+                                _sortiereNeu(i, von, nach),
+                            onNachRegeln: () => _nachRegeln(i),
+                            onMenge: (p) => _aendereMenge(i, p),
+                            onEntfernen: (p) => _entferne(i, p),
+                            onVerschieben: (p, richtung) =>
+                                _verschiebe(i, p, richtung),
+                            onUebernehmen: () => _uebernehmen(i),
+                            onDatenblatt: (p) => _datenblatt(i, p),
+                            onDatenblaetter: () => _datenblaetter(i),
+                          ),
+                      if (_nichtPlanbar.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        _NichtPlanbarKarte(eintraege: _nichtPlanbar),
+                      ],
                     ],
                   ],
                 ),
@@ -268,31 +492,41 @@ class _PlanungsvorschlagScreenState
     );
   }
 
-  Future<void> _bestaetigeNeuberechnung() async {
-    if (_geaendert) {
-      final weiter = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Änderungen verwerfen?'),
-          content: const Text(
-            'Der Vorschlag wurde von Hand angepasst. Neu berechnen setzt '
-            'Mengen und Reihenfolgen zurück.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Neu berechnen'),
-            ),
-          ],
+  /// Nachfrage, bevor handgemachte Änderungen am Vorschlag verloren gehen.
+  Future<bool> _verwerfenOk() async {
+    if (!_geaendert) return true;
+    final weiter = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Änderungen verwerfen?'),
+        content: const Text(
+          'Der Vorschlag wurde von Hand angepasst. Neu berechnen setzt '
+          'Mengen und Reihenfolgen zurück.',
         ),
-      );
-      if (weiter != true) return;
-    }
-    await _rechne();
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Neu berechnen'),
+          ),
+        ],
+      ),
+    );
+    return weiter ?? false;
+  }
+
+  /// Bedarfe neu laden — nach Änderungen in der Bedarfsliste, im
+  /// Auftragsbestand oder im Board — und, wenn schon gerechnet war, neu
+  /// rechnen.
+  Future<void> _neuLaden() async {
+    if (_berechnet && !await _verwerfenOk()) return;
+    if (!mounted) return;
+    final ok = await _ladeBedarfe();
+    if (!mounted) return;
+    if (ok && _berechnet && _bedarfe.isNotEmpty) await _rechne();
   }
 
   Future<void> _oeffneEinstellungen() async {
@@ -302,12 +536,302 @@ class _PlanungsvorschlagScreenState
       context: context,
       builder: (_) => _EinstellungenDialog(start: _einstellungen),
     );
-    if (neu == null) return;
+    if (neu == null || !mounted) return;
+    if (_berechnet && !await _verwerfenOk()) return;
+    if (!mounted) return;
     setState(() => _einstellungen = neu);
-    await _rechne();
+    if (_berechnet) await _rechne();
   }
 
   static String _key(DateTime d) => '${d.year}-${d.month}-${d.day}';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Auswahl
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Welche offenen Bedarfe in den Vorschlag kommen — und wie geplant wird.
+class _AuswahlKarte extends StatelessWidget {
+  const _AuswahlKarte({
+    required this.bedarfe,
+    required this.auswahl,
+    required this.tage,
+    required this.offen,
+    required this.berechnet,
+    required this.moeglichstSpaet,
+    required this.onWaehle,
+    required this.onSetze,
+    required this.onSpaet,
+    required this.onAufklappen,
+    required this.onZuklappen,
+    required this.onBerechnen,
+  });
+
+  final List<OffenerBedarf> bedarfe;
+  final Set<String> auswahl;
+
+  /// Arbeitstage des Zeitraums.
+  final List<DateTime> tage;
+  final bool offen;
+  final bool berechnet;
+  final bool moeglichstSpaet;
+  final void Function(String bedarfId, bool an) onWaehle;
+  final void Function(Set<String> ids) onSetze;
+  final ValueChanged<bool> onSpaet;
+  final VoidCallback onAufklappen;
+  final VoidCallback onZuklappen;
+  final VoidCallback onBerechnen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final gewaehlt = [
+      for (final b in bedarfe)
+        if (auswahl.contains(b.bedarfId)) b,
+    ];
+    final kg = gewaehlt.fold<double>(0, (s, b) => s + b.offenKg);
+
+    final rahmen = BoxDecoration(
+      color: theme.colorScheme.surface,
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: theme.dividerColor),
+    );
+
+    if (!offen) {
+      return Container(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+        decoration: rahmen,
+        child: Row(
+          children: [
+            Icon(
+              Icons.checklist_rounded,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${gewaehlt.length} von ${bedarfe.length} offenen Bedarfen '
+                'im Vorschlag',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+            TextButton(
+              onPressed: onAufklappen,
+              child: const Text('Auswahl ändern'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final faellig = vorauswahl(bedarfe, tage);
+    final letzter = tage.isEmpty ? null : tage.last;
+    final bis = letzter == null ? 'im Zeitraum' : 'bis ${_tagKurz(letzter)}';
+
+    return Container(
+      decoration: rahmen,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Was soll eingeplant werden?',
+                        style: theme.textTheme.titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (berechnet)
+                      IconButton(
+                        onPressed: onZuklappen,
+                        icon: const Icon(Icons.expand_less, size: 20),
+                        tooltip: 'Zuklappen',
+                        visualDensity: VisualDensity.compact,
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Vorausgewählt ist, was $bis fällig ist, und alles ohne '
+                  'Termin. Was noch nicht dran ist oder wegen der '
+                  'Haltbarkeit nicht mitgebündelt werden soll, einfach '
+                  'abhaken. Nach dem Termin plant der Vorschlag nie — passt '
+                  'es vorher nicht mehr, steht es unten in der Restliste.',
+                  style: grau,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Wrap(
+              spacing: 4,
+              children: [
+                TextButton(
+                  onPressed: () => onSetze(faellig),
+                  child: Text('Vorauswahl (${faellig.length})'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      onSetze({for (final b in bedarfe) b.bedarfId}),
+                  child: Text('Alle (${bedarfe.length})'),
+                ),
+                TextButton(
+                  onPressed: () => onSetze(<String>{}),
+                  child: const Text('Keine'),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          for (final b in bedarfe)
+            _AuswahlZeile(
+              bedarf: b,
+              gewaehlt: auswahl.contains(b.bedarfId),
+              tage: tage,
+              onChanged: (v) => onWaehle(b.bedarfId, v),
+            ),
+          const Divider(height: 1),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(
+                      value: true,
+                      label: Text('Möglichst spät'),
+                      tooltip: 'Nah am Termin: frische Ware, wenig Lager',
+                    ),
+                    ButtonSegment(
+                      value: false,
+                      label: Text('Möglichst früh'),
+                      tooltip: 'Früh produzieren, hinten bleibt Luft',
+                    ),
+                  ],
+                  selected: {moeglichstSpaet},
+                  onSelectionChanged: (s) => onSpaet(s.first),
+                  showSelectedIcon: false,
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${gewaehlt.length} gewählt · ${kg.round()} kg',
+                      style: grau,
+                    ),
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: gewaehlt.isEmpty ? null : onBerechnen,
+                      icon: const Icon(Icons.auto_awesome_rounded, size: 18),
+                      label: Text(
+                        berechnet ? 'Neu berechnen' : 'Vorschlag berechnen',
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Ein offener Bedarf in der Auswahl.
+class _AuswahlZeile extends StatelessWidget {
+  const _AuswahlZeile({
+    required this.bedarf,
+    required this.gewaehlt,
+    required this.tage,
+    required this.onChanged,
+  });
+
+  final OffenerBedarf bedarf;
+  final bool gewaehlt;
+  final List<DateTime> tage;
+  final ValueChanged<bool> onChanged;
+
+  static const _quellen = {
+    'bestellung': 'Bestellung',
+    'bestand': 'Bestand',
+    'sonstiges': 'Sonstiges',
+    'auftragsbestand': 'Auftragsbestand',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = bedarf;
+    final grau = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final rot = theme.colorScheme.error;
+
+    final termin = b.termin;
+    final String terminText;
+    var ueberfaellig = false;
+    if (termin == null) {
+      terminText = 'ohne Termin';
+    } else if (tage.isNotEmpty && _tagVon(termin).isBefore(tage.first)) {
+      terminText = 'Termin ${_tagKurz(termin)} überschritten';
+      ueberfaellig = true;
+    } else if (tage.isNotEmpty && _tagVon(termin).isAfter(tage.last)) {
+      terminText = 'fällig erst ${_tagKurz(termin)}';
+    } else {
+      terminText = 'spätestens ${_tagKurz(termin)}';
+    }
+    final notiz = b.notizen?.trim() ?? '';
+
+    return CheckboxListTile(
+      dense: true,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: gewaehlt,
+      onChanged: (v) => onChanged(v ?? false),
+      secondary: b.prioritaet > 0
+          ? Tooltip(
+              message: 'Hohe Priorität',
+              child: Icon(Icons.priority_high, size: 18, color: rot),
+            )
+          : null,
+      title: Text(
+        '${b.artikelnummer}  ${b.bezeichnung}',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+      subtitle: Text.rich(
+        TextSpan(
+          style: grau,
+          children: [
+            TextSpan(text: '${b.offenKg.round()} kg · '),
+            TextSpan(
+              text: terminText,
+              style: ueberfaellig
+                  ? TextStyle(color: rot, fontWeight: FontWeight.w700)
+                  : null,
+            ),
+            TextSpan(text: ' · ${_quellen[b.quelle] ?? b.quelle}'),
+            if (notiz.isNotEmpty) TextSpan(text: '\n$notiz'),
+          ],
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -333,6 +857,8 @@ class _Kopfzeile extends StatelessWidget {
     final tageMitInhalt = tage.where((t) => t.posten.isNotEmpty).length;
     final rohware = tage.fold<double>(0, (s, t) => s + t.rohwareKg);
     final e = einstellungen;
+    final wann =
+        e.moeglichstSpaet ? 'So spät wie möglich' : 'So früh wie möglich';
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
@@ -383,8 +909,9 @@ class _Kopfzeile extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Allergene aufsteigend · Bio vor konventionell · roh nach '
-            'gegart · dann ähnliche Bratstraßen-Einstellungen',
+            '$wann, nie nach dem Termin · Allergene aufsteigend · Bio vor '
+            'konventionell · roh nach gegart · dann ähnliche '
+            'Bratstraßen-Einstellungen',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -393,6 +920,10 @@ class _Kopfzeile extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
+              _Pille(
+                e.moeglichstSpaet ? 'möglichst spät' : 'möglichst früh',
+                farbe: theme.colorScheme.primary,
+              ),
               _Pille('Rüsten ${e.ruestenMinuten.round()} min'),
               _Pille('Reinigen ${e.zwischenreinigungMinuten.round()} min'),
               _Pille('Endreinigung ${e.endreinigungMinuten.round()} min'),
@@ -434,21 +965,16 @@ class _Pille extends StatelessWidget {
 }
 
 class _LeerKarte extends StatelessWidget {
-  const _LeerKarte({required this.hatReste});
+  const _LeerKarte({required this.text});
 
-  final bool hatReste;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
-        child: Text(
-          hatReste
-              ? 'Aus dem offenen Bedarf lässt sich gerade nichts einplanen. '
-                  'Die Liste unten nennt zu jedem Artikel den Grund.'
-              : 'Kein offener Bedarf.',
-        ),
+        child: Text(text),
       ),
     );
   }
@@ -471,6 +997,8 @@ class _TagKarte extends StatelessWidget {
     required this.onEntfernen,
     required this.onVerschieben,
     required this.onUebernehmen,
+    required this.onDatenblatt,
+    required this.onDatenblaetter,
   });
 
   final VorschlagTag tag;
@@ -484,6 +1012,8 @@ class _TagKarte extends StatelessWidget {
   final void Function(VorschlagPosten) onEntfernen;
   final void Function(VorschlagPosten, int richtung) onVerschieben;
   final VoidCallback onUebernehmen;
+  final void Function(VorschlagPosten) onDatenblatt;
+  final VoidCallback onDatenblaetter;
 
   static const _wochentage = [
     'Montag',
@@ -607,11 +1137,13 @@ class _TagKarte extends StatelessWidget {
                 key: ValueKey('${p.productId}-${p.bedarfId}-$i'),
                 index: i,
                 posten: p,
+                tag: tag.tag,
                 kannZurueck: kannZurueck,
                 kannVor: kannVor,
                 onMenge: () => onMenge(p),
                 onEntfernen: () => onEntfernen(p),
                 onVerschieben: (r) => onVerschieben(p, r),
+                onDatenblatt: () => onDatenblatt(p),
               );
             },
           ),
@@ -680,6 +1212,15 @@ class _TagKarte extends StatelessWidget {
                         icon: const Icon(Icons.sort_rounded, size: 18),
                         label: const Text('Nach Regeln sortieren'),
                       ),
+                    TextButton.icon(
+                      onPressed: onDatenblaetter,
+                      icon: const Icon(Icons.print_outlined, size: 18),
+                      label: Text(
+                        tag.posten.length == 1
+                            ? 'Datenblatt'
+                            : 'Datenblätter (${tag.posten.length})',
+                      ),
+                    ),
                     const Spacer(),
                     if (uebernommen)
                       Text('übernommen', style: theme.textTheme.bodySmall)
@@ -741,25 +1282,35 @@ class _PostenZeile extends StatelessWidget {
     required super.key,
     required this.index,
     required this.posten,
+    required this.tag,
     required this.kannZurueck,
     required this.kannVor,
     required this.onMenge,
     required this.onEntfernen,
     required this.onVerschieben,
+    required this.onDatenblatt,
   });
 
   final int index;
   final VorschlagPosten posten;
+
+  /// Der Tag, auf dem der Posten gerade liegt.
+  final DateTime tag;
   final bool kannZurueck;
   final bool kannVor;
   final VoidCallback onMenge;
   final VoidCallback onEntfernen;
   final void Function(int richtung) onVerschieben;
+  final VoidCallback onDatenblatt;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final reinigen = posten.wechselGrund == WechselGrund.reinigen;
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      fontSize: 11,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
     // Der Wechsel gehört zum ÜBERGANG, nicht zum Artikel — deshalb steht
     // er als eigene, eingerückte Zeile darüber.
@@ -771,6 +1322,21 @@ class _PostenZeile extends StatelessWidget {
       WechselGrund.reinigen =>
         'reinigen ${Zeit.kurz(posten.nebenzeitMinuten)}',
     };
+
+    // Termin und Herkunft: Liegt der Tag nach dem Termin — etwa nach
+    // einem Verschieben —, steht das rot da.
+    final termin = posten.termin;
+    final zuSpaet = posten.zuSpaetAm(tag);
+    final auftraege = {for (final b in posten.auftragsBezuege) b.beleg};
+    final herkunft = [
+      if (termin != null)
+        zuSpaet
+            ? 'nach dem Termin (${_tagKurz(termin)})!'
+            : 'spätestens ${_tagKurz(termin)}',
+      if (auftraege.isNotEmpty)
+        'Auftragsbestand, ${auftraege.length} '
+            '${auftraege.length == 1 ? 'Auftrag' : 'Aufträge'}',
+    ].join(' · ');
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -845,12 +1411,16 @@ class _PostenZeile extends StatelessWidget {
                         style: theme.textTheme.bodyMedium,
                       ),
                       if (posten.begruendung.isNotEmpty)
+                        Text(posten.begruendung, style: grau),
+                      if (herkunft.isNotEmpty)
                         Text(
-                          posten.begruendung,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            fontSize: 11,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                          herkunft,
+                          style: zuSpaet
+                              ? grau?.copyWith(
+                                  color: theme.colorScheme.error,
+                                  fontWeight: FontWeight.w700,
+                                )
+                              : grau,
                         ),
                     ],
                   ),
@@ -867,10 +1437,7 @@ class _PostenZeile extends StatelessWidget {
                     Text(
                       '${Zeit.kurz(posten.dauerMinuten)} · '
                       '${posten.rohwareKg.round()} kg roh',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontSize: 11,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      style: grau,
                     ),
                   ],
                 ),
@@ -889,20 +1456,27 @@ class _PostenZeile extends StatelessWidget {
                     if (kannZurueck)
                       const PopupMenuItem(
                         value: 'zurueck',
-                        child: Text('Einen Tag früher'),
+                        child: Text('Einen Arbeitstag früher'),
                       ),
                     if (kannVor)
                       const PopupMenuItem(
                         value: 'vor',
-                        child: Text('Einen Tag später'),
+                        child: Text('Einen Arbeitstag später'),
                       ),
                     const PopupMenuItem(
                       value: 'weg',
                       child: Text('Aus dem Vorschlag nehmen'),
                     ),
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'datenblatt',
+                      child: Text('Datenblatt drucken'),
+                    ),
                   ],
                   onSelected: (w) {
                     switch (w) {
+                      case 'datenblatt':
+                        onDatenblatt();
                       case 'menge':
                         onMenge();
                       case 'zurueck':
@@ -978,7 +1552,8 @@ class _MengeDialogState extends State<_MengeDialog> {
           Text(
             'Dauer und Rohware skalieren mit. Feste Durchlaufzeiten der '
             'Anlagen tun das nicht — bei großen Änderungen lieber neu '
-            'berechnen lassen.',
+            'berechnen lassen. Weniger als der Bedarf: Der Rest bleibt '
+            'offen und kommt beim nächsten Vorschlag wieder.',
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -1105,6 +1680,7 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
   late final TextEditingController _endreinigung;
   late final TextEditingController _tage;
   late bool _samstag;
+  late bool _spaet;
   late DateTime? _start;
   late Set<DateTime> _gesperrt;
 
@@ -1122,6 +1698,7 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
     );
     _tage = TextEditingController(text: e.maxArbeitstage.toString());
     _samstag = e.planeSamstag;
+    _spaet = e.moeglichstSpaet;
     _start = e.startTag;
     _gesperrt = {...e.gesperrteTage};
   }
@@ -1151,78 +1728,88 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Text(
-              'Zeiten und Zeitraum',
-              style: theme.textTheme.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Die Nebenzeiten sind Pauschalen. Sobald beim Erfassen echte '
-              'Rüst- und Reinigungszeiten anfallen, lassen sie sich daran '
-              'ausrichten.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(child: _zahlFeld(_ruesten, 'Umrüsten', 'min')),
-                const SizedBox(width: 10),
-                Expanded(child: _zahlFeld(_reinigen, 'Reinigen', 'min')),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _zahlFeld(_endreinigung, 'Endreinigung', 'min'),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: _zahlFeld(_tage, 'Zeitraum', 'Tage')),
-              ],
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _samstag,
-              onChanged: (v) => setState(() => _samstag = v),
-              title: const Text('Samstag mitplanen'),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.event_rounded),
-              title: const Text('Beginn'),
-              subtitle: Text(_start == null ? 'morgen' : _datum(_start!)),
-              trailing: TextButton(
-                onPressed: _waehleStart,
-                child: const Text('ändern'),
+              Text(
+                'Zeiten und Zeitraum',
+                style: theme.textTheme.titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w700),
               ),
-            ),
-            // Gesperrte Tage sind der Platz für alles Äußere: fehlende
-            // Rohware, Wartung, Feiertag, Inventur.
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.block_rounded),
-              title: const Text('Gesperrte Tage'),
-              subtitle: Text(
-                _gesperrt.isEmpty
-                    ? 'keine — z.B. Feiertag oder fehlende Rohware'
-                    : (_gesperrt.toList()..sort()).map(_datum).join(', '),
+              const SizedBox(height: 4),
+              Text(
+                'Die Nebenzeiten sind Pauschalen. Sobald beim Erfassen echte '
+                'Rüst- und Reinigungszeiten anfallen, lassen sie sich daran '
+                'ausrichten.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-              trailing: TextButton(
-                onPressed: _waehleGesperrt,
-                child: const Text('hinzufügen'),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(child: _zahlFeld(_ruesten, 'Umrüsten', 'min')),
+                  const SizedBox(width: 10),
+                  Expanded(child: _zahlFeld(_reinigen, 'Reinigen', 'min')),
+                ],
               ),
-            ),
-            if (_gesperrt.isNotEmpty)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => setState(_gesperrt.clear),
-                  child: const Text('Sperren aufheben'),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _zahlFeld(_endreinigung, 'Endreinigung', 'min'),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: _zahlFeld(_tage, 'Zeitraum', 'Tage')),
+                ],
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _spaet,
+                onChanged: (v) => setState(() => _spaet = v),
+                title: const Text('Möglichst spät planen'),
+                subtitle: const Text(
+                  'Nah am Termin: frische Ware, wenig Lager. Aus: so früh '
+                  'wie möglich. Nach dem Termin plant der Vorschlag nie.',
                 ),
               ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: _samstag,
+                onChanged: (v) => setState(() => _samstag = v),
+                title: const Text('Samstag mitplanen'),
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.event_rounded),
+                title: const Text('Beginn'),
+                subtitle: Text(_start == null ? 'morgen' : _datum(_start!)),
+                trailing: TextButton(
+                  onPressed: _waehleStart,
+                  child: const Text('ändern'),
+                ),
+              ),
+              // Gesperrte Tage sind der Platz für alles Äußere: fehlende
+              // Rohware, Wartung, Feiertag, Inventur.
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.block_rounded),
+                title: const Text('Gesperrte Tage'),
+                subtitle: Text(
+                  _gesperrt.isEmpty
+                      ? 'keine — z.B. Feiertag oder fehlende Rohware'
+                      : (_gesperrt.toList()..sort()).map(_datum).join(', '),
+                ),
+                trailing: TextButton(
+                  onPressed: _waehleGesperrt,
+                  child: const Text('hinzufügen'),
+                ),
+              ),
+              if (_gesperrt.isNotEmpty)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () => setState(_gesperrt.clear),
+                    child: const Text('Sperren aufheben'),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1234,7 +1821,7 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
         ),
         FilledButton(
           onPressed: _fertig,
-          child: const Text('Neu berechnen'),
+          child: const Text('Übernehmen'),
         ),
       ],
     );
@@ -1250,22 +1837,30 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
 
   Future<void> _waehleStart() async {
     final heute = DateTime.now();
+    final von = DateTime(heute.year, heute.month, heute.day - 1);
+    final bis = DateTime(heute.year, heute.month, heute.day + 180);
     final gewaehlt = await showDatePicker(
       context: context,
-      initialDate: _start ?? heute.add(const Duration(days: 1)),
-      firstDate: heute.subtract(const Duration(days: 1)),
-      lastDate: heute.add(const Duration(days: 180)),
+      initialDate: _imBereich(_start, von, bis, heute),
+      firstDate: von,
+      lastDate: bis,
     );
-    if (gewaehlt != null) setState(() => _start = gewaehlt);
+    if (gewaehlt != null) {
+      setState(
+        () => _start = DateTime(gewaehlt.year, gewaehlt.month, gewaehlt.day),
+      );
+    }
   }
 
   Future<void> _waehleGesperrt() async {
     final heute = DateTime.now();
+    final von = DateTime(heute.year, heute.month, heute.day);
+    final bis = DateTime(heute.year, heute.month, heute.day + 180);
     final gewaehlt = await showDatePicker(
       context: context,
-      initialDate: _start ?? heute.add(const Duration(days: 1)),
-      firstDate: heute,
-      lastDate: heute.add(const Duration(days: 180)),
+      initialDate: _imBereich(_start, von, bis, heute),
+      firstDate: von,
+      lastDate: bis,
       helpText: 'Tag sperren',
     );
     if (gewaehlt == null) return;
@@ -1290,13 +1885,43 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
         maxArbeitstage:
             int.tryParse(_tage.text.trim()) ?? widget.start.maxArbeitstage,
         planeSamstag: _samstag,
+        moeglichstSpaet: _spaet,
         gesperrteTage: _gesperrt,
         startTag: _start,
       ),
     );
   }
 
+  /// Vorbelegung der Datumsauswahl: der gewählte Beginn, sonst morgen —
+  /// aber immer innerhalb dessen, was die Auswahl anbietet. Sonst stürzt
+  /// sie ab, etwa bei einem Beginn, der inzwischen in der Vergangenheit
+  /// liegt.
+  static DateTime _imBereich(
+    DateTime? wunsch,
+    DateTime von,
+    DateTime bis,
+    DateTime heute,
+  ) {
+    final d = wunsch ?? DateTime(heute.year, heute.month, heute.day + 1);
+    if (d.isBefore(von)) return von;
+    if (d.isAfter(bis)) return bis;
+    return d;
+  }
+
   static String _datum(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}.'
       '${d.month.toString().padLeft(2, '0')}.';
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Formatierung
+// ═══════════════════════════════════════════════════════════════════════
+
+const _wochentageKurz = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+DateTime _tagVon(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// „Di 06.10."
+String _tagKurz(DateTime d) => '${_wochentageKurz[d.weekday - 1]} '
+    '${d.day.toString().padLeft(2, '0')}.'
+    '${d.month.toString().padLeft(2, '0')}.';

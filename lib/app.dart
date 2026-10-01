@@ -12,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
+import 'features/auftragsbestand/aenderungen_screen.dart';
 import 'features/auftragsbestand/auftragsbestand_screen.dart';
 import 'features/backup/backup_management_screen.dart';
 import 'features/bedarf/bedarf_screen.dart';
@@ -93,8 +94,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           child: PlanungsvorschlagScreen(),
         ),
       ),
-      // Navision-Import: Artikelkatalog aus der Warenwirtschaft ansehen,
-      // filtern und daraus Bedarf erzeugen.
+      // Navision-Artikel: die Artikelübersicht aus der Warenwirtschaft mit
+      // dem Artikelstamm abgleichen — neue Artikel und Allergene. Bedarf
+      // entsteht im Auftragsbestand.
       GoRoute(
         path: '/navision',
         name: 'navisionImport',
@@ -109,6 +111,15 @@ final routerProvider = Provider<GoRouter>((ref) {
         name: 'auftragsbestand',
         pageBuilder: (context, state) => const NoTransitionPage(
           child: AuftragsbestandScreen(),
+        ),
+      ),
+      // Änderungen seit dem vorigen Auftragsbestand — und welche Planung
+      // deshalb nicht mehr passt.
+      GoRoute(
+        path: '/auftragsbestand/aenderungen',
+        name: 'auftragsbestandAenderungen',
+        pageBuilder: (context, state) => const NoTransitionPage(
+          child: AuftragsbestandAenderungenScreen(),
         ),
       ),
       // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.

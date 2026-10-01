@@ -3,9 +3,16 @@ import 'package:drift/drift.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/artikel_merkmale.dart';
 import '../../core/database/database.dart';
+import '../../core/services/auftragsbestand_deckung.dart'
+    show
+        AuftragsBezug,
+        kQuelleAuftragsbestand,
+        ladeBedarfsPlanung,
+        restBezuege,
+        teileBezuegeZu;
+import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 import '../whiteboard/whiteboard_provider.dart';
-
 
 // ═══════════════════════════════════════════════════════════════════════
 // Einstellungen
@@ -24,6 +31,8 @@ class VorschlagEinstellungen {
     this.gesperrteTage = const <DateTime>{},
     this.ausgeschlosseneArtikel = const <String>{},
     this.startTag,
+    this.bedarfIds,
+    this.moeglichstSpaet = true,
   });
 
   /// Umstellen zwischen zwei Artikeln ohne Regelbruch.
@@ -53,6 +62,15 @@ class VorschlagEinstellungen {
   /// Erster Tag des Vorschlags. Ohne Angabe: morgen.
   final DateTime? startTag;
 
+  /// Die Bedarfe, die der Vorschlag einplanen soll — die Auswahl vor dem
+  /// Rechnen. null heißt: alle offenen.
+  final Set<String>? bedarfIds;
+
+  /// So spät wie möglich planen, also möglichst nah an den Termin: Die
+  /// Ware ist frisch, wenn sie rausgeht, und liegt nicht tagelang im
+  /// Lager. Aus: so früh wie möglich — dann bleibt hinten Luft.
+  final bool moeglichstSpaet;
+
   VorschlagEinstellungen kopieMit({
     double? ruestenMinuten,
     double? zwischenreinigungMinuten,
@@ -62,6 +80,8 @@ class VorschlagEinstellungen {
     Set<DateTime>? gesperrteTage,
     Set<String>? ausgeschlosseneArtikel,
     DateTime? startTag,
+    Set<String>? bedarfIds,
+    bool? moeglichstSpaet,
   }) {
     return VorschlagEinstellungen(
       ruestenMinuten: ruestenMinuten ?? this.ruestenMinuten,
@@ -74,8 +94,108 @@ class VorschlagEinstellungen {
       ausgeschlosseneArtikel:
           ausgeschlosseneArtikel ?? this.ausgeschlosseneArtikel,
       startTag: startTag ?? this.startTag,
+      bedarfIds: bedarfIds ?? this.bedarfIds,
+      moeglichstSpaet: moeglichstSpaet ?? this.moeglichstSpaet,
     );
   }
+}
+
+/// Die Arbeitstage eines Vorschlags: ab [VorschlagEinstellungen.startTag]
+/// (ohne Angabe morgen) die nächsten
+/// [VorschlagEinstellungen.maxArbeitstage] Tage, an denen gearbeitet wird.
+///
+/// Gerechnet wird über die Tageszahl, nie mit `Duration(days: 1)`: Am Tag
+/// der Zeitumstellung hat ein Tag 25 Stunden. `add` landete dann auf
+/// 23:00 desselben Tages, auf Mitternacht gekürzt wieder auf dem Tag
+/// selbst — und die Schleife käme nie über den 25.10. hinaus.
+List<DateTime> vorschlagsTage(VorschlagEinstellungen e, {DateTime? heute}) {
+  final jetzt = heute ?? DateTime.now();
+  final start = e.startTag;
+  var tag = start == null
+      ? DateTime(jetzt.year, jetzt.month, jetzt.day + 1)
+      : DateTime(start.year, start.month, start.day);
+  final tage = <DateTime>[];
+  // Sicherung, falls fast alles gesperrt ist: Nach so vielen Kalendertagen
+  // ist auch mit Wochenenden und Sperren jeder Zeitraum voll.
+  final grenze = e.maxArbeitstage * 7 + e.gesperrteTage.length + 7;
+  for (var n = 0; tage.length < e.maxArbeitstage && n < grenze; n++) {
+    if (_istArbeitstag(tag, e)) tage.add(tag);
+    tag = DateTime(tag.year, tag.month, tag.day + 1);
+  }
+  return tage;
+}
+
+bool _istArbeitstag(DateTime d, VorschlagEinstellungen e) {
+  for (final g in e.gesperrteTage) {
+    if (g.year == d.year && g.month == d.month && g.day == d.day) {
+      return false;
+    }
+  }
+  if (d.weekday == DateTime.sunday) return false;
+  if (d.weekday == DateTime.saturday && !e.planeSamstag) return false;
+  return true;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Auswahl vor dem Rechnen
+// ═══════════════════════════════════════════════════════════════════════
+
+/// Ein offener Bedarf, wie ihn die Auswahl vor dem Rechnen zeigt.
+class OffenerBedarf {
+  const OffenerBedarf({
+    required this.bedarfId,
+    required this.productId,
+    required this.artikelnummer,
+    required this.bezeichnung,
+    required this.offenKg,
+    required this.quelle,
+    required this.prioritaet,
+    this.termin,
+    this.notizen,
+    this.auftragsBezuege = const [],
+  });
+
+  final String bedarfId;
+  final String productId;
+  final String artikelnummer;
+  final String bezeichnung;
+
+  /// Noch nicht eingeplante Fertigmenge in kg.
+  final double offenKg;
+
+  /// Spätester Produktionstag.
+  final DateTime? termin;
+
+  final String quelle;
+  final int prioritaet;
+  final String? notizen;
+
+  /// Bei einem Planungsauftrag aus dem Auftragsbestand: die Auftragszeilen,
+  /// die noch keine Produktion trägt.
+  final List<AuftragsBezug> auftragsBezuege;
+
+  bool get ausAuftragsbestand => quelle == kQuelleAuftragsbestand;
+}
+
+/// Ist [b] bis [letzterTag] fällig? Ohne Termin: ja — was keinen Termin
+/// hat, kann jederzeit in eine Lücke.
+bool faelligBis(OffenerBedarf b, DateTime letzterTag) {
+  final t = b.termin;
+  if (t == null) return true;
+  return !DateTime(t.year, t.month, t.day).isAfter(letzterTag);
+}
+
+/// Die Vorauswahl: alles, was bis zum letzten Tag des Vorschlags fällig
+/// ist — Überfälliges eingeschlossen —, und alles ohne Termin.
+///
+/// Was erst danach fällig ist, bleibt draußen, bis es jemand anhakt: Es
+/// ist noch nicht dran, und wer es jetzt einplant, legt Ware auf Lager.
+Set<String> vorauswahl(List<OffenerBedarf> bedarfe, List<DateTime> tage) {
+  return {
+    for (final b in bedarfe)
+      if (b.termin == null || (tage.isNotEmpty && faelligBis(b, tage.last)))
+        b.bedarfId,
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -118,6 +238,8 @@ class VorschlagPosten {
     required this.plattenTemp,
     required this.hoehe,
     required this.ausgangsMengeKg,
+    this.termin,
+    this.auftragsBezuege = const [],
   });
 
   final String? bedarfId;
@@ -158,7 +280,23 @@ class VorschlagPosten {
   /// Ändert der Anwender die Menge, werden beide daran skaliert.
   final double ausgangsMengeKg;
 
+  /// Spätester Produktionstag des Bedarfs.
+  final DateTime? termin;
+
+  /// Auftragszeilen aus dem Auftragsbestand, für die produziert wird.
+  /// Beim Übernehmen bekommt die Produktion davon so viele, wie ihre Menge
+  /// bedient — der früheste Versand zuerst.
+  final List<AuftragsBezug> auftragsBezuege;
+
   double get gesamtMinuten => dauerMinuten + nebenzeitMinuten;
+
+  /// Liegt [tag] nach dem Termin?
+  bool zuSpaetAm(DateTime tag) {
+    final t = termin;
+    if (t == null) return false;
+    return DateTime(t.year, t.month, t.day)
+        .isBefore(DateTime(tag.year, tag.month, tag.day));
+  }
 
   VorschlagPosten kopieMit({
     double? mengeKg,
@@ -185,6 +323,8 @@ class VorschlagPosten {
       plattenTemp: plattenTemp,
       hoehe: hoehe,
       ausgangsMengeKg: ausgangsMengeKg,
+      termin: termin,
+      auftragsBezuege: auftragsBezuege,
     );
   }
 
@@ -228,10 +368,12 @@ class VorschlagTag {
   /// Was an diesem Tag schon im Board steht — bleibt unangetastet.
   final double belegtVorherMinuten;
 
+  /// Endreinigung, sobald an diesem Tag etwas Neues läuft. 0, wenn sie
+  /// aus einem früher übernommenen Vorschlag schon im Board steht.
   final double endreinigungMinuten;
 
   /// Hinweise, die den Tag nicht verhindern: nachgelagerte Abteilung
-  /// läuft über, Merkmale fehlen, Wunschtermin überschritten.
+  /// läuft über, Merkmale fehlen, Termin überschritten.
   final List<String> warnungen;
 
   double get neuMinuten =>
@@ -283,6 +425,8 @@ class Planungsvorschlag {
     required this.einstellungen,
   });
 
+  /// Alle Arbeitstage des Zeitraums, auch die ohne neue Posten — so
+  /// lässt sich ein Posten auf jeden Nachbartag schieben.
   final List<VorschlagTag> tage;
   final List<NichtPlanbar> nichtPlanbar;
   final VorschlagEinstellungen einstellungen;
@@ -399,6 +543,7 @@ class _Kandidat {
     required this.hoehe,
     required this.begruendung,
     required this.fehlendeMerkmale,
+    required this.bezuege,
   });
 
   final String? bedarfId;
@@ -417,6 +562,7 @@ class _Kandidat {
   /// Leistungsdaten. Wird in der Ansicht ausgewiesen.
   final bool ausHistorie;
 
+  /// Spätester Produktionstag.
   final DateTime? termin;
   final int prioritaet;
 
@@ -440,6 +586,10 @@ class _Kandidat {
   /// Nicht gepflegte Merkmale — werden als Warnung am Tag gemeldet.
   final List<String> fehlendeMerkmale;
 
+  /// Auftragszeilen aus dem Auftragsbestand, die noch keine Produktion
+  /// trägt.
+  final List<AuftragsBezug> bezuege;
+
   /// Braucht der Wechsel von [vorher] auf diesen Posten eine Reinigung?
   bool brauchtReinigungNach(_Kandidat vorher) =>
       allergenRang < vorher.allergenRang ||
@@ -451,6 +601,14 @@ class _Kandidat {
       plattenTemp == vorher.plattenTemp && hoehe == vorher.hoehe;
 }
 
+/// Ein offener Bedarf samt Artikel, bevor er geprüft wird.
+typedef _Offen = ({
+  Demand bedarf,
+  Product produkt,
+  double offenKg,
+  List<AuftragsBezug> bezuege,
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // Service
 // ═══════════════════════════════════════════════════════════════════════
@@ -458,8 +616,15 @@ class _Kandidat {
 /// Rechnet aus dem offenen Bedarf einen Vorschlag, wie die nächsten Tage
 /// aussehen könnten — ohne irgendetwas zu speichern.
 ///
-/// Bewusst kein Optimierer: Die Reihenfolge folgt den Regeln aus der
-/// Produktion, nicht einer Zielfunktion. In dieser Rangfolge:
+/// **Wann** etwas läuft, entscheidet der Termin: Mit „möglichst spät"
+/// (Standard) landet jeder Bedarf am letzten Arbeitstag vor seinem
+/// Termin, auf dem noch Platz ist — nie danach. Ist vor dem Termin alles
+/// voll, kommt er in die Restliste, statt still zu spät geplant zu
+/// werden. Überfälliges und Bedarf ohne Termin kommen so früh wie möglich
+/// in die Lücken.
+///
+/// **In welcher Reihenfolge** es innerhalb eines Tages läuft, folgt den
+/// Regeln aus der Produktion, nicht einer Zielfunktion:
 ///
 /// 1. **Allergene aufsteigend.** Ein Tag beginnt allergenfrei und
 ///    arbeitet sich hoch. Ein Rücksprung kostet die volle Reinigung.
@@ -470,12 +635,12 @@ class _Kandidat {
 ///    was die Regeln darüber erlauben.
 ///
 /// Führend ist die Bratstraße: Sie ist der Engpass und die Abteilung mit
-/// den verlässlichsten Daten. Die übrigen Abteilungen laufen mit und
-/// werden nur als Warnung gemeldet, wenn sie überlaufen.
+/// den verlässlichsten Daten. Was dort schon im Board steht — auch fest
+/// eingeplante Produktionen aus dem Auftragsbestand —, bleibt stehen und
+/// verkleinert die freie Zeit.
 ///
 /// Der Vorschlag ist eine Rechnung, kein Plan. Geschrieben wird erst,
-/// wenn der Anwender einen Tag oder eine Zeile übernimmt — dafür ist
-/// [uebernehmeTag] da.
+/// wenn der Anwender einen Tag übernimmt — dafür ist [uebernehmeTag] da.
 class PlanungsvorschlagService {
   PlanungsvorschlagService(this._db);
 
@@ -484,20 +649,30 @@ class PlanungsvorschlagService {
   /// Die führende Abteilung. Sie ist der Engpass und hat die besten Daten.
   static const _fuehrend = Abteilung.bratstrasse;
 
-  Future<Planungsvorschlag> berechne(VorschlagEinstellungen e) async {
-    final heute = DateTime.now();
-    final start = _tag(
-      e.startTag ?? DateTime(heute.year, heute.month, heute.day + 1),
-    );
+  /// Minuten sind gerundet — ein Tag mit 600,0000001 von 600 Minuten ist
+  /// voll, nicht übervoll.
+  static const double _toleranz = 1e-6;
 
-    final nichtPlanbar = <NichtPlanbar>[];
-    final kandidaten = await _sammleKandidaten(e, nichtPlanbar);
-
-    // Termin und Priorität entscheiden, WAS drankommt. Die Regeln oben
-    // entscheiden, in welcher Reihenfolge es innerhalb eines Tages läuft.
-    kandidaten.sort((a, b) {
-      final p = b.prioritaet.compareTo(a.prioritaet);
-      if (p != 0) return p;
+  /// Die offenen Bedarfe für die Auswahl vor dem Rechnen: der früheste
+  /// Termin zuerst, ohne Termin am Ende.
+  Future<List<OffenerBedarf>> ladeOffeneBedarfe() async {
+    final offen = await _offeneBedarfe();
+    final liste = [
+      for (final o in offen)
+        OffenerBedarf(
+          bedarfId: o.bedarf.id,
+          productId: o.produkt.id,
+          artikelnummer: o.produkt.artikelnummer,
+          bezeichnung: o.produkt.artikelbezeichnung,
+          offenKg: o.offenKg,
+          termin: o.bedarf.termin,
+          quelle: o.bedarf.quelle,
+          prioritaet: o.bedarf.prioritaet,
+          notizen: o.bedarf.notizen,
+          auftragsBezuege: o.bezuege,
+        ),
+    ];
+    liste.sort((a, b) {
       final at = a.termin, bt = b.termin;
       if (at != null && bt != null) {
         final t = at.compareTo(bt);
@@ -507,118 +682,243 @@ class PlanungsvorschlagService {
       } else if (bt != null) {
         return 1;
       }
+      final p = b.prioritaet.compareTo(a.prioritaet);
+      if (p != 0) return p;
       return a.artikelnummer.compareTo(b.artikelnummer);
     });
+    return liste;
+  }
+
+  Future<Planungsvorschlag> berechne(VorschlagEinstellungen e) async {
+    final tage = vorschlagsTage(e);
+    final nichtPlanbar = <NichtPlanbar>[];
+    final kandidaten = await _sammleKandidaten(e, nichtPlanbar);
 
     final kapazitaet = await _kapazitaetFuehrend();
     final belegung = await _belegungJeTag();
+    final schonGereinigt = await _endreinigungImBoard(tage);
 
-    final tage = <VorschlagTag>[];
-    final offen = [...kandidaten];
-    var tag = start;
-    var arbeitstage = 0;
+    final belegt = [for (final t in tage) belegung[_schluessel(t)] ?? 0.0];
+    final endreinigung = [
+      for (final t in tage)
+        schonGereinigt.contains(_schluessel(t)) ? 0.0 : e.endreinigungMinuten,
+    ];
+    final gewaehlt =
+        List<List<_Kandidat>>.generate(tage.length, (_) => <_Kandidat>[]);
 
-    while (offen.isNotEmpty && arbeitstage < e.maxArbeitstage) {
-      if (!_istArbeitstag(tag, e)) {
-        tag = _tag(tag.add(const Duration(days: 1)));
-        continue;
-      }
-      arbeitstage++;
-
-      final belegtVorher = belegung[_schluessel(tag)] ?? 0;
-      var frei = kapazitaet - belegtVorher - e.endreinigungMinuten;
-      final gewaehlt = <_Kandidat>[];
-
-      // Greedy füllen: Kandidat probeweise aufnehmen, Tag neu sortieren,
-      // Nebenzeiten neu rechnen. Passt es nicht, bleibt er liegen und der
-      // nächste wird probiert — ein kleiner Artikel kann eine Lücke noch
-      // füllen, die ein großer sprengen würde.
-      for (final k in [...offen]) {
-        final probe = _sortiere([...gewaehlt, k]);
-        final summe = _summeMitNebenzeiten(probe, e);
-        if (summe <= frei) {
-          gewaehlt
-            ..clear()
-            ..addAll(probe);
-          offen.remove(k);
-        }
-      }
-
-      if (gewaehlt.isEmpty) {
-        // Nichts passt mehr an diesen Tag — nächster Tag.
-        tag = _tag(tag.add(const Duration(days: 1)));
-        continue;
-      }
-
-      frei = kapazitaet - belegtVorher;
-      tage.add(
-        _baueTag(
-          tag: tag,
-          gewaehlt: gewaehlt,
-          kapazitaet: kapazitaet,
-          belegtVorher: belegtVorher,
-          e: e,
-        ),
-      );
-      tag = _tag(tag.add(const Duration(days: 1)));
+    // Legt k an Tag i, wenn er dort noch Platz hat. Der Tag wird dabei
+    // nach den Regeln neu sortiert, die Nebenzeiten neu gerechnet — ein
+    // kleiner Artikel kann eine Lücke füllen, die ein großer sprengt.
+    bool lege(int i, _Kandidat k) {
+      final probe = _sortiere([...gewaehlt[i], k]);
+      final summe = _summeMitNebenzeiten(probe, e, endreinigung[i]);
+      if (belegt[i] + summe > kapazitaet + _toleranz) return false;
+      gewaehlt[i] = probe;
+      return true;
     }
 
-    // Was nach dem letzten Tag übrig ist, gehört in die Restliste — sonst
-    // verschwindet es stillschweigend.
-    for (final k in offen) {
-      nichtPlanbar.add(
-        NichtPlanbar(
-          artikelnummer: k.artikelnummer,
-          bezeichnung: k.bezeichnung,
-          mengeKg: k.mengeKg,
-          grund: 'Passt nicht mehr in den Zeitraum von '
-              '${e.maxArbeitstage} Arbeitstagen',
-        ),
-      );
+    bool vorwaerts(_Kandidat k, int bis) {
+      for (var i = 0; i <= bis; i++) {
+        if (lege(i, k)) return true;
+      }
+      return false;
+    }
+
+    bool rueckwaerts(_Kandidat k, int bis) {
+      for (var i = bis; i >= 0; i--) {
+        if (lege(i, k)) return true;
+      }
+      return false;
+    }
+
+    void zurueck(_Kandidat k, String grund) => nichtPlanbar.add(
+          NichtPlanbar(
+            artikelnummer: k.artikelnummer,
+            bezeichnung: k.bezeichnung,
+            mengeKg: k.mengeKg,
+            grund: grund,
+          ),
+        );
+
+    final zeitraum = 'Passt nicht mehr in den Zeitraum von '
+        '${e.maxArbeitstage} Arbeitstagen';
+    String vorTermin(DateTime termin) =>
+        'Vor dem Termin (${_datum(termin)}) ist kein Platz mehr frei — '
+        'Termin prüfen oder von Hand im Board einplanen';
+
+    // Was allein schon mehr als einen ganzen Tag braucht, passt nirgends.
+    final planbar = <_Kandidat>[];
+    for (final k in kandidaten) {
+      final allein = _summeMitNebenzeiten([k], e, e.endreinigungMinuten);
+      if (allein > kapazitaet + _toleranz) {
+        zurueck(
+          k,
+          'Braucht allein ${Zeit.lang(allein)} — mehr als ein ganzer Tag '
+          '(${Zeit.lang(kapazitaet)}). Weniger bündeln oder auf mehrere '
+          'Bedarfe aufteilen',
+        );
+      } else if (tage.isEmpty) {
+        zurueck(k, zeitraum);
+      } else {
+        planbar.add(k);
+      }
+    }
+
+    if (tage.isNotEmpty) {
+      final erster = tage.first;
+      final letzter = tage.last;
+
+      // Letzter Tag des Zeitraums, der nicht nach dem Termin liegt; -1,
+      // wenn der Termin vor dem ersten Tag liegt.
+      int bisTermin(DateTime termin) {
+        final t = _tag(termin);
+        for (var i = tage.length - 1; i >= 0; i--) {
+          if (!tage[i].isAfter(t)) return i;
+        }
+        return -1;
+      }
+
+      bool ueberfaellig(_Kandidat k) {
+        final t = k.termin;
+        return t != null && _tag(t).isBefore(erster);
+      }
+
+      // Kein Platz: Liegt der Termin im Zeitraum, ist er der Grund.
+      String grund(_Kandidat k) {
+        final t = k.termin;
+        if (t == null || ueberfaellig(k) || _tag(t).isAfter(letzter)) {
+          return zeitraum;
+        }
+        return vorTermin(t);
+      }
+
+      if (e.moeglichstSpaet) {
+        // 1. Mit Termin: vom Termin aus rückwärts, der späteste Termin
+        //    zuerst. So bekommt jeder den spätesten Tag, der für ihn noch
+        //    frei ist, und nimmt den früheren Terminen nichts weg, solange
+        //    hinten Platz ist.
+        final mitTermin = [
+          for (final k in planbar)
+            if (k.termin != null && !ueberfaellig(k)) k,
+        ]..sort((a, b) {
+            final t = b.termin!.compareTo(a.termin!);
+            if (t != 0) return t;
+            final p = b.prioritaet.compareTo(a.prioritaet);
+            if (p != 0) return p;
+            return a.artikelnummer.compareTo(b.artikelnummer);
+          });
+        for (final k in mitTermin) {
+          if (!rueckwaerts(k, bisTermin(k.termin!))) zurueck(k, grund(k));
+        }
+
+        // 2. Überfälliges und Bedarf ohne Termin: so früh wie möglich, in
+        //    die Lücken, die jetzt noch bleiben.
+        final rest = [
+          for (final k in planbar)
+            if (k.termin == null || ueberfaellig(k)) k,
+        ]..sort(_nachDringlichkeit);
+        for (final k in rest) {
+          if (!vorwaerts(k, tage.length - 1)) zurueck(k, grund(k));
+        }
+      } else {
+        // So früh wie möglich — aber auch hier nie nach dem Termin.
+        final alle = [...planbar]..sort(_nachDringlichkeit);
+        for (final k in alle) {
+          final t = k.termin;
+          final bis = t == null || ueberfaellig(k)
+              ? tage.length - 1
+              : bisTermin(t);
+          if (!vorwaerts(k, bis)) zurueck(k, grund(k));
+        }
+      }
     }
 
     return Planungsvorschlag(
-      tage: tage,
+      tage: [
+        for (var i = 0; i < tage.length; i++)
+          _baueTag(
+            tag: tage[i],
+            gewaehlt: gewaehlt[i],
+            kapazitaet: kapazitaet,
+            belegtVorher: belegt[i],
+            endreinigung: endreinigung[i],
+            e: e,
+          ),
+      ],
       nichtPlanbar: nichtPlanbar,
       einstellungen: e,
     );
   }
 
+  /// Priorität zuerst, dann der früheste Termin, ohne Termin zuletzt.
+  static int _nachDringlichkeit(_Kandidat a, _Kandidat b) {
+    final p = b.prioritaet.compareTo(a.prioritaet);
+    if (p != 0) return p;
+    final at = a.termin, bt = b.termin;
+    if (at != null && bt != null) {
+      final t = at.compareTo(bt);
+      if (t != 0) return t;
+    } else if (at != null) {
+      return -1;
+    } else if (bt != null) {
+      return 1;
+    }
+    return a.artikelnummer.compareTo(b.artikelnummer);
+  }
+
   // ── Kandidaten ───────────────────────────────────────────────────────
+
+  /// Alle offenen Bedarfe mit Artikel: nicht gelöscht, nicht von Hand
+  /// erledigt, und die eingeplante Menge reicht noch nicht. Ein Bedarf,
+  /// der zur Hälfte im Board steht, braucht nur noch den Rest — und bei
+  /// einem Planungsauftrag nur noch die Zeilen, die keine Kette trägt.
+  Future<List<_Offen>> _offeneBedarfe() async {
+    final bedarfe = await (_db.select(_db.demands)
+          ..where((d) => d.deletedAt.isNull())
+          ..where((d) => d.manuellErledigt.equals(false)))
+        .get();
+    if (bedarfe.isEmpty) return const [];
+
+    final produkte = {
+      for (final p in await _db.select(_db.products).get()) p.id: p,
+    };
+    final planung = await ladeBedarfsPlanung(_db);
+
+    final liste = <_Offen>[];
+    for (final d in bedarfe) {
+      final p = produkte[d.productId];
+      if (p == null) continue;
+      final geplant = planung[d.id];
+      final offen = d.mengeKgFertig - (geplant?.kg ?? 0);
+      if (offen <= 0.5) continue; // gedeckt
+      liste.add(
+        (
+          bedarf: d,
+          produkt: p,
+          offenKg: offen,
+          bezuege: restBezuege(
+            AuftragsBezug.dekodiere(d.auftragsZeilen),
+            geplant?.bezuege ?? const [],
+          ),
+        ),
+      );
+    }
+    return liste;
+  }
 
   Future<List<_Kandidat>> _sammleKandidaten(
     VorschlagEinstellungen e,
     List<NichtPlanbar> nichtPlanbar,
   ) async {
-    final bedarfe = await (_db.select(_db.demands)
-          ..where((d) => d.deletedAt.isNull())
-          ..where((d) => d.manuellErledigt.equals(false)))
-        .get();
-
-    final produkte = {
-      for (final p in await _db.select(_db.products).get()) p.id: p,
-    };
-
-    // Bereits eingeplante Mengen je Bedarf abziehen: Ein Bedarf, der zur
-    // Hälfte im Board steht, braucht nur noch den Rest.
-    final tasks = await (_db.select(_db.productionTasks)
-          ..where((t) => t.deletedAt.isNull())
-          ..where((t) => t.bedarfId.isNotNull()))
-        .get();
-    final geplantJeBedarf = <String, double>{};
-    for (final t in tasks) {
-      final bid = t.bedarfId;
-      final menge = t.fertigMengeKg;
-      if (bid == null || menge == null) continue;
-      geplantJeBedarf[bid] = (geplantJeBedarf[bid] ?? 0) + menge;
-    }
-
+    final auswahl = e.bedarfIds;
     final kandidaten = <_Kandidat>[];
-    for (final d in bedarfe) {
-      final p = produkte[d.productId];
-      final offen = d.mengeKgFertig - (geplantJeBedarf[d.id] ?? 0);
-      if (offen <= 0.5) continue; // gedeckt
-      if (p == null) continue;
+    for (final o in await _offeneBedarfe()) {
+      final d = o.bedarf;
+      final p = o.produkt;
+      final offen = o.offenKg;
+      // Nicht ausgewählt: bleibt außen vor, auch nicht in der Restliste —
+      // genau das war der Sinn der Auswahl.
+      if (auswahl != null && !auswahl.contains(d.id)) continue;
 
       final nummer = p.artikelnummer;
       final bez = p.artikelbezeichnung;
@@ -702,7 +1002,7 @@ class PlanungsvorschlagService {
           rohwareKg: plan.rohwareKg,
           dauerMinuten: dauer,
           ausHistorie: ausHistorie,
-          termin: d.termin,
+          termin: d.termin == null ? null : _tag(d.termin!),
           prioritaet: d.prioritaet,
           allergenRang: allergenRang(p.allergene),
           // Unbekannte Qualitätsstufe wird wie konventionell behandelt —
@@ -721,6 +1021,7 @@ class PlanungsvorschlagService {
             if (temp > 0) '${temp.round()}°C',
           ].where((s) => s.isNotEmpty).join(' · '),
           fehlendeMerkmale: fehlt,
+          bezuege: o.bezuege,
         ),
       );
     }
@@ -788,12 +1089,14 @@ class PlanungsvorschlagService {
 
   /// Was in der führenden Abteilung je Tag schon belegt ist: bestehende
   /// Aufträge plus bereits eingetragene Rüst- und Reinigungsblöcke.
+  /// Stornierte Aufträge belegen nichts.
   Future<Map<String, double>> _belegungJeTag() async {
     final belegung = <String, double>{};
 
     final tasks = await (_db.select(_db.productionTasks)
           ..where((t) => t.deletedAt.isNull())
-          ..where((t) => t.abteilung.equals(_fuehrend.dbValue)))
+          ..where((t) => t.abteilung.equals(_fuehrend.dbValue))
+          ..where((t) => t.status.isNotIn(const ['storniert'])))
         .get();
     for (final t in tasks) {
       final k = _schluessel(t.datum);
@@ -809,6 +1112,24 @@ class PlanungsvorschlagService {
       belegung[k] = (belegung[k] ?? 0) + z.minuten;
     }
     return belegung;
+  }
+
+  /// Tage, an denen die Endreinigung aus einem früher übernommenen
+  /// Vorschlag schon im Board steht. Sie steckt dann bereits in der
+  /// Belegung und darf nicht ein zweites Mal dazukommen.
+  Future<Set<String>> _endreinigungImBoard(List<DateTime> tage) async {
+    if (tage.isEmpty) return const <String>{};
+    final ids = {
+      for (final t in tage) _zusatzzeitId('reinigen', t): _schluessel(t),
+    };
+    final zeilen = await (_db.select(_db.zusatzzeiten)
+          ..where((z) => z.id.isIn(ids.keys))
+          ..where((z) => z.deletedAt.isNull()))
+        .get();
+    return {
+      for (final z in zeilen)
+        if (ids[z.id] != null) ids[z.id]!,
+    };
   }
 
   // ── Sortierung und Nebenzeiten ───────────────────────────────────────
@@ -844,9 +1165,12 @@ class PlanungsvorschlagService {
     return e.ruestenMinuten;
   }
 
+  /// Produktion und Nebenzeiten eines sortierten Tages plus
+  /// [endreinigung] — genau einmal je Tag.
   static double _summeMitNebenzeiten(
     List<_Kandidat> sortiert,
     VorschlagEinstellungen e,
+    double endreinigung,
   ) {
     var summe = 0.0;
     _Kandidat? vorher;
@@ -854,7 +1178,7 @@ class PlanungsvorschlagService {
       summe += k.dauerMinuten + _nebenzeit(k, vorher, e);
       vorher = k;
     }
-    return summe + e.endreinigungMinuten;
+    return summe + endreinigung;
   }
 
   static VorschlagTag _baueTag({
@@ -862,6 +1186,7 @@ class PlanungsvorschlagService {
     required List<_Kandidat> gewaehlt,
     required double kapazitaet,
     required double belegtVorher,
+    required double endreinigung,
     required VorschlagEinstellungen e,
   }) {
     final posten = <VorschlagPosten>[];
@@ -897,6 +1222,8 @@ class PlanungsvorschlagService {
           plattenTemp: k.plattenTemp,
           hoehe: k.hoehe,
           ausgangsMengeKg: k.mengeKg,
+          termin: k.termin,
+          auftragsBezuege: k.bezuege,
         ),
       );
 
@@ -905,8 +1232,8 @@ class PlanungsvorschlagService {
       }
       final termin = k.termin;
       if (termin != null && _tag(termin).isBefore(tag)) {
-        warnungen.add('Wunschtermin von ${k.artikelnummer} liegt vor diesem '
-            'Tag');
+        warnungen.add('Termin von ${k.artikelnummer} war am '
+            '${_datum(termin)} — schon überschritten');
       }
       vorher = k;
     }
@@ -916,7 +1243,7 @@ class PlanungsvorschlagService {
       posten: posten,
       kapazitaetMinuten: kapazitaet,
       belegtVorherMinuten: belegtVorher,
-      endreinigungMinuten: e.endreinigungMinuten,
+      endreinigungMinuten: endreinigung,
       warnungen: warnungen.toList()..sort(),
     );
   }
@@ -926,6 +1253,12 @@ class PlanungsvorschlagService {
   /// Schreibt die Posten eines Vorschlagstags ins Board: je Artikel die
   /// komplette Auftragskette über alle Abteilungen, plus die Rüst- und
   /// Reinigungsblöcke als Zusatzzeit auf der führenden Spur.
+  ///
+  /// Die Kette trägt den Bedarf und — bei einem Planungsauftrag aus dem
+  /// Auftragsbestand — die Auftragszeilen, die ihre Menge bedient. Im
+  /// Auftragsbestand wechseln diese Zeilen damit von „vorgemerkt" auf
+  /// „geplant". Wird die Kette im Board gelöscht, ist der Planungsauftrag
+  /// wieder offen und die Zeilen wieder vorgemerkt.
   ///
   /// Wird pro Tag aufgerufen, nicht für den ganzen Vorschlag: Der
   /// Anwender entscheidet Tag für Tag.
@@ -938,46 +1271,68 @@ class PlanungsvorschlagService {
         mengeKg: p.mengeKg,
         startTag: t.tag,
       );
+      if (plan.schritte.isEmpty) continue;
       await erstelleTasksAusPlan(
         db: _db,
         productId: p.productId,
         schritte: plan.schritte,
         bedarfId: p.bedarfId,
         fertigMengeKg: p.mengeKg,
+        auftragsBezuege: teileBezuegeZu(p.auftragsBezuege, p.mengeKg),
       );
       angelegt++;
     }
 
     final neben = t.posten.fold<double>(0, (s, p) => s + p.nebenzeitMinuten);
-    if (neben > 0) {
-      await _zusatzzeit(t.tag, 'ruesten', neben, 'Aus Planungsvorschlag');
-    }
+    if (neben > 0) await _ruestenDazu(t.tag, neben);
     if (t.posten.isNotEmpty && t.endreinigungMinuten > 0) {
-      await _zusatzzeit(
-        t.tag,
-        'reinigen',
-        t.endreinigungMinuten,
-        'Endreinigung aus Planungsvorschlag',
-      );
+      await _endreinigung(t.tag, t.endreinigungMinuten);
     }
     return angelegt;
   }
 
-  Future<void> _zusatzzeit(
-    DateTime tag,
-    String art,
-    double minuten,
-    String notiz,
-  ) async {
+  /// Rüst- und Reinigungszeit zwischen den Posten. Stand von einer
+  /// früheren Übernahme schon ein Block an diesem Tag, kommt die neue Zeit
+  /// dazu — vorher wurde er überschrieben, und die Zeit der ersten
+  /// Übernahme fiel aus der Auslastung.
+  Future<void> _ruestenDazu(DateTime tag, double minuten) async {
+    final id = _zusatzzeitId('ruesten', tag);
+    final vorhanden = await (_db.select(_db.zusatzzeiten)
+          ..where((z) => z.id.equals(id)))
+        .getSingleOrNull();
+    final bisher = vorhanden != null && vorhanden.deletedAt == null
+        ? vorhanden.minuten
+        : 0.0;
     await _db.into(_db.zusatzzeiten).insert(
           ZusatzzeitenCompanion.insert(
-            id: '${_fuehrend.dbValue}-$art-${tag.millisecondsSinceEpoch}',
+            id: id,
             datum: _tag(tag),
             // Sammelspur der Abteilung — dieselbe Kennung wie im Board.
             spurId: '${_fuehrend.dbValue}|',
-            art: art,
+            art: 'ruesten',
+            minuten: bisher + minuten,
+            notiz: const Value('Aus Planungsvorschlag'),
+          ),
+          mode: InsertMode.insertOrReplace,
+        );
+  }
+
+  /// Endreinigung — genau ein Block je Tag.
+  Future<void> _endreinigung(DateTime tag, double minuten) async {
+    final id = _zusatzzeitId('reinigen', tag);
+    final vorhanden = await (_db.select(_db.zusatzzeiten)
+          ..where((z) => z.id.equals(id))
+          ..where((z) => z.deletedAt.isNull()))
+        .getSingleOrNull();
+    if (vorhanden != null) return;
+    await _db.into(_db.zusatzzeiten).insert(
+          ZusatzzeitenCompanion.insert(
+            id: id,
+            datum: _tag(tag),
+            spurId: '${_fuehrend.dbValue}|',
+            art: 'reinigen',
             minuten: minuten,
-            notiz: Value(notiz),
+            notiz: const Value('Endreinigung aus Planungsvorschlag'),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -985,17 +1340,20 @@ class PlanungsvorschlagService {
 
   // ── Kleinkram ────────────────────────────────────────────────────────
 
+  /// Feste Kennung der Blöcke, die der Vorschlag anlegt: je Tag und Art
+  /// genau einer.
+  static String _zusatzzeitId(String art, DateTime tag) =>
+      '${_fuehrend.dbValue}-$art-${_tag(tag).millisecondsSinceEpoch}';
+
   static DateTime _tag(DateTime d) => DateTime(d.year, d.month, d.day);
 
   static String _schluessel(DateTime d) =>
       '${d.year}-${d.month}-${d.day}';
 
-  static bool _istArbeitstag(DateTime d, VorschlagEinstellungen e) {
-    if (e.gesperrteTage.any((g) => _schluessel(g) == _schluessel(d))) {
-      return false;
-    }
-    if (d.weekday == DateTime.sunday) return false;
-    if (d.weekday == DateTime.saturday && !e.planeSamstag) return false;
-    return true;
-  }
+  static const _wochentage = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+  /// „Di 06.10."
+  static String _datum(DateTime d) => '${_wochentage[d.weekday - 1]} '
+      '${d.day.toString().padLeft(2, '0')}.'
+      '${d.month.toString().padLeft(2, '0')}.';
 }

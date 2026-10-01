@@ -3,21 +3,30 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
+import '../../core/providers/artikel_providers.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/artikel_anlage_service.dart';
 import '../../core/services/auftragsbestand_deckung.dart';
 import '../../core/services/auftragsbestand_import_service.dart';
+import '../../core/services/auftragsbestand_vergleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
-import '../bedarf/bedarf_screen.dart' show heuteProvider;
-import '../navision/navision_import_screen.dart'
-    show abteilungenJeArtikelProvider, appArtikelnummernProvider;
+import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
+import '../datenblatt/datenblatt.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show Ausbeute, AusbeuteQuelle, dailyTasksProvider, ermittleAusbeute;
 import 'auftrags_einplanung.dart';
+import 'planung_pruefen.dart'
+    show
+        PlanungsKonflikt,
+        PruefArt,
+        ermittleKonflikte,
+        verschobeneZiele,
+        wieUmgehaengt;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten für die Ansicht
@@ -30,6 +39,8 @@ class AuftragsbestandZeile {
     required this.positionen,
     required this.zugaenge,
     required this.deckung,
+    this.vormerkungen = const [],
+    this.verschoben = const {},
   });
 
   final AuftragsArtikel artikel;
@@ -41,8 +52,21 @@ class AuftragsbestandZeile {
 
   final ArtikelDeckung deckung;
 
+  /// Offene Planungsaufträge für diesen Artikel: an den Planungsvorschlag
+  /// übergeben, noch nicht (ganz) eingeplant.
+  final List<Vormerkung> vormerkungen;
+
+  /// Verschobene Aufträge, deren Planung noch am alten Tag hängt:
+  /// Schlüssel der Zeile am neuen Tag → Konflikt. Diese Zeilen sind
+  /// gesperrt, bis die Verschiebung geklärt ist.
+  final Map<String, PlanungsKonflikt> verschoben;
+
   Set<String> get belege => {for (final p in positionen) p.beleg};
   Set<String> get kunden => {for (final p in positionen) p.debitor};
+
+  /// Hier ist etwas zu tun: noch zu bündeln, zu spät eingeplant — oder
+  /// ein verschobener Auftrag zu klären.
+  bool get handlungsbedarf => !deckung.erledigt || verschoben.isNotEmpty;
 
   /// Eingeplante Produktionen ohne Fertigmenge — sie zählen nicht mit.
   int get ohneMenge => zugaenge
@@ -59,6 +83,7 @@ class AuftragsbestandAnsicht {
     this.bis,
     this.importiertAm,
     this.berichtTag,
+    this.konflikte = const [],
   });
 
   final List<AuftragsbestandZeile> zeilen;
@@ -71,11 +96,17 @@ class AuftragsbestandAnsicht {
   /// Berichts, ersatzweise der Tag des Einlesens.
   final DateTime? berichtTag;
 
+  /// Planung, die nicht mehr zum Bericht passt — Planungsaufträge und
+  /// Produktionen an verschobenen, verringerten oder entfallenen
+  /// Aufträgen. Anzupassen in der Änderungsansicht.
+  final List<PlanungsKonflikt> konflikte;
+
   bool get leer => zeilen.isEmpty;
 }
 
 /// Lädt den Auftragsbestand und rechnet je Artikel die Deckung: erst das
-/// Lager, dann die Produktionen der App.
+/// Lager, dann die Produktionen der App, zuletzt die Vormerkungen für den
+/// Planungsvorschlag.
 ///
 /// `autoDispose`: Beim nächsten Öffnen wird neu gelesen und gerechnet. Die
 /// Rechnung ist billig — ein paar tausend Zeilen —, und so gibt es keinen
@@ -104,6 +135,24 @@ final auftragsbestandProvider =
     heute: heute,
     berichtTag: berichtTag,
   );
+  final vormerkungen = await ladeVormerkungen(db);
+  // Der vorige Bericht zeigt, ob ein Auftrag verschoben wurde: am alten
+  // Tag verschwunden, am neuen aufgetaucht.
+  final konflikte = ermittleKonflikte(
+    bestand: bestandAusTabellen(artikel, positionen),
+    vorher: await ladeVorherigenBestand(db),
+    vormerkungen: vormerkungen,
+    zugaenge: zugaenge,
+  );
+  // Verschobene Aufträge: gerechnet, als hinge ihre Planung schon am
+  // neuen Tag — sonst stünden sie dort als offen da. Bündeln lassen sie
+  // sich erst, wenn die Verschiebung geklärt ist.
+  final gerechnet = wieUmgehaengt(
+    vormerkungen: vormerkungen,
+    zugaenge: zugaenge,
+    konflikte: konflikte,
+  );
+  final verschoben = verschobeneZiele(konflikte);
 
   return AuftragsbestandAnsicht(
     stand: erster.berichtStand,
@@ -111,30 +160,47 @@ final auftragsbestandProvider =
     bis: erster.zeitraumBis,
     importiertAm: erster.importiertAm,
     berichtTag: berichtTag,
+    konflikte: konflikte,
     zeilen: [
       for (final a in artikel)
         _zeile(
           a,
           jeArtikel[a.artikelnummer] ?? const [],
-          zugaenge[a.artikelnummer] ?? const [],
+          zugaenge: zugaenge[a.artikelnummer] ?? const [],
+          vormerkungen: vormerkungen[a.artikelnummer] ?? const [],
+          zugaengeGerechnet: gerechnet.zugaenge[a.artikelnummer] ?? const [],
+          vormerkungenGerechnet:
+              gerechnet.vormerkungen[a.artikelnummer] ?? const [],
+          verschoben: verschoben[a.artikelnummer] ?? const {},
         ),
     ],
   );
 });
 
+/// Ein Artikel samt Deckung. Angezeigt werden [zugaenge] und
+/// [vormerkungen], wie sie in der Datenbank stehen; gerechnet wird mit den
+/// umgehängten (siehe [wieUmgehaengt]).
 AuftragsbestandZeile _zeile(
   AuftragsArtikel artikel,
-  List<AuftragsPosition> positionen,
-  List<ProduktionsZugang> zugaenge,
-) {
+  List<AuftragsPosition> positionen, {
+  required List<ProduktionsZugang> zugaenge,
+  required List<Vormerkung> vormerkungen,
+  required List<ProduktionsZugang> zugaengeGerechnet,
+  required List<Vormerkung> vormerkungenGerechnet,
+  required Map<String, PlanungsKonflikt> verschoben,
+}) {
   return AuftragsbestandZeile(
     artikel: artikel,
     positionen: positionen,
     zugaenge: zugaenge,
+    vormerkungen: vormerkungen,
+    verschoben: verschoben,
     deckung: berechneDeckung(
       lagerKg: artikel.lagerKg,
       positionen: positionen,
-      zugaenge: zugaenge,
+      zugaenge: zugaengeGerechnet,
+      vormerkungen: vormerkungenGerechnet,
+      gesperrt: verschoben.keys.toSet(),
     ),
   );
 }
@@ -146,7 +212,7 @@ AuftragsbestandZeile _zeile(
 /// Sortierungen der Artikelliste.
 enum _Sortierung {
   engpass('Frühester Engpass'),
-  fehlmenge('Noch einzuplanen ↓'),
+  fehlmenge('Noch zu bündeln ↓'),
   auftrag('Auftragsmenge ↓'),
   nummer('Artikelnummer');
 
@@ -158,8 +224,9 @@ enum _Sortierung {
 /// dagegen gerechnet das Lager und die Produktionen der App — und was
 /// danach noch einzuplanen ist.
 ///
-/// Bedarf und Planungsvorschlag bleiben vorerst, wie sie sind. Der
-/// Auftragsbestand fließt erst im nächsten Schritt dort hinein.
+/// Abgehakte Versandtage gehen entweder an den Planungsvorschlag (als
+/// Planungsauftrag mit spätestem Produktionstag) oder direkt an einem
+/// festen Tag ins Board.
 class AuftragsbestandScreen extends ConsumerStatefulWidget {
   const AuftragsbestandScreen({super.key});
 
@@ -220,36 +287,96 @@ class _AuftragsbestandScreenState
       return;
     }
 
+    // Vor der nächsten Wartestelle geholt: Container, Router und Messenger
+    // überleben auch, wenn jemand den Bildschirm währenddessen schließt.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final router = GoRouter.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final db = ref.read(databaseProvider);
+    final service = AuftragsbestandImportService(db);
+
     setState(() {
       _liest = true;
       _fehler = null;
       _hinweise = const [];
     });
     try {
-      final ergebnis = await AuftragsbestandImportService(
-        ref.read(databaseProvider),
-      ).importiere(bytes);
+      final bericht = await service.lese(bytes);
+      final bisher = await ladeBestand(db);
+      final neu = BestandsStand.ausBericht(
+        bericht,
+        importiertAm: DateTime.now(),
+      );
+
+      // Sieht der Bericht gefiltert, veraltet oder verrutscht aus? Dann
+      // erst fragen — er ersetzt den bisherigen vollständig, und was darin
+      // fehlt, gälte als nicht mehr offen.
+      final zweifel = [
+        for (final h in pruefeUmfang(bisher, neu))
+          if (h.ernst) h,
+      ];
+      if (zweifel.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _liest = false);
+        final weiter = await showDialog<bool>(
+          context: context,
+          builder: (_) => _UmfangsDialog(hinweise: zweifel),
+        );
+        if (weiter != true || !mounted) return;
+        setState(() => _liest = true);
+      }
+
+      final ergebnis = await service.speichere(bericht);
+      container.invalidate(auftragsbestandProvider);
+
+      final verpackung = ergebnis.uebersprungen.isEmpty
+          ? ''
+          : ' · ${ergebnis.uebersprungen.length} Verpackungs- und '
+              'Palettenartikel ausgelassen';
+      final vergleich = vergleicheBestand(bisher, neu);
+      final kurz = vergleich.kurzfassung;
+      final standBisher = bisher.stand;
+      final standNeu = neu.stand;
+      final String seitdem;
+      if (vergleich.ohneVorher) {
+        seitdem = '';
+      } else if (standBisher != null &&
+          standNeu != null &&
+          standBisher.isAtSameMomentAs(standNeu)) {
+        seitdem = '\nDerselbe Bericht wie zuvor — die Änderungen zeigen '
+            'weiter den Vergleich mit dem Bericht davor.';
+      } else if (kurz.isEmpty) {
+        seitdem = '\nSeit dem vorigen Bericht keine wesentlichen Änderungen.';
+      } else {
+        seitdem = '\nSeit dem vorigen Bericht: $kurz';
+      }
+      // Die Meldung auch dann, wenn der Bildschirm inzwischen geschlossen
+      // wurde — der Messenger gehört zur App.
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 10),
+          // Mit Aktion blieben Meldungen sonst stehen, bis jemand klickt.
+          persist: false,
+          content: Text(
+            '${ergebnis.artikel} Artikel · ${ergebnis.positionen} '
+            'Auftragszeilen · ${ergebnis.kunden} Kunden eingelesen'
+            '$verpackung$seitdem',
+          ),
+          action: vergleich.ohneVorher
+              ? null
+              : SnackBarAction(
+                  label: 'Änderungen ansehen',
+                  onPressed: () =>
+                      router.pushNamed('auftragsbestandAenderungen'),
+                ),
+        ),
+      );
       if (!mounted) return;
-      ref.invalidate(auftragsbestandProvider);
       setState(() {
         _offen.clear();
         _markiert.clear();
         _hinweise = ergebnis.warnungen;
       });
-      final verpackung = ergebnis.uebersprungen.isEmpty
-          ? ''
-          : ' · ${ergebnis.uebersprungen.length} Verpackungs- und '
-              'Palettenartikel ausgelassen';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 5),
-          content: Text(
-            '${ergebnis.artikel} Artikel · ${ergebnis.positionen} '
-            'Auftragszeilen · ${ergebnis.kunden} Kunden eingelesen'
-            '$verpackung',
-          ),
-        ),
-      );
     } on FormatException catch (e) {
       if (mounted) setState(() => _fehler = e.message);
     } catch (e) {
@@ -333,9 +460,16 @@ class _AuftragsbestandScreenState
 
   // ── Einplanen ────────────────────────────────────────────────────────
 
-  /// Plant die abgehakten Tage eines Artikels ein: fragt Menge und
-  /// Produktionstag ab und legt die Kette im Board an — mit der Zuordnung
-  /// zu genau den Auftragszeilen, die an diesen Tagen noch fehlen.
+  /// Plant die abgehakten Tage eines Artikels ein — mit genau den
+  /// Auftragszeilen, die an diesen Tagen noch offen sind. Der Dialog fragt
+  /// Menge, Tag und Weg ab:
+  ///
+  /// * **Planungsvorschlag** (Standard): Es entsteht ein Planungsauftrag
+  ///   mit dem Tag als spätestem Produktionstag. Die Zeilen sind
+  ///   vorgemerkt, bis der Vorschlag sie in einen Tag legt und der Tag
+  ///   übernommen wird.
+  /// * **Fester Tag**: Die Kette kommt sofort ins Board, an genau diesem
+  ///   Tag. Der Planungsvorschlag plant drumherum.
   Future<void> _einplanen(AuftragsbestandZeile zeile) async {
     final nr = zeile.artikel.artikelnummer;
     final tage = _markiert[nr] ?? const <DateTime>{};
@@ -344,7 +478,7 @@ class _AuftragsbestandScreenState
       setState(() => _markiert.remove(nr));
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('An den markierten Tagen fehlt nichts mehr.'),
+          content: Text('An den markierten Tagen ist nichts mehr offen.'),
         ),
       );
       return;
@@ -353,6 +487,7 @@ class _AuftragsbestandScreenState
     // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
     // jemand den Bildschirm währenddessen schließt.
     final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
     final db = ref.read(databaseProvider);
     final heute = ref.read(heuteProvider);
 
@@ -380,46 +515,81 @@ class _AuftragsbestandScreenState
       for (final t in zeile.deckung.tage)
         if (tage.contains(t.tag) && t.einplanbar) t,
     ];
-    final fehltKg = bezuege.fold<double>(0, (s, b) => s + b.kg);
-    final auswahl = await showDialog<({double fertigKg, DateTime tag})>(
+    final offenKg = bezuege.fold<double>(0, (s, b) => s + b.kg);
+    final auswahl = await showDialog<_Wahl>(
       context: context,
       builder: (_) => _EinplanenDialog(
         artikel: zeile.artikel,
         tage: gewaehlt,
-        fehltKg: fehltKg,
+        offenKg: offenKg,
         ausbeute: ausbeute,
         vorschlag: vorschlagProduktionstag(gewaehlt.first.tag, heute),
+        heute: heute,
       ),
     );
     if (auswahl == null || !mounted) return;
 
     setState(() => _plant = true);
     try {
-      final e = await planeAuftragszeilen(
-        db: db,
-        productId: produkt.id,
-        fertigKg: auswahl.fertigKg,
-        tag: auswahl.tag,
-        bezuege: bezuege,
-      );
+      final String meldung;
+      // Das Datenblatt der gerade gebündelten Planung — über die Aktion
+      // der Meldung sofort zu drucken.
+      final Future<List<Datenblatt>> Function() blatt;
+      if (auswahl.fest) {
+        final e = await planeAuftragszeilen(
+          db: db,
+          productId: produkt.id,
+          fertigKg: auswahl.fertigKg,
+          tag: auswahl.tag,
+          bezuege: bezuege,
+        );
+        container.invalidate(dailyTasksProvider);
+        meldung = 'Eingeplant am ${_tagKurz(e.tag)} · '
+            '${_kg(e.fertigwareKg)} kg Fertigware '
+            '(≈ ${_kg(e.rohwareKg)} kg Rohware) · ${e.schritte} '
+            '${e.schritte == 1 ? 'Schritt' : 'Schritte'} im Board';
+        final wurzelId = e.wurzelId;
+        blatt = () async {
+          if (wurzelId == null) return const <Datenblatt>[];
+          return alsListe(datenblattFuerKette(db, wurzelId));
+        };
+      } else {
+        final bedarfId = await uebergebeAnPlanungsvorschlag(
+          db: db,
+          productId: produkt.id,
+          fertigKg: auswahl.fertigKg,
+          termin: auswahl.tag,
+          bezuege: bezuege,
+        );
+        meldung = 'An den Planungsvorschlag übergeben · '
+            '${_kg(auswahl.fertigKg)} kg, spätestens am '
+            '${_tagKurz(auswahl.tag)} zu produzieren. Dort mit den übrigen '
+            'Bedarfen einplanen.';
+        blatt = () => alsListe(datenblattFuerBedarf(db, bedarfId));
+      }
       container.invalidate(auftragsbestandProvider);
-      container.invalidate(dailyTasksProvider);
-      container
-          .read(autoBackupTriggerProvider)
-          .fireDebounced(reason: 'Aus dem Auftragsbestand eingeplant');
-      if (!mounted) return;
-      setState(() => _markiert.remove(nr));
-      ScaffoldMessenger.of(context).showSnackBar(
+      container.invalidate(bedarfProvider);
+      container.read(autoBackupTriggerProvider).fireDebounced(
+            reason: auswahl.fest
+                ? 'Aus dem Auftragsbestand eingeplant'
+                : 'An den Planungsvorschlag übergeben',
+          );
+      // Die Meldung samt Aktion auch dann, wenn der Bildschirm inzwischen
+      // geschlossen wurde — der Messenger gehört zur App.
+      messenger.showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 6),
-          content: Text(
-            'Eingeplant am ${_tagKurz(e.tag)} · ${_kg(e.fertigwareKg)} kg '
-            'Fertigware (≈ ${_kg(e.rohwareKg)} kg Rohware) · '
-            '${e.schritte} ${e.schritte == 1 ? 'Schritt' : 'Schritte'} im '
-            'Board',
+          duration: const Duration(seconds: 10),
+          // Mit Aktion blieben Meldungen sonst stehen, bis jemand klickt.
+          persist: false,
+          content: Text(meldung),
+          action: SnackBarAction(
+            label: 'Datenblatt drucken',
+            onPressed: () => druckeDatenblaetterMitMeldung(messenger, blatt),
           ),
         ),
       );
+      if (!mounted) return;
+      setState(() => _markiert.remove(nr));
     } on StateError catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -443,6 +613,78 @@ class _AuftragsbestandScreenState
     }
   }
 
+  /// Hebt eine Vormerkung auf: Der Planungsauftrag wird gelöscht, seine
+  /// Zeilen sind wieder offen.
+  Future<void> _vormerkungAufheben(Vormerkung v) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final db = ref.read(databaseProvider);
+    final termin = v.termin;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Vormerkung aufheben?'),
+        content: SizedBox(
+          width: 460,
+          child: Text(
+            'Der Planungsauftrag über ${_kg(v.offenKg)} kg'
+            '${termin == null ? '' : ' (spätestens ${_tagKurz(termin)})'} '
+            'wird gelöscht. Seine Aufträge sind danach wieder offen und '
+            'lassen sich neu bündeln. Was davon schon im Board steht, '
+            'bleibt dort.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Aufheben'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await hebeVormerkungAuf(db: db, bedarfId: v.bedarfId);
+      container.invalidate(auftragsbestandProvider);
+      container.invalidate(bedarfProvider);
+      container
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Vormerkung aufgehoben');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text('Aufheben fehlgeschlagen. ($e)'),
+        ),
+      );
+    }
+  }
+
+  // ── Datenblatt ───────────────────────────────────────────────────────
+
+  /// Druckt das Datenblatt einer Vormerkung: der Teil des
+  /// Planungsauftrags, der noch nicht im Board steht.
+  Future<void> _datenblattVormerkung(Vormerkung v) {
+    final db = ref.read(databaseProvider);
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () => alsListe(datenblattFuerBedarf(db, v.bedarfId, nurOffen: true)),
+    );
+  }
+
+  /// Druckt das Datenblatt einer Produktion der App.
+  Future<void> _datenblattKette(ProduktionsZugang z) {
+    final db = ref.read(databaseProvider);
+    return druckeDatenblaetterMitMeldung(
+      ScaffoldMessenger.of(context),
+      () => alsListe(datenblattFuerKette(db, z.kettenId)),
+    );
+  }
+
   // ── Filtern und Sortieren ────────────────────────────────────────────
 
   List<AuftragsbestandZeile> _gefiltert(
@@ -451,7 +693,7 @@ class _AuftragsbestandScreenState
   ) {
     final suche = _suche.text.trim().toLowerCase();
     final liste = alle.where((z) {
-      if (_nurOffene && z.deckung.gedeckt) return false;
+      if (_nurOffene && !z.handlungsbedarf) return false;
       final abteilung = _abteilung;
       if (abteilung != null &&
           !(abteilungen[z.artikel.artikelnummer]?.contains(abteilung) ??
@@ -475,13 +717,22 @@ class _AuftragsbestandScreenState
 
     switch (_sortierung) {
       case _Sortierung.engpass:
+        // Erst, was hier Arbeit macht — nach dem frühesten Tag, an dem
+        // etwas zu bündeln ist oder zu spät kommt. Danach, was beim
+        // Planungsvorschlag liegt oder gedeckt ist.
         liste.sort((a, b) {
-          final ea = a.deckung.ersterEngpass;
-          final eb = b.deckung.ersterEngpass;
+          if (a.handlungsbedarf != b.handlungsbedarf) {
+            return a.handlungsbedarf ? -1 : 1;
+          }
+          final x = a.deckung;
+          final y = b.deckung;
+          if (x.erledigt != y.erledigt) return x.erledigt ? 1 : -1;
+          final ea = x.erledigt ? x.ersterEngpass : _handlungstag(x);
+          final eb = y.erledigt ? y.ersterEngpass : _handlungstag(y);
           if (ea != null && eb != null) {
             final t = ea.compareTo(eb);
             if (t != 0) return t;
-            return b.deckung.fehltKg.compareTo(a.deckung.fehltKg);
+            return y.offenKg.compareTo(x.offenKg);
           }
           if (ea != null) return -1;
           if (eb != null) return 1;
@@ -489,7 +740,7 @@ class _AuftragsbestandScreenState
         });
       case _Sortierung.fehlmenge:
         liste.sort((a, b) {
-          final f = b.deckung.fehltKg.compareTo(a.deckung.fehltKg);
+          final f = b.deckung.offenKg.compareTo(a.deckung.offenKg);
           return f != 0 ? f : nachNummer(a, b);
         });
       case _Sortierung.auftrag:
@@ -519,6 +770,11 @@ class _AuftragsbestandScreenState
       appBar: AppBar(
         title: const Text('Auftragsbestand'),
         actions: [
+          IconButton(
+            onPressed: () => context.pushNamed('auftragsbestandAenderungen'),
+            icon: const Icon(Icons.compare_arrows),
+            tooltip: 'Änderungen seit dem vorigen Bericht',
+          ),
           IconButton(
             onPressed: () => ref.invalidate(auftragsbestandProvider),
             icon: const Icon(Icons.refresh),
@@ -589,6 +845,11 @@ class _AuftragsbestandScreenState
     return Column(
       children: [
         _Kopf(ansicht: ansicht, heute: heute),
+        if (ansicht.konflikte.isNotEmpty)
+          _KonfliktBanner(
+            konflikte: ansicht.konflikte,
+            onPruefen: () => context.pushNamed('auftragsbestandAenderungen'),
+          ),
         if (fehlende.isNotEmpty)
           _FehlendeBanner(
             anzahl: fehlende.length,
@@ -635,6 +896,11 @@ class _AuftragsbestandScreenState
                       onEinplanen: markiert.isEmpty || _plant
                           ? null
                           : () => _einplanen(z),
+                      onAufheben: _vormerkungAufheben,
+                      onDatenblattVormerkung: _datenblattVormerkung,
+                      onDatenblattKette: _datenblattKette,
+                      onPruefen: () =>
+                          context.pushNamed('auftragsbestandAenderungen'),
                       onUmschalten: () => setState(() {
                         if (!_offen.remove(nr)) _offen.add(nr);
                       }),
@@ -663,7 +929,7 @@ class _AuftragsbestandScreenState
         anzahl[d] = (anzahl[d] ?? 0) + 1;
       }
     }
-    final offene = ansicht.zeilen.where((z) => !z.deckung.gedeckt).length;
+    final offene = ansicht.zeilen.where((z) => z.handlungsbedarf).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
@@ -730,8 +996,10 @@ class _AuftragsbestandScreenState
               ),
               FilterChip(
                 label: Text('Nur mit Handlungsbedarf ($offene)'),
-                tooltip: 'Artikel, bei denen noch etwas fehlt oder die '
-                    'Produktion zu spät fertig wird',
+                tooltip: 'Artikel, bei denen noch etwas zu bündeln ist, die '
+                    'Produktion zu spät fertig wird oder ein verschobener '
+                    'Auftrag zu klären ist. Was beim Planungsvorschlag '
+                    'vorgemerkt ist, ist hier erledigt.',
                 selected: _nurOffene,
                 onSelected: (v) => setState(() => _nurOffene = v),
               ),
@@ -790,6 +1058,27 @@ Color _bernstein(ThemeData theme) => theme.brightness == Brightness.dark
     ? const Color(0xFFFBBF24)
     : const Color(0xFFB45309);
 
+/// Blau für „beim Planungsvorschlag vorgemerkt": in Arbeit, aber noch
+/// nicht im Board.
+Color _blau(ThemeData theme) => theme.brightness == Brightness.dark
+    ? const Color(0xFF60A5FA)
+    : const Color(0xFF1D4ED8);
+
+/// Lila für „verschoben": Die Planung hängt noch am alten Versandtag.
+Color _lila(ThemeData theme) => theme.brightness == Brightness.dark
+    ? const Color(0xFFC084FC)
+    : const Color(0xFF7E22CE);
+
+/// Erster Warenausgang, an dem hier etwas zu tun ist: noch zu bündeln
+/// oder zu spät eingeplant.
+DateTime? _handlungstag(ArtikelDeckung d) {
+  final offen = d.ersterOffenTag;
+  final spaet = d.ersterZuSpaet;
+  if (offen == null) return spaet;
+  if (spaet == null) return offen;
+  return offen.isBefore(spaet) ? offen : spaet;
+}
+
 /// Stand, Zeitraum und Kennzahlen des eingelesenen Berichts.
 class _Kopf extends StatelessWidget {
   const _Kopf({required this.ansicht, required this.heute});
@@ -806,7 +1095,8 @@ class _Kopf extends StatelessWidget {
     var auftragKg = 0.0;
     var lagerKg = 0.0;
     var planungKg = 0.0;
-    var fehltKg = 0.0;
+    var offenKg = 0.0;
+    var vorgemerktKg = 0.0;
     var zuSpaetKg = 0.0;
     var offene = 0;
     for (final z in zeilen) {
@@ -816,9 +1106,10 @@ class _Kopf extends StatelessWidget {
       auftragKg += d.auftragKg;
       lagerKg += d.ausLagerKg;
       planungKg += d.ausPlanungKg + d.zuSpaetKg;
-      fehltKg += d.fehltKg;
+      offenKg += d.offenKg;
+      vorgemerktKg += d.vorgemerktKg;
       zuSpaetKg += d.zuSpaetKg;
-      if (!d.gedeckt) offene++;
+      if (z.handlungsbedarf) offene++;
     }
 
     final stand = ansicht.stand;
@@ -879,10 +1170,16 @@ class _Kopf extends StatelessWidget {
                 label: 'aus Produktion',
               ),
               _Kennzahl(
-                wert: '${_kg(fehltKg)} kg',
+                wert: '${_kg(offenKg)} kg',
                 label: 'noch einzuplanen',
-                farbe: fehltKg >= 0.005 ? theme.colorScheme.error : null,
+                farbe: offenKg >= 0.005 ? theme.colorScheme.error : null,
               ),
+              if (vorgemerktKg >= 0.005)
+                _Kennzahl(
+                  wert: '${_kg(vorgemerktKg)} kg',
+                  label: 'beim Planungsvorschlag',
+                  farbe: _blau(theme),
+                ),
               if (zuSpaetKg >= 0.005)
                 _Kennzahl(
                   wert: '${_kg(zuSpaetKg)} kg',
@@ -914,7 +1211,8 @@ const _rechenweg =
     '3. Produktionen, die erst nach dem Versandtag fertig werden, decken '
     'die Menge — aber zu spät.\n\n'
     'Was danach noch fehlt, ist einzuplanen. Termin ist der erste Tag, an '
-    'dem es fehlt.\n\n'
+    'dem es fehlt. Ist es an den Planungsvorschlag übergeben, ist es '
+    'vorgemerkt — es fehlt noch, ist aber in Arbeit.\n\n'
     'Welche Produktionen mitzählen:\n'
     '• Eingeplant: letzter Schritt heute oder später.\n'
     '• Produziert am Tag des Berichts oder danach: im Lager des Berichts '
@@ -926,9 +1224,27 @@ const _rechenweg =
     'Produktionen mit der erfassten. Produktionen ohne Fertigmenge (in '
     'Rohware geplant, ohne bekannte Ausbeute) zählen nicht mit.\n\n'
     'Einplanen: Tage eines Artikels abhaken und „Zur Planung '
-    'hinzufügen". Die Aufträge dieser Tage werden grau und zeigen, wann '
-    'produziert wird. Wird die Produktion im Board gelöscht, sind sie '
-    'wieder offen.';
+    'hinzufügen". Zwei Wege:\n'
+    '• An den Planungsvorschlag übergeben (Standard): Es entsteht ein '
+    'Planungsauftrag mit spätestem Produktionstag. Die Aufträge sind blau '
+    'vorgemerkt, bis der Planungsvorschlag sie in einen Tag legt und der '
+    'Tag übernommen wird. Er plant möglichst spät, aber nie nach dem '
+    'Termin.\n'
+    '• Fester Tag: Die Produktion kommt sofort ins Board, genau an diesem '
+    'Tag. Der Planungsvorschlag plant drumherum.\n\n'
+    'Eingeplante Aufträge werden grau und zeigen, wann produziert wird. '
+    'Wird eine Produktion im Board gelöscht, ist ein übergebener Auftrag '
+    'wieder vorgemerkt, ein fest eingeplanter wieder offen. Wird ein '
+    'Planungsauftrag gelöscht — hier über „Vormerkung aufheben" oder in '
+    'der Bedarfsliste —, sind seine Aufträge wieder offen.\n\n'
+    'Nach jedem Einlesen vergleicht die App den Bericht mit dem vorigen '
+    '(Symbol oben rechts): neu, mehr, weniger, verschoben, entfallen. '
+    'Hängt Planung an einem Auftrag, der sich geändert hat, erscheint '
+    'oben ein roter Hinweis — dort lässt sie sich anpassen.\n\n'
+    'Verschobene Aufträge, deren Planung noch am alten Tag hängt, sind '
+    'lila markiert. Gerechnet wird schon mit dem neuen Tag, gebündelt '
+    'werden können sie aber erst, wenn die Verschiebung umgehängt oder '
+    'verworfen ist — sonst würde dieselbe Menge zweimal eingeplant.';
 
 Future<void> _zeigeRechenweg(BuildContext context) {
   return showDialog<void>(
@@ -1041,6 +1357,122 @@ class _FehlendeBanner extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Hinweis über der Liste: Planung, die nicht mehr zum Bericht passt.
+/// Vor dem nächsten Bündeln zu prüfen — ein verschobener Auftrag stünde
+/// sonst am neuen Tag als offen da und würde ein zweites Mal eingeplant.
+class _KonfliktBanner extends StatelessWidget {
+  const _KonfliktBanner({required this.konflikte, required this.onPruefen});
+
+  final List<PlanungsKonflikt> konflikte;
+  final VoidCallback onPruefen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = theme.colorScheme.onErrorContainer;
+    final n = konflikte.length;
+    final arten = [
+      for (final art in PruefArt.values)
+        if (konflikte.any((k) => k.art == art)) art.label,
+    ];
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.rule, size: 20, color: farbe),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              '${n == 1 ? 'An 1 Auftrag hängt' : 'An $n Aufträgen hängt'} '
+              'Planung, die nicht mehr zum Bericht passt '
+              '(${arten.join(', ')}). Erst prüfen, dann neu bündeln — '
+              'sonst wird doppelt oder zu viel produziert.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: farbe,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            onPressed: onPruefen,
+            icon: const Icon(Icons.compare_arrows, size: 18),
+            label: const Text('Prüfen …'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Rückfrage beim Einlesen: Der Bericht sieht gefiltert, veraltet oder
+/// verrutscht aus.
+class _UmfangsDialog extends StatelessWidget {
+  const _UmfangsDialog({required this.hinweise});
+
+  final List<UmfangsHinweis> hinweise;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AlertDialog(
+      icon: Icon(Icons.warning_amber_rounded, color: _bernstein(theme)),
+      title: const Text('Diesen Bericht übernehmen?'),
+      content: SizedBox(
+        width: 520,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final h in hinweise)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('•  '),
+                      Expanded(child: Text(h.text)),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 4),
+              Text(
+                'Der Bericht ersetzt den bisherigen vollständig. Was darin '
+                'fehlt, weil er gefiltert ist, gilt in der App als nicht '
+                'mehr offen: Das Lager wird nur den gezeigten Aufträgen '
+                'zugeteilt, und die Planungsprüfung schlägt vor, die '
+                'Planung der fehlenden herauszunehmen.\n\n'
+                'Am sichersten: in Navision immer mit demselben Grundfilter '
+                'aufrufen — alle Kunden, alle Artikel, nur den Zeitraum '
+                'anpassen.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Trotzdem übernehmen'),
+        ),
+      ],
     );
   }
 }
@@ -1175,27 +1607,39 @@ class _FehlendeDialogState extends State<_FehlendeDialog> {
   }
 }
 
-/// Menge und Produktionstag für die abgehakten Tage eines Artikels.
+/// Was im Dialog „Zur Planung hinzufügen" gewählt wurde: Menge
+/// Fertigware, Tag, und ob der Tag fest ist oder nur der späteste.
+typedef _Wahl = ({double fertigKg, DateTime tag, bool fest});
+
+/// Menge, Tag und Weg für die abgehakten Tage eines Artikels.
 ///
-/// Vorgeschlagen ist genau das, was an diesen Tagen fehlt, und als Tag der
-/// Arbeitstag vor dem ersten Versand. Beides lässt sich ändern — etwa auf
-/// eine volle Charge aufrunden.
+/// Vorgeschlagen ist genau das, was an diesen Tagen noch offen ist, und
+/// als Tag der Arbeitstag vor dem ersten Versand. Beides lässt sich ändern
+/// — etwa auf eine volle Charge aufrunden.
+///
+/// Standard ist die Übergabe an den Planungsvorschlag: Der Tag ist dann
+/// der späteste Produktionstag, der Vorschlag sucht den passenden Tag
+/// davor. „Fester Tag" legt die Produktion sofort ins Board.
 class _EinplanenDialog extends StatefulWidget {
   const _EinplanenDialog({
     required this.artikel,
     required this.tage,
-    required this.fehltKg,
+    required this.offenKg,
     required this.ausbeute,
     required this.vorschlag,
+    required this.heute,
   });
 
   final AuftragsArtikel artikel;
 
   /// Die abgehakten Versandtage, frühester zuerst.
   final List<TagesDeckung> tage;
-  final double fehltKg;
+
+  /// Was an diesen Tagen noch offen ist.
+  final double offenKg;
   final Ausbeute ausbeute;
   final DateTime vorschlag;
+  final DateTime heute;
 
   @override
   State<_EinplanenDialog> createState() => _EinplanenDialogState();
@@ -1203,9 +1647,12 @@ class _EinplanenDialog extends StatefulWidget {
 
 class _EinplanenDialogState extends State<_EinplanenDialog> {
   late final TextEditingController _menge = TextEditingController(
-    text: widget.fehltKg.ceil().toString(),
+    text: widget.offenKg.ceil().toString(),
   );
   late DateTime _tag = widget.vorschlag;
+
+  /// Fester Tag statt Übergabe an den Planungsvorschlag.
+  bool _fest = false;
 
   @override
   void dispose() {
@@ -1241,6 +1688,10 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
     final ersterVersand = widget.tage.first.tag;
     final zuSpaet = _tag.isAfter(ersterVersand);
     final amVersandtag = _tag.isAtSameMomentAs(ersterVersand);
+    final tagText = _fest ? 'Produktionstag' : 'Spätester Produktionstag';
+    // Der Planungsvorschlag plant ab morgen. Muss es heute laufen, geht
+    // das nur fest.
+    final nurFest = !_fest && !_tag.isAfter(widget.heute);
 
     final String rohware;
     if (fertig == null) {
@@ -1264,7 +1715,7 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
         '${widget.artikel.artikelnummer}  ${widget.artikel.bezeichnung}',
       ),
       content: SizedBox(
-        width: 480,
+        width: 500,
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1293,12 +1744,42 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
                         ),
                       ),
                       Text(
-                        'fehlen ${_kg(t.fehltKg)} kg',
+                        'offen ${_kg(t.einplanbarKg)} kg',
                         style: klein?.copyWith(fontWeight: FontWeight.w700),
                       ),
                     ],
                   ),
                 ),
+              const SizedBox(height: 16),
+              SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    icon: Icon(Icons.auto_awesome_rounded, size: 18),
+                    label: Text('An Planungsvorschlag'),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    icon: Icon(Icons.event, size: 18),
+                    label: Text('Fester Tag'),
+                  ),
+                ],
+                selected: {_fest},
+                onSelectionChanged: (s) => setState(() => _fest = s.first),
+                showSelectedIcon: false,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _fest
+                    ? 'Die Produktion kommt sofort ins Board, genau an diesem '
+                        'Tag — für Ware, die an diesem Tag laufen muss. Der '
+                        'Planungsvorschlag plant drumherum.'
+                    : 'Der Planungsvorschlag legt die Produktion mit den '
+                        'übrigen Bedarfen in die Woche: so spät wie möglich, '
+                        'aber nie nach dem spätesten Produktionstag. Bis '
+                        'dahin sind die Aufträge hier vorgemerkt.',
+                style: grau,
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _menge,
@@ -1306,8 +1787,8 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
                 decoration: InputDecoration(
                   labelText: 'Fertigware einplanen',
                   suffixText: 'kg',
-                  helperText: 'Vorschlag: was an diesen Tagen fehlt '
-                      '(${_kg(widget.fehltKg)} kg)',
+                  helperText: 'Vorschlag: was an diesen Tagen noch offen ist '
+                      '(${_kg(widget.offenKg)} kg)',
                   border: const OutlineInputBorder(),
                 ),
                 keyboardType:
@@ -1323,7 +1804,7 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
                 children: [
                   Expanded(
                     child: Text(
-                      'Produktionstag: ${_tagKurz(_tag)}${_tag.year}',
+                      '$tagText: ${_tagKurz(_tag)}${_tag.year}',
                       style: theme.textTheme.bodyMedium
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
@@ -1349,12 +1830,26 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
                   'Knapp: Produktion am ersten Versandtag selbst.',
                   style: klein?.copyWith(color: _bernstein(theme)),
                 ),
-              const SizedBox(height: 8),
-              Text(
-                'Alle Abteilungen kommen zunächst auf diesen Tag. Einzelne '
-                'Schritte kannst du danach im Board verschieben.',
-                style: grau,
-              ),
+              if (nurFest)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    'Der Planungsvorschlag plant ab morgen. Muss es heute '
+                    'laufen, „Fester Tag" wählen.',
+                    style: klein?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: _bernstein(theme),
+                    ),
+                  ),
+                ),
+              if (_fest) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Alle Abteilungen kommen zunächst auf diesen Tag. '
+                  'Einzelne Schritte kannst du danach im Board verschieben.',
+                  style: grau,
+                ),
+              ],
             ],
           ),
         ),
@@ -1367,9 +1862,13 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
         FilledButton.icon(
           onPressed: fertig == null
               ? null
-              : () => Navigator.of(context).pop((fertigKg: fertig, tag: _tag)),
-          icon: const Icon(Icons.event_available, size: 18),
-          label: const Text('Einplanen'),
+              : () => Navigator.of(context)
+                  .pop((fertigKg: fertig, tag: _tag, fest: _fest)),
+          icon: Icon(
+            _fest ? Icons.event_available : Icons.auto_awesome_rounded,
+            size: 18,
+          ),
+          label: Text(_fest ? 'Einplanen' : 'Übergeben'),
         ),
       ],
     );
@@ -1387,6 +1886,10 @@ class _ArtikelKarte extends StatelessWidget {
     required this.markiert,
     required this.onMarkieren,
     required this.onEinplanen,
+    required this.onAufheben,
+    required this.onDatenblattVormerkung,
+    required this.onDatenblattKette,
+    required this.onPruefen,
     required this.onUmschalten,
   });
 
@@ -1397,6 +1900,13 @@ class _ArtikelKarte extends StatelessWidget {
   final Set<DateTime> markiert;
   final void Function(DateTime tag, bool an)? onMarkieren;
   final VoidCallback? onEinplanen;
+  final void Function(Vormerkung v) onAufheben;
+  final void Function(Vormerkung v) onDatenblattVormerkung;
+  final void Function(ProduktionsZugang z) onDatenblattKette;
+
+  /// Öffnet die Änderungsansicht — dort wird eine Verschiebung geklärt.
+  final VoidCallback onPruefen;
+
   final VoidCallback onUmschalten;
 
   @override
@@ -1404,17 +1914,23 @@ class _ArtikelKarte extends StatelessWidget {
     final theme = Theme.of(context);
     final a = zeile.artikel;
     final d = zeile.deckung;
-    final fehltAb = d.ersterFehltag;
+    final offenAb = d.ersterOffenTag;
     final zuSpaetAb = d.ersterZuSpaet;
 
     final Color akzent;
     final String status;
-    if (fehltAb != null) {
+    if (offenAb != null) {
       akzent = theme.colorScheme.error;
-      status = 'fehlt ${_kg(d.fehltKg)} kg ab ${_tagKurz(fehltAb)}';
+      status = 'fehlt ${_kg(d.offenKg)} kg ab ${_tagKurz(offenAb)}';
     } else if (zuSpaetAb != null) {
       akzent = _bernstein(theme);
       status = 'zu spät eingeplant · ${_tagKurz(zuSpaetAb)}';
+    } else if (d.vorgemerktKg >= 0.005) {
+      akzent = _blau(theme);
+      final termin = d.fruehesterVormerkTermin;
+      status = termin == null
+          ? 'beim Planungsvorschlag'
+          : 'beim Planungsvorschlag · spätestens ${_tagKurz(termin)}';
     } else if (d.lagerReicht) {
       akzent = _gruen(theme);
       status = 'Lager reicht';
@@ -1427,8 +1943,8 @@ class _ArtikelKarte extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       clipBehavior: Clip.antiAlias,
       child: DecoratedBox(
-        // Farbiger Rand links: rot = fehlt, bernstein = zu spät,
-        // grün = rechtzeitig gedeckt.
+        // Farbiger Rand links: rot = fehlt, bernstein = zu spät, blau =
+        // beim Planungsvorschlag vorgemerkt, grün = rechtzeitig gedeckt.
         decoration: BoxDecoration(
           border: Border(left: BorderSide(color: akzent, width: 4)),
         ),
@@ -1458,11 +1974,17 @@ class _ArtikelKarte extends StatelessWidget {
               _Details(
                 deckung: d,
                 zugaenge: zeile.zugaenge,
+                vormerkungen: zeile.vormerkungen,
+                verschoben: zeile.verschoben,
                 heute: heute,
                 inApp: inApp,
                 markiert: markiert,
                 onMarkieren: onMarkieren,
                 onEinplanen: onEinplanen,
+                onAufheben: onAufheben,
+                onDatenblattVormerkung: onDatenblattVormerkung,
+                onDatenblattKette: onDatenblattKette,
+                onPruefen: onPruefen,
               ),
           ],
         ),
@@ -1474,6 +1996,9 @@ class _ArtikelKarte extends StatelessWidget {
     final auftraege = zeile.belege.length;
     final tage = d.tage.length;
     final ohneMenge = zeile.ohneMenge;
+    // Vorgemerkt UND noch etwas offen oder zu spät: Der Status rechts
+    // zeigt das Dringendere, die Vormerkung steht deshalb hier.
+    final vorgemerktNebenbei = d.vorgemerktKg >= 0.005 && !d.erledigt;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1498,6 +2023,23 @@ class _ArtikelKarte extends StatelessWidget {
                     ? '1 Planung ohne Fertigmenge'
                     : '$ohneMenge Planungen ohne Fertigmenge',
                 farbe: _bernstein(theme),
+              ),
+            if (vorgemerktNebenbei)
+              _Marke(
+                text: '${_kg(d.vorgemerktKg)} kg beim Planungsvorschlag',
+                farbe: _blau(theme),
+              ),
+            if (zeile.verschoben.isNotEmpty)
+              Tooltip(
+                message: 'Ein Auftrag steht an einem neuen Versandtag, seine '
+                    'Planung hängt noch am alten. Bis das geklärt ist, lässt '
+                    'er sich nicht bündeln.',
+                child: _Marke(
+                  text: zeile.verschoben.length == 1
+                      ? '1 Auftrag verschoben'
+                      : '${zeile.verschoben.length} Aufträge verschoben',
+                  farbe: _lila(theme),
+                ),
               ),
           ],
         ),
@@ -1524,24 +2066,39 @@ class _ArtikelKarte extends StatelessWidget {
 }
 
 /// Aufgeklappt: je Warenausgangstag Summe und Deckung samt Aufträgen,
-/// darunter die Produktionen der App für diesen Artikel.
+/// darunter die Vormerkungen und die Produktionen der App für diesen
+/// Artikel.
 ///
-/// Tage, an denen noch etwas fehlt, lassen sich abhaken und gemeinsam
+/// Tage, an denen noch etwas offen ist, lassen sich abhaken und gemeinsam
 /// einplanen. Zeilen, für die schon eine Produktion eingeplant ist, sind
-/// grau und zeigen, wann.
+/// grau und zeigen, wann; vorgemerkte zeigen blau, bis wann sie spätestens
+/// produziert werden. Verschobene Aufträge, deren Planung noch am alten
+/// Tag hängt, sind lila markiert und gesperrt.
 class _Details extends StatelessWidget {
   const _Details({
     required this.deckung,
     required this.zugaenge,
+    required this.vormerkungen,
+    required this.verschoben,
     required this.heute,
     required this.inApp,
     required this.markiert,
     required this.onMarkieren,
     required this.onEinplanen,
+    required this.onAufheben,
+    required this.onDatenblattVormerkung,
+    required this.onDatenblattKette,
+    required this.onPruefen,
   });
 
   final ArtikelDeckung deckung;
   final List<ProduktionsZugang> zugaenge;
+  final List<Vormerkung> vormerkungen;
+
+  /// Schlüssel der Zeile am neuen Tag → Konflikt (siehe
+  /// [AuftragsbestandZeile.verschoben]).
+  final Map<String, PlanungsKonflikt> verschoben;
+
   final DateTime heute;
   final bool inApp;
   final Set<DateTime> markiert;
@@ -1551,6 +2108,11 @@ class _Details extends StatelessWidget {
 
   /// null, solange nichts abgehakt ist oder gerade eingeplant wird.
   final VoidCallback? onEinplanen;
+
+  final void Function(Vormerkung v) onAufheben;
+  final void Function(Vormerkung v) onDatenblattVormerkung;
+  final void Function(ProduktionsZugang z) onDatenblattKette;
+  final VoidCallback onPruefen;
 
   /// Breite der Spalte mit dem Haken und der mit dem Tag — die Aufträge
   /// darunter rücken um beide ein.
@@ -1568,14 +2130,16 @@ class _Details extends StatelessWidget {
     final rot = theme.colorScheme.error;
     final bernstein = _bernstein(theme);
     final gruen = _gruen(theme);
+    final blau = _blau(theme);
+    final lila = _lila(theme);
     final markieren = onMarkieren;
 
     final markierteTage = [
       for (final t in deckung.tage)
         if (markiert.contains(t.tag) && t.einplanbar) t,
     ];
-    final fehltMarkiert =
-        markierteTage.fold<double>(0, (s, t) => s + t.fehltKg);
+    final offenMarkiert =
+        markierteTage.fold<double>(0, (s, t) => s + t.einplanbarKg);
 
     Widget haken(TagesDeckung t) {
       if (markieren != null && t.einplanbar) {
@@ -1586,10 +2150,25 @@ class _Details extends StatelessWidget {
           onChanged: (v) => markieren(t.tag, v ?? false),
         );
       }
+      if (t.gesperrtKg >= 0.005) {
+        return Tooltip(
+          message: 'Gesperrt: ein verschobener Auftrag, dessen Planung noch '
+              'am alten Tag hängt. Erst in „Änderungen" umhängen oder '
+              'verwerfen, dann bündeln.',
+          child: Icon(Icons.lock_outline, size: 18, color: lila),
+        );
+      }
       if (t.eingeplantIn.isNotEmpty) {
         return Tooltip(
           message: 'Eingeplant ${_geplantText(t.eingeplantIn)}',
           child: Icon(Icons.event_available, size: 18, color: gruen),
+        );
+      }
+      if (t.vorgemerktIn.isNotEmpty) {
+        return Tooltip(
+          message: 'Beim Planungsvorschlag vorgemerkt'
+              '${_terminText(t.vorgemerktIn)}',
+          child: Icon(Icons.schedule_rounded, size: 18, color: blau),
         );
       }
       return const SizedBox.shrink();
@@ -1599,11 +2178,23 @@ class _Details extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          if (t.fehltKg >= 0.005)
+          if (t.offenKg >= 0.005)
             Text(
-              'fehlt ${_kg(t.fehltKg)} kg',
+              'fehlt ${_kg(t.offenKg)} kg',
               textAlign: TextAlign.right,
               style: klein?.copyWith(fontWeight: FontWeight.w700, color: rot),
+            ),
+          if (t.gesperrtKg >= 0.005)
+            Text(
+              'davon gesperrt ${_kg(t.gesperrtKg)} kg',
+              textAlign: TextAlign.right,
+              style: klein?.copyWith(color: lila),
+            ),
+          if (t.vorgemerktKg >= 0.005)
+            Text(
+              'vorgemerkt ${_kg(t.vorgemerktKg)} kg',
+              textAlign: TextAlign.right,
+              style: klein?.copyWith(fontWeight: FontWeight.w700, color: blau),
             ),
           if (t.zuSpaetKg >= 0.005) ...[
             Text(
@@ -1635,10 +2226,14 @@ class _Details extends StatelessWidget {
 
     Widget zeile(ZeilenDeckung z) {
       final p = z.position;
-      // Grau heißt: eingeplant und damit erledigt. Fehlt trotz Planung
-      // noch etwas — etwa weil der Kunde nachbestellt hat —, bleibt die
-      // Zeile normal, damit der Rest auffällt.
-      final stil = z.geplant && !z.offen ? blass : grau;
+      // Grau heißt: eingeplant oder vorgemerkt und damit hier erledigt.
+      // Fehlt trotzdem noch etwas — etwa weil der Kunde nachbestellt
+      // hat —, bleibt die Zeile normal, damit der Rest auffällt.
+      final stil = (z.geplant || z.vorgemerkt) && z.erledigt ? blass : grau;
+      final umzug = verschoben[z.schluessel];
+      final unsicher = umzug != null && !umzug.sicher
+          ? ' Ob es derselbe Auftrag ist, lässt sich nicht sicher sagen.'
+          : '';
       return Padding(
         padding: const EdgeInsets.only(left: _hakenBreite + _tagBreite, top: 1),
         child: Row(
@@ -1651,12 +2246,43 @@ class _Details extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (umzug != null)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Tooltip(
+                  message: 'Stand vorher am ${_tagKurz(umzug.warenausgang)}. '
+                      'Die Planung hängt noch am alten Tag — in „Änderungen" '
+                      'umhängen oder verwerfen. Bis dahin lässt sich der '
+                      'Auftrag nicht bündeln.$unsicher',
+                  child: InkWell(
+                    onTap: onPruefen,
+                    borderRadius: BorderRadius.circular(6),
+                    child: _Marke(
+                      text: 'verschoben vom ${_tagKurz(umzug.warenausgang)}',
+                      farbe: lila,
+                      kraeftig: true,
+                    ),
+                  ),
+                ),
+              ),
             if (z.geplant)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: _Marke(
                   text: 'geplant ${_geplantText(z.eingeplantIn)}',
                   farbe: gruen,
+                ),
+              ),
+            if (z.vorgemerkt)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Tooltip(
+                  message: 'An den Planungsvorschlag übergeben — er legt '
+                      'die Produktion in einen Tag, nie nach dem Termin.',
+                  child: _Marke(
+                    text: 'vorgemerkt${_terminText(z.vorgemerktIn)}',
+                    farbe: blau,
+                  ),
                 ),
               ),
             Text('${_zahl(p.menge)} ${p.einheit ?? ''}', style: stil),
@@ -1761,7 +2387,7 @@ class _Details extends StatelessWidget {
                     child: Text(
                       '${markierteTage.length} '
                       '${markierteTage.length == 1 ? 'Tag' : 'Tage'} '
-                      'markiert · fehlen ${_kg(fehltMarkiert)} kg',
+                      'markiert · fehlen ${_kg(offenMarkiert)} kg',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: theme.colorScheme.onPrimaryContainer,
@@ -1778,6 +2404,23 @@ class _Details extends StatelessWidget {
               ),
             ),
           ],
+          if (vormerkungen.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(
+                'Beim Planungsvorschlag vorgemerkt — spätester '
+                'Produktionstag',
+                style: klein?.copyWith(fontWeight: FontWeight.w700),
+              ),
+            ),
+            for (final v in vormerkungen)
+              _VormerkungZeile(
+                vormerkung: v,
+                onAufheben: () => onAufheben(v),
+                onDatenblatt: () => onDatenblattVormerkung(v),
+              ),
+          ],
           if (zugaenge.isNotEmpty) ...[
             const SizedBox(height: 14),
             Padding(
@@ -1787,7 +2430,11 @@ class _Details extends StatelessWidget {
                 style: klein?.copyWith(fontWeight: FontWeight.w700),
               ),
             ),
-            for (final z in zugaenge) _ZugangZeile(zugang: z),
+            for (final z in zugaenge)
+              _ZugangZeile(
+                zugang: z,
+                onDatenblatt: () => onDatenblattKette(z),
+              ),
           ],
           if (deckung.ueberschussKg >= 0.005)
             Padding(
@@ -1799,6 +2446,85 @@ class _Details extends StatelessWidget {
                 style: grau,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// „ · spätestens Mi 01.10." — der früheste Termin der Planungsaufträge,
+/// leer ohne Termin.
+String _terminText(List<Vormerkung> vormerkungen) {
+  DateTime? frueh;
+  for (final v in vormerkungen) {
+    final t = v.termin;
+    if (t != null && (frueh == null || t.isBefore(frueh))) frueh = t;
+  }
+  return frueh == null ? '' : ' · spätestens ${_tagKurz(frueh)}';
+}
+
+/// Ein offener Planungsauftrag: bis wann, für welche Aufträge, wie viel —
+/// und der Knopf, ihn aufzuheben.
+class _VormerkungZeile extends StatelessWidget {
+  const _VormerkungZeile({
+    required this.vormerkung,
+    required this.onAufheben,
+    required this.onDatenblatt,
+  });
+
+  final Vormerkung vormerkung;
+  final VoidCallback onAufheben;
+  final VoidCallback onDatenblatt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final v = vormerkung;
+    final stil = theme.textTheme.bodySmall;
+    final termin = v.termin;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 92,
+            child: Text(
+              termin == null ? 'ohne Termin' : _tagKurz(termin),
+              style: stil?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: _blau(theme),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              beschreibeBezuege(v.bezuege),
+              style: stil,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          SizedBox(
+            width: 110,
+            child: Text(
+              '${_kg(v.offenKg)} kg',
+              textAlign: TextAlign.right,
+              style: stil?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          IconButton(
+            onPressed: onDatenblatt,
+            icon: const Icon(Icons.print_outlined, size: 16),
+            tooltip: 'Datenblatt drucken — Artikel, Menge und Aufträge',
+            visualDensity: VisualDensity.compact,
+          ),
+          IconButton(
+            onPressed: onAufheben,
+            icon: const Icon(Icons.close, size: 16),
+            tooltip: 'Vormerkung aufheben — die Aufträge sind dann wieder '
+                'offen',
+            visualDensity: VisualDensity.compact,
+          ),
         ],
       ),
     );
@@ -1819,9 +2545,10 @@ String _geplantText(List<ProduktionsZugang> produktionen) {
 
 /// Eine Produktion der App: wann fertig, wie viel, und ob sie mitzählt.
 class _ZugangZeile extends StatelessWidget {
-  const _ZugangZeile({required this.zugang});
+  const _ZugangZeile({required this.zugang, required this.onDatenblatt});
 
   final ProduktionsZugang zugang;
+  final VoidCallback onDatenblatt;
 
   @override
   Widget build(BuildContext context) {
@@ -1869,6 +2596,12 @@ class _ZugangZeile extends StatelessWidget {
                 decoration: zaehlt ? null : TextDecoration.lineThrough,
               ),
             ),
+          ),
+          IconButton(
+            onPressed: onDatenblatt,
+            icon: const Icon(Icons.print_outlined, size: 16),
+            tooltip: 'Datenblatt dieser Produktion drucken',
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -1989,9 +2722,11 @@ class _LeerHinweis extends StatelessWidget {
                 'In Navision den Bericht „Auftragsbestand" mit dem '
                 'gewünschten Zeitraum aufrufen, in der Vorschau „Speichern '
                 'unter → Excel" wählen und die Datei hier einlesen.\n\n'
-                'Tipp: Den Zeitraum ein paar Tage vor heute beginnen '
-                'lassen. Dann sind auch überfällige, noch nicht versandte '
-                'Aufträge dabei.',
+                'Tipp: Immer mit demselben Grundfilter aufrufen — alle '
+                'Kunden, alle Artikel, nur den Zeitraum anpassen — und ihn '
+                'ein paar Tage vor heute beginnen lassen. Dann sind auch '
+                'überfällige Aufträge dabei, und der Vergleich mit dem '
+                'vorigen Bericht stimmt.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
