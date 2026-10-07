@@ -388,4 +388,394 @@ void main() {
       expect(mit.rohwareKg, closeTo(1600, 0.01));
     });
   });
+
+  group('Leistung aus den letzten Produktionen', () {
+    /// Eine erfasste Produktion: [kg] Rohware, die Zeit wahlweise als
+    /// Minuten, als Start/Ende oder als kg/h.
+    Future<void> produktion(
+      String productId, {
+      required String id,
+      required DateTime datum,
+      double? kg,
+      double? minuten,
+      String? start,
+      String? ende,
+      double? kgProStundeRoh,
+    }) async {
+      await db.into(db.productionHistory).insert(
+            ProductionHistoryCompanion.insert(
+              id: id,
+              productId: productId,
+              datum: datum,
+              kgRohware: Value(kg),
+              startzeit: Value(start),
+              endzeit: Value(ende),
+              produktionszeitMinuten: Value(minuten),
+              kgProStundeRoh: Value(kgProStundeRoh),
+            ),
+          );
+    }
+
+    Future<void> ruestzeit(String stepId, double minuten) async {
+      await (db.update(db.productSteps)..where((s) => s.id.equals(stepId)))
+          .write(ProductStepsCompanion(fixZeitMinuten: Value(minuten)));
+    }
+
+    test('ohne Leistungsdaten rechnet die Abteilung mit dem Ø der letzten '
+        'Produktionen', () async {
+      // Ø 500 kg in Ø 300 min → 1.000 kg brauchen 600 min.
+      await seedArtikel(db, id: 'p20', nummer: '2020');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p20',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await produktion(
+        'p20',
+        id: 'h1',
+        datum: DateTime(2026, 9, 1),
+        kg: 400,
+        minuten: 240,
+      );
+      await produktion(
+        'p20',
+        id: 'h2',
+        datum: DateTime(2026, 9, 2),
+        kg: 600,
+        minuten: 360,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p20',
+        mengeKg: 1000,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      final s = plan.schritte.single;
+      expect(s.dauerQuelle, DauerQuelle.historieErsatz);
+      expect(s.ausHistorie, isTrue);
+      expect(s.platzhalter, isFalse);
+      expect(s.historie?.anzahl, 2);
+      expect(s.dauerMinuten, closeTo(600, 0.5));
+    });
+
+    test('gepflegte Leistungsdaten gehen den Produktionen vor', () async {
+      await seedArtikel(db, id: 'p21', nummer: '2021');
+      // 100 kg in 30 min → 1.000 kg in 300 min.
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p21',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 100,
+        basisDauerMinuten: 30,
+      );
+      await produktion(
+        'p21',
+        id: 'h1',
+        datum: DateTime(2026, 9, 1),
+        kg: 500,
+        minuten: 300,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p21',
+        mengeKg: 1000,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      final s = plan.schritte.single;
+      expect(s.dauerQuelle, DauerQuelle.leistungsdaten);
+      expect(s.ausHistorie, isFalse);
+      expect(s.dauerMinuten, closeTo(300, 0.5));
+    });
+
+    test('ohne Leistungsdaten und ohne Produktion mit Zeit bleibt es ein '
+        'Platzhalter', () async {
+      await seedArtikel(db, id: 'p22', nummer: '2022');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p22',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      // Eine Menge ohne Zeit: Daraus lässt sich nichts hochrechnen.
+      await produktion('p22', id: 'h1', datum: DateTime(2026, 9, 1), kg: 500);
+
+      expect(await historienLeistung(db, 'p22'), isNull);
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p22',
+        mengeKg: 1000,
+        startTag: DateTime(2026, 9, 14),
+      );
+      expect(plan.schritte.single.platzhalter, isTrue);
+      expect(plan.schritte.single.historie, isNull);
+    });
+
+    test('es zählen nur die letzten zehn Produktionen mit Zeit', () async {
+      await seedArtikel(db, id: 'p23', nummer: '2023');
+      // Zehn aktuelle Produktionen mit 100 kg/h …
+      for (var t = 1; t <= 10; t++) {
+        await produktion(
+          'p23',
+          id: 'neu$t',
+          datum: DateTime(2026, 9, t),
+          kg: 500,
+          minuten: 300,
+        );
+      }
+      // … zwei alte mit 10 kg/h und eine neue ohne Zeit: Sie zählen nicht.
+      await produktion(
+        'p23',
+        id: 'alt1',
+        datum: DateTime(2025, 1, 1),
+        kg: 100,
+        minuten: 600,
+      );
+      await produktion(
+        'p23',
+        id: 'alt2',
+        datum: DateTime(2025, 1, 2),
+        kg: 100,
+        minuten: 600,
+      );
+      await produktion(
+        'p23',
+        id: 'ohneZeit',
+        datum: DateTime(2026, 9, 20),
+        kg: 900,
+      );
+
+      final h = await historienLeistung(db, 'p23');
+
+      expect(h, isNotNull);
+      expect(h!.anzahl, kLetzteProduktionen);
+      expect(h.mengeKg, closeTo(500, 1e-9));
+      expect(h.minuten, closeTo(300, 1e-9));
+      expect(h.kgProStunde, closeTo(100, 1e-9));
+    });
+
+    test('die Zeit kommt notfalls aus Start und Ende oder aus dem kg/h',
+        () async {
+      await seedArtikel(db, id: 'p24', nummer: '2024');
+      // 06:00–10:00 sind 240 min; 600 kg bei 150 kg/h ebenfalls.
+      await produktion(
+        'p24',
+        id: 'h1',
+        datum: DateTime(2026, 9, 1),
+        kg: 400,
+        start: '06:00',
+        ende: '10:00',
+      );
+      await produktion(
+        'p24',
+        id: 'h2',
+        datum: DateTime(2026, 9, 2),
+        kg: 600,
+        kgProStundeRoh: 150,
+      );
+
+      final h = await historienLeistung(db, 'p24');
+
+      expect(h!.anzahl, 2);
+      expect(h.mengeKg, closeTo(500, 1e-9));
+      expect(h.minuten, closeTo(240, 1e-9));
+    });
+
+    test('die Rüstzeit kommt auf die Zeit aus den Produktionen obendrauf',
+        () async {
+      await seedArtikel(db, id: 'p25', nummer: '2025');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p25',
+        reihenfolge: 1,
+        abteilung: 'kutterabteilung',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await ruestzeit('s1', 20);
+      await produktion(
+        'p25',
+        id: 'h1',
+        datum: DateTime(2026, 9, 1),
+        kg: 500,
+        minuten: 300,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p25',
+        mengeKg: 250,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      // 20 min Rüsten + 150 min für 250 kg.
+      expect(plan.schritte.single.dauerMinuten, closeTo(170, 0.5));
+    });
+
+    test('eine Bratstraße ohne Produktionen und ohne Leistungsdaten ist ein '
+        'Platzhalter', () async {
+      await seedArtikel(db, id: 'p26', nummer: '2026');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p26',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p26',
+        reihenfolge: 2,
+        abteilung: 'bratstrasse',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p26',
+        mengeKg: 500,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      // Sonst rutschte der Artikel mit geratenen 30 Minuten in den
+      // Planungsvorschlag.
+      expect(plan.schritte.single.platzhalter, isTrue);
+      expect(plan.schritte.single.ausHistorie, isFalse);
+    });
+
+    test('die Menge eines Auftrags ändern rechnet wie das Einplanen',
+        () async {
+      // Wurstküche ohne Leistungsdaten, Bratstraße mit 45 min Durchlauf.
+      await seedArtikel(db, id: 'p27', nummer: '2027');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p27',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p27',
+        reihenfolge: 2,
+        abteilung: 'bratstrasse',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await ruestzeit('s2', 45);
+      await produktion(
+        'p27',
+        id: 'h1',
+        datum: DateTime(2026, 9, 1),
+        kg: 500,
+        minuten: 300,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p27',
+        mengeKg: 800,
+        startTag: DateTime(2026, 9, 14),
+      );
+      final wurstkueche = await ladeAbteilungsDauerModell(
+        db,
+        productId: 'p27',
+        abteilung: 'wurstkueche',
+      );
+      final bratstrasse = await ladeAbteilungsDauerModell(
+        db,
+        productId: 'p27',
+        abteilung: 'bratstrasse',
+      );
+
+      // 800 kg bei 100 kg/h: 480 min; die Bratstraße +45 min Durchlauf.
+      expect(plan.schritte[0].dauerMinuten, closeTo(480, 0.5));
+      expect(plan.schritte[1].dauerMinuten, closeTo(525, 0.5));
+      expect(plan.schritte[1].dauerQuelle, DauerQuelle.historie);
+
+      final wk = wurstkueche!.dauerFuer(800);
+      expect(wk.minuten, closeTo(plan.schritte[0].dauerMinuten, 0.5));
+      expect(wk.quelle, DauerQuelle.historieErsatz);
+      final bs = bratstrasse!.dauerFuer(800);
+      expect(bs.minuten, closeTo(plan.schritte[1].dauerMinuten, 0.5));
+      expect(bs.quelle, DauerQuelle.historie);
+      // Halbe Menge, halbe Auflagezeit — der Durchlauf bleibt.
+      expect(bratstrasse.dauerFuer(400).minuten, closeTo(285, 0.5));
+
+      expect(
+        await ladeAbteilungsDauerModell(
+          db,
+          productId: 'p27',
+          abteilung: 'verpackung',
+        ),
+        isNull,
+      );
+    });
+
+    test('kommt eine Abteilung zweimal vor, zählt der Block mit der Anlage '
+        'des Auftrags', () async {
+      await seedArtikel(db, id: 'p28', nummer: '2028');
+      await seedAnlage(db, id: 'm1', name: 'Anlage 1', abteilung: 'verpackung');
+      await seedAnlage(db, id: 'm2', name: 'Anlage 2', abteilung: 'verpackung');
+      // 100 kg: vorne 60 min auf Anlage 1, hinten 30 min auf Anlage 2.
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p28',
+        reihenfolge: 1,
+        abteilung: 'verpackung',
+        maschineId: 'm1',
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p28',
+        reihenfolge: 2,
+        abteilung: 'bratstrasse',
+      );
+      await seedSchritt(
+        db,
+        id: 's3',
+        productId: 'p28',
+        reihenfolge: 3,
+        abteilung: 'verpackung',
+        basisDauerMinuten: 30,
+        maschineId: 'm2',
+      );
+
+      Future<double> dauer(String? maschineId) async {
+        final m = await ladeAbteilungsDauerModell(
+          db,
+          productId: 'p28',
+          abteilung: 'verpackung',
+          maschineId: maschineId,
+        );
+        return m!.dauerFuer(100).minuten;
+      }
+
+      expect(await dauer('m2'), closeTo(30, 0.5));
+      expect(await dauer('m1'), closeTo(60, 0.5));
+      expect(await dauer(null), closeTo(60, 0.5));
+    });
+  });
 }

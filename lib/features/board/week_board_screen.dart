@@ -2063,6 +2063,17 @@ enum _PlanStufe { auswahl, tage }
 /// gewünschten Fertigmenge oder mit der verfügbaren Produktionszeit.
 enum _MengenEinheit { rohware, fertigware, stunden }
 
+/// Zeitmodell einer Abteilung: Minuten = fix + proKg × Fertigmenge — samt
+/// Herkunft der Zahlen, damit die Ansicht sagen kann, worauf die Menge zur
+/// eingegebenen Zeit beruht.
+typedef _Zeitmodell = ({
+  String abteilung,
+  double fix,
+  double proKg,
+  DauerQuelle quelle,
+  HistorienLeistung? historie,
+});
+
 class _ProduktPlanenSheet extends ConsumerStatefulWidget {
   const _ProduktPlanenSheet({required this.tage, required this.initialTag});
 
@@ -2191,17 +2202,18 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   //
   // Die Menge ist die FERTIGmenge, weil [berechneSchrittPlan] mit ihr
   // gerechnet wird. Die Bratstraße läuft dabei mit der zugehörigen Rohware
-  // (Fertigmenge ÷ Ausbeute) gegen den Ø kg/h roh aus der Historie.
+  // (Fertigmenge ÷ Ausbeute) gegen den Ø der letzten Produktionen. Fehlen
+  // einer anderen Abteilung die Leistungsdaten, rechnet auch sie damit —
+  // sonst ließe sich für sie aus der Zeit keine Menge ableiten.
   //
   // WICHTIG: Es wird JE ABTEILUNG gerechnet, nicht über die Summe. Im
   // Wochenplan bekommt jede Abteilung ihren eigenen Tag mit 9 Stunden;
   // „2 Stunden produzieren" heißt also 2 Stunden AN DER LINIE, nicht
   // 2 Stunden über alle Abteilungen zusammengezählt. Maßgeblich ist die
   // engste Abteilung — sie begrenzt, was in der Zeit zu schaffen ist.
-  List<({String abteilung, double fix, double proKg})> _dauerModelle = [];
+  List<_Zeitmodell> _dauerModelle = [];
 
-  Future<List<({String abteilung, double fix, double proKg})>>
-      _berechneZeitmodell(
+  Future<List<_Zeitmodell>> _berechneZeitmodell(
     AppDatabase db,
     String productId,
     double? ersatz,
@@ -2220,7 +2232,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       startTag: _startTag,
       ausbeuteErsatz: ersatz,
     );
-    final modelle = <({String abteilung, double fix, double proKg})>[];
+    final modelle = <_Zeitmodell>[];
     final anzahl = klein.schritte.length < gross.schritte.length
         ? klein.schritte.length
         : gross.schritte.length;
@@ -2233,6 +2245,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         abteilung: klein.schritte[i].abteilungDbValue,
         fix: t1 - steigung * 100,
         proKg: steigung,
+        quelle: klein.schritte[i].dauerQuelle,
+        historie: klein.schritte[i].historie,
       ),);
     }
     return modelle;
@@ -2242,7 +2256,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   /// noch gibt, sonst die Bratstraße — die durchlaufende Linie und damit
   /// der übliche Taktgeber —, sonst die erste Abteilung des Prozesses.
   String? _passendeZeitAbteilung(
-    List<({String abteilung, double fix, double proKg})> modelle,
+    List<_Zeitmodell> modelle,
   ) {
     if (modelle.isEmpty) return null;
     final bisher = _zeitAbteilung;
@@ -2258,13 +2272,28 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   /// Auf welche Abteilung sich die eingegebene Stundenzahl bezieht.
   String? _zeitAbteilung;
 
-  ({String abteilung, double fix, double proKg})? get _bezugsModell {
+  _Zeitmodell? get _bezugsModell {
     final a = _zeitAbteilung;
     if (a == null) return null;
     for (final m in _dauerModelle) {
       if (m.abteilung == a) return m;
     }
     return null;
+  }
+
+  /// Worauf die Menge zur eingegebenen Zeit beruht, wenn es die letzten
+  /// Produktionen sind — mit deren Zahlen, damit nachvollziehbar ist, woher
+  /// „schaffbar" kommt. null bei gepflegten Leistungsdaten.
+  String? get _grundlageHinweis {
+    final m = _bezugsModell;
+    final h = m?.historie;
+    if (m == null || h == null) return null;
+    final basis = '${h.herkunft}: ${h.kennzahlen}';
+    if (m.quelle == DauerQuelle.historieErsatz) {
+      return 'Keine Leistungsdaten für ${_abteilungsName(m.abteilung)} — '
+          'gerechnet mit $basis';
+    }
+    return 'Gerechnet mit $basis';
   }
 
   /// Abteilungen, die für die gewählte Menge über die 9-Stunden-Kapazität
@@ -2391,7 +2420,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       final hinweis = _einheit == _MengenEinheit.stunden
           ? (_dauerModelle.isEmpty
               ? 'Für dieses Produkt lässt sich aus der Zeit keine Menge '
-                  'ableiten — es fehlen Leistungsdaten.'
+                  'ableiten — es gibt weder mengenabhängige Leistungsdaten '
+                  'noch erfasste Produktionen mit Zeit.'
               : 'Bitte eine gültige Produktionszeit eingeben.')
           : 'Bitte eine gültige Menge (kg) eingeben.';
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2577,6 +2607,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   // -- Stufe 1: Produkt + Starttag + Menge -------------------------------
   Widget _buildAuswahl(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
+    final grundlage = _grundlageHinweis;
     final q = _suche.text.toLowerCase();
     final gefiltert = q.isEmpty
         ? _produkte
@@ -2758,8 +2789,9 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             if (_ausbeute != null && _dauerModelle.isEmpty) ...[
               const SizedBox(height: 10),
               const _RohwareHinweis(
-                text: 'Für dieses Produkt fehlen Leistungsdaten — aus der '
-                    'Zeit lässt sich noch keine Menge ableiten.',
+                text: 'Für dieses Produkt gibt es weder mengenabhängige '
+                    'Leistungsdaten noch erfasste Produktionen mit Zeit — aus '
+                    'der Zeit lässt sich noch keine Menge ableiten.',
               ),
             ] else if (_dauerModelle.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -2782,6 +2814,11 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 ],
                 onChanged: (v) => setState(() => _zeitAbteilung = v),
               ),
+              // Ohne gepflegte Leistungsdaten: sagen, womit gerechnet wird.
+              if (grundlage != null) ...[
+                const SizedBox(height: 8),
+                _RohwareHinweis(text: grundlage),
+              ],
             ],
           ],
 
@@ -2990,11 +3027,41 @@ class _SchrittTagKarte extends StatelessWidget {
   final VoidCallback onPlus;
   final VoidCallback onPick;
 
+  /// Woher die Dauer stammt — als Hinweis unter der Zeile. null bei
+  /// gepflegten Leistungsdaten, da gibt es nichts zu erklären.
+  ({String text, Color farbe})? _herkunft() {
+    final h = schritt.historie;
+    switch (schritt.dauerQuelle) {
+      case DauerQuelle.historie:
+        if (h == null) return null;
+        return (
+          text: 'Dauer aus ${h.herkunft} '
+              '(≈ ${_fmtKg(h.kgProStunde)} kg/h)',
+          farbe: const Color(0xFF2E7D32),
+        );
+      case DauerQuelle.historieErsatz:
+        if (h == null) return null;
+        return (
+          text: 'Keine Leistungsdaten — Dauer aus ${h.herkunft} '
+              '(≈ ${_fmtKg(h.kgProStunde)} kg/h)',
+          farbe: const Color(0xFF2E7D32),
+        );
+      case DauerQuelle.platzhalter:
+        return (
+          text: 'Zeit ist Platzhalter — im Artikel pflegen',
+          farbe: Colors.orange.shade700,
+        );
+      case DauerQuelle.leistungsdaten:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final abt = schritt.abteilung;
     final farbe = abt?.farbe ?? Colors.grey;
+    final herkunft = _herkunft();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3048,18 +3115,14 @@ class _SchrittTagKarte extends StatelessWidget {
                 ),
               ],
             ),
-            if (schritt.ausHistorie || schritt.platzhalter) ...[
+            if (herkunft != null) ...[
               const SizedBox(height: 4),
               Text(
-                schritt.ausHistorie
-                    ? 'Dauer aus Historie'
-                    : 'Zeit ist Platzhalter — im Artikel pflegen',
+                herkunft.text,
                 style: TextStyle(
                   fontSize: 10,
                   fontStyle: FontStyle.italic,
-                  color: schritt.ausHistorie
-                      ? const Color(0xFF2E7D32)
-                      : Colors.orange.shade700,
+                  color: herkunft.farbe,
                 ),
               ),
             ],

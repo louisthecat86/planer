@@ -56,7 +56,14 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   late final TextEditingController _startZeitController;
   late final TextEditingController _notizenController;
 
-  ProductStep? _step; // Zugehöriger ProductStep für Skalierung.
+  /// Woraus sich die Dauer dieser Abteilung für jede Menge rechnet — nach
+  /// denselben Regeln wie beim Einplanen. null, solange es lädt oder wenn
+  /// der Artikel keinen Schritt in dieser Abteilung hat.
+  AbteilungsDauerModell? _modell;
+
+  /// „Hochrechnen nicht möglich" kommt einmal, nicht bei jedem Tastendruck.
+  bool _hochrechnenHinweisGezeigt = false;
+
   bool _isDirty = false;
   bool _isSaving = false;
 
@@ -73,63 +80,78 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     _startZeitController = TextEditingController(text: t.startZeit ?? '');
     _notizenController = TextEditingController(text: t.notizen ?? '');
 
-    _loadProductStep();
+    _ladeModell();
   }
 
-  Future<void> _loadProductStep() async {
+  Future<void> _ladeModell() async {
     final db = ref.read(databaseProvider);
-    final steps = await (db.select(db.productSteps)
-          ..where((s) => s.productId.equals(widget.wbTask.task.productId))
-          ..where((s) => s.abteilung.equals(widget.wbTask.task.abteilung))
-          ..where((s) => s.deletedAt.isNull()))
-        .get();
-
-    if (steps.isNotEmpty && mounted) {
-      setState(() => _step = steps.first);
-    }
+    final task = widget.wbTask.task;
+    final modell = await ladeAbteilungsDauerModell(
+      db,
+      productId: task.productId,
+      abteilung: task.abteilung,
+      maschineId: task.maschineId,
+    );
+    if (modell == null || !mounted) return;
+    setState(() => _modell = modell);
+    // Wurde die Menge schon geändert, während das Modell noch lud, jetzt
+    // nachrechnen — sonst gälte für die neue Menge die alte Dauer.
+    if (_isDirty) _recalcDuration(_aktuelleMenge);
   }
 
-  /// Berechnet die Dauer basierend auf Menge und historischem ProductStep.
-  ///
-  /// Formel: fix_zeit + basis_dauer * (neue_menge / basis_menge)
-  void _recalcDuration() {
-    final step = _step;
-    if (step == null) return;
+  /// Die Menge im Feld, solange sie gültig ist — sonst die des Auftrags.
+  double get _aktuelleMenge {
+    final v = double.tryParse(_mengeController.text.replaceAll(',', '.'));
+    return (v != null && v.isFinite && v > 0)
+        ? v
+        : widget.wbTask.task.mengeKg;
+  }
 
-    final newMenge = double.tryParse(
-      _mengeController.text.replaceAll(',', '.'),
-    );
-    if (newMenge == null || newMenge <= 0) return;
+  /// Menge geändert: speicherbar machen und die Dauer hochrechnen.
+  void _mengeGeaendert() {
+    final v = double.tryParse(_mengeController.text.replaceAll(',', '.'));
+    if (v == null || !v.isFinite || v <= 0) return;
+    // Auch wenn sich die Dauer nicht hochrechnen lässt, muss die neue
+    // Menge speicherbar sein — vorher blieb „Speichern" dann gesperrt.
+    setState(() => _isDirty = true);
+    _recalcDuration(v);
+  }
 
-    // Ohne Basismenge ist keine Hochrechnung möglich (Division durch 0
-    // würde NaN erzeugen). Dauer bleibt dann unverändert; der Nutzer
-    // bekommt einen kurzen Hinweis.
-    if (step.basisMengeKg <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Hochrechnen nicht möglich: Der Artikel hat keine Basismenge '
-            'im ersten Prozessschritt hinterlegt.',
+  /// Rechnet die Dauer aus der neuen Menge hoch — nach denselben Regeln
+  /// wie beim Einplanen: mit den Leistungsdaten der Abteilung, ohne sie
+  /// mit dem Ø der letzten Produktionen (in der Bratstraße immer mit
+  /// diesem). Ohne beides bleibt die Dauer, wie sie ist.
+  void _recalcDuration(double neueMenge) {
+    final modell = _modell;
+    if (modell == null) return;
+
+    final dauer = modell.dauerFuer(neueMenge);
+    if (dauer.quelle == DauerQuelle.platzhalter) {
+      if (!_hochrechnenHinweisGezeigt) {
+        _hochrechnenHinweisGezeigt = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Hochrechnen nicht möglich: Für diese Abteilung sind keine '
+              'Leistungsdaten gepflegt, und es ist keine Produktion mit Zeit '
+              'erfasst.',
+            ),
           ),
-        ),
-      );
+        );
+      }
       return;
     }
+    if (!dauer.minuten.isFinite) return;
 
-    final fixZeit = step.fixZeitMinuten ?? 0.0;
-    final scaledDauer =
-        fixZeit + step.basisDauerMinuten * (newMenge / step.basisMengeKg);
-    if (!scaledDauer.isFinite) return;
-
-    _dauerController.text = scaledDauer.roundToDouble().toStringAsFixed(0);
-    setState(() => _isDirty = true);
+    _dauerController.text = dauer.minuten.roundToDouble().toStringAsFixed(0);
   }
 
   /// Dialog: Auftrag auf 2–5 aufeinanderfolgende Tage verteilen.
   ///
   /// Die Gesamtmenge wird gleichmäßig aufgeteilt; die Dauer je Tag wird —
-  /// wenn Basisdaten vorhanden sind — pro Teilmenge hochgerechnet
-  /// (fixe Zeit fällt dann an jedem Tag an), sonst schlicht geteilt.
+  /// mit Leistungsdaten oder erfassten Produktionen — pro Teilmenge
+  /// hochgerechnet (fixe Zeit fällt dann an jedem Tag an), sonst schlicht
+  /// geteilt.
   Future<void> _verteileAufTageDialog() async {
     final task = widget.wbTask.task;
     final gesamtMenge = double.tryParse(
@@ -141,12 +163,14 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
     double dauerJeTag(int tage) {
       final teilMenge = gesamtMenge / tage;
-      final step = _step;
-      if (step != null && step.basisMengeKg > 0) {
-        final fix = step.fixZeitMinuten ?? 0.0;
-        final d =
-            fix + step.basisDauerMinuten * (teilMenge / step.basisMengeKg);
-        if (d.isFinite && d > 0) return d;
+      final modell = _modell;
+      if (modell != null) {
+        final d = modell.dauerFuer(teilMenge);
+        if (d.quelle != DauerQuelle.platzhalter &&
+            d.minuten.isFinite &&
+            d.minuten > 0) {
+          return d.minuten.roundToDouble();
+        }
       }
       return gesamtDauer / tage;
     }
@@ -320,17 +344,39 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     }
   }
 
+  /// Die hochgerechnete Dauer, wenn sie von der angezeigten abweicht —
+  /// etwa bei einem Auftrag, der noch mit einem Platzhalter eingeplant
+  /// wurde, bevor es Leistungsdaten oder erfasste Produktionen gab. null,
+  /// wenn beide übereinstimmen oder sich nichts hochrechnen lässt.
+  double? _abweichendeDauer(AbteilungsDauer? dauer) {
+    if (dauer == null || dauer.quelle == DauerQuelle.platzhalter) return null;
+    final neu = dauer.minuten.roundToDouble();
+    final angezeigt = double.tryParse(_dauerController.text);
+    if (angezeigt != null && (neu - angezeigt).abs() < 1) return null;
+    return neu;
+  }
+
   /// Hinweistext unter dem Dauerfeld: woher der Wert stammt.
-  String? _dauerHinweis() {
-    final step = _step;
-    if (step == null) return null;
-    if (step.basisAnzahlMessungen > 0) {
-      return 'Aus ${step.basisAnzahlMessungen} Messungen berechnet';
+  String? _dauerHinweis(AbteilungsDauer? dauer) {
+    final modell = _modell;
+    if (modell == null || dauer == null) return null;
+    final h = dauer.historie;
+    switch (dauer.quelle) {
+      case DauerQuelle.historie:
+        return h == null ? null : 'Aus ${h.herkunft} hochgerechnet';
+      case DauerQuelle.historieErsatz:
+        return h == null
+            ? null
+            : 'Keine Leistungsdaten — aus ${h.herkunft} hochgerechnet';
+      case DauerQuelle.leistungsdaten:
+        final messungen = modell.ersterSchritt.basisAnzahlMessungen;
+        return messungen > 0
+            ? 'Aus $messungen Messungen berechnet'
+            : 'Aus den Leistungsdaten hochgerechnet';
+      case DauerQuelle.platzhalter:
+        return 'Platzhalter — weder Leistungsdaten noch Produktionen mit '
+            'Zeit erfasst';
     }
-    if (step.basisMengeKg > 0 && step.basisDauerMinuten > 0) {
-      return 'Schätzwert aus Stammdaten — noch keine Messungen erfasst';
-    }
-    return 'Platzhalter — Stammdaten noch nicht gepflegt';
   }
 
   Future<void> _save() async {
@@ -511,6 +557,12 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   Widget build(BuildContext context) {
     final abt = widget.wbTask.abteilungEnum;
     final colors = Theme.of(context).colorScheme;
+    final modell = _modell;
+    final dauer = modell?.dauerFuer(_aktuelleMenge);
+    // Weicht die angezeigte Dauer von der hochgerechneten ab, steht sie
+    // „wie eingeplant" da — und die neue Zahl wird zum Übernehmen
+    // angeboten, statt die alte als hochgerechnet auszugeben.
+    final abweichend = _abweichendeDauer(dauer);
 
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
@@ -616,16 +668,13 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                           RegExp(r'[\d.,]'),
                         ),
                       ],
-                      onChanged: (_) {
-                        _recalcDuration();
-                      },
+                      onChanged: (_) => _mengeGeaendert(),
                     ),
                   ),
-                  if (_step != null) ...[
+                  if (modell != null) ...[
                     const SizedBox(width: 8),
                     Tooltip(
-                      message: 'Dauer wird aus ${_step!.basisAnzahlMessungen} '
-                          'historischen Messungen berechnet',
+                      message: 'Die Dauer wird aus der Menge hochgerechnet',
                       child: Icon(
                         Icons.auto_fix_high,
                         color: colors.primary,
@@ -643,13 +692,27 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
               // nur die Menge angepasst werden, sonst nichts.
               _DauerAnzeige(
                 dauerController: _dauerController,
-                hinweis: _dauerHinweis(),
+                hinweis: abweichend == null
+                    ? _dauerHinweis(dauer)
+                    : 'Wie eingeplant',
               ),
+              if (abweichend != null) ...[
+                const SizedBox(height: 8),
+                _NeuHochgerechnet(
+                  minuten: abweichend,
+                  grundlage: _dauerHinweis(dauer),
+                  onUebernehmen: () => setState(() {
+                    _dauerController.text = abweichend.toStringAsFixed(0);
+                    _isDirty = true;
+                  }),
+                ),
+              ],
 
-              // Historische Basisdaten (Info-Box)
-              if (_step != null) ...[
+              // Grundlage der Dauer: Leistungsdaten oder die letzten
+              // Produktionen (Info-Box)
+              if (modell != null && dauer != null) ...[
                 const SizedBox(height: 20),
-                _HistoryInfoBox(step: _step!),
+                _GrundlageBox(modell: modell, dauer: dauer),
               ],
 
               const SizedBox(height: 16),
@@ -722,43 +785,68 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 }
 
 // ---------------------------------------------------------------------------
-// Info-Box: Historische Basisdaten
+// Info-Box: Grundlage der Dauer
 // ---------------------------------------------------------------------------
 
-class _HistoryInfoBox extends StatelessWidget {
-  const _HistoryInfoBox({required this.step});
+/// Kilogramm als ganze Zahl mit Tausenderpunkt: „12.857".
+String _fmtKg(double kg) => kg.round().toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
 
-  final ProductStep step;
+/// Zeigt, woraus die Dauer dieser Abteilung hochgerechnet wird: aus den
+/// gepflegten Leistungsdaten oder — ohne sie — aus den letzten
+/// Produktionen.
+class _GrundlageBox extends StatelessWidget {
+  const _GrundlageBox({required this.modell, required this.dauer});
+
+  final AbteilungsDauerModell modell;
+  final AbteilungsDauer dauer;
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final messungen = step.basisAnzahlMessungen;
+    final step = modell.ersterSchritt;
+    final h = dauer.historie;
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.insights, size: 16, color: colors.primary),
-              const SizedBox(width: 6),
-              Text(
-                'Historische Basisdaten',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: colors.onSurfaceVariant,
-                ),
+    final zeilen = <Widget>[];
+    String? hinweis;
+    switch (dauer.quelle) {
+      case DauerQuelle.historie:
+      case DauerQuelle.historieErsatz:
+        if (h != null) {
+          zeilen.addAll([
+            _infoRow(
+              'Grundlage',
+              h.anzahl == 1
+                  ? 'Letzte Produktion'
+                  : 'Letzte ${h.anzahl} Produktionen',
+            ),
+            _infoRow('Ø Menge', '${_fmtKg(h.mengeKg)} kg Rohware'),
+            _infoRow('Ø Zeit', Zeit.lang(h.minuten)),
+            _infoRow('Ø Leistung', '${_fmtKg(h.kgProStunde)} kg/h'),
+          ]);
+          // In der Bratstraße kommen die festen Durchlaufzeiten aller
+          // Stationen dazu, sonst die Rüstzeit des Schritts.
+          final dazu = modell.istBratstrasse
+              ? modell.festeZeitMinuten
+              : (step.fixZeitMinuten ?? 0.0);
+          if (dazu > 0) {
+            zeilen.add(
+              _infoRow(
+                modell.istBratstrasse ? 'Durchlauf/Verpacken' : 'Fixe Rüstzeit',
+                Zeit.lang(dazu),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
+            );
+          }
+        }
+        if (dauer.quelle == DauerQuelle.historieErsatz) {
+          hinweis = 'Für diese Abteilung sind keine Leistungsdaten gepflegt. '
+              'Genauer wird es mit Leistungsdaten im Artikel.';
+        }
+      case DauerQuelle.leistungsdaten:
+        final messungen = step.basisAnzahlMessungen;
+        zeilen.addAll([
           _infoRow(
             'Basismenge',
             '${step.basisMengeKg.toStringAsFixed(1)} kg',
@@ -784,6 +872,50 @@ class _HistoryInfoBox extends StatelessWidget {
             _infoRow(
               'Standardabweichung',
               '± ${step.dauerStdAbweichung!.toStringAsFixed(1)} min',
+            ),
+        ]);
+      case DauerQuelle.platzhalter:
+        hinweis = 'Weder Leistungsdaten noch eine Produktion mit Zeit '
+            'erfasst — die Dauer ist ein Platzhalter. Leistungsdaten '
+            'pflegst du im Artikel.';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights, size: 16, color: colors.primary),
+              const SizedBox(width: 6),
+              Text(
+                'Grundlage der Dauer',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...zeilen,
+          if (hinweis != null)
+            Padding(
+              padding: EdgeInsets.only(top: zeilen.isEmpty ? 0 : 4),
+              child: Text(
+                hinweis,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
             ),
         ],
       ),
@@ -811,6 +943,67 @@ class _HistoryInfoBox extends StatelessWidget {
 /// und Zeiten und schreibt daraus eine Zeile in die Excel-Historie. Die
 /// abgeleiteten Kennzahlen (Verlust, kg/h, Produktionszeit) werden live
 /// vorgerechnet, damit man vor dem Speichern sieht, was gespeichert wird.
+
+/// Bietet eine neu hochgerechnete Dauer zum Übernehmen an, wenn sie von
+/// der eingeplanten abweicht.
+class _NeuHochgerechnet extends StatelessWidget {
+  const _NeuHochgerechnet({
+    required this.minuten,
+    required this.grundlage,
+    required this.onUebernehmen,
+  });
+
+  final double minuten;
+  final String? grundlage;
+  final VoidCallback onUebernehmen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: 0.25),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Neu hochgerechnet: ${Zeit.lang(minuten)}',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                if (grundlage != null)
+                  Text(
+                    grundlage!,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onUebernehmen,
+            child: const Text('Übernehmen'),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 /// Reine Anzeige der geschätzten Dauer (nicht editierbar). Im Wochenplan-
 /// Sheet soll nur die Menge angepasst werden; die Dauer errechnet das

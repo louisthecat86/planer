@@ -6,7 +6,9 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart' show AuftragsBezug;
+import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/zeit.dart';
 
 // ---------------------------------------------------------------------------
 // Datums-Auswahl
@@ -94,6 +96,25 @@ final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
 /// aus der Produktions-Historie (dort wird die Zeit tatsächlich gemessen).
 const String _kBratstrasseDbValue = 'bratstrasse';
 
+/// Woher die Dauer einer Abteilung stammt.
+enum DauerQuelle {
+  /// Gepflegte Leistungsdaten der Abteilung — „Menge X kg in Zeit Y" —
+  /// oder eine feste Zeit ohne Menge.
+  leistungsdaten,
+
+  /// Ø der letzten erfassten Produktionen. Für die Bratstraße der
+  /// Regelfall: Dort wird die Zeit tatsächlich gemessen.
+  historie,
+
+  /// Für die Abteilung sind keine Leistungsdaten gepflegt. Ersatzweise
+  /// zählt der Ø der letzten erfassten Produktionen des Artikels.
+  historieErsatz,
+
+  /// Weder Leistungsdaten noch Produktionen mit Zeit: Die Dauer ist ein
+  /// Platzhalter.
+  platzhalter,
+}
+
 /// Ein berechneter Planungs-Schritt: was eine Abteilung für die geplante
 /// Menge zu tun hat. Der [tag] ist im Planen-Dialog frei verschiebbar.
 class GeplanterSchritt {
@@ -105,10 +126,10 @@ class GeplanterSchritt {
     required this.mengeKg,
     required this.dauerMinuten,
     required this.mitarbeiter,
-    required this.ausHistorie,
-    required this.platzhalter,
+    required this.dauerQuelle,
     required this.notizen,
     required this.tag,
+    this.historie,
     this.maschineId,
   });
 
@@ -128,11 +149,22 @@ class GeplanterSchritt {
   final double dauerMinuten;
   final int mitarbeiter;
 
-  /// Dauer stammt aus dem Historie-Durchschnitt (Bratstraße).
-  final bool ausHistorie;
+  /// Woher [dauerMinuten] stammt.
+  final DauerQuelle dauerQuelle;
 
-  /// Keine gepflegten Zeit-Stammdaten → Dauer ist ein Platzhalter.
-  final bool platzhalter;
+  /// Die Produktionen, aus denen die Dauer stammt — gesetzt, wenn
+  /// [ausHistorie].
+  final HistorienLeistung? historie;
+
+  /// Dauer stammt aus dem Ø der letzten Produktionen: in der Bratstraße
+  /// regulär, sonst ersatzweise für fehlende Leistungsdaten.
+  bool get ausHistorie =>
+      dauerQuelle == DauerQuelle.historie ||
+      dauerQuelle == DauerQuelle.historieErsatz;
+
+  /// Weder Leistungsdaten noch Produktionen mit Zeit → die Dauer ist ein
+  /// Platzhalter.
+  bool get platzhalter => dauerQuelle == DauerQuelle.platzhalter;
 
   final String? notizen;
 
@@ -328,10 +360,12 @@ Future<Ausbeute> _ausbeuteFuer(
 
 /// Berechnet aus Produkt + gewünschter **Fertigmenge** den Schritt-Plan:
 /// pro Schritt Eingangsmenge (rückwärts über die Ausbeute), Dauer und
-/// Personen. Für die **Bratstraße** wird die Dauer aus dem Ø der
-/// Produktions-Historie (kg/h roh) bestimmt, sonst aus den Schritt-Stammdaten
-/// linear auf die Menge skaliert. Alle Schritte starten auf [startTag];
-/// die Tageszuordnung wird anschließend im Dialog angepasst.
+/// Personen. Für die **Bratstraße** kommt die Dauer aus dem Ø der letzten
+/// erfassten Produktionen, sonst aus den Leistungsdaten der Abteilung,
+/// linear auf die Menge skaliert. Fehlen die Leistungsdaten, dienen auch
+/// dort die letzten Produktionen als Basis (siehe [HistorienLeistung]).
+/// Alle Schritte starten auf [startTag]; die Tageszuordnung wird
+/// anschließend im Dialog angepasst.
 ///
 /// [mengeKg] ist IMMER Fertigware. Wer von einer Rohwarenmenge ausgeht,
 /// rechnet sie vorher mit [ermittleAusbeute] um — sonst wird der Verlust
@@ -395,110 +429,35 @@ Future<GeplanterPlan> berechneSchrittPlan({
     }
   }
 
-  // Ø kg/h roh aus der Historie (für die Bratstraße).
-  final histAvgKgh = await _avgKghRohAusHistorie(db, productId);
+  // Ø der letzten Produktionen: Grundlage der Bratstraße und Ersatz für
+  // fehlende Leistungsdaten in allen anderen Abteilungen.
+  final historie = await historienLeistung(db, productId);
 
   final tagNorm = DateTime(startTag.year, startTag.month, startTag.day);
-
-  // Pro Schritt zunächst Dauer + Platzhalter + Bezeichnung berechnen.
-  final perStep =
-      <({ProductStep step, double menge, double dauer, bool platzhalter, String label})>[];
-  for (var i = 0; i < steps.length; i++) {
-    final step = steps[i];
-    final menge = inputMengen[i];
-    final muell = StringBuffer();
-    final (d, ph) = _skaliereDauer(step, menge, muell);
-    final label = (step.prozessschritt != null &&
-            step.prozessschritt!.isNotEmpty)
-        ? step.prozessschritt!
-        : (step.maschine ?? '');
-    perStep.add(
-      (step: step, menge: menge, dauer: d, platzhalter: ph, label: label),
-    );
-  }
 
   // Aufeinanderfolgende Schritte derselben Abteilung zu EINEM Block bündeln
   // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → ein Eintrag).
   final result = <GeplanterSchritt>[];
   var i = 0;
-  while (i < perStep.length) {
-    final abt = perStep[i].step.abteilung;
-    final block = [perStep[i]];
-    var j = i + 1;
-    while (j < perStep.length && perStep[j].step.abteilung == abt) {
-      block.add(perStep[j]);
-      j++;
+  while (i < steps.length) {
+    final abt = steps[i].abteilung;
+    final block = <({ProductStep step, double menge})>[];
+    while (i < steps.length && steps[i].abteilung == abt) {
+      block.add((step: steps[i], menge: inputMengen[i]));
+      i++;
     }
-    i = j;
 
-    final blockMenge = block.first.menge;
-    final istBratstrasse = abt == _kBratstrasseDbValue;
+    final labels = block
+        .map((b) => _schrittBezeichnung(b.step))
+        .where((l) => l.isNotEmpty)
+        .toList();
+    final dauer = _blockDauer(block, historie);
+
     final notizen = StringBuffer();
-
-    final labels =
-        block.map((b) => b.label).where((l) => l.isNotEmpty).toList();
     if (labels.length > 1) {
       notizen.write('Maschinen/Schritte: ${labels.join(' · ')}. ');
     }
-
-    var ausHistorie = false;
-    var platzhalter = false;
-    double dauer;
-
-    if (istBratstrasse && histAvgKgh != null && histAvgKgh > 0) {
-      // Auflagezeit (erste bis letzte Auflage aufs Band) aus dem gemessenen
-      // Durchsatz; fixe Durchlauf-/Verpackzeiten der Maschinen oben drauf.
-      final auflage = blockMenge / histAvgKgh * 60.0;
-      final durchlauf = block.fold<double>(
-        0,
-        (summe, b) => summe + (b.step.fixZeitMinuten ?? 0.0),
-      );
-      dauer = auflage + durchlauf;
-      ausHistorie = true;
-      if (durchlauf > 0) {
-        notizen.write(
-          'Auflage ${auflage.round()} min + Durchlauf/Verpacken '
-          '${durchlauf.round()} min. ',
-        );
-      } else {
-        notizen.write('Dauer aus Historie (Ø kg/h, Auflagezeit). ');
-      }
-    } else {
-      // Wichtig: In der Bratstraße bilden Bratstraße, Dampftunnel,
-      // Schockfroster & Co. EINE durchlaufende Linie — das Produkt
-      // passiert sie nacheinander, aber die Linie läuft als Ganzes.
-      // Die Dauern dürfen deshalb NICHT addiert werden; maßgeblich ist
-      // die längste Station.
-      //
-      // Läuft ein Produkt erst ab dem Dampftunnel (ohne Bratstraße),
-      // greift genau dieselbe Rechnung — dann ist der Dampftunnel die
-      // längste (und einzige) Station und bestimmt die Dauer.
-      // Alle anderen Abteilungen: EINE Leistung je Abteilung. Maßgeblich
-      // ist die Basis (Menge/Dauer) des ERSTEN Schritts der Abteilung —
-      // genau die Werte, die der Leistungsdaten-Dialog pflegt. Die App
-      // skaliert diese eine Referenz auf die Blockmenge hoch, statt die
-      // Einzelschritte zu skalieren und zu addieren (das führte bei
-      // mehrschrittigen Abteilungen wie Wolf+Kutter zu falschen Zeiten).
-      if (istBratstrasse) {
-        dauer = block.fold<double>(0, (m, b) => b.dauer > m ? b.dauer : m);
-        if (block.length > 1) {
-          notizen.write('Durchlaufende Linie (längste Station zählt). ');
-        }
-      } else {
-        final ref = block.first.step;
-        final muell = StringBuffer();
-        final (d, ph) = _skaliereDauer(ref, blockMenge, muell);
-        dauer = d;
-        platzhalter = ph;
-        if (ph) {
-          notizen.write('Zeit ist Platzhalter (Leistungsdaten pflegen). ');
-        }
-      }
-    }
-
-    // Sicherheitsnetz gegen unsinnige Werte.
-    if (!dauer.isFinite || dauer.isNaN || dauer < 0) dauer = 30.0;
-    if (dauer > 60 * 24 * 7) dauer = 30.0;
+    notizen.write(dauer.hinweise);
 
     final mitarbeiter = block
         .map((b) => b.step.basisMitarbeiter)
@@ -514,11 +473,11 @@ Future<GeplanterPlan> berechneSchrittPlan({
             .map((b) => b.step.maschineId)
             .firstWhere((m) => m != null, orElse: () => null),
         prozessschritt: labels.isEmpty ? null : labels.join(' · '),
-        mengeKg: blockMenge,
-        dauerMinuten: dauer.roundToDouble(),
+        mengeKg: block.first.menge,
+        dauerMinuten: dauer.minuten.roundToDouble(),
         mitarbeiter: mitarbeiter,
-        ausHistorie: ausHistorie,
-        platzhalter: platzhalter,
+        dauerQuelle: dauer.quelle,
+        historie: dauer.historie,
         notizen: notizen.isEmpty ? null : notizen.toString().trim(),
         tag: tagNorm,
       ),
@@ -533,16 +492,165 @@ Future<GeplanterPlan> berechneSchrittPlan({
   );
 }
 
-/// Lineare Dauer-Skalierung aus den Schritt-Stammdaten inkl. Chargen-Logik.
-/// Liefert (Dauer, istPlatzhalter). Schreibt ggf. Hinweise in [notizen].
+/// Bezeichnung eines Schritts für Plan und Notizen: der Prozessschritt,
+/// sonst die Maschine.
+String _schrittBezeichnung(ProductStep step) {
+  final p = step.prozessschritt;
+  if (p != null && p.isNotEmpty) return p;
+  return step.maschine ?? '';
+}
+
+// ---------------------------------------------------------------------------
+// Dauer einer Abteilung
+// ---------------------------------------------------------------------------
+
+/// Dauer einer Abteilung für eine Menge — und woher sie stammt.
+class AbteilungsDauer {
+  const AbteilungsDauer({
+    required this.minuten,
+    required this.quelle,
+    this.historie,
+    this.hinweise = '',
+  });
+
+  final double minuten;
+  final DauerQuelle quelle;
+
+  /// Die Produktionen, aus denen die Dauer stammt — gesetzt bei
+  /// [DauerQuelle.historie] und [DauerQuelle.historieErsatz].
+  final HistorienLeistung? historie;
+
+  /// Erläuterung für die Notizen des Auftrags, z.B. Auflage + Durchlauf.
+  final String hinweise;
+}
+
+/// Rechnet die Dauer eines Abteilungsblocks — aufeinanderfolgende Schritte
+/// derselben Abteilung, jeder mit seiner Eingangsmenge. Dieselbe Regel
+/// gilt beim Einplanen ([berechneSchrittPlan]) und beim Ändern der Menge
+/// eines Auftrags ([AbteilungsDauerModell]):
+///
+/// - **Bratstraße:** Gibt es erfasste Produktionen mit Zeit, kommt die
+///   Auflagezeit aus deren Ø, dazu die festen Durchlaufzeiten der
+///   Stationen. Sonst zählt die längste Station laut Leistungsdaten.
+/// - **Jede andere Abteilung:** die Leistungsdaten ihres ersten Schritts.
+///   Fehlen sie, gilt der Ø der letzten Produktionen als Basis. Erst ohne
+///   beides ist die Dauer ein Platzhalter.
+AbteilungsDauer _blockDauer(
+  List<({ProductStep step, double menge})> block,
+  HistorienLeistung? historie,
+) {
+  final hinweise = StringBuffer();
+  final menge = block.first.menge;
+  double dauer;
+  DauerQuelle quelle;
+
+  if (block.first.step.abteilung == _kBratstrasseDbValue) {
+    if (historie != null) {
+      // Auflagezeit (erste bis letzte Auflage aufs Band) aus dem gemessenen
+      // Durchsatz; fixe Durchlauf-/Verpackzeiten der Maschinen oben drauf.
+      final auflage = historie.minutenFuer(menge);
+      final durchlauf = block.fold<double>(
+        0,
+        (summe, b) => summe + (b.step.fixZeitMinuten ?? 0.0),
+      );
+      dauer = auflage + durchlauf;
+      quelle = DauerQuelle.historie;
+      if (durchlauf > 0) {
+        hinweise.write(
+          'Auflage ${auflage.round()} min (${historie.herkunft}) + '
+          'Durchlauf/Verpacken ${durchlauf.round()} min. ',
+        );
+      } else {
+        hinweise.write('Dauer aus ${historie.herkunft} (Auflagezeit). ');
+      }
+    } else {
+      // Wichtig: In der Bratstraße bilden Bratstraße, Dampftunnel,
+      // Schockfroster & Co. EINE durchlaufende Linie — das Produkt
+      // passiert sie nacheinander, aber die Linie läuft als Ganzes.
+      // Die Dauern dürfen deshalb NICHT addiert werden; maßgeblich ist
+      // die längste Station.
+      //
+      // Läuft ein Produkt erst ab dem Dampftunnel (ohne Bratstraße),
+      // greift genau dieselbe Rechnung — dann ist der Dampftunnel die
+      // längste (und einzige) Station und bestimmt die Dauer.
+      dauer = 0;
+      var ohneDaten = true;
+      for (final b in block) {
+        final (d, platzhalter) = _skaliereDauer(b.step, b.menge);
+        if (d > dauer) dauer = d;
+        if (!platzhalter) ohneDaten = false;
+      }
+      // Hat keine Station Leistungsdaten, ist auch die Linie geraten —
+      // der Planungsvorschlag lässt solche Artikel deshalb aus.
+      quelle =
+          ohneDaten ? DauerQuelle.platzhalter : DauerQuelle.leistungsdaten;
+      if (block.length > 1) {
+        hinweise.write('Durchlaufende Linie (längste Station zählt). ');
+      }
+      if (ohneDaten) {
+        hinweise.write('Zeit ist Platzhalter (Leistungsdaten pflegen). ');
+      }
+    }
+  } else {
+    // Alle anderen Abteilungen: EINE Leistung je Abteilung. Maßgeblich
+    // ist die Basis (Menge/Dauer) des ERSTEN Schritts der Abteilung —
+    // genau die Werte, die der Leistungsdaten-Dialog pflegt. Die App
+    // skaliert diese eine Referenz auf die Blockmenge hoch, statt die
+    // Einzelschritte zu skalieren und zu addieren (das führte bei
+    // mehrschrittigen Abteilungen wie Wolf+Kutter zu falschen Zeiten).
+    final erster = block.first.step;
+    final (d, platzhalter) = _skaliereDauer(erster, menge);
+    if (!platzhalter) {
+      dauer = d;
+      quelle = DauerQuelle.leistungsdaten;
+    } else if (historie != null) {
+      // Keine Leistungsdaten: Die letzten Produktionen des Artikels
+      // dienen als Basis — Ø Menge in Ø Zeit, genauso hochgerechnet.
+      dauer = _skaliereDauer(erster, menge, ersatz: historie).$1;
+      quelle = DauerQuelle.historieErsatz;
+      hinweise.write(
+        'Keine Leistungsdaten — Dauer aus ${historie.herkunft} '
+        '(≈ ${_kgText(historie.kgProStunde)} kg/h). ',
+      );
+    } else {
+      dauer = d;
+      quelle = DauerQuelle.platzhalter;
+      hinweise.write('Zeit ist Platzhalter (Leistungsdaten pflegen). ');
+    }
+  }
+
+  // Sicherheitsnetz gegen unsinnige Werte.
+  if (!dauer.isFinite || dauer < 0) dauer = 30.0;
+  if (dauer > 60 * 24 * 7) dauer = 30.0;
+
+  final ausHistorie = quelle == DauerQuelle.historie ||
+      quelle == DauerQuelle.historieErsatz;
+  return AbteilungsDauer(
+    minuten: dauer,
+    quelle: quelle,
+    historie: ausHistorie ? historie : null,
+    hinweise: hinweise.toString(),
+  );
+}
+
+/// Lineare Dauer-Skalierung inkl. Chargen-Logik:
+/// Fixzeit + Basisdauer × Menge ÷ Basismenge.
+///
+/// Die Basis sind die Leistungsdaten des Schritts. Fehlen sie und ist
+/// [ersatz] gesetzt, dienen die letzten Produktionen als Basis.
+/// Liefert (Dauer, istPlatzhalter).
 (double, bool) _skaliereDauer(
   ProductStep step,
-  double stepMenge,
-  StringBuffer notizen,
-) {
+  double stepMenge, {
+  HistorienLeistung? ersatz,
+}) {
   final fixZeit = step.fixZeitMinuten ?? 0.0;
-  final basisMenge = step.basisMengeKg;
-  final basisDauer = step.basisDauerMinuten;
+  var basisMenge = step.basisMengeKg;
+  var basisDauer = step.basisDauerMinuten;
+  if (basisDauer <= 0 && ersatz != null) {
+    basisMenge = ersatz.mengeKg;
+    basisDauer = ersatz.minuten;
+  }
 
   double dauer;
   var platzhalter = false;
@@ -554,7 +662,6 @@ Future<GeplanterPlan> berechneSchrittPlan({
   } else {
     dauer = fixZeit > 0 ? fixZeit : 30.0;
     platzhalter = true;
-    notizen.write('Zeit ist Platzhalter (Stammdaten noch nicht gepflegt). ');
   }
 
   // Chargengrößen: mehrere Durchgänge bei Überschreitung der Kapazität.
@@ -567,33 +674,212 @@ Future<GeplanterPlan> berechneSchrittPlan({
     final durchgaenge = (stepMenge / maxCharge).ceil();
     final dauerProCharge = fixZeit + basisDauer * (maxCharge / basisMenge);
     dauer = dauerProCharge * durchgaenge;
-    notizen.write(
-      '$durchgaenge Durchgänge à ${maxCharge.toStringAsFixed(0)} kg. ',
-    );
   }
 
   return (dauer, platzhalter);
 }
 
-/// Durchschnittliches kg/h roh aus der Produktions-Historie eines Produkts,
-/// oder null wenn keine brauchbaren Werte vorliegen.
-Future<double?> _avgKghRohAusHistorie(
+/// Grundlage für die Dauer EINER Abteilung eines Artikels — einmal aus
+/// der Datenbank geladen, danach für jede Menge ohne Datenbank rechenbar.
+///
+/// Für das Ändern eines Auftrags im Board: Ändert sich die Menge, rechnet
+/// [dauerFuer] die Dauer nach genau denselben Regeln wie beim Einplanen
+/// ([berechneSchrittPlan]) — mit den Leistungsdaten, ohne sie mit dem Ø
+/// der letzten Produktionen, in der Bratstraße immer mit diesem.
+class AbteilungsDauerModell {
+  const AbteilungsDauerModell({
+    required this.schritte,
+    required this.historie,
+    required this.schrittAusbeute,
+  });
+
+  /// Die Schritte der Abteilung — ein zusammenhängender Block in der
+  /// Reihenfolge des Prozesses.
+  final List<ProductStep> schritte;
+
+  /// Ø der letzten Produktionen, null ohne Produktionen mit Zeit.
+  final HistorienLeistung? historie;
+
+  /// Rechnet der Artikel mit Ausbeuten an den einzelnen Schritten? Dann
+  /// sinkt die Menge schon innerhalb der Abteilung von Schritt zu Schritt.
+  final bool schrittAusbeute;
+
+  ProductStep get ersterSchritt => schritte.first;
+
+  bool get istBratstrasse => ersterSchritt.abteilung == _kBratstrasseDbValue;
+
+  /// Summe der festen Zeiten der Schritte — in der Bratstraße die
+  /// Durchlauf- und Verpackzeit, die zur Auflagezeit hinzukommt.
+  double get festeZeitMinuten =>
+      schritte.fold<double>(0, (s, x) => s + (x.fixZeitMinuten ?? 0.0));
+
+  /// Dauer für [mengeKg] — die Eingangsmenge der Abteilung, wie sie am
+  /// Auftrag steht.
+  AbteilungsDauer dauerFuer(double mengeKg) {
+    final block = <({ProductStep step, double menge})>[];
+    var menge = mengeKg;
+    for (final s in schritte) {
+      block.add((step: s, menge: menge));
+      final a = s.ausbeuteFaktor;
+      if (schrittAusbeute && a != null && a > 0 && a < 1) menge *= a;
+    }
+    return _blockDauer(block, historie);
+  }
+}
+
+/// Lädt das [AbteilungsDauerModell] für [abteilung] des Artikels. null,
+/// wenn der Artikel dort keinen Schritt hat.
+///
+/// Kommt die Abteilung im Prozess mehrmals vor, gilt der Block mit der
+/// Anlage [maschineId] des Auftrags, sonst der erste.
+Future<AbteilungsDauerModell?> ladeAbteilungsDauerModell(
+  AppDatabase db, {
+  required String productId,
+  required String abteilung,
+  String? maschineId,
+}) async {
+  final steps = await _ladeSchritte(db, productId);
+
+  // Zusammenhängende Blöcke dieser Abteilung — wie im Plan.
+  final bloecke = <List<ProductStep>>[];
+  var i = 0;
+  while (i < steps.length) {
+    if (steps[i].abteilung != abteilung) {
+      i++;
+      continue;
+    }
+    final block = <ProductStep>[];
+    while (i < steps.length && steps[i].abteilung == abteilung) {
+      block.add(steps[i]);
+      i++;
+    }
+    bloecke.add(block);
+  }
+  if (bloecke.isEmpty) return null;
+  final passend = maschineId == null
+      ? null
+      : bloecke
+          .where((b) => b.any((s) => s.maschineId == maschineId))
+          .firstOrNull;
+
+  final ausbeute = await _ausbeuteFuer(db, productId, steps);
+  final historie = await historienLeistung(db, productId);
+  return AbteilungsDauerModell(
+    schritte: passend ?? bloecke.first,
+    historie: historie,
+    schrittAusbeute: ausbeute.quelle == AusbeuteQuelle.schritte,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Leistung aus den letzten Produktionen
+// ---------------------------------------------------------------------------
+
+/// Aus so vielen der zuletzt erfassten Produktionen eines Artikels wird
+/// seine Leistung gemittelt. Ältere zählen nicht mehr mit — Anlagen,
+/// Rezepturen und Mannschaft ändern sich, und der Plan soll zeigen, was
+/// heute zu schaffen ist.
+const int kLetzteProduktionen = 10;
+
+/// Was die zuletzt erfassten Produktionen eines Artikels im Schnitt
+/// geschafft haben: Ø Rohware in Ø Produktionszeit.
+///
+/// Menge und Zeit werden getrennt gemittelt — wie bei den Leistungsdaten
+/// („Menge X kg in Zeit Y"), und daraus rechnet die App jede andere Menge
+/// genauso linear hoch. Die Bratstraße rechnet immer damit, weil dort die
+/// Zeit gemessen wird; jede andere Abteilung nur, wenn für sie keine
+/// Leistungsdaten gepflegt sind.
+class HistorienLeistung {
+  const HistorienLeistung({
+    required this.mengeKg,
+    required this.minuten,
+    required this.anzahl,
+  });
+
+  /// Ø Rohware je Produktion in kg.
+  final double mengeKg;
+
+  /// Ø Produktionszeit je Produktion in Minuten.
+  final double minuten;
+
+  /// Aus so vielen Produktionen stammt der Schnitt.
+  final int anzahl;
+
+  /// Ø kg Rohware je Stunde.
+  double get kgProStunde => mengeKg / minuten * 60;
+
+  /// Minuten für [kg] — linear hochgerechnet.
+  double minutenFuer(double kg) => minuten * kg / mengeKg;
+
+  /// „Ø der letzten 6 Produktionen" bzw. „der letzten Produktion".
+  String get herkunft => anzahl == 1
+      ? 'der letzten Produktion'
+      : 'Ø der letzten $anzahl Produktionen';
+
+  /// „480 kg Rohware in 4:10 h (≈ 115 kg/h)".
+  String get kennzahlen => '${_kgText(mengeKg)} kg Rohware in '
+      '${Zeit.kurz(minuten)} (≈ ${_kgText(kgProStunde)} kg/h)';
+}
+
+/// Ø Menge und Ø Zeit der letzten [kLetzteProduktionen] erfassten
+/// Produktionen des Artikels, bei denen beides bekannt ist. null, wenn
+/// keine Produktion mit Menge und Zeit erfasst ist.
+///
+/// Die Zeit ist die erfasste Produktionszeit, sonst die Spanne zwischen
+/// Start und Ende, sonst die Menge geteilt durch das erfasste kg/h.
+Future<HistorienLeistung?> historienLeistung(
   AppDatabase db,
   String productId,
 ) async {
   final rows = await (db.select(db.productionHistory)
         ..where((h) => h.productId.equals(productId))
-        ..where((h) => h.deletedAt.isNull()))
+        ..where((h) => h.deletedAt.isNull())
+        ..orderBy([
+          (h) => OrderingTerm.desc(h.datum),
+          (h) => OrderingTerm.desc(h.createdAt),
+        ]))
       .get();
 
-  final werte = rows
-      .map((h) => h.kgProStundeRoh)
-      .whereType<double>()
-      .where((v) => v > 0)
-      .toList();
-  if (werte.isEmpty) return null;
-  return werte.reduce((a, b) => a + b) / werte.length;
+  var summeKg = 0.0;
+  var summeMinuten = 0.0;
+  var anzahl = 0;
+  for (final h in rows) {
+    final kg = h.kgRohware;
+    if (kg == null || !kg.isFinite || kg <= 0) continue;
+    final minuten = _produktionsMinuten(h, kg);
+    if (minuten == null) continue;
+    summeKg += kg;
+    summeMinuten += minuten;
+    anzahl++;
+    if (anzahl >= kLetzteProduktionen) break;
+  }
+  if (anzahl == 0) return null;
+  return HistorienLeistung(
+    mengeKg: summeKg / anzahl,
+    minuten: summeMinuten / anzahl,
+    anzahl: anzahl,
+  );
 }
+
+/// Produktionszeit einer erfassten Produktion in Minuten, oder null.
+double? _produktionsMinuten(ProductionHistoryData h, double kg) {
+  final erfasst = h.produktionszeitMinuten;
+  if (erfasst != null && erfasst.isFinite && erfasst > 0) return erfasst;
+  final ausUhrzeit = ProduktionErfassenService.produktionszeitMinuten(
+    h.startzeit,
+    h.endzeit,
+  );
+  if (ausUhrzeit != null && ausUhrzeit > 0) return ausUhrzeit;
+  final kgh = h.kgProStundeRoh;
+  if (kgh != null && kgh.isFinite && kgh > 0) return kg / kgh * 60;
+  return null;
+}
+
+/// Kilogramm als ganze Zahl mit Tausenderpunkt: „12.857".
+String _kgText(double kg) => kg.round().toString().replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+      (_) => '.',
+    );
 
 /// Ø Ausbeute aus den erfassten Produktionen samt deren Anzahl. Es zählen
 /// dieselben Werte wie bei [durchschnittsVerlust].
