@@ -59,31 +59,23 @@ String _fmtKg(double kg) => kg.round().toString().replaceAllMapped(
       (_) => '.',
     );
 
-/// „Ausbeute 56,0 % · aus der Gesamtausbeute des Artikels · 2 erfasste
-/// Produktionen: Ø 55,8 %" — damit sichtbar ist, mit welcher Zahl
-/// gerechnet wird und ob sie zu den erfassten Produktionen passt.
+/// „Ausbeute 56,0 % · Ø der letzten 7 Produktionen" — damit sichtbar
+/// ist, mit welcher Zahl gerechnet wird und woher sie stammt.
 String _ausbeuteText(Ausbeute a) {
-  String prozent(double f) =>
-      '${(f * 100).toStringAsFixed(1).replaceAll('.', ',')} %';
-  if (!a.bekannt) return 'Keine Ausbeute bekannt — gerechnet ohne Verlust';
-  final n = a.historieAnzahl;
-  final erfasst =
-      n == 1 ? '1 erfassten Produktion' : '$n erfassten Produktionen';
-  final quelle = switch (a.quelle) {
-    AusbeuteQuelle.schritte => 'aus den Ausbeuten der Prozessschritte',
-    AusbeuteQuelle.artikel => 'aus der Gesamtausbeute des Artikels',
-    AusbeuteQuelle.historie => 'Ø aus $erfasst',
-    AusbeuteQuelle.eingabe => 'von Hand eingetragen',
-    AusbeuteQuelle.keine => '',
-  };
-  // Zum Vergleich: Was die wenigen erfassten Produktionen sagen. Ab
-  // [kMindestErfassungenAusbeute] gilt ihr Wert von selbst.
-  final historie = a.historie;
-  final vergleich = historie != null && a.quelle != AusbeuteQuelle.historie
-      ? ' · Ø aus $erfasst: ${prozent(historie)} (zählt ab '
-          '$kMindestErfassungenAusbeute)'
-      : '';
-  return 'Ausbeute ${prozent(a.faktor)} · $quelle$vergleich';
+  final prozent =
+      '${(a.faktor * 100).toStringAsFixed(1).replaceAll('.', ',')} %';
+  switch (a.quelle) {
+    case AusbeuteQuelle.historie:
+      final n = a.historieAnzahl;
+      final aus = n == 1
+          ? 'aus der letzten Produktion'
+          : 'Ø der letzten $n Produktionen';
+      return 'Ausbeute $prozent · $aus';
+    case AusbeuteQuelle.eingabe:
+      return 'Ausbeute $prozent · von Hand eingetragen';
+    case AusbeuteQuelle.keine:
+      return 'Keine Ausbeute bekannt — gerechnet ohne Verlust';
+  }
 }
 
 Color _ampelFarbe(CapacityStatus status) {
@@ -2089,9 +2081,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   final _suche = TextEditingController();
   final _menge = TextEditingController(text: '100');
 
-  /// Von Hand eingetragener Verlust in %. Wird nur gefragt, wenn der
-  /// Artikel selbst keine Ausbeute kennt — weder an den Schritten noch in
-  /// den Stammdaten noch aus erfassten Produktionen.
+  /// Von Hand eingetragener Verlust in %. Wird nur gefragt, solange für
+  /// den Artikel keine Produktion mit Roh- und Fertigware erfasst ist.
   final _verlustProzent = TextEditingController();
 
   List<Product> _produkte = [];
@@ -2170,9 +2161,9 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
   /// Lädt Ausbeute und Zeitmodell des Artikels.
   ///
-  /// Beides hängt vom von Hand eingetragenen Verlust ab, wenn der Artikel
-  /// keine eigene Ausbeute hat — deshalb wird bei jeder Änderung dieses
-  /// Felds neu geladen.
+  /// Beides hängt vom von Hand eingetragenen Verlust ab, solange keine
+  /// Produktion mit Fertigware erfasst ist — deshalb wird bei jeder
+  /// Änderung dieses Felds neu geladen.
   Future<void> _ladeArtikeldaten(String productId) async {
     final nr = ++_ladeNr;
     final db = ref.read(databaseProvider);
@@ -2197,8 +2188,9 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   }
 
   // -- Zeitmodell: Minuten = Fixanteil + Faktor × FERTIGmenge -------------
-  // Die Schrittdauer ist „Fixzeit + Zeit × (Menge / Referenzmenge)", also
-  // linear in der Menge — die Rechnung lässt sich damit umkehren.
+  // Die Dauer einer Abteilung ist „Zeit × (Menge / Referenzmenge)", also
+  // linear in der Menge — die Rechnung lässt sich damit umkehren. Der
+  // Fixanteil bleibt im Modell, ist heute aber praktisch null.
   //
   // Die Menge ist die FERTIGmenge, weil [berechneSchrittPlan] mit ihr
   // gerechnet wird. Die Bratstraße läuft dabei mit der zugehörigen Rohware
@@ -2341,16 +2333,16 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     return 1 - p / 100;
   }
 
-  /// Muss der Verlust von Hand eingetragen werden? Nur, wenn der Artikel
-  /// selbst keine Ausbeute liefert.
+  /// Muss der Verlust von Hand eingetragen werden? Nur, solange die
+  /// erfassten Produktionen keine Ausbeute liefern.
   bool get _verlustAbfragen {
     final q = _ausbeute?.quelle;
     return q == AusbeuteQuelle.keine || q == AusbeuteQuelle.eingabe;
   }
 
-  /// Die Ausbeute, mit der gerechnet wird. Hat der Artikel keine eigene,
-  /// gilt sofort der von Hand eingetragene Verlust — ohne auf das
-  /// Nachladen zu warten.
+  /// Die Ausbeute, mit der gerechnet wird. Liefern die erfassten
+  /// Produktionen keine, gilt sofort der von Hand eingetragene Verlust —
+  /// ohne auf das Nachladen zu warten.
   Ausbeute get _effektiveAusbeute {
     final a = _ausbeute ?? Ausbeute.unbekannt;
     if (!_verlustAbfragen) return a;
@@ -2878,8 +2870,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         TextField(
           controller: _verlustProzent,
           decoration: const InputDecoration(
-            labelText: 'Verlust (%) — für diesen Artikel ist keine Ausbeute '
-                'hinterlegt',
+            labelText: 'Verlust (%) — noch keine Produktion mit '
+                'Fertigware erfasst',
             suffixText: '%',
             border: OutlineInputBorder(),
           ),

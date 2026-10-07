@@ -7,6 +7,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/prozesskette_service.dart';
 
 /// Dialog zum Bearbeiten eines bestehenden oder Anlegen eines neuen
 /// Produktions-Schritts.
@@ -21,8 +22,10 @@ import '../../core/services/auto_backup_trigger.dart';
 /// - Prozessschritt (Freitext)
 /// - Anlage (Dropdown aus Anlagen-Katalog, gefiltert nach Abteilung)
 /// - Personen an diesem Schritt (Zahl, Default 1 beim Anlegen)
-/// - Menge kg (Zahl)
-/// - Dauer Minuten (Zahl)
+///
+/// Zeiten gibt es am Schritt keine: Menge und Zeit sind Leistungsdaten der
+/// Abteilung und werden dort gepflegt. Wechselt ein Schritt die Abteilung,
+/// bleiben deren Leistungsdaten zurück (siehe [ProzesskettenService]).
 ///
 /// **Reihenfolge-Logik im Insert-Modus:**
 /// Die neue `reihenfolge` ist `MAX(reihenfolge) + 1` über **alle** Schritte
@@ -31,8 +34,8 @@ import '../../core/services/auto_backup_trigger.dart';
 /// im Excel-Export bleibt stabil (Variante 2: gelöschte Spalten unangetastet).
 ///
 /// **Spalten-Sperre des Artikelblatts:**
-/// Die v3-Excel-Vorlage hat 10 Schritt-Spalten (B..U). Bei `MAX(reihenfolge)
-/// >= 10` wird der Insert blockiert und eine Fehlermeldung im Dialog
+/// Die v3-Excel-Vorlage hat 20 Schritt-Spalten (B..U). Bei `MAX(reihenfolge)
+/// >= 20` wird der Insert blockiert und eine Fehlermeldung im Dialog
 /// angezeigt. Der aufrufende Screen sollte zusätzlich vor dem Öffnen des
 /// Dialogs prüfen und mit einer Snackbar abweisen — der Check hier ist
 /// das Sicherheitsnetz.
@@ -122,9 +125,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   late TextEditingController _prozessschrittCtrl;
   String? _maschineId; // FK auf Machines
   late TextEditingController _personenCtrl;
-  late TextEditingController _mengeCtrl;
-  late TextEditingController _dauerMinCtrl;
-  late TextEditingController _fixZeitCtrl;
 
   List<Machine> _alleMaschinen = [];
   bool _maschinenGeladen = false;
@@ -154,19 +154,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       _maschineId = step.maschineId;
       _personenCtrl =
           TextEditingController(text: step.basisMitarbeiter.toString());
-      _mengeCtrl = TextEditingController(
-        text: step.basisMengeKg > 0 ? _formatZahl(step.basisMengeKg) : '',
-      );
-      _dauerMinCtrl = TextEditingController(
-        text: step.basisDauerMinuten > 0
-            ? _formatZahl(step.basisDauerMinuten)
-            : '',
-      );
-      _fixZeitCtrl = TextEditingController(
-        text: (step.fixZeitMinuten ?? 0) > 0
-            ? _formatZahl(step.fixZeitMinuten!)
-            : '',
-      );
     } else {
       // Insert-Modus: leere Felder mit sinnvollen Defaults
       final start = widget.startMaschine;
@@ -174,9 +161,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       _prozessschrittCtrl = TextEditingController();
       _maschineId = start?.id;
       _personenCtrl = TextEditingController(text: '1');
-      _mengeCtrl = TextEditingController();
-      _dauerMinCtrl = TextEditingController();
-      _fixZeitCtrl = TextEditingController();
     }
     _ladeMaschinen();
   }
@@ -185,9 +169,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   void dispose() {
     _prozessschrittCtrl.dispose();
     _personenCtrl.dispose();
-    _mengeCtrl.dispose();
-    _dauerMinCtrl.dispose();
-    _fixZeitCtrl.dispose();
     super.dispose();
   }
 
@@ -203,18 +184,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
         _maschinenGeladen = true;
       });
     }
-  }
-
-  /// Formatiert eine Zahl für die Anzeige im TextField (kein „123.0").
-  String _formatZahl(double wert) {
-    if (wert == wert.roundToDouble()) return wert.toInt().toString();
-    return wert.toString();
-  }
-
-  /// Parst das Text-Feld zu einer Zahl (akzeptiert Komma und Punkt).
-  double? _parseZahl(String text) {
-    if (text.trim().isEmpty) return null;
-    return double.tryParse(text.trim().replaceAll(',', '.'));
   }
 
   /// Maschinen gefiltert nach der gewählten Abteilung.
@@ -261,9 +230,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     // Leeres Feld = 0 Personen. Früher stand hier 1 als Fallback — das
     // stammt aus der Zeit, als der Wert die ganze Abteilung meinte.
     final personen = int.tryParse(_personenCtrl.text.trim()) ?? 0;
-    final menge = _parseZahl(_mengeCtrl.text) ?? 0.0;
-    final dauer = _parseZahl(_dauerMinCtrl.text) ?? 0.0;
-    final fixZeit = _parseZahl(_fixZeitCtrl.text) ?? 0.0;
     final prozess = _prozessschrittCtrl.text.trim();
     final maschineName = _ermittleMaschinenName();
 
@@ -289,9 +255,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
           db: db,
           neueReihenfolge: currentMax + 1,
           personen: personen,
-          menge: menge,
-          dauer: dauer,
-          fixZeit: fixZeit,
           prozess: prozess,
           maschineName: maschineName,
         );
@@ -299,9 +262,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
         await _update(
           db: db,
           personen: personen,
-          menge: menge,
-          dauer: dauer,
-          fixZeit: fixZeit,
           prozess: prozess,
           maschineName: maschineName,
         );
@@ -324,9 +284,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     required AppDatabase db,
     required int neueReihenfolge,
     required int personen,
-    required double menge,
-    required double dauer,
-    required double fixZeit,
     required String prozess,
     required String? maschineName,
   }) async {
@@ -342,10 +299,10 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
             maschineId: Value(_maschineId),
             // Legacy-Feld parallel pflegen — Excel-Export liest beide.
             maschine: Value(maschineName),
-            mengeKg: Value(menge > 0 ? menge : null),
-            basisMengeKg: Value(menge),
-            basisDauerMinuten: Value(dauer),
-            fixZeitMinuten: Value(fixZeit > 0 ? fixZeit : null),
+            // Leistungsdaten hat ein neuer Schritt keine — sie gehören der
+            // Abteilung und werden dort gepflegt.
+            basisMengeKg: const Value(0),
+            basisDauerMinuten: const Value(0),
             basisMitarbeiter: Value(personen),
             // basisAnzahlMessungen: Default 0 aus dem Schema
             // createdAt / updatedAt: Default currentDateAndTime aus Schema
@@ -360,25 +317,26 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   Future<void> _update({
     required AppDatabase db,
     required int personen,
-    required double menge,
-    required double dauer,
-    required double fixZeit,
     required String prozess,
     required String? maschineName,
   }) async {
-    await (db.update(db.productSteps)
-          ..where((s) => s.id.equals(widget.step!.id)))
+    final step = widget.step!;
+    // Abteilung über den Service wechseln: Die Leistungsdaten der alten
+    // Abteilung bleiben dort, statt mit dem Schritt mitzuwandern.
+    if (_abteilungDbValue != step.abteilung) {
+      await ProzesskettenService.wechsleAbteilung(
+        db,
+        step.id,
+        _abteilungDbValue,
+      );
+    }
+    await (db.update(db.productSteps)..where((s) => s.id.equals(step.id)))
         .write(
       ProductStepsCompanion(
-        abteilung: Value(_abteilungDbValue),
         prozessschritt: Value(prozess.isEmpty ? null : prozess),
         maschineId: Value(_maschineId),
         maschine: Value(maschineName), // Legacy-Feld spiegeln
         basisMitarbeiter: Value(personen),
-        basisMengeKg: Value(menge),
-        mengeKg: Value(menge > 0 ? menge : null),
-        basisDauerMinuten: Value(dauer),
-        fixZeitMinuten: Value(fixZeit > 0 ? fixZeit : null),
         updatedAt: Value(DateTime.now()),
       ),
     );
@@ -531,11 +489,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
 
               const SizedBox(height: 12),
 
-              // ── Hinweis: Menge und Zeit zentral je Abteilung ─────────
-              // Menge und Dauer bleiben bewusst an der Abteilung: Sie
-              // sind die Referenz, auf die die App jede Planmenge
-              // hochskaliert. Die Controller halten die geladenen Werte,
-              // hier sind sie nur nicht editierbar.
+              // ── Hinweis: Zeiten gehören der Abteilung ────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
@@ -556,30 +510,13 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Menge und Zeit werden zentral über '
-                        '„Leistungsdaten" je Abteilung gepflegt.',
+                        'Zeiten gibt es an der Anlage keine: Die Dauer kommt '
+                        'aus den Leistungsdaten der Abteilung oder aus den '
+                        'erfassten Produktionen.',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ),
                   ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // ── Fixe Zeit / Durchlauf (mengenunabhängig) ──────────────
-              TextField(
-                controller: _fixZeitCtrl,
-                enabled: !_isSaving,
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Fixe Zeit / Durchlauf',
-                  suffixText: 'min',
-                  helperText: 'Mengenunabhängig — z.B. Tunnel-Durchlauf, '
-                      'Schockfrost, Transport + Verpacken. Wird bei der '
-                      'Bratstraße auf die Auflagezeit aufaddiert.',
-                  helperMaxLines: 3,
                 ),
               ),
 

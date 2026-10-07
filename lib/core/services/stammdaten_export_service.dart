@@ -169,7 +169,6 @@ class StammdatenExportService {
               'personen': s.basisMitarbeiter,
               'mengeKg': s.basisMengeKg,
               'dauerMinuten': s.basisDauerMinuten,
-              'fixZeitMinuten': s.fixZeitMinuten,
               'werte': <String, String>{
                 for (final w
                     in paramJeSchritt[s.id] ?? <ProductStepParameter>[])
@@ -388,7 +387,11 @@ class StammdatenExportService {
   }
 
   // ── Feste Zeilenlagen — identisch zum Importer ──────────────────────
-  static const int _spalten = 10;
+  /// Schrittspalten B bis U — so viele Schritte erlaubt die App.
+  static const int _spalten = 20;
+
+  /// Zeile 15 hieß früher „Fixe Zeit (min)". Fixe Zeiten gibt es nicht
+  /// mehr; die Zeile bleibt frei, damit ältere Mappen dieselbe Lage haben.
   static const List<String> _schrittZeilen = [
     'Abteilung',
     'Prozessschritt',
@@ -396,7 +399,6 @@ class StammdatenExportService {
     'Personen',
     'Menge (kg)',
     'Zeit (hh:mm)',
-    'Fixe Zeit (min)',
   ];
 
   static void _artikelBlatt(
@@ -464,8 +466,6 @@ class StammdatenExportService {
       if (menge > 0) w.zahl(13, c, menge, _S.zahl1);
       final dauer = s['dauerMinuten']! as double;
       if (dauer > 0) w.text(14, c, _hhmm(dauer.round()), _S.wert);
-      final fix = s['fixZeitMinuten'] as double?;
-      if (fix != null && fix > 0) w.zahl(15, c, fix, _S.wert);
 
       final anlage = s['anlage'] as String?;
       if (anlage != null && anlage.isNotEmpty) {

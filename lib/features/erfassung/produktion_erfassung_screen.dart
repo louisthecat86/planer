@@ -6,8 +6,9 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
-import '../../core/utils/sheet_utils.dart';
-import '../whiteboard/produktion_erfassen_sheet.dart';
+import '../articles/article_detail_providers.dart'
+    show productionHistoryProvider;
+import '../articles/production_entry_dialog.dart';
 
 // ---------------------------------------------------------------------------
 // Modell + Provider
@@ -259,21 +260,19 @@ class _ProduktionErfassungScreenState
     WidgetRef ref,
     GeplanteProduktion prod,
   ) async {
-    final erfasst = await showSheetOhneAnimation<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      showDragHandle: true,
-      constraints: const BoxConstraints(maxWidth: 560),
-      builder: (_) => ProduktionErfassenSheet(
-        productId: prod.task.productId,
-        vorschlagMengeKg: prod.mengeKg,
-        vorschlagDatum: prod.task.datum,
-        vorschlagStart: prod.task.startZeit,
-      ),
+    // Dasselbe Formular wie im Artikel. Vorgeschlagen wird die geplante
+    // ROHWARE: Die Wurzel der Kette ist der erste Schritt, ihre Menge die
+    // Rohware — die Fertigmenge wird erst nach dem Wiegen eingetragen.
+    final erfasst = await ProductionEntryDialog.show(
+      context,
+      prod.task.productId,
+      vorschlagRohKg: prod.task.mengeKg,
+      vorschlagDatum: prod.task.datum,
+      vorschlagStart: prod.task.startZeit,
     );
-    if (erfasst == true) {
+    if (erfasst) {
       ref.invalidate(erfassungWocheDatenProvider);
+      ref.invalidate(productionHistoryProvider(prod.task.productId));
     }
   }
 }

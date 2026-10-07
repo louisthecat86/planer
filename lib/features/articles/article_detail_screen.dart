@@ -10,6 +10,16 @@ import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/prozesskette_service.dart';
+import '../whiteboard/whiteboard_provider.dart'
+    show
+        HistorienLeistung,
+        Leistungsdaten,
+        ausbeuteAusProduktionen,
+        historienLeistung,
+        kLetzteProduktionen,
+        leistungAusProduktionen,
+        leistungsdatenVon;
 import 'article_detail_providers.dart';
 import 'article_info_editor_dialog.dart';
 import 'article_print_service.dart';
@@ -359,7 +369,7 @@ class _StepsList extends ConsumerWidget {
   /// Gruppen-Anordnung neu durch (1..n) und lädt die Ansicht neu.
   ///
   /// Der Excel-Export schreibt die Schritte nach `reihenfolge` in die
-  /// Spalten B..K — jede neue Abfolge landet also automatisch im Export.
+  /// Spalten B..U — jede neue Abfolge landet also automatisch im Export.
   Future<void> _schreibeReihenfolge(
     WidgetRef ref,
     List<List<({ProductStep step, int nummer})>> neu, {
@@ -470,7 +480,7 @@ class _StepsList extends ConsumerWidget {
     final theme = Theme.of(context);
 
     // Aufeinanderfolgende Schritte derselben Abteilung zu EINER Karte bündeln
-    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel ? eine Karte).
+    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → eine Karte).
     final gruppen = <List<({ProductStep step, int nummer})>>[];
     for (var i = 0; i < steps.length; i++) {
       final eintrag = (step: steps[i], nummer: i + 1);

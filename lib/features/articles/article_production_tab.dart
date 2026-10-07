@@ -66,10 +66,13 @@ class _ProductionTab extends ConsumerWidget {
   }
 }
 
-/// Aggregierte Kennzahlen über alle historischen Produktionen.
+/// Kennzahlen der erfassten Produktionen. Ausbeute und Leistung sind der
+/// Ø der letzten [kLetzteProduktionen] — genau die Zahlen, mit denen die
+/// Planung rechnet.
 class _KennzahlenCard extends StatelessWidget {
   const _KennzahlenCard({required this.rows});
 
+  /// Neueste zuerst (siehe [productionHistoryProvider]).
   final List<ProductionHistoryData> rows;
 
   @override
@@ -77,23 +80,16 @@ class _KennzahlenCard extends StatelessWidget {
     double summeRoh = 0;
     double summeFertig = 0;
     var hatMengen = false;
-
-    final kgHWerte = <double>[];
     for (final r in rows) {
       if (r.kgRohware != null) {
         summeRoh += r.kgRohware!;
         hatMengen = true;
       }
       if (r.kgFertigware != null) summeFertig += r.kgFertigware!;
-      if (r.kgProStundeRoh != null) kgHWerte.add(r.kgProStundeRoh!);
     }
 
-    final double? ausbeute =
-        (hatMengen && summeRoh > 0) ? summeFertig / summeRoh : null;
-    final double? garverlust = ausbeute != null ? 1 - ausbeute : null;
-    final double? avgKgH = kgHWerte.isNotEmpty
-        ? kgHWerte.reduce((a, b) => a + b) / kgHWerte.length
-        : null;
+    final ausbeute = ausbeuteAusProduktionen(rows);
+    final leistung = leistungAusProduktionen(rows);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -131,28 +127,35 @@ class _KennzahlenCard extends StatelessWidget {
                   value: '${rows.length}',
                   label: 'Produktionen',
                 ),
-                if (ausbeute != null)
+                if (ausbeute != null) ...[
                   _Kennzahl(
-                    value: fmtProzent(ausbeute),
+                    value: fmtProzent(ausbeute.faktor),
                     label: 'Ø Ausbeute',
                   ),
-                if (garverlust != null)
                   _Kennzahl(
-                    value: fmtProzent(garverlust),
+                    value: fmtProzent(1 - ausbeute.faktor),
                     label: 'Ø Garverlust',
                     valueColor: const Color(0xFFFF8A65),
                   ),
-                if (avgKgH != null)
+                ],
+                if (leistung != null)
                   _Kennzahl(
-                    value: '${fmtKg(avgKgH)} kg/h',
-                    label: 'Ø Durchsatz roh',
+                    value: '${fmtKg(leistung.kgProStunde.roundToDouble())} '
+                        'kg/h',
+                    label: 'Ø Leistung roh',
                   ),
               ],
             ),
+            const SizedBox(height: 14),
+            const Text(
+              'Ausbeute und Leistung: Ø der letzten $kLetzteProduktionen '
+              'Produktionen — damit rechnet die Planung.',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
             if (hatMengen) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 4),
               Text(
-                'Gesamt: ${fmtKg(summeRoh)} kg Rohware ? '
+                'Gesamt: ${fmtKg(summeRoh)} kg Rohware → '
                 '${fmtKg(summeFertig)} kg Fertigware',
                 style: const TextStyle(color: Colors.white70, fontSize: 12),
               ),
@@ -371,10 +374,11 @@ class _HistWert extends StatelessWidget {
 
 /// Geführte Maske: fragt für jede Abteilung des Prozesses die
 /// Referenzleistung ab — „Menge X kg in Zeit Y". Daraus zeigt sie live die
-/// Kennzahl kg/h und schreibt die Werte beim Speichern auf den ersten
-/// Schritt jeder Abteilungsgruppe. Mit diesen Basiswerten skaliert die App
-/// die Dauer jeder Planmenge
-/// (Dauer = Fixzeit + Zeit × Planmenge ÷ Referenzmenge).
+/// Kennzahl kg/h und schreibt die Werte beim Speichern über den
+/// [ProzesskettenService] an den ersten Schritt jeder Abteilungsgruppe.
+/// Damit skaliert die App die Dauer jeder Planmenge
+/// (Dauer = Zeit × Planmenge ÷ Referenzmenge). Bleibt eine Abteilung
+/// leer, rechnet sie mit den erfassten Produktionen.
 ///
 /// Bewusst **personenunabhängig**: Wie viele Leute an einer Anlage stehen,
 /// hängt am einzelnen Schritt (`basisMitarbeiter`) und wird dort im
@@ -383,8 +387,9 @@ class _HistWert extends StatelessWidget {
 class _LeistungsdatenDialog extends ConsumerStatefulWidget {
   const _LeistungsdatenDialog({required this.eintraege});
 
-  /// Je Abteilung: der erste Schritt (trägt die Referenzwerte) und alle
-  /// Schritte der Gruppe (für die Personensumme in der Anzeige).
+  /// Je Abteilung: der erste Schritt (dort landen die Referenzwerte) und
+  /// alle Schritte der Gruppe (für die geltenden Werte und die
+  /// Personensumme in der Anzeige).
   final List<
       ({
         Abteilung abteilung,
@@ -400,25 +405,42 @@ class _LeistungsdatenDialog extends ConsumerStatefulWidget {
 class _LeistungsdatenDialogState
     extends ConsumerState<_LeistungsdatenDialog> {
   late final List<TextEditingController> _menge;
+
   /// Dauer je Abteilung in MINUTEN (aus der Stunden/Minuten-Eingabe).
   late List<double?> _zeitMin;
+
+  /// Stand beim Öffnen — unveränderte Zeilen werden nicht geschrieben,
+  /// und eine geleerte Zeile erkennt man nur im Vergleich.
+  late final List<Leistungsdaten?> _vorher;
+  late final List<String> _mengeVorher;
+
+  /// Was die erfassten Produktionen sagen: die Grundlage, wenn für eine
+  /// Abteilung nichts hinterlegt ist.
+  HistorienLeistung? _historie;
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
-    _menge = [
-      for (final e in widget.eintraege)
-        TextEditingController(
-          text: e.erster.basisMengeKg > 0
-              ? e.erster.basisMengeKg.round().toString()
-              : '',
-        ),
+    _vorher = [
+      for (final e in widget.eintraege) leistungsdatenVon(e.schritte),
     ];
-    _zeitMin = [
-      for (final e in widget.eintraege)
-        e.erster.basisDauerMinuten > 0 ? e.erster.basisDauerMinuten : null,
+    _mengeVorher = [
+      for (final l in _vorher) l == null ? '' : l.mengeKg.round().toString(),
     ];
+    _menge = [for (final t in _mengeVorher) TextEditingController(text: t)];
+    _zeitMin = [for (final l in _vorher) l?.minuten];
+    _ladeHistorie();
+  }
+
+  Future<void> _ladeHistorie() async {
+    if (widget.eintraege.isEmpty) return;
+    final db = ref.read(databaseProvider);
+    final h = await historienLeistung(
+      db,
+      widget.eintraege.first.erster.productId,
+    );
+    if (mounted) setState(() => _historie = h);
   }
 
   @override
@@ -442,40 +464,102 @@ class _LeistungsdatenDialogState
     return '${kgh.toStringAsFixed(0)} kg/h';
   }
 
+  bool _istLeer(int i) => _menge[i].text.trim().isEmpty && _zeitMin[i] == null;
+
+  /// Womit die Abteilung rechnet, solange ihre Zeile leer ist — und für
+  /// die Bratstraße, ob hinterlegte Werte überhaupt zählen.
+  String? _grundlage(int i) {
+    final h = _historie;
+    final bratstrasse =
+        widget.eintraege[i].abteilung == Abteilung.bratstrasse;
+    if (bratstrasse && h != null) {
+      return 'Rechnet mit ${h.herkunft}: ${h.kennzahlen}. Hinterlegte '
+          'Werte gelten hier nur ohne erfasste Produktionen.';
+    }
+    if (!_istLeer(i)) return null;
+    if (h != null) return 'Leer: rechnet mit ${h.herkunft}: ${h.kennzahlen}';
+    return 'Leer: noch keine Produktion mit Zeit erfasst — die Dauer ist '
+        'dann ein Platzhalter.';
+  }
+
+  /// Geändert, aber weder vollständig noch ganz geleert — so lässt sich
+  /// nichts speichern.
+  bool _halbAusgefuellt(int i) {
+    final text = _menge[i].text.trim();
+    final min = _zeitMin[i];
+    if (text == _mengeVorher[i] && min == _vorher[i]?.minuten) return false;
+    final kg = double.tryParse(text.replaceAll(',', '.'));
+    final vollstaendig = kg != null && kg > 0 && min != null && min > 0;
+    return !vollstaendig && !_istLeer(i);
+  }
+
   Future<void> _speichern() async {
-    setState(() => _busy = true);
-    final db = ref.read(databaseProvider);
-    final jetzt = DateTime.now();
-    var geschrieben = 0;
-
+    // Eine halb geleerte Zeile nicht stillschweigend verwerfen.
     for (var i = 0; i < widget.eintraege.length; i++) {
-      final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
-      final min = _zeitMin[i];
-      // Nur vollständig ausgefüllte Abteilungen schreiben — leere Zeilen
-      // lassen den bestehenden Stand unangetastet.
-      if (kg == null || kg <= 0 || min == null || min <= 0) continue;
-
-      await (db.update(db.productSteps)
-            ..where((st) => st.id.equals(widget.eintraege[i].erster.id)))
-          .write(
-        ProductStepsCompanion(
-          mengeKg: Value(kg),
-          basisMengeKg: Value(kg),
-          basisDauerMinuten: Value(min),
-          // basisMitarbeiter bleibt unangetastet — die Zahl gehört dem
-          // einzelnen Schritt, nicht der Abteilung.
-          updatedAt: Value(jetzt),
+      if (!_halbAusgefuellt(i)) continue;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${widget.eintraege[i].abteilung.anzeigeName}: Menge und Zeit '
+            'eintragen — oder beide Felder leeren, dann rechnet die '
+            'Abteilung mit den erfassten Produktionen.',
+          ),
         ),
       );
-      geschrieben++;
+      return;
     }
 
-    if (geschrieben > 0) {
+    setState(() => _busy = true);
+    final db = ref.read(databaseProvider);
+    var geaendert = 0;
+    try {
+      for (var i = 0; i < widget.eintraege.length; i++) {
+        final e = widget.eintraege[i];
+        final vorher = _vorher[i];
+        final text = _menge[i].text.trim();
+        final kg = double.tryParse(text.replaceAll(',', '.'));
+        final min = _zeitMin[i];
+        if (text == _mengeVorher[i] && min == vorher?.minuten) continue;
+
+        if (kg != null && kg > 0 && min != null && min > 0) {
+          // Landet am ersten Schritt der Abteilung; ältere Werte an
+          // anderen Schritten verschwinden — danach gibt es eine Stelle.
+          await ProzesskettenService.setzeLeistungsdaten(
+            db,
+            productId: e.erster.productId,
+            stepId: e.erster.id,
+            mengeKg: kg,
+            minuten: min,
+          );
+          geaendert++;
+        } else if (_istLeer(i) && vorher != null) {
+          // Beide Felder geleert: Die Abteilung rechnet wieder mit den
+          // erfassten Produktionen.
+          await ProzesskettenService.entferneLeistungsdaten(
+            db,
+            productId: e.erster.productId,
+            stepId: e.erster.id,
+          );
+          geaendert++;
+        }
+        // Halb ausgefüllte Zeilen bleiben, wie sie waren.
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
+        );
+      }
+      return;
+    }
+
+    if (geaendert > 0) {
       ref.read(autoBackupTriggerProvider).fireDebounced(
             reason: 'Leistungsdaten erfasst',
           );
     }
-    if (mounted) Navigator.of(context).pop(geschrieben > 0);
+    if (mounted) Navigator.of(context).pop(geaendert > 0);
   }
 
   @override
@@ -493,9 +577,11 @@ class _LeistungsdatenDialogState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Referenz: Welche Menge schafft die Abteilung bei diesem '
-                'Artikel in welcher Zeit? Daraus skaliert die App die Dauer '
-                'jeder Planmenge. Die Personen je Anlage pflegst du im '
+                'Welche Menge schafft die Abteilung bei diesem Artikel in '
+                'welcher Zeit? Daraus rechnet die App die Dauer jeder '
+                'Planmenge hoch. Bleibt eine Abteilung leer, rechnet sie mit '
+                'dem Ø der letzten $kLetzteProduktionen erfassten '
+                'Produktionen. Die Personen je Anlage pflegst du im '
                 'jeweiligen Schritt.',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,
@@ -560,6 +646,16 @@ class _LeistungsdatenDialogState
                     ),
                   ],
                 ),
+                if (_grundlage(i) case final text?) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    text,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
               ],
             ],

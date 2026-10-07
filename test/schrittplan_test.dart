@@ -10,17 +10,52 @@ import 'helpers/test_db.dart';
 /// Tests für `berechneSchrittPlan` — die Rückwärtsrechnung.
 ///
 /// Das ist das Herz der Planung: Aus der gewünschten FERTIGMENGE wird über
-/// die Ausbeutefaktoren zurückgerechnet, wie viel Rohware am Anfang der
-/// Kette stehen muss. Rechnet sie falsch, fehlt in der Produktion Ware —
-/// und zwar erst dann sichtbar, wenn es zu spät ist.
+/// die Ausbeute zurückgerechnet, wie viel Rohware am Anfang der Kette
+/// stehen muss. Rechnet sie falsch, fehlt in der Produktion Ware — und
+/// zwar erst dann sichtbar, wenn es zu spät ist.
+///
+/// Ausbeute und Leistung kommen aus den erfassten Produktionen (Ø der
+/// letzten zehn), die Leistung alternativ aus den hinterlegten
+/// Leistungsdaten der Abteilung. Alle Daten sind erfunden.
 void main() {
   late AppDatabase db;
 
   setUp(() => db = testDatenbank());
   tearDown(() => db.close());
 
+  /// Eine erfasste Produktion: [kg] Rohware, dazu wahlweise Verlust und
+  /// Zeit — als Minuten, als Start/Ende oder als kg/h.
+  Future<void> produktion(
+    String productId, {
+    required String id,
+    DateTime? datum,
+    double? kg = 1000,
+    double? verlust,
+    double? minuten,
+    String? start,
+    String? ende,
+    double? kgProStundeRoh,
+  }) async {
+    await db.into(db.productionHistory).insert(
+          ProductionHistoryCompanion.insert(
+            id: id,
+            productId: productId,
+            datum: datum ?? DateTime(2026, 9, 1),
+            kgRohware: Value(kg),
+            kgFertigware: Value(
+              (kg != null && verlust != null) ? kg * (1 - verlust) : null,
+            ),
+            verlustAnteil: Value(verlust),
+            startzeit: Value(start),
+            endzeit: Value(ende),
+            produktionszeitMinuten: Value(minuten),
+            kgProStundeRoh: Value(kgProStundeRoh),
+          ),
+        );
+  }
+
   group('Rückwärtsrechnung der Mengen', () {
-    test('ohne Ausbeutefaktoren bleibt die Menge über alle Schritte gleich',
+    test('ohne Ausbeute bleibt die Menge über alle Schritte gleich',
         () async {
       await seedArtikel(db, id: 'p1', nummer: '1001');
       await seedSchritt(
@@ -52,24 +87,18 @@ void main() {
       }
     });
 
-    test('ein Ausbeutefaktor erhöht die benötigte Rohware', () async {
+    test('die Ausbeute der erfassten Produktionen erhöht die Rohware',
+        () async {
       await seedArtikel(db, id: 'p2', nummer: '1002');
-      // 80 % Ausbeute: Für 800 kg fertig braucht es 1000 kg Rohware.
       await seedSchritt(
         db,
         id: 's1',
         productId: 'p2',
         reihenfolge: 1,
         abteilung: 'zerlegung',
-        ausbeuteFaktor: 0.8,
       );
-      await seedSchritt(
-        db,
-        id: 's2',
-        productId: 'p2',
-        reihenfolge: 2,
-        abteilung: 'verpackung',
-      );
+      // 20 % Verlust: Für 800 kg fertig braucht es 1000 kg Rohware.
+      await produktion('p2', id: 'h1', verlust: 0.2);
 
       final plan = await berechneSchrittPlan(
         db: db,
@@ -79,11 +108,13 @@ void main() {
       );
 
       expect(plan.rohwareKg, closeTo(1000, 0.01));
+      expect(plan.ausbeute.quelle, AusbeuteQuelle.historie);
     });
 
-    test('mehrere Ausbeutefaktoren multiplizieren sich auf', () async {
+    test('Ausbeute an Schritten oder am Artikel zählt nicht mehr', () async {
+      // Beides war in der App nie einzugeben. Was davon noch in alten
+      // Daten steht, darf den Plan nicht leise verändern.
       await seedArtikel(db, id: 'p3', nummer: '1003');
-      // 0,5 × 0,8 = 0,4 → für 400 kg fertig braucht es 1000 kg Rohware.
       await seedSchritt(
         db,
         id: 's1',
@@ -92,14 +123,8 @@ void main() {
         abteilung: 'zerlegung',
         ausbeuteFaktor: 0.5,
       );
-      await seedSchritt(
-        db,
-        id: 's2',
-        productId: 'p3',
-        reihenfolge: 2,
-        abteilung: 'wurstkueche',
-        ausbeuteFaktor: 0.8,
-      );
+      await (db.update(db.products)..where((p) => p.id.equals('p3')))
+          .write(const ProductsCompanion(gesamtAusbeuteFaktor: Value(0.6)));
 
       final plan = await berechneSchrittPlan(
         db: db,
@@ -108,7 +133,8 @@ void main() {
         startTag: DateTime(2026, 9, 14),
       );
 
-      expect(plan.rohwareKg, closeTo(1000, 0.01));
+      expect(plan.ausbeute.quelle, AusbeuteQuelle.keine);
+      expect(plan.rohwareKg, closeTo(400, 0.01));
     });
   });
 
@@ -184,32 +210,7 @@ void main() {
   });
 
   group('Ausbeute: Rohware und Fertigware', () {
-    Future<void> gesamtausbeute(String productId, double faktor) async {
-      await (db.update(db.products)..where((p) => p.id.equals(productId)))
-          .write(ProductsCompanion(gesamtAusbeuteFaktor: Value(faktor)));
-    }
-
-    Future<void> historie(
-      String productId, {
-      required String id,
-      required double verlust,
-      double? kgProStundeRoh,
-    }) async {
-      await db.into(db.productionHistory).insert(
-            ProductionHistoryCompanion.insert(
-              id: id,
-              productId: productId,
-              datum: DateTime(2026, 9, 1),
-              kgRohware: const Value(1000),
-              kgFertigware: Value(1000 * (1 - verlust)),
-              verlustAnteil: Value(verlust),
-              kgProStundeRoh: Value(kgProStundeRoh),
-            ),
-          );
-    }
-
-    test('unter drei Erfassungen gilt die Gesamtausbeute des Artikels',
-        () async {
+    test('die Ausbeute ist der Ø der erfassten Produktionen', () async {
       await seedArtikel(db, id: 'p7', nummer: '12429');
       await seedSchritt(
         db,
@@ -218,52 +219,50 @@ void main() {
         reihenfolge: 1,
         abteilung: 'bratstrasse',
       );
-      await gesamtausbeute('p7', 0.56);
-      await historie('p7', id: 'h1', verlust: 0.40);
-      await historie('p7', id: 'h2', verlust: 0.42);
+      await produktion('p7', id: 'h1', verlust: 0.40);
+      await produktion('p7', id: 'h2', verlust: 0.42);
 
       final a = await ermittleAusbeute(db, 'p7');
 
-      expect(a.quelle, AusbeuteQuelle.artikel);
-      expect(a.faktor, closeTo(0.56, 1e-9));
-      // Die Historie steht zum Vergleich daneben.
-      expect(a.historie, closeTo(0.59, 1e-9));
+      expect(a.quelle, AusbeuteQuelle.historie);
+      expect(a.faktor, closeTo(0.59, 1e-9));
       expect(a.historieAnzahl, 2);
     });
 
-    test('ab drei Erfassungen gilt der Ø der erfassten Produktionen',
-        () async {
-      await seedArtikel(db, id: 'p12', nummer: '12429');
-      await seedSchritt(
-        db,
-        id: 's1',
-        productId: 'p12',
-        reihenfolge: 1,
-        abteilung: 'bratstrasse',
-        ausbeuteFaktor: 0.7,
+    test('es zählen die letzten zehn Produktionen mit Fertigware', () async {
+      await seedArtikel(db, id: 'p12', nummer: '12430');
+      // Zehn aktuelle mit 40 % Verlust …
+      for (var t = 1; t <= 10; t++) {
+        await produktion(
+          'p12',
+          id: 'neu$t',
+          datum: DateTime(2026, 9, t),
+          verlust: 0.40,
+        );
+      }
+      // … zwei ältere mit 10 % und eine neue ohne Fertigware: Sie zählen
+      // nicht.
+      await produktion(
+        'p12',
+        id: 'alt1',
+        datum: DateTime(2025, 1, 1),
+        verlust: 0.10,
       );
-      await gesamtausbeute('p12', 0.56);
-      await historie('p12', id: 'h1', verlust: 0.40);
-      await historie('p12', id: 'h2', verlust: 0.42);
-      await historie('p12', id: 'h3', verlust: 0.44);
+      await produktion(
+        'p12',
+        id: 'alt2',
+        datum: DateTime(2025, 1, 2),
+        verlust: 0.10,
+      );
+      await produktion('p12', id: 'ohne', datum: DateTime(2026, 9, 20));
 
       final a = await ermittleAusbeute(db, 'p12');
 
-      // Gemessen schlägt gepflegt — auch die Ausbeute am Schritt.
-      expect(a.quelle, AusbeuteQuelle.historie);
-      expect(a.faktor, closeTo(0.58, 1e-9));
-      expect(a.historieAnzahl, 3);
-
-      final plan = await berechneSchrittPlan(
-        db: db,
-        productId: 'p12',
-        mengeKg: 580,
-        startTag: DateTime(2026, 9, 14),
-      );
-      expect(plan.rohwareKg, closeTo(1000, 0.01));
+      expect(a.faktor, closeTo(0.60, 1e-9));
+      expect(a.historieAnzahl, kLetzteProduktionen);
     });
 
-    test('ohne Artikelwert zählt die Historie, erst danach die Eingabe',
+    test('ohne erfasste Produktion gilt die Eingabe im Planen-Dialog',
         () async {
       await seedArtikel(db, id: 'p8', nummer: '1008');
       await seedSchritt(
@@ -280,7 +279,7 @@ void main() {
       );
       expect((await ermittleAusbeute(db, 'p8')).quelle, AusbeuteQuelle.keine);
 
-      await historie('p8', id: 'h1', verlust: 0.25);
+      await produktion('p8', id: 'h1', verlust: 0.25);
       final a = await ermittleAusbeute(db, 'p8', ersatz: 0.7);
 
       expect(a.quelle, AusbeuteQuelle.historie);
@@ -309,7 +308,7 @@ void main() {
         reihenfolge: 2,
         abteilung: 'verpackung',
       );
-      await gesamtausbeute('p9', 0.56);
+      await produktion('p9', id: 'h1', verlust: 0.44);
 
       final a = await ermittleAusbeute(db, 'p9');
       final fertig = a.fertigAusRoh(7200);
@@ -323,7 +322,7 @@ void main() {
       expect(fertig, closeTo(4032, 0.01));
       expect(plan.rohwareKg, closeTo(7200, 0.01));
       expect(plan.fertigwareKg, closeTo(4032, 0.01));
-      expect(plan.ausbeute.quelle, AusbeuteQuelle.artikel);
+      expect(plan.ausbeute.quelle, AusbeuteQuelle.historie);
       // Bis einschließlich Bratstraße Rohware, danach Fertigware.
       expect(plan.schritte[0].mengeKg, closeTo(7200, 0.01));
       expect(plan.schritte[1].mengeKg, closeTo(4032, 0.01));
@@ -340,8 +339,7 @@ void main() {
         reihenfolge: 1,
         abteilung: 'bratstrasse',
       );
-      await gesamtausbeute('p10', 0.56);
-      await historie('p10', id: 'h1', verlust: 0.44, kgProStundeRoh: 620);
+      await produktion('p10', id: 'h1', verlust: 0.44, kgProStundeRoh: 620);
 
       final plan = await berechneSchrittPlan(
         db: db,
@@ -355,7 +353,7 @@ void main() {
       expect(plan.schritte.single.dauerMinuten, closeTo(540, 0.5));
     });
 
-    test('ein von Hand eingetragener Verlust gilt nur ohne eigene Ausbeute',
+    test('ein von Hand eingetragener Verlust gilt nur ohne erfasste Ausbeute',
         () async {
       await seedArtikel(db, id: 'p11', nummer: '1011');
       await seedSchritt(
@@ -376,7 +374,7 @@ void main() {
       expect(ohne.ausbeute.quelle, AusbeuteQuelle.eingabe);
       expect(ohne.rohwareKg, closeTo(1000, 0.01));
 
-      await gesamtausbeute('p11', 0.5);
+      await produktion('p11', id: 'h1', verlust: 0.5);
       final mit = await berechneSchrittPlan(
         db: db,
         productId: 'p11',
@@ -384,43 +382,12 @@ void main() {
         startTag: DateTime(2026, 9, 14),
         ausbeuteErsatz: 0.8,
       );
-      expect(mit.ausbeute.quelle, AusbeuteQuelle.artikel);
+      expect(mit.ausbeute.quelle, AusbeuteQuelle.historie);
       expect(mit.rohwareKg, closeTo(1600, 0.01));
     });
   });
 
-  group('Leistung aus den letzten Produktionen', () {
-    /// Eine erfasste Produktion: [kg] Rohware, die Zeit wahlweise als
-    /// Minuten, als Start/Ende oder als kg/h.
-    Future<void> produktion(
-      String productId, {
-      required String id,
-      required DateTime datum,
-      double? kg,
-      double? minuten,
-      String? start,
-      String? ende,
-      double? kgProStundeRoh,
-    }) async {
-      await db.into(db.productionHistory).insert(
-            ProductionHistoryCompanion.insert(
-              id: id,
-              productId: productId,
-              datum: datum,
-              kgRohware: Value(kg),
-              startzeit: Value(start),
-              endzeit: Value(ende),
-              produktionszeitMinuten: Value(minuten),
-              kgProStundeRoh: Value(kgProStundeRoh),
-            ),
-          );
-    }
-
-    Future<void> ruestzeit(String stepId, double minuten) async {
-      await (db.update(db.productSteps)..where((s) => s.id.equals(stepId)))
-          .write(ProductStepsCompanion(fixZeitMinuten: Value(minuten)));
-    }
-
+  group('Leistung: hinterlegt oder aus den letzten Produktionen', () {
     test('ohne Leistungsdaten rechnet die Abteilung mit dem Ø der letzten '
         'Produktionen', () async {
       // Ø 500 kg in Ø 300 min → 1.000 kg brauchen 600 min.
@@ -464,7 +431,7 @@ void main() {
       expect(s.dauerMinuten, closeTo(600, 0.5));
     });
 
-    test('gepflegte Leistungsdaten gehen den Produktionen vor', () async {
+    test('hinterlegte Leistungsdaten gehen den Produktionen vor', () async {
       await seedArtikel(db, id: 'p21', nummer: '2021');
       // 100 kg in 30 min → 1.000 kg in 300 min.
       await seedSchritt(
@@ -476,13 +443,7 @@ void main() {
         basisMengeKg: 100,
         basisDauerMinuten: 30,
       );
-      await produktion(
-        'p21',
-        id: 'h1',
-        datum: DateTime(2026, 9, 1),
-        kg: 500,
-        minuten: 300,
-      );
+      await produktion('p21', id: 'h1', kg: 500, minuten: 300);
 
       final plan = await berechneSchrittPlan(
         db: db,
@@ -495,6 +456,91 @@ void main() {
       expect(s.dauerQuelle, DauerQuelle.leistungsdaten);
       expect(s.ausHistorie, isFalse);
       expect(s.dauerMinuten, closeTo(300, 0.5));
+    });
+
+    test('die Leistungsdaten gelten auch, wenn eine andere Anlage der '
+        'Abteilung vorn steht', () async {
+      // Früher zählte nur der erste Schritt — zog man eine Anlage davor,
+      // waren die Leistungsdaten scheinbar weg.
+      await seedArtikel(db, id: 'p29', nummer: '2029');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p29',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p29',
+        reihenfolge: 2,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 200,
+        basisDauerMinuten: 60,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p29',
+        mengeKg: 600,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      expect(plan.schritte.single.dauerQuelle, DauerQuelle.leistungsdaten);
+      expect(plan.schritte.single.dauerMinuten, closeTo(180, 0.5));
+    });
+
+    test('eine Zeit ohne Menge ist keine Leistung', () async {
+      await seedArtikel(db, id: 'p30', nummer: '2030');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p30',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        basisMengeKg: 0,
+        basisDauerMinuten: 90,
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p30',
+        mengeKg: 500,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      expect(plan.schritte.single.platzhalter, isTrue);
+      expect(plan.schritte.single.dauerMinuten, kPlatzhalterMinuten);
+    });
+
+    test('fixe Zeiten an den Schritten zählen nicht mehr', () async {
+      await seedArtikel(db, id: 'p25', nummer: '2025');
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p25',
+        reihenfolge: 1,
+        abteilung: 'kutterabteilung',
+        basisMengeKg: 0,
+        basisDauerMinuten: 0,
+      );
+      // Ein Altwert aus früheren Versionen.
+      await (db.update(db.productSteps)..where((s) => s.id.equals('s1')))
+          .write(const ProductStepsCompanion(fixZeitMinuten: Value(20)));
+      await produktion('p25', id: 'h1', kg: 500, minuten: 300);
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p25',
+        mengeKg: 250,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      // 150 min für 250 kg — ohne Rüstzeit obendrauf.
+      expect(plan.schritte.single.dauerMinuten, closeTo(150, 0.5));
     });
 
     test('ohne Leistungsdaten und ohne Produktion mit Zeit bleibt es ein '
@@ -510,7 +556,7 @@ void main() {
         basisDauerMinuten: 0,
       );
       // Eine Menge ohne Zeit: Daraus lässt sich nichts hochrechnen.
-      await produktion('p22', id: 'h1', datum: DateTime(2026, 9, 1), kg: 500);
+      await produktion('p22', id: 'h1', kg: 500);
 
       expect(await historienLeistung(db, 'p22'), isNull);
       final plan = await berechneSchrittPlan(
@@ -593,38 +639,6 @@ void main() {
       expect(h.minuten, closeTo(240, 1e-9));
     });
 
-    test('die Rüstzeit kommt auf die Zeit aus den Produktionen obendrauf',
-        () async {
-      await seedArtikel(db, id: 'p25', nummer: '2025');
-      await seedSchritt(
-        db,
-        id: 's1',
-        productId: 'p25',
-        reihenfolge: 1,
-        abteilung: 'kutterabteilung',
-        basisMengeKg: 0,
-        basisDauerMinuten: 0,
-      );
-      await ruestzeit('s1', 20);
-      await produktion(
-        'p25',
-        id: 'h1',
-        datum: DateTime(2026, 9, 1),
-        kg: 500,
-        minuten: 300,
-      );
-
-      final plan = await berechneSchrittPlan(
-        db: db,
-        productId: 'p25',
-        mengeKg: 250,
-        startTag: DateTime(2026, 9, 14),
-      );
-
-      // 20 min Rüsten + 150 min für 250 kg.
-      expect(plan.schritte.single.dauerMinuten, closeTo(170, 0.5));
-    });
-
     test('eine Bratstraße ohne Produktionen und ohne Leistungsdaten ist ein '
         'Platzhalter', () async {
       await seedArtikel(db, id: 'p26', nummer: '2026');
@@ -662,7 +676,8 @@ void main() {
 
     test('die Menge eines Auftrags ändern rechnet wie das Einplanen',
         () async {
-      // Wurstküche ohne Leistungsdaten, Bratstraße mit 45 min Durchlauf.
+      // Wurstküche ohne Leistungsdaten, Bratstraße mit erfassten
+      // Produktionen.
       await seedArtikel(db, id: 'p27', nummer: '2027');
       await seedSchritt(
         db,
@@ -682,14 +697,7 @@ void main() {
         basisMengeKg: 0,
         basisDauerMinuten: 0,
       );
-      await ruestzeit('s2', 45);
-      await produktion(
-        'p27',
-        id: 'h1',
-        datum: DateTime(2026, 9, 1),
-        kg: 500,
-        minuten: 300,
-      );
+      await produktion('p27', id: 'h1', kg: 500, minuten: 300);
 
       final plan = await berechneSchrittPlan(
         db: db,
@@ -708,9 +716,9 @@ void main() {
         abteilung: 'bratstrasse',
       );
 
-      // 800 kg bei 100 kg/h: 480 min; die Bratstraße +45 min Durchlauf.
+      // 800 kg bei 100 kg/h: 480 min in beiden Abteilungen.
       expect(plan.schritte[0].dauerMinuten, closeTo(480, 0.5));
-      expect(plan.schritte[1].dauerMinuten, closeTo(525, 0.5));
+      expect(plan.schritte[1].dauerMinuten, closeTo(480, 0.5));
       expect(plan.schritte[1].dauerQuelle, DauerQuelle.historie);
 
       final wk = wurstkueche!.dauerFuer(800);
@@ -719,8 +727,7 @@ void main() {
       final bs = bratstrasse!.dauerFuer(800);
       expect(bs.minuten, closeTo(plan.schritte[1].dauerMinuten, 0.5));
       expect(bs.quelle, DauerQuelle.historie);
-      // Halbe Menge, halbe Auflagezeit — der Durchlauf bleibt.
-      expect(bratstrasse.dauerFuer(400).minuten, closeTo(285, 0.5));
+      expect(bratstrasse.dauerFuer(400).minuten, closeTo(240, 0.5));
 
       expect(
         await ladeAbteilungsDauerModell(

@@ -164,7 +164,7 @@ Future<Datenblatt?> datenblattFuerMenge(
     startTag: tag ?? DateTime.now(),
   );
   // Ohne Prozessschritte rechnet der Plan nichts aus — eine Ausbeute kann
-  // trotzdem in den Stammdaten oder in der Historie stehen.
+  // es aus den erfassten Produktionen trotzdem geben.
   final ausbeute = plan.schritte.isEmpty
       ? await ermittleAusbeute(db, productId)
       : plan.ausbeute;

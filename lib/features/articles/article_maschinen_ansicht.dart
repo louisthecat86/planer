@@ -41,7 +41,7 @@ class _KartenAnsichtState extends State<_KartenAnsicht> {
   @override
   void initState() {
     super.initState();
-    // Wenige Abteilungen ? gleich offen, viele ? zugeklappt starten.
+    // Wenige Abteilungen → gleich offen, viele → zugeklappt starten.
     _offen = widget.gruppen.length <= 3
         ? widget.gruppen.map(_schluessel).toSet()
         : <String>{};
@@ -466,13 +466,6 @@ class _MaschinenKachel extends ConsumerWidget {
                             ? Colors.green
                             : (gepflegt == 0 ? Colors.redAccent : Colors.orange),
                       ),
-                    if ((step.fixZeitMinuten ?? 0) > 0) ...[
-                      const SizedBox(width: 6),
-                      _Pille(
-                        text: '${step.fixZeitMinuten!.round()} min fix',
-                        farbe: theme.colorScheme.primary,
-                      ),
-                    ],
                     const Spacer(),
                     Icon(
                       Icons.chevron_right,
@@ -577,42 +570,12 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
       ),
     );
     if (bestaetigt != true) return;
-    final db = ref.read(databaseProvider);
-    final jetzt = DateTime.now();
-
-    await db.transaction(() async {
-      await (db.update(db.productSteps)
-            ..where((s) => s.id.equals(widget.step.id)))
-          .write(
-        ProductStepsCompanion(
-          deletedAt: Value(jetzt),
-          updatedAt: Value(jetzt),
-        ),
-      );
-
-      // Übrige Schritte lückenlos neu durchnummerieren (1..n).
-      //
-      // Ohne das behält der Rest seine alte `reihenfolge` — löscht man
-      // Schritt 1, bleiben 2,3,4 stehen. Die App sortiert das zwar weg,
-      // der Excel-Export nimmt die Nummer aber als Spalte: „Schritt 1"
-      // bliebe leer und alles stünde eine Spalte zu weit rechts.
-      final rest = await (db.select(db.productSteps)
-            ..where((s) => s.productId.equals(widget.step.productId))
-            ..where((s) => s.deletedAt.isNull())
-            ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
-          .get();
-      for (var i = 0; i < rest.length; i++) {
-        if (rest[i].reihenfolge == i + 1) continue;
-        await (db.update(db.productSteps)
-              ..where((s) => s.id.equals(rest[i].id)))
-            .write(
-          ProductStepsCompanion(
-            reihenfolge: Value(i + 1),
-            updatedAt: Value(jetzt),
-          ),
-        );
-      }
-    });
+    // Nummeriert den Rest lückenlos neu (Excel-Spalten) und gibt die
+    // Leistungsdaten der Abteilung weiter, falls dieser Schritt sie trug.
+    await ProzesskettenService.entferneSchritt(
+      ref.read(databaseProvider),
+      widget.step.id,
+    );
 
     ref.read(autoBackupTriggerProvider).fireDebounced(
           reason: 'Schritt aus Prozess entfernt',
@@ -738,47 +701,24 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           // besetzt sein. Die Abteilungszahl im Kopf der Station ist die
           // Summe darüber und aktualisiert sich über `onUpdated()` sofort.
           //
-          // Menge und Dauer bleiben dagegen zentral im Leistungsdaten-
-          // Block je Abteilung — sie sind die Referenz für die
-          // Dauerberechnung.
-          Row(
-            children: [
-              Expanded(
-                child: _WertFeld(
-                  label: 'Personen',
-                  wert: s.basisMitarbeiter > 0
-                      ? '${s.basisMitarbeiter}'
-                      : '–',
-                  onTap: () => _editNumber(
-                    titel: 'Personen an diesem Schritt',
-                    aktuell: s.basisMitarbeiter.toDouble(),
-                    suffix: 'Pers.',
-                    bauen: (v) => ProductStepsCompanion(
-                      basisMitarbeiter: Value(v > 0 ? v.round() : 0),
-                      updatedAt: Value(DateTime.now()),
-                    ),
-                  ),
+          // Zeiten gibt es an der Anlage keine: Die Dauer kommt aus den
+          // Leistungsdaten der Abteilung oder aus den erfassten
+          // Produktionen.
+          SizedBox(
+            width: 220,
+            child: _WertFeld(
+              label: 'Personen',
+              wert: s.basisMitarbeiter > 0 ? '${s.basisMitarbeiter}' : '–',
+              onTap: () => _editNumber(
+                titel: 'Personen an diesem Schritt',
+                aktuell: s.basisMitarbeiter.toDouble(),
+                suffix: 'Pers.',
+                bauen: (v) => ProductStepsCompanion(
+                  basisMitarbeiter: Value(v > 0 ? v.round() : 0),
+                  updatedAt: Value(DateTime.now()),
                 ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _WertFeld(
-                  label: 'Fixe Zeit',
-                  wert: (s.fixZeitMinuten ?? 0) > 0
-                      ? fmtDauer(s.fixZeitMinuten!)
-                      : '–',
-                  onTap: () => _editNumber(
-                    titel: 'Fixe Zeit / Durchlauf (min)',
-                    aktuell: s.fixZeitMinuten,
-                    suffix: 'min',
-                    bauen: (v) => ProductStepsCompanion(
-                      fixZeitMinuten: Value(v > 0 ? v : null),
-                      updatedAt: Value(DateTime.now()),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(height: 12),
 

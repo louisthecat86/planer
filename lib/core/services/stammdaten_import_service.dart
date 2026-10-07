@@ -111,10 +111,14 @@ class StammdatenImportService {
   static const int _zeilePersonen = 12;
   static const int _zeileMenge = 13;
   static const int _zeileZeit = 14;
+
+  /// Zeile 15 hieß früher „Fixe Zeit (min)" und wird nicht mehr gelesen —
+  /// fixe Zeiten gibt es nicht mehr. Ab hier beginnen die Abschnitte.
   static const int _zeileFixZeit = 15;
 
-  /// Höchstzahl an Schrittspalten (B bis K).
-  static const int _maxSchritte = 10;
+  /// Höchstzahl an Schrittspalten (B bis U) — so viele Schritte erlaubt
+  /// die App.
+  static const int _maxSchritte = 20;
 
   /// Parametergruppe, unter der die Werte einer Anlage abgelegt werden.
   static const String _gruppeAnlage = 'MASCHINENEINSTELLUNGEN';
@@ -321,7 +325,6 @@ class StammdatenImportService {
         'personen': _zahl(zelle(_zeilePersonen, spalte)),
         'mengeKg': _zahl(zelle(_zeileMenge, spalte)),
         'dauerMinuten': _minuten(zelle(_zeileZeit, spalte)),
-        'fixZeitMinuten': _zahl(zelle(_zeileFixZeit, spalte)),
         'werte': <Map<String, Object?>>[],
       });
     }
@@ -723,7 +726,6 @@ class StammdatenImportService {
               basisMengeKg: (s['mengeKg'] as double?) ?? 0,
               basisDauerMinuten: (s['dauerMinuten'] as double?) ?? 0,
               basisMitarbeiter: ((s['personen'] as double?) ?? 0).round(),
-              fixZeitMinuten: Value(s['fixZeitMinuten'] as double?),
             ),
           );
           anzSchritte++;

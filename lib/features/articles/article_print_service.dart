@@ -18,6 +18,8 @@ import 'package:printing/printing.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/parameter_namen.dart';
 import '../../core/database/database.dart';
+import '../../core/utils/zeit.dart' show Zeit;
+import '../whiteboard/whiteboard_provider.dart' show leistungsdatenVon;
 import 'article_detail_providers.dart';
 import 'bratstrasse_schema.dart';
 
@@ -29,9 +31,10 @@ typedef _DruckAuswahl = ({Set<String> abteilungen, bool eigeneSeiten});
 ///
 /// Aufbau (angelehnt an die Bratstraßen-Einstellvorlage):
 /// - Kopf mit Artikelnummer, Bezeichnung, Produktgruppe und Druckdatum
-/// - Je Abteilung ein farbiges Band (Abteilungsfarbe + Kurzcode)
-/// - Je Maschine: Kennwerte (Personen / Menge / Dauer / Fixe Zeit / …)
-///   und alle gefüllten Parameter, nach Gruppe geordnet
+/// - Je Abteilung ein farbiges Band (Abteilungsfarbe + Kurzcode) mit den
+///   hinterlegten Leistungsdaten der Abteilung
+/// - Je Maschine: Kennwerte (Personen, Kerntemperatur) und alle gefüllten
+///   Parameter, nach Gruppe geordnet
 /// - Für Bratstraßen-Schritte: grafisches Plattenraster mit Laufrichtung
 ///   (Zone 1 = Einlauf rechts), Bratstraße 10+10 bzw. Kombiofen 12 Zonen
 ///
@@ -201,7 +204,10 @@ class ArticlePrintService {
           _kopf(produkt),
           pw.SizedBox(height: 10),
           for (final eintrag in teile) ...[
-            _abteilungsBand(eintrag.key),
+            _abteilungsBand(
+              eintrag.key,
+              leistung: _leistungText(eintrag.value),
+            ),
             pw.SizedBox(height: 4),
             for (final s in eintrag.value) ...[
               _schrittBlock(
@@ -307,7 +313,16 @@ class ArticlePrintService {
 
   // ── Abteilungsband ────────────────────────────────────────────────
 
-  static pw.Widget _abteilungsBand(String abteilungDb) {
+  /// „Leistung: 600 kg in 1:00 h (600 kg/h)" — die hinterlegten
+  /// Leistungsdaten der Abteilung, null ohne.
+  static String? _leistungText(List<ProductStep> schritte) {
+    final l = leistungsdatenVon(schritte);
+    if (l == null) return null;
+    return 'Leistung: ${_fmt(l.mengeKg)} kg in ${Zeit.kurz(l.minuten)} '
+        '(${_fmt(l.kgProStunde.roundToDouble())} kg/h)';
+  }
+
+  static pw.Widget _abteilungsBand(String abteilungDb, {String? leistung}) {
     final abt = Abteilung.fromDbValue(abteilungDb);
     final farbe = PdfColor.fromInt(abt.farbe.toARGB32());
     final name = abt.anzeigeName;
@@ -347,6 +362,13 @@ class ArticlePrintService {
               color: PdfColors.white,
             ),
           ),
+          if (leistung != null) ...[
+            pw.Spacer(),
+            pw.Text(
+              leistung,
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.white),
+            ),
+          ],
         ],
       ),
     );
@@ -369,26 +391,11 @@ class ArticlePrintService {
     if (step.basisMitarbeiter > 0) {
       kennwerte.add((label: 'Personen', wert: '${step.basisMitarbeiter}'));
     }
-    if (step.basisMengeKg > 0) {
-      kennwerte
-          .add((label: 'Menge (kg)', wert: _fmt(step.basisMengeKg)));
-    }
-    if (step.basisDauerMinuten > 0) {
-      kennwerte.add(
-        (label: 'Dauer (min)', wert: _fmt(step.basisDauerMinuten)),
-      );
-    }
-    final num? fix = step.fixZeitMinuten;
-    if (fix != null && fix > 0) {
-      kennwerte.add((label: 'Fixe Zeit (min)', wert: _fmt(fix)));
-    }
+    // Menge und Zeit sind Leistungsdaten der Abteilung und stehen im
+    // Abteilungsband — an der Anlage gibt es keine Zeiten.
     final num? kt = step.kerntemperaturZiel;
     if (kt != null && kt > 0) {
       kennwerte.add((label: 'Kerntemp. (°C)', wert: _fmt(kt)));
-    }
-    final num? wz = step.wartezeitMinuten;
-    if (wz != null && wz > 0) {
-      kennwerte.add((label: 'Wartezeit (min)', wert: _fmt(wz)));
     }
 
     // Plattenschema nur bei den Maschinen Bratstraße/Dampftunnel — NICHT

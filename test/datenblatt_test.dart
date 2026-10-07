@@ -53,7 +53,19 @@ void main() {
             qualitaetsstufe: const Value('konventionell'),
             verarbeitungsstufe: const Value('gegart'),
             haltbarkeitTage: const Value(21),
-            gesamtAusbeuteFaktor: const Value(0.8),
+          ),
+        );
+    // Ausbeute 80 %: eine erfasste Produktion, 1.000 kg Rohware ergaben
+    // 800 kg Fertigware. Ohne Zeiten — die Dauer kommt aus den
+    // Leistungsdaten der Schritte.
+    await db.into(db.productionHistory).insert(
+          ProductionHistoryCompanion.insert(
+            id: 'h1',
+            productId: 'p1',
+            datum: DateTime(2026, 9, 1),
+            kgRohware: const Value(1000),
+            kgFertigware: const Value(800),
+            verlustAnteil: const Value(0.2),
           ),
         );
     await seedSchritt(

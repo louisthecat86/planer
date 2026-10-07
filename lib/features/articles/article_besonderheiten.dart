@@ -318,8 +318,9 @@ class _MaschinenNotizFeld extends ConsumerWidget {
 /// Läuft der Artikel über die Bratstraße, passiert er den Dampftunnel
 /// automatisch inline: Menge und Produktionszeit sind dieselben, und es
 /// wird dort kein eigenes Personal gebunden. Fehlt die Bratstraße
-/// (das Produkt startet erst am Dampftunnel), gilt das Gegenteil — dann
-/// sind Menge, Zeit und Personal hier eigenständig zu pflegen.
+/// (das Produkt startet erst am Dampftunnel), ist das Personal hier
+/// eigenständig zu pflegen. Zeiten gibt es an der Anlage keine — sie
+/// kommen aus den Leistungsdaten der Abteilung.
 class _InlineHinweis extends ConsumerWidget {
   const _InlineHinweis({required this.productId});
 
@@ -351,7 +352,7 @@ class _InlineHinweis extends ConsumerWidget {
             'entsprechen der Bratstraße, eigenes Personal ist hier nicht '
             'nötig.'
         : 'Produktion startet am Dampftunnel (keine Bratstraße im Prozess) — '
-            'Menge, Zeit und Personal hier eigenständig pflegen.';
+            'Personal hier eigenständig pflegen.';
 
     return Container(
       width: double.infinity,

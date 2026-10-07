@@ -296,7 +296,12 @@ final productionHistoryProvider =
   return (db.select(db.productionHistory)
         ..where((h) => h.productId.equals(productId))
         ..where((h) => h.deletedAt.isNull())
-        ..orderBy([(h) => OrderingTerm.desc(h.datum)]))
+        // Dieselbe Reihenfolge wie in der Planung — so zeigen die
+        // Kennzahlen genau die Produktionen, mit denen sie rechnet.
+        ..orderBy([
+          (h) => OrderingTerm.desc(h.datum),
+          (h) => OrderingTerm.desc(h.createdAt),
+        ]))
       .get();
 });
 

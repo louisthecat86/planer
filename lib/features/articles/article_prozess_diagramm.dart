@@ -419,8 +419,7 @@ class _ProzessKnoten extends ConsumerWidget {
 
     final hatDaten = step.basisMitarbeiter > 0 ||
         step.basisMengeKg > 0 ||
-        step.basisDauerMinuten > 0 ||
-        (step.fixZeitMinuten ?? 0) > 0;
+        step.basisDauerMinuten > 0;
     final accent = dark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
 
     return InkWell(

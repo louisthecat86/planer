@@ -1710,9 +1710,9 @@ class _EinplanenDialogState extends State<_EinplanenDialog> {
       rohware = 'Ausbeute unbekannt — gerechnet ohne Verlust';
     } else {
       final quelle = switch (a.quelle) {
-        AusbeuteQuelle.historie => 'Ø der erfassten Produktionen',
-        AusbeuteQuelle.artikel => 'Gesamtausbeute des Artikels',
-        AusbeuteQuelle.schritte => 'Ausbeute der Schritte',
+        AusbeuteQuelle.historie => a.historieAnzahl == 1
+            ? 'letzte Produktion'
+            : 'Ø der letzten ${a.historieAnzahl} Produktionen',
         AusbeuteQuelle.eingabe || AusbeuteQuelle.keine => '',
       };
       final prozent = (a.faktor * 100).toStringAsFixed(1).replaceAll('.', ',');

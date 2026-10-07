@@ -358,8 +358,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
   /// Hinweistext unter dem Dauerfeld: woher der Wert stammt.
   String? _dauerHinweis(AbteilungsDauer? dauer) {
-    final modell = _modell;
-    if (modell == null || dauer == null) return null;
+    if (_modell == null || dauer == null) return null;
     final h = dauer.historie;
     switch (dauer.quelle) {
       case DauerQuelle.historie:
@@ -369,10 +368,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
             ? null
             : 'Keine Leistungsdaten — aus ${h.herkunft} hochgerechnet';
       case DauerQuelle.leistungsdaten:
-        final messungen = modell.ersterSchritt.basisAnzahlMessungen;
-        return messungen > 0
-            ? 'Aus $messungen Messungen berechnet'
-            : 'Aus den Leistungsdaten hochgerechnet';
+        return 'Aus den Leistungsdaten hochgerechnet';
       case DauerQuelle.platzhalter:
         return 'Platzhalter — weder Leistungsdaten noch Produktionen mit '
             'Zeit erfasst';
@@ -795,8 +791,7 @@ String _fmtKg(double kg) => kg.round().toString().replaceAllMapped(
     );
 
 /// Zeigt, woraus die Dauer dieser Abteilung hochgerechnet wird: aus den
-/// gepflegten Leistungsdaten oder — ohne sie — aus den letzten
-/// Produktionen.
+/// hinterlegten Leistungsdaten oder aus den letzten Produktionen.
 class _GrundlageBox extends StatelessWidget {
   const _GrundlageBox({required this.modell, required this.dauer});
 
@@ -806,8 +801,8 @@ class _GrundlageBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final step = modell.ersterSchritt;
     final h = dauer.historie;
+    final leistung = modell.leistungsdaten;
 
     final zeilen = <Widget>[];
     String? hinweis;
@@ -826,54 +821,20 @@ class _GrundlageBox extends StatelessWidget {
             _infoRow('Ø Zeit', Zeit.lang(h.minuten)),
             _infoRow('Ø Leistung', '${_fmtKg(h.kgProStunde)} kg/h'),
           ]);
-          // In der Bratstraße kommen die festen Durchlaufzeiten aller
-          // Stationen dazu, sonst die Rüstzeit des Schritts.
-          final dazu = modell.istBratstrasse
-              ? modell.festeZeitMinuten
-              : (step.fixZeitMinuten ?? 0.0);
-          if (dazu > 0) {
-            zeilen.add(
-              _infoRow(
-                modell.istBratstrasse ? 'Durchlauf/Verpacken' : 'Fixe Rüstzeit',
-                Zeit.lang(dazu),
-              ),
-            );
-          }
         }
         if (dauer.quelle == DauerQuelle.historieErsatz) {
-          hinweis = 'Für diese Abteilung sind keine Leistungsdaten gepflegt. '
-              'Genauer wird es mit Leistungsdaten im Artikel.';
+          hinweis = 'Für diese Abteilung sind keine Leistungsdaten '
+              'hinterlegt. Genauer wird es mit Leistungsdaten im Artikel.';
         }
       case DauerQuelle.leistungsdaten:
-        final messungen = step.basisAnzahlMessungen;
-        zeilen.addAll([
-          _infoRow(
-            'Basismenge',
-            '${step.basisMengeKg.toStringAsFixed(1)} kg',
-          ),
-          _infoRow(
-            'Basisdauer',
-            '${step.basisDauerMinuten.toStringAsFixed(0)} min',
-          ),
-          if (step.fixZeitMinuten != null && step.fixZeitMinuten! > 0)
-            _infoRow(
-              'Fixe Rüstzeit',
-              '${step.fixZeitMinuten!.toStringAsFixed(0)} min',
-            ),
-          _infoRow(
-            'Basismitarbeiter',
-            '${step.basisMitarbeiter}',
-          ),
-          _infoRow(
-            'Messungen',
-            messungen == 0 ? 'Keine (Schätzwerte)' : '$messungen',
-          ),
-          if (step.dauerStdAbweichung != null)
-            _infoRow(
-              'Standardabweichung',
-              '± ${step.dauerStdAbweichung!.toStringAsFixed(1)} min',
-            ),
-        ]);
+        if (leistung != null) {
+          zeilen.addAll([
+            _infoRow('Grundlage', 'Hinterlegte Leistungsdaten'),
+            _infoRow('Menge', '${_fmtKg(leistung.mengeKg)} kg'),
+            _infoRow('Zeit', Zeit.lang(leistung.minuten)),
+            _infoRow('Leistung', '${_fmtKg(leistung.kgProStunde)} kg/h'),
+          ]);
+        }
       case DauerQuelle.platzhalter:
         hinweis = 'Weder Leistungsdaten noch eine Produktion mit Zeit '
             'erfasst — die Dauer ist ein Platzhalter. Leistungsdaten '
@@ -938,11 +899,6 @@ class _GrundlageBox extends StatelessWidget {
     );
   }
 }
-
-/// Dialog zum Abschließen einer Produktion. Erfasst Datum, Roh-/Fertigmenge
-/// und Zeiten und schreibt daraus eine Zeile in die Excel-Historie. Die
-/// abgeleiteten Kennzahlen (Verlust, kg/h, Produktionszeit) werden live
-/// vorgerechnet, damit man vor dem Speichern sieht, was gespeichert wird.
 
 /// Bietet eine neu hochgerechnete Dauer zum Übernehmen an, wenn sie von
 /// der eingeplanten abweicht.

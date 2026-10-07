@@ -2,40 +2,58 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/utils/zeit.dart';
 
-/// Bottom-Sheet zum Erfassen **oder Bearbeiten** einer Produktion.
+/// Das EINE Formular, mit dem Produktionen erfasst werden — aus dem
+/// Artikel heraus genauso wie aus der Produktionserfassung der Woche.
 ///
-/// Ohne [existing] wird eine neue Zeile in `production_history` angelegt
-/// (`quelle = 'app'`); mit [existing] wird die bestehende Zeile aktualisiert
-/// oder gelöscht. Garverlust-Anteil, Produktionszeit und kg/h werden aus
-/// Rohware, Fertigware und Start-/Endzeit berechnet — identisch zur
-/// Excel-Vorlage (Verlust = 1 − Fertig/Roh, kg/h roh = Roh ÷ Stunden).
+/// Ohne [existing] entsteht eine neue Zeile in `production_history`
+/// (`quelle = 'app'`); mit [existing] wird die bestehende Zeile geändert
+/// oder gelöscht. Verlust, Produktionszeit und kg/h rechnet
+/// [ProduktionErfassenService] — identisch zur Excel-Vorlage und auch über
+/// Mitternacht richtig.
+///
+/// Aus diesen Zeilen stammen Ausbeute und Leistung der Planung (Ø der
+/// letzten zehn Produktionen).
 class ProductionEntryDialog extends ConsumerStatefulWidget {
   const ProductionEntryDialog({
     super.key,
     required this.productId,
     this.existing,
+    this.vorschlagRohKg,
+    this.vorschlagDatum,
+    this.vorschlagStart,
   });
 
   final String productId;
   final ProductionHistoryData? existing;
 
-  /// Öffnet den Dialog. Gibt `true` zurück, wenn gespeichert/gelöscht wurde.
+  /// Vorbelegung für eine neue Produktion, etwa aus dem Wochenplan.
+  final double? vorschlagRohKg;
+  final DateTime? vorschlagDatum;
+  final String? vorschlagStart;
+
+  /// Öffnet das Formular. Gibt `true` zurück, wenn gespeichert oder
+  /// gelöscht wurde.
   static Future<bool> show(
     BuildContext context,
     String productId, {
     ProductionHistoryData? existing,
+    double? vorschlagRohKg,
+    DateTime? vorschlagDatum,
+    String? vorschlagStart,
   }) async {
     final result = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      constraints: const BoxConstraints(maxWidth: 640),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -44,6 +62,9 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
         child: ProductionEntryDialog(
           productId: productId,
           existing: existing,
+          vorschlagRohKg: vorschlagRohKg,
+          vorschlagDatum: vorschlagDatum,
+          vorschlagStart: vorschlagStart,
         ),
       ),
     );
@@ -57,8 +78,6 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
 
 class _ProductionEntryDialogState
     extends ConsumerState<ProductionEntryDialog> {
-  final _uuid = const Uuid();
-
   late DateTime _datum;
   final _rohController = TextEditingController();
   final _fertigController = TextEditingController();
@@ -82,8 +101,11 @@ class _ProductionEntryDialogState
       _endController.text = e.endzeit ?? '';
       _notizenController.text = e.notizen ?? '';
     } else {
-      final now = DateTime.now();
-      _datum = DateTime(now.year, now.month, now.day);
+      final d = widget.vorschlagDatum ?? DateTime.now();
+      _datum = DateTime(d.year, d.month, d.day);
+      final roh = widget.vorschlagRohKg;
+      if (roh != null && roh > 0) _rohController.text = roh.round().toString();
+      _startController.text = widget.vorschlagStart ?? '';
     }
   }
 
@@ -102,53 +124,21 @@ class _ProductionEntryDialogState
   static double? _num(String s) =>
       double.tryParse(s.trim().replaceAll(',', '.'));
 
-  /// "HH:MM" → Minuten seit Mitternacht.
-  static int? _minuten(String s) {
-    final parts = s.trim().split(':');
-    if (parts.length < 2) return null;
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
-    if (h == null || m == null) return null;
-    return h * 60 + m;
-  }
-
   static String _kgText(double? v) {
     if (v == null) return '';
     return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
   }
 
-  // ── Berechnete Werte (live) ───────────────────────────────────────────
-
   double? get _roh => _num(_rohController.text);
   double? get _fertig => _num(_fertigController.text);
 
-  double? get _verlustAnteil {
-    final r = _roh;
-    final f = _fertig;
-    if (r == null || r <= 0 || f == null) return null;
-    return 1 - (f / r);
-  }
-
-  double? get _produktionszeitMinuten {
-    final s = _minuten(_startController.text);
-    final e = _minuten(_endController.text);
-    if (s == null || e == null || e <= s) return null;
-    return (e - s).toDouble();
-  }
-
-  double? get _kgProStundeRoh {
-    final r = _roh;
-    final t = _produktionszeitMinuten;
-    if (r == null || t == null || t <= 0) return null;
-    return r / (t / 60);
-  }
-
-  double? get _kgProStundeGegart {
-    final f = _fertig;
-    final t = _produktionszeitMinuten;
-    if (f == null || t == null || t <= 0) return null;
-    return f / (t / 60);
-  }
+  /// Live gerechnet — mit derselben Rechnung, mit der gespeichert wird.
+  ProduktionsKennzahlen get _kennzahlen => ProduktionErfassenService.kennzahlen(
+        kgRohware: _roh,
+        kgFertigware: _fertig,
+        startzeit: _startController.text,
+        endzeit: _endController.text,
+      );
 
   // ── Formatierung ──────────────────────────────────────────────────────
 
@@ -160,22 +150,18 @@ class _ProductionEntryDialogState
   static String _fmtKg(double v) =>
       v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
 
-  static String _fmtDauer(double minuten) {
-    final h = (minuten / 60).floor();
-    final m = (minuten % 60).round();
-    if (h == 0) return '$m min';
-    if (m == 0) return '$h h';
-    return '$h h $m min';
-  }
-
   // ── Aktionen ──────────────────────────────────────────────────────────
 
   Future<void> _datumWaehlen() async {
+    // Produktionen liegen in der Vergangenheit; morgen ist das Äußerste.
+    // Ein bestehender Eintrag außerhalb dieser Spanne bleibt wählbar.
+    final morgen = DateTime.now().add(const Duration(days: 1));
+    final frueheste = DateTime(2020);
     final picked = await showDatePicker(
       context: context,
       initialDate: _datum,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: _datum.isBefore(frueheste) ? _datum : frueheste,
+      lastDate: _datum.isAfter(morgen) ? _datum : morgen,
     );
     if (picked != null) {
       setState(() => _datum = DateTime(picked.year, picked.month, picked.day));
@@ -192,52 +178,21 @@ class _ProductionEntryDialogState
       );
       return;
     }
+    final fertig = _fertig;
 
     setState(() => _saving = true);
     try {
-      final db = ref.read(databaseProvider);
-      final start = _startController.text.trim();
-      final end = _endController.text.trim();
-      final notizen = _notizenController.text.trim();
-      final jetzt = DateTime.now();
-
-      if (_istBearbeitung) {
-        await (db.update(db.productionHistory)
-              ..where((t) => t.id.equals(widget.existing!.id)))
-            .write(
-          ProductionHistoryCompanion(
-            datum: Value(_datum),
-            kgRohware: Value(roh),
-            kgFertigware: Value(_fertig),
-            verlustAnteil: Value(_verlustAnteil),
-            startzeit: Value(start.isEmpty ? null : start),
-            endzeit: Value(end.isEmpty ? null : end),
-            produktionszeitMinuten: Value(_produktionszeitMinuten),
-            kgProStundeRoh: Value(_kgProStundeRoh),
-            kgProStundeGegart: Value(_kgProStundeGegart),
-            notizen: Value(notizen.isEmpty ? null : notizen),
-            updatedAt: Value(jetzt),
-          ),
-        );
-      } else {
-        await db.into(db.productionHistory).insert(
-              ProductionHistoryCompanion(
-                id: Value(_uuid.v4()),
-                productId: Value(widget.productId),
-                datum: Value(_datum),
-                kgRohware: Value(roh),
-                kgFertigware: Value(_fertig),
-                verlustAnteil: Value(_verlustAnteil),
-                startzeit: Value(start.isEmpty ? null : start),
-                endzeit: Value(end.isEmpty ? null : end),
-                produktionszeitMinuten: Value(_produktionszeitMinuten),
-                kgProStundeRoh: Value(_kgProStundeRoh),
-                kgProStundeGegart: Value(_kgProStundeGegart),
-                notizen: Value(notizen.isEmpty ? null : notizen),
-                quelle: const Value('app'),
-              ),
-            );
-      }
+      await ProduktionErfassenService.speichere(
+        db: ref.read(databaseProvider),
+        productId: widget.productId,
+        datum: _datum,
+        kgRohware: roh,
+        kgFertigware: (fertig != null && fertig > 0) ? fertig : null,
+        startzeit: _startController.text,
+        endzeit: _endController.text,
+        notizen: _notizenController.text,
+        vorhandeneId: widget.existing?.id,
+      );
 
       ref
           .read(autoBackupTriggerProvider)
@@ -310,6 +265,8 @@ class _ProductionEntryDialogState
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final k = _kennzahlen;
+    final fertig = _fertig;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.85,
@@ -331,10 +288,7 @@ class _ProductionEntryDialogState
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.25),
+                    color: colors.onSurface.withValues(alpha: 0.25),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -350,8 +304,9 @@ class _ProductionEntryDialogState
               ),
               const SizedBox(height: 4),
               Text(
-                'Die Werte landen in der Historie dieses Artikels und '
-                'können in die Excel zurückgeschrieben werden.',
+                'Aus den erfassten Produktionen rechnet die Planung Ausbeute '
+                'und Leistung (Ø der letzten zehn). Die Werte lassen sich in '
+                'die Excel zurückschreiben.',
                 style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
               ),
               const SizedBox(height: 16),
@@ -406,7 +361,7 @@ class _ProductionEntryDialogState
               ),
               const SizedBox(height: 14),
 
-              // Start + End
+              // Start + Ende
               Row(
                 children: [
                   Expanded(
@@ -445,11 +400,18 @@ class _ProductionEntryDialogState
               const SizedBox(height: 16),
 
               // Live-Vorschau der berechneten Werte
-              _Vorschau(
-                verlustAnteil: _verlustAnteil,
-                produktionszeitMinuten: _produktionszeitMinuten,
-                kgProStundeRoh: _kgProStundeRoh,
-              ),
+              _Vorschau(kennzahlen: k),
+              if (fertig == null || fertig <= 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  'Ohne Fertigware zählt diese Produktion nicht für die '
+                  'Ausbeute, ohne Start- und Endzeit nicht für die Leistung.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
               const SizedBox(height: 20),
 
               SizedBox(
@@ -498,39 +460,34 @@ class _ProductionEntryDialogState
   }
 }
 
-/// Zeigt die live berechneten Kennzahlen (Garverlust, Dauer, kg/h).
+/// Zeigt die live berechneten Kennzahlen (Verlust, Dauer, kg/h).
 class _Vorschau extends StatelessWidget {
-  const _Vorschau({
-    required this.verlustAnteil,
-    required this.produktionszeitMinuten,
-    required this.kgProStundeRoh,
-  });
+  const _Vorschau({required this.kennzahlen});
 
-  final double? verlustAnteil;
-  final double? produktionszeitMinuten;
-  final double? kgProStundeRoh;
+  final ProduktionsKennzahlen kennzahlen;
 
   @override
   Widget build(BuildContext context) {
-    final eintraege = <({String label, String wert})>[];
-    if (verlustAnteil != null) {
-      eintraege.add((
-        label: 'Garverlust',
-        wert: '${(verlustAnteil! * 100).toStringAsFixed(1)} %',
-      ),);
-    }
-    if (produktionszeitMinuten != null) {
-      eintraege.add((
-        label: 'Dauer',
-        wert: _ProductionEntryDialogState._fmtDauer(produktionszeitMinuten!),
-      ),);
-    }
-    if (kgProStundeRoh != null) {
-      eintraege.add((
-        label: 'kg/h roh',
-        wert: _ProductionEntryDialogState._fmtKg(kgProStundeRoh!),
-      ),);
-    }
+    final k = kennzahlen;
+    final eintraege = <({String label, String wert})>[
+      if (k.verlustAnteil != null)
+        (
+          label: 'Verlust',
+          wert: '${(k.verlustAnteil! * 100).toStringAsFixed(1)} %',
+        ),
+      if (k.produktionszeitMinuten != null)
+        (label: 'Dauer', wert: Zeit.lang(k.produktionszeitMinuten)),
+      if (k.kgProStundeRoh != null)
+        (
+          label: 'kg/h roh',
+          wert: _ProductionEntryDialogState._fmtKg(k.kgProStundeRoh!),
+        ),
+      if (k.kgProStundeGegart != null)
+        (
+          label: 'kg/h gegart',
+          wert: _ProductionEntryDialogState._fmtKg(k.kgProStundeGegart!),
+        ),
+    ];
 
     if (eintraege.isEmpty) {
       return Container(
@@ -543,7 +500,7 @@ class _Vorschau extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
-          'Garverlust und kg/h erscheinen hier automatisch, sobald Roh-, '
+          'Verlust und kg/h erscheinen hier automatisch, sobald Roh-, '
           'Fertigmenge und Zeiten ausgefüllt sind.',
           style: TextStyle(
             fontSize: 12,
