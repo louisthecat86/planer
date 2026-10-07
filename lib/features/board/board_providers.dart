@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/erledigt_service.dart';
+import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 
@@ -73,6 +75,7 @@ class BoardTask {
     required this.mitgliederIds,
     this.parentTaskId,
     this.maschineId,
+    this.erledigt,
   });
 
   final String id;
@@ -114,6 +117,10 @@ class BoardTask {
   /// IDs aller zusammengefassten Tasks (gleiches Produkt + Abteilung + Tag).
   /// Bei einem einzelnen Task = [id]. Verschieben/Sortieren wirkt auf alle.
   final List<String> mitgliederIds;
+
+  /// Ob und warum die Karte erledigt ist — null = offen. Eine gebündelte
+  /// Karte ist erledigt, wenn es alle ihre Aufträge sind.
+  final Erledigt? erledigt;
 }
 
 /// Eine Kapazitäts-SPUR im Board.
@@ -362,7 +369,12 @@ final weekBoardProvider = FutureProvider.autoDispose
   final tage = List.generate(5, (i) => tagPlus(wochenStart, i));
   final wochenEndeExkl = tagPlus(wochenStart, 7);
 
-  final alleTasks = await _ladeBoardTasks(db, wochenStart, wochenEndeExkl);
+  final alleTasks = await _ladeBoardTasks(
+    db,
+    wochenStart,
+    wochenEndeExkl,
+    mitErledigt: true,
+  );
 
   // Kettenmarker: Vor-/Folgestufen derselben Auftragskette, die außerhalb
   // dieser Woche liegen (wochenübergreifende Produktionen).
@@ -446,7 +458,12 @@ final dayBoardProvider = FutureProvider.autoDispose
   final tag = DateTime(datum.year, datum.month, datum.day);
   final naechsterTag = tagPlus(tag, 1);
 
-  final alleTasks = await _ladeBoardTasks(db, tag, naechsterTag);
+  final alleTasks = await _ladeBoardTasks(
+    db,
+    tag,
+    naechsterTag,
+    mitErledigt: true,
+  );
   final planungsAnlagen = await _ladePlanungsAnlagen(db);
   final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
@@ -490,6 +507,24 @@ final dayBoardProvider = FutureProvider.autoDispose
   return DayBoard(tag: tag, lanes: lanes);
 });
 
+/// Sonstige Aufgaben der Woche, in die [anyDayInWeek] fällt — je
+/// Abteilung und Tag in ihrer Reihenfolge. Lädt Montag bis Sonntag, damit
+/// auch die Tagesansicht am Wochenende ihre Einträge findet.
+///
+/// Eigener Provider statt eines Teils des Wochenboards: Ein Haken an einer
+/// Aufgabe lädt so nur die Aufgaben neu, nicht das ganze Board.
+final tagesaufgabenProvider = FutureProvider.autoDispose
+    .family<Map<AufgabenZelle, List<Tagesaufgabe>>, DateTime>(
+        (ref, anyDayInWeek) {
+  final db = ref.watch(databaseProvider);
+  final montag = _montag(anyDayInWeek);
+  return TagesaufgabenService.fuerZeitraum(
+    db,
+    von: montag,
+    bisExkl: tagPlus(montag, 7),
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Interne Helfer
 // ---------------------------------------------------------------------------
@@ -497,11 +532,16 @@ final dayBoardProvider = FutureProvider.autoDispose
 /// Lädt alle nicht-stornierten, nicht gelöschten Tasks im Zeitraum
 /// [startInkl] (inklusive) bis [endeExkl] (exklusive) und reichert sie mit
 /// dem Produktnamen an.
+///
+/// [mitErledigt]: zusätzlich bestimmen, welche Karten erledigt sind
+/// (abgehakt oder Produktion erfasst). Nur das Board braucht das — die
+/// Kapazitätsrechnung spart sich die Abfragen.
 Future<List<BoardTask>> _ladeBoardTasks(
   AppDatabase db,
   DateTime startInkl,
-  DateTime endeExkl,
-) async {
+  DateTime endeExkl, {
+  bool mitErledigt = false,
+}) async {
   final rows = await (db.select(db.productionTasks)
         ..where((t) => t.deletedAt.isNull())
         ..where((t) => t.datum.isBiggerOrEqualValue(startInkl))
@@ -524,6 +564,10 @@ Future<List<BoardTask>> _ladeBoardTasks(
     for (final p in produkte) p.id: p.artikelnummer,
   };
 
+  final erledigtStand = mitErledigt
+      ? await ErledigtService.stand(db, rows)
+      : const <String, Erledigt>{};
+
   final perRow = <BoardTask>[];
   for (final t in rows) {
     final abteilung = _abteilungOf(t.abteilung);
@@ -544,6 +588,7 @@ Future<List<BoardTask>> _ladeBoardTasks(
         sortierung: t.sortierung,
         status: t.status,
         mitgliederIds: [t.id],
+        erledigt: erledigtStand[t.id],
       ),
     );
   }
@@ -593,10 +638,23 @@ Future<List<BoardTask>> _ladeBoardTasks(
         sortierung: sortierung,
         status: g.first.status,
         mitgliederIds: [for (final t in g) t.id],
+        erledigt: _erledigtGebuendelt(g),
       ),
     );
   }
   return result;
+}
+
+/// Erledigt-Stand einer gebündelten Karte: erfasst, wenn alle ihre
+/// Aufträge erfasst sind; abgehakt, wenn alle erledigt sind und
+/// mindestens einer davon nur abgehakt — den Haken kann man dann noch
+/// zurücknehmen. Sonst offen.
+Erledigt? _erledigtGebuendelt(List<BoardTask> gruppe) {
+  if (gruppe.every((t) => t.erledigt == Erledigt.erfasst)) {
+    return Erledigt.erfasst;
+  }
+  if (gruppe.every((t) => t.erledigt != null)) return Erledigt.abgehakt;
+  return null;
 }
 
 /// Sortiert Tasks innerhalb einer Zelle/Spur: zuerst nach der manuellen

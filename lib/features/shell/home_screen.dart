@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/backup_service.dart';
+import '../../core/services/erledigt_service.dart';
 import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/vollbild.dart';
@@ -33,22 +34,27 @@ final selectedDateProvider = StateProvider<DateTime>((ref) {
 class _Auftrag {
   const _Auftrag({
     required this.abteilung,
+    required this.productId,
     required this.nummer,
     required this.name,
     required this.mengeKg,
     required this.minuten,
-    required this.erfasst,
+    required this.erledigt,
   });
 
   final Abteilung? abteilung;
+
+  /// null, wenn es den Artikel nicht mehr gibt — dann gibt es auch keine
+  /// Stammdaten zum Öffnen.
+  final String? productId;
   final String nummer;
   final String name;
   final double mengeKg;
   final double minuten;
 
-  /// Nur für Ketten-Wurzeln bedeutsam — eine Produktion wird einmal
-  /// erfasst, nicht je Abteilungsschritt.
-  final bool? erfasst;
+  /// Wie im Board: von Hand abgehakt oder die Produktion ist erfasst.
+  /// null = offen.
+  final Erledigt? erledigt;
 }
 
 class _Auslastung {
@@ -181,17 +187,19 @@ final _uebersichtProvider =
       return a.sortierung.compareTo(b.sortierung);
     });
 
+  // Erledigt wie im Board: abgehakt, oder die Produktion ist erfasst —
+  // dann jeder Schritt ihrer Kette, nicht nur der erste.
+  final erledigt = await ErledigtService.stand(db, heuteTasks);
   final auftraege = [
     for (final t in heuteTasks)
       _Auftrag(
         abteilung: abteilungVon(t.abteilung),
+        productId: produktVon.containsKey(t.productId) ? t.productId : null,
         nummer: produktVon[t.productId]?.artikelnummer ?? '—',
         name: produktVon[t.productId]?.artikelbezeichnung ?? 'Unbekannt',
         mengeKg: t.mengeKg,
         minuten: t.geplanteDauerMinuten,
-        erfasst: t.parentTaskId == null
-            ? istErfasst(t.productId, heute)
-            : null,
+        erledigt: erledigt[t.id],
       ),
   ];
 
@@ -514,6 +522,20 @@ Future<void> _oeffne(BuildContext context, WidgetRef ref, String ziel) async {
   _neuLaden(ref);
 }
 
+/// Öffnet die Stammdaten eines Artikels. Auch danach neu laden: Im Artikel
+/// lässt sich eine Produktion erfassen, und die macht den Auftrag grün.
+Future<void> _oeffneArtikel(
+  BuildContext context,
+  WidgetRef ref,
+  String productId,
+) async {
+  await context.pushNamed(
+    'articleDetail',
+    pathParameters: {'productId': productId},
+  );
+  _neuLaden(ref);
+}
+
 // ── Kopf ────────────────────────────────────────────────────────────────
 
 class _Kopf extends ConsumerWidget {
@@ -773,6 +795,13 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
         return abt == null || !_HeuteKarte._versteckt.contains(abt.dbValue);
       }).toList();
 
+  /// Antippen einer Zeile öffnet die Stammdaten des Artikels.
+  VoidCallback? _oeffnerFuer(_Auftrag a) {
+    final id = a.productId;
+    if (id == null) return null;
+    return () => _oeffneArtikel(context, ref, id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -865,7 +894,11 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
                     ),
                   ),
                 for (final a in sichtbare)
-                  _AuftragZeile(auftrag: a, skala: skala),
+                  _AuftragZeile(
+                    auftrag: a,
+                    skala: skala,
+                    onTap: _oeffnerFuer(a),
+                  ),
                 if (gefiltert && sichtbare.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 8),
@@ -989,13 +1022,19 @@ class _AbteilungsFilter extends StatelessWidget {
 }
 
 class _AuftragZeile extends StatelessWidget {
-  const _AuftragZeile({required this.auftrag, this.skala = 1.0});
+  const _AuftragZeile({required this.auftrag, this.skala = 1.0, this.onTap});
 
   final _Auftrag auftrag;
 
   /// Zoomfaktor der Karte: skaliert Schrift, Abstände und die festen
   /// Spaltenbreiten gemeinsam, damit die Zeile im Raster bleibt.
   final double skala;
+
+  /// Öffnet die Stammdaten des Artikels. null, wenn es ihn nicht mehr gibt.
+  final VoidCallback? onTap;
+
+  /// Dasselbe Grün wie im Board.
+  static const Color _gruen = Color(0xFF43A047);
 
   @override
   Widget build(BuildContext context) {
@@ -1006,69 +1045,88 @@ class _AuftragZeile extends StatelessWidget {
     TextStyle? skaliert(TextStyle? stil) =>
         stil?.copyWith(fontSize: (stil.fontSize ?? 14) * skala);
 
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 8 * skala),
-      decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: theme.dividerColor)),
-      ),
-      child: Row(
-        children: [
-          // Gefüllt wie im Board: Als Schrift auf blassem Grund war das
-          // Braun der Bratstraße im dunklen Modus kaum zu erkennen.
-          Container(
-            width: 30 * skala,
-            padding: EdgeInsets.symmetric(vertical: 2 * skala),
-            decoration: BoxDecoration(
-              color: farbe,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              a.abteilung?.kurzcode ?? '?',
-              style: skaliert(theme.textTheme.labelSmall)?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
+    final haken = switch (a.erledigt) {
+      null => null,
+      Erledigt.erfasst => Tooltip(
+          message: 'Produktion erfasst',
+          child: Icon(
+            Icons.fact_check_rounded,
+            size: 16 * skala,
+            color: _gruen,
+          ),
+        ),
+      Erledigt.abgehakt => Tooltip(
+          message: 'Erledigt',
+          child: Icon(
+            Icons.check_box_rounded,
+            size: 16 * skala,
+            color: _gruen,
+          ),
+        ),
+    };
+
+    // Material statt Farbe am Container: Die Tipp- und Hover-Welle des
+    // InkWell malt auf das nächste Material. Läge die Farbe darüber, wäre
+    // sie unsichtbar.
+    return Material(
+      color: a.erledigt == null
+          ? Colors.transparent
+          : _gruen.withValues(alpha: 0.10),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 8 * skala),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: theme.dividerColor)),
+          ),
+          child: Row(
+            children: [
+              // Gefüllt wie im Board: Als Schrift auf blassem Grund war das
+              // Braun der Bratstraße im dunklen Modus kaum zu erkennen.
+              Container(
+                width: 30 * skala,
+                padding: EdgeInsets.symmetric(vertical: 2 * skala),
+                decoration: BoxDecoration(
+                  color: farbe,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  a.abteilung?.kurzcode ?? '?',
+                  style: skaliert(theme.textTheme.labelSmall)?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
               ),
-            ),
+              SizedBox(width: 10 * skala),
+              SizedBox(
+                width: 52 * skala,
+                child: Text(
+                  a.nummer,
+                  style: skaliert(theme.textTheme.bodyMedium)
+                      ?.copyWith(color: theme.colorScheme.primary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  a.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: skaliert(theme.textTheme.bodyMedium),
+                ),
+              ),
+              SizedBox(width: 12 * skala),
+              Text(
+                '${_kg(a.mengeKg)} · ${Zeit.kurz(a.minuten)}',
+                style: skaliert(theme.textTheme.bodySmall)
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+              SizedBox(width: 10 * skala),
+              SizedBox(width: 18 * skala, child: haken),
+            ],
           ),
-          SizedBox(width: 10 * skala),
-          SizedBox(
-            width: 52 * skala,
-            child: Text(
-              a.nummer,
-              style: skaliert(theme.textTheme.bodyMedium)
-                  ?.copyWith(color: theme.colorScheme.primary),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              a.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: skaliert(theme.textTheme.bodyMedium),
-            ),
-          ),
-          SizedBox(width: 12 * skala),
-          Text(
-            '${_kg(a.mengeKg)} · ${Zeit.kurz(a.minuten)}',
-            style: skaliert(theme.textTheme.bodySmall)
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          SizedBox(width: 10 * skala),
-          SizedBox(
-            width: 18 * skala,
-            child: a.erfasst == true
-                ? Tooltip(
-                    message: 'Erfasst',
-                    child: Icon(
-                      Icons.check_circle_rounded,
-                      size: 16 * skala,
-                      color: Colors.green.shade600,
-                    ),
-                  )
-                : null,
-          ),
-        ],
+        ),
       ),
     );
   }

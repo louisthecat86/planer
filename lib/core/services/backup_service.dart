@@ -32,7 +32,8 @@ class BackupService {
   /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
   /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
   /// 1.4 → inkl. `demands`, `production_history`, `week_snapshots`
-  static const String _currentVersion = '1.4';
+  /// 1.5 → inkl. `tagesaufgaben`
+  static const String _currentVersion = '1.5';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -43,6 +44,7 @@ class BackupService {
     '1.2',
     '1.3',
     '1.4',
+    '1.5',
   };
 
   /// Schlüssel des selbst gewählten Backup-Ordners.
@@ -282,6 +284,8 @@ class BackupService {
         'demands': await _exportDemands(database),
         'production_history': await _exportProductionHistory(database),
         'week_snapshots': await _exportWeekSnapshots(database),
+        // ── ab Backup-Version 1.5 ────────────────────────────────────
+        'tagesaufgaben': await _exportTagesaufgaben(database),
       },
     };
   }
@@ -387,6 +391,7 @@ class BackupService {
         await _importDemands(database, data);
         await _importProductionHistory(database, data);
         await _importWeekSnapshots(database, data);
+        await _importTagesaufgaben(database, data);
         await _importAppSettings(database, data);
       });
     } catch (e) {
@@ -703,6 +708,16 @@ class BackupService {
           .map((s) => s.toJson())
           .toList();
 
+  // ── Backup-Version 1.5: Tagesaufgaben ──────────────────────────────
+
+  /// Sonstige Aufgaben je Abteilung und Tag (Wochenboard).
+  static Future<List<Map<String, dynamic>>> _exportTagesaufgaben(
+    AppDatabase db,
+  ) async =>
+      (await db.select(db.tagesaufgaben).get())
+          .map((a) => a.toJson())
+          .toList();
+
   // ============================================================================
   // PRIVATE IMPORT-METHODEN
   // ============================================================================
@@ -1001,6 +1016,24 @@ class BackupService {
     );
   }
 
+  // ── Backup-Version 1.5: Tagesaufgaben ──────────────────────────────
+  // Ältere Backups kennen den Schlüssel nicht — dann bleibt die Liste
+  // leer.
+
+  static Future<void> _importTagesaufgaben(
+    AppDatabase db,
+    Map<String, dynamic> data,
+  ) async {
+    final zeilen = _zeilen(data, 'tagesaufgaben');
+    if (zeilen.isEmpty) return;
+    final eintraege = zeilen
+        .map((z) => Tagesaufgabe.fromJson(z).toCompanion(true))
+        .toList();
+    await db.batch(
+      (b) => b.insertAllOnConflictUpdate(db.tagesaufgaben, eintraege),
+    );
+  }
+
   // ============================================================================
   // CLEAR DATABASE
   // ============================================================================
@@ -1031,8 +1064,9 @@ class BackupService {
     await db.delete(db.parameterGrenzen).go();
     // Anlagen-Katalog
     await db.delete(db.machines).go();
-    // Wochen-Snapshots (eigenständig, keine FK).
+    // Wochen-Snapshots und Tagesaufgaben (eigenständig, keine FK).
     await db.delete(db.weekSnapshots).go();
+    await db.delete(db.tagesaufgaben).go();
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
     await db.delete(db.appSettings).go();
   }

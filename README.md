@@ -47,6 +47,13 @@ stellt jede Aufgabe als Zeitbalken dar — je länger die Dauer, desto höher di
 Karte, der leere Platz unten zeigt die freie Zeit. Beide Ansichten lassen sich
 als A4-PDF drucken (Artikel, Menge, Dauer je Abteilung).
 
+Erledigtes ist grün: Karten lassen sich abhaken, und sobald eine Produktion
+erfasst ist, wird ihre ganze Kette automatisch grün (zugeordnet über Artikel
+und Starttag der Kette, wie in der Produktionserfassung). Unter ihren Anlagen
+hat jede Abteilung eine Zeile „Sonstige Aufgaben" für alles, was nicht aus der
+Planung eines Artikels kommt — mit + je Tag, abhakbar und per Ziehen auf einen
+anderen Tag verschiebbar.
+
 ## Excel-Vorlage (v3) — das Datenfundament
 
 Die Stammdaten werden in der **v3-Vorlage** gesammelt und importiert. Aufbau:

@@ -17,6 +17,7 @@ import 'tables/production_tasks.dart';
 import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
+import 'tables/tagesaufgaben.dart';
 import 'tables/task_dependencies.dart';
 import 'tables/week_snapshots.dart';
 import 'tables/zusatzzeiten.dart';
@@ -55,6 +56,7 @@ part 'database.g.dart';
     AuftragsbestandPositionen,
     AuftragsbestandArtikelVorher,
     AuftragsbestandPositionenVorher,
+    Tagesaufgaben,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -72,7 +74,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 30;
+  int get schemaVersion => 31;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -493,6 +495,14 @@ class AppDatabase extends _$AppDatabase {
           if (from < 30) {
             await m.createTable(auftragsbestandArtikelVorher);
             await m.createTable(auftragsbestandPositionenVorher);
+          }
+
+          // --- v30 → v31: Sonstige Aufgaben im Wochenboard --------------
+          // Von Hand eingetragene Aufgaben je Abteilung und Tag, abhakbar
+          // und auf andere Tage verschiebbar. createTable arbeitet mit
+          // IF NOT EXISTS.
+          if (from < 31) {
+            await m.createTable(tagesaufgaben);
           }
         },
         beforeOpen: (details) async {

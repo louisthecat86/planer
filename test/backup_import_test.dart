@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/services/backup_service.dart';
+import 'package:produktion_planer/core/services/tagesaufgaben_service.dart';
 
 import 'helpers/test_db.dart';
 
@@ -131,6 +132,41 @@ void main() {
 
       final artikel = await db.select(db.products).get();
       expect(artikel.single.istEingepflegt, isTrue);
+    });
+
+    test('spielt Tagesaufgaben ein und ersetzt die vorhandenen', () async {
+      await TagesaufgabenService.anlegen(
+        db,
+        tag: DateTime(2026, 10, 6),
+        abteilung: 'zerlegung',
+        inhalt: 'Alter Eintrag',
+      );
+
+      final pfad = await schreibeBackup(
+        {
+          'tagesaufgaben': [
+            {
+              'id': 'a1',
+              'datum': DateTime(2026, 10, 5).millisecondsSinceEpoch,
+              'abteilung': 'wurstkueche',
+              'inhalt': 'Kessel entkalken',
+              'erledigt': true,
+              'sortierung': 0,
+              'createdAt': 0,
+              'updatedAt': 0,
+            },
+          ],
+        },
+        version: '1.5',
+      );
+
+      await BackupService.importBackup(pfad, db, sicherungAnlegen: false);
+
+      final aufgaben = await db.select(db.tagesaufgaben).get();
+      expect(aufgaben.single.inhalt, 'Kessel entkalken');
+      expect(aufgaben.single.abteilung, 'wurstkueche');
+      expect(aufgaben.single.erledigt, isTrue);
+      expect(aufgaben.single.datum, DateTime(2026, 10, 5));
     });
   });
 

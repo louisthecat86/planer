@@ -15668,6 +15668,485 @@ class AuftragsbestandPositionenVorherCompanion
   }
 }
 
+class $TagesaufgabenTable extends Tagesaufgaben
+    with TableInfo<$TagesaufgabenTable, Tagesaufgabe> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TagesaufgabenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _datumMeta = const VerificationMeta('datum');
+  @override
+  late final GeneratedColumn<DateTime> datum = GeneratedColumn<DateTime>(
+      'datum', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _abteilungMeta =
+      const VerificationMeta('abteilung');
+  @override
+  late final GeneratedColumn<String> abteilung = GeneratedColumn<String>(
+      'abteilung', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _inhaltMeta = const VerificationMeta('inhalt');
+  @override
+  late final GeneratedColumn<String> inhalt = GeneratedColumn<String>(
+      'inhalt', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _erledigtMeta =
+      const VerificationMeta('erledigt');
+  @override
+  late final GeneratedColumn<bool> erledigt = GeneratedColumn<bool>(
+      'erledigt', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("erledigt" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _sortierungMeta =
+      const VerificationMeta('sortierung');
+  @override
+  late final GeneratedColumn<int> sortierung = GeneratedColumn<int>(
+      'sortierung', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        datum,
+        abteilung,
+        inhalt,
+        erledigt,
+        sortierung,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tagesaufgaben';
+  @override
+  VerificationContext validateIntegrity(Insertable<Tagesaufgabe> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('datum')) {
+      context.handle(
+          _datumMeta, datum.isAcceptableOrUnknown(data['datum']!, _datumMeta));
+    } else if (isInserting) {
+      context.missing(_datumMeta);
+    }
+    if (data.containsKey('abteilung')) {
+      context.handle(_abteilungMeta,
+          abteilung.isAcceptableOrUnknown(data['abteilung']!, _abteilungMeta));
+    } else if (isInserting) {
+      context.missing(_abteilungMeta);
+    }
+    if (data.containsKey('inhalt')) {
+      context.handle(_inhaltMeta,
+          inhalt.isAcceptableOrUnknown(data['inhalt']!, _inhaltMeta));
+    } else if (isInserting) {
+      context.missing(_inhaltMeta);
+    }
+    if (data.containsKey('erledigt')) {
+      context.handle(_erledigtMeta,
+          erledigt.isAcceptableOrUnknown(data['erledigt']!, _erledigtMeta));
+    }
+    if (data.containsKey('sortierung')) {
+      context.handle(
+          _sortierungMeta,
+          sortierung.isAcceptableOrUnknown(
+              data['sortierung']!, _sortierungMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Tagesaufgabe map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Tagesaufgabe(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      datum: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
+      abteilung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}abteilung'])!,
+      inhalt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}inhalt'])!,
+      erledigt: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}erledigt'])!,
+      sortierung: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sortierung'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $TagesaufgabenTable createAlias(String alias) {
+    return $TagesaufgabenTable(attachedDatabase, alias);
+  }
+}
+
+class Tagesaufgabe extends DataClass implements Insertable<Tagesaufgabe> {
+  /// UUID.
+  final String id;
+
+  /// Tag, für den die Aufgabe gilt (auf 00:00 normalisiert).
+  final DateTime datum;
+
+  /// Abteilung, gespeichert als [Abteilung.dbValue].
+  final String abteilung;
+
+  /// Was zu tun oder zu wissen ist.
+  final String inhalt;
+
+  /// Abgehakt — im Board grün.
+  final bool erledigt;
+
+  /// Reihenfolge innerhalb von Tag und Abteilung, kleinere zuerst. Neue
+  /// Einträge kommen ans Ende.
+  final int sortierung;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Tagesaufgabe(
+      {required this.id,
+      required this.datum,
+      required this.abteilung,
+      required this.inhalt,
+      required this.erledigt,
+      required this.sortierung,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['datum'] = Variable<DateTime>(datum);
+    map['abteilung'] = Variable<String>(abteilung);
+    map['inhalt'] = Variable<String>(inhalt);
+    map['erledigt'] = Variable<bool>(erledigt);
+    map['sortierung'] = Variable<int>(sortierung);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  TagesaufgabenCompanion toCompanion(bool nullToAbsent) {
+    return TagesaufgabenCompanion(
+      id: Value(id),
+      datum: Value(datum),
+      abteilung: Value(abteilung),
+      inhalt: Value(inhalt),
+      erledigt: Value(erledigt),
+      sortierung: Value(sortierung),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Tagesaufgabe.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Tagesaufgabe(
+      id: serializer.fromJson<String>(json['id']),
+      datum: serializer.fromJson<DateTime>(json['datum']),
+      abteilung: serializer.fromJson<String>(json['abteilung']),
+      inhalt: serializer.fromJson<String>(json['inhalt']),
+      erledigt: serializer.fromJson<bool>(json['erledigt']),
+      sortierung: serializer.fromJson<int>(json['sortierung']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'datum': serializer.toJson<DateTime>(datum),
+      'abteilung': serializer.toJson<String>(abteilung),
+      'inhalt': serializer.toJson<String>(inhalt),
+      'erledigt': serializer.toJson<bool>(erledigt),
+      'sortierung': serializer.toJson<int>(sortierung),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Tagesaufgabe copyWith(
+          {String? id,
+          DateTime? datum,
+          String? abteilung,
+          String? inhalt,
+          bool? erledigt,
+          int? sortierung,
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Tagesaufgabe(
+        id: id ?? this.id,
+        datum: datum ?? this.datum,
+        abteilung: abteilung ?? this.abteilung,
+        inhalt: inhalt ?? this.inhalt,
+        erledigt: erledigt ?? this.erledigt,
+        sortierung: sortierung ?? this.sortierung,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Tagesaufgabe copyWithCompanion(TagesaufgabenCompanion data) {
+    return Tagesaufgabe(
+      id: data.id.present ? data.id.value : this.id,
+      datum: data.datum.present ? data.datum.value : this.datum,
+      abteilung: data.abteilung.present ? data.abteilung.value : this.abteilung,
+      inhalt: data.inhalt.present ? data.inhalt.value : this.inhalt,
+      erledigt: data.erledigt.present ? data.erledigt.value : this.erledigt,
+      sortierung:
+          data.sortierung.present ? data.sortierung.value : this.sortierung,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Tagesaufgabe(')
+          ..write('id: $id, ')
+          ..write('datum: $datum, ')
+          ..write('abteilung: $abteilung, ')
+          ..write('inhalt: $inhalt, ')
+          ..write('erledigt: $erledigt, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, datum, abteilung, inhalt, erledigt,
+      sortierung, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Tagesaufgabe &&
+          other.id == this.id &&
+          other.datum == this.datum &&
+          other.abteilung == this.abteilung &&
+          other.inhalt == this.inhalt &&
+          other.erledigt == this.erledigt &&
+          other.sortierung == this.sortierung &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class TagesaufgabenCompanion extends UpdateCompanion<Tagesaufgabe> {
+  final Value<String> id;
+  final Value<DateTime> datum;
+  final Value<String> abteilung;
+  final Value<String> inhalt;
+  final Value<bool> erledigt;
+  final Value<int> sortierung;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const TagesaufgabenCompanion({
+    this.id = const Value.absent(),
+    this.datum = const Value.absent(),
+    this.abteilung = const Value.absent(),
+    this.inhalt = const Value.absent(),
+    this.erledigt = const Value.absent(),
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  TagesaufgabenCompanion.insert({
+    required String id,
+    required DateTime datum,
+    required String abteilung,
+    required String inhalt,
+    this.erledigt = const Value.absent(),
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        datum = Value(datum),
+        abteilung = Value(abteilung),
+        inhalt = Value(inhalt);
+  static Insertable<Tagesaufgabe> custom({
+    Expression<String>? id,
+    Expression<DateTime>? datum,
+    Expression<String>? abteilung,
+    Expression<String>? inhalt,
+    Expression<bool>? erledigt,
+    Expression<int>? sortierung,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (datum != null) 'datum': datum,
+      if (abteilung != null) 'abteilung': abteilung,
+      if (inhalt != null) 'inhalt': inhalt,
+      if (erledigt != null) 'erledigt': erledigt,
+      if (sortierung != null) 'sortierung': sortierung,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  TagesaufgabenCompanion copyWith(
+      {Value<String>? id,
+      Value<DateTime>? datum,
+      Value<String>? abteilung,
+      Value<String>? inhalt,
+      Value<bool>? erledigt,
+      Value<int>? sortierung,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return TagesaufgabenCompanion(
+      id: id ?? this.id,
+      datum: datum ?? this.datum,
+      abteilung: abteilung ?? this.abteilung,
+      inhalt: inhalt ?? this.inhalt,
+      erledigt: erledigt ?? this.erledigt,
+      sortierung: sortierung ?? this.sortierung,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (datum.present) {
+      map['datum'] = Variable<DateTime>(datum.value);
+    }
+    if (abteilung.present) {
+      map['abteilung'] = Variable<String>(abteilung.value);
+    }
+    if (inhalt.present) {
+      map['inhalt'] = Variable<String>(inhalt.value);
+    }
+    if (erledigt.present) {
+      map['erledigt'] = Variable<bool>(erledigt.value);
+    }
+    if (sortierung.present) {
+      map['sortierung'] = Variable<int>(sortierung.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TagesaufgabenCompanion(')
+          ..write('id: $id, ')
+          ..write('datum: $datum, ')
+          ..write('abteilung: $abteilung, ')
+          ..write('inhalt: $inhalt, ')
+          ..write('erledigt: $erledigt, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -15706,6 +16185,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AuftragsbestandPositionenVorherTable
       auftragsbestandPositionenVorher =
       $AuftragsbestandPositionenVorherTable(this);
+  late final $TagesaufgabenTable tagesaufgaben = $TagesaufgabenTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -15732,7 +16212,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         auftragsbestandArtikel,
         auftragsbestandPositionen,
         auftragsbestandArtikelVorher,
-        auftragsbestandPositionenVorher
+        auftragsbestandPositionenVorher,
+        tagesaufgaben
       ];
 }
 
@@ -24723,6 +25204,239 @@ typedef $$AuftragsbestandPositionenVorherTableProcessedTableManager
         ),
         AuftragsPositionVorher,
         PrefetchHooks Function()>;
+typedef $$TagesaufgabenTableCreateCompanionBuilder = TagesaufgabenCompanion
+    Function({
+  required String id,
+  required DateTime datum,
+  required String abteilung,
+  required String inhalt,
+  Value<bool> erledigt,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$TagesaufgabenTableUpdateCompanionBuilder = TagesaufgabenCompanion
+    Function({
+  Value<String> id,
+  Value<DateTime> datum,
+  Value<String> abteilung,
+  Value<String> inhalt,
+  Value<bool> erledigt,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$TagesaufgabenTableFilterComposer
+    extends Composer<_$AppDatabase, $TagesaufgabenTable> {
+  $$TagesaufgabenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get abteilung => $composableBuilder(
+      column: $table.abteilung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get erledigt => $composableBuilder(
+      column: $table.erledigt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$TagesaufgabenTableOrderingComposer
+    extends Composer<_$AppDatabase, $TagesaufgabenTable> {
+  $$TagesaufgabenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get abteilung => $composableBuilder(
+      column: $table.abteilung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get erledigt => $composableBuilder(
+      column: $table.erledigt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$TagesaufgabenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TagesaufgabenTable> {
+  $$TagesaufgabenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get datum =>
+      $composableBuilder(column: $table.datum, builder: (column) => column);
+
+  GeneratedColumn<String> get abteilung =>
+      $composableBuilder(column: $table.abteilung, builder: (column) => column);
+
+  GeneratedColumn<String> get inhalt =>
+      $composableBuilder(column: $table.inhalt, builder: (column) => column);
+
+  GeneratedColumn<bool> get erledigt =>
+      $composableBuilder(column: $table.erledigt, builder: (column) => column);
+
+  GeneratedColumn<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$TagesaufgabenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $TagesaufgabenTable,
+    Tagesaufgabe,
+    $$TagesaufgabenTableFilterComposer,
+    $$TagesaufgabenTableOrderingComposer,
+    $$TagesaufgabenTableAnnotationComposer,
+    $$TagesaufgabenTableCreateCompanionBuilder,
+    $$TagesaufgabenTableUpdateCompanionBuilder,
+    (
+      Tagesaufgabe,
+      BaseReferences<_$AppDatabase, $TagesaufgabenTable, Tagesaufgabe>
+    ),
+    Tagesaufgabe,
+    PrefetchHooks Function()> {
+  $$TagesaufgabenTableTableManager(_$AppDatabase db, $TagesaufgabenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TagesaufgabenTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TagesaufgabenTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TagesaufgabenTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<DateTime> datum = const Value.absent(),
+            Value<String> abteilung = const Value.absent(),
+            Value<String> inhalt = const Value.absent(),
+            Value<bool> erledigt = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TagesaufgabenCompanion(
+            id: id,
+            datum: datum,
+            abteilung: abteilung,
+            inhalt: inhalt,
+            erledigt: erledigt,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required DateTime datum,
+            required String abteilung,
+            required String inhalt,
+            Value<bool> erledigt = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              TagesaufgabenCompanion.insert(
+            id: id,
+            datum: datum,
+            abteilung: abteilung,
+            inhalt: inhalt,
+            erledigt: erledigt,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$TagesaufgabenTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $TagesaufgabenTable,
+    Tagesaufgabe,
+    $$TagesaufgabenTableFilterComposer,
+    $$TagesaufgabenTableOrderingComposer,
+    $$TagesaufgabenTableAnnotationComposer,
+    $$TagesaufgabenTableCreateCompanionBuilder,
+    $$TagesaufgabenTableUpdateCompanionBuilder,
+    (
+      Tagesaufgabe,
+      BaseReferences<_$AppDatabase, $TagesaufgabenTable, Tagesaufgabe>
+    ),
+    Tagesaufgabe,
+    PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -24777,4 +25491,6 @@ class $AppDatabaseManager {
       get auftragsbestandPositionenVorher =>
           $$AuftragsbestandPositionenVorherTableTableManager(
               _db, _db.auftragsbestandPositionenVorher);
+  $$TagesaufgabenTableTableManager get tagesaufgaben =>
+      $$TagesaufgabenTableTableManager(_db, _db.tagesaufgaben);
 }

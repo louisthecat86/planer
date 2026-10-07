@@ -10,13 +10,18 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show AuftragsBezug, bezuegeFuerNeueProduktion;
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/erledigt_service.dart';
+import '../../core/services/tagesaufgaben_service.dart';
 import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
 import 'board_print_service.dart';
 import '../../core/utils/sheet_utils.dart';
+import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 import 'board_providers.dart';
+
+part 'board_aufgaben.dart';
 
 // Breiter als früher (148): Namen wie „Schneideabteilung" oder
 // „Verpackung Tef1 / Multivac Tef1" brachen sonst mitten im Wort um.
@@ -97,6 +102,96 @@ String _ampelWort(CapacityStatus status) {
       return 'gut gefüllt';
     case CapacityStatus.ueberbucht:
       return 'überbucht';
+  }
+}
+
+/// Grün für Erledigtes — Karten, Tagesaufgaben, Haken.
+const Color _kErledigtFarbe = Color(0xFF43A047);
+
+/// Hintergrund einer erledigten Karte: ein Hauch Grün über der Fläche,
+/// damit die Schrift in beiden Modi gut lesbar bleibt.
+Color _erledigtHintergrund(ThemeData theme) => Color.alphaBlend(
+      _kErledigtFarbe.withValues(alpha: 0.16),
+      theme.colorScheme.surface,
+    );
+
+/// Hakt eine Karte ab oder nimmt den Haken zurück. Gebündelte Karten
+/// (mehrere Aufträge desselben Artikels an einem Tag) wirken auf alle.
+///
+/// Ist die Produktion erfasst, gibt es nichts zu tun: Dann entscheidet die
+/// Erfassung, nicht der Haken.
+Future<void> _abhaken(WidgetRef ref, BoardTask task) async {
+  if (task.erledigt == Erledigt.erfasst) return;
+  final abhaken = task.erledigt == null;
+  final db = ref.read(databaseProvider);
+  await ErledigtService.abhaken(db, task.mitgliederIds, erledigt: abhaken);
+  ref
+      .read(autoBackupTriggerProvider)
+      .fireDebounced(reason: abhaken ? 'Auftrag abgehakt' : 'Haken entfernt');
+  ref
+    ..invalidate(weekBoardProvider)
+    ..invalidate(dayBoardProvider)
+    ..invalidate(dailyTasksProvider);
+}
+
+/// Haken an einer Auftragskarte: offen, abgehakt oder — dann nicht
+/// antippbar — durch die erfasste Produktion erledigt.
+class _HakenKnopf extends StatelessWidget {
+  const _HakenKnopf({
+    required this.erledigt,
+    required this.onTap,
+    this.groesse = 16,
+  });
+
+  final Erledigt? erledigt;
+
+  /// null: nur anzeigen (etwa an der Karte, die gerade gezogen wird).
+  final VoidCallback? onTap;
+  final double groesse;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (symbol, farbe, hinweis) = switch (erledigt) {
+      Erledigt.erfasst => (
+          Icons.fact_check_rounded,
+          _kErledigtFarbe,
+          'Produktion erfasst — damit erledigt',
+        ),
+      Erledigt.abgehakt => (
+          Icons.check_box_rounded,
+          _kErledigtFarbe,
+          'Erledigt — antippen, um den Haken zu entfernen',
+        ),
+      null => (
+          Icons.check_box_outline_blank_rounded,
+          theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.6),
+          'Als erledigt abhaken',
+        ),
+    };
+    // Etwas breiter als das Symbol: Mit der Maus wird aus einem
+    // verwackelten Klick sonst schnell ein Ziehen der ganzen Karte.
+    final icon = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      child: Icon(symbol, size: groesse, color: farbe),
+    );
+    if (onTap == null) return icon;
+    return Tooltip(
+      message: hinweis,
+      // Eigenes, durchsichtiges Material: Die Karte malt ihre Fläche über
+      // das Material darunter — die Hover- und Tipp-Welle wäre sonst
+      // unsichtbar.
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          // Erfasst: kein eigener Tipp — er geht an die Karte und öffnet
+          // wie gewohnt die Details.
+          onTap: erledigt == Erledigt.erfasst ? null : onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: icon,
+        ),
+      ),
+    );
   }
 }
 
@@ -285,6 +380,15 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     final montag = mondayOfWeek(sel);
     final weekAsync = ref.watch(weekBoardProvider(montag));
     final dayAsync = ref.watch(dayBoardProvider(sel));
+    // Die sonstigen Aufgaben schon hier: So laden sie parallel zum Board
+    // und bleiben beim Wechsel zwischen Woche und Tag geladen. Beobachtet
+    // wird nur ein Fehler — die Daten selbst lesen Raster und Tagesliste,
+    // sonst baute jeder Haken den ganzen Bildschirm neu.
+    final aufgabenFehler =
+        ref.watch(tagesaufgabenProvider(montag).select((a) => a.error));
+    // Um Mitternacht neu bauen: Offene Aufgaben von gestern sind ab dann
+    // liegen geblieben und werden orange.
+    ref.watch(heuteProvider);
 
     // „Planen"-Direkteinstieg: einmalig den Dialog öffnen, sobald die
     // Wochendaten geladen sind.
@@ -418,6 +522,18 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
               ],
             ),
           ),
+          if (aufgabenFehler != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+              child: Text(
+                'Sonstige Aufgaben konnten nicht geladen werden: '
+                '$aufgabenFehler',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ),
           Expanded(
             child: istWoche
                 ? weekAsync.when(
@@ -471,6 +587,12 @@ class _BoardGrid extends ConsumerWidget {
 
     final zugeklappt = ref.watch(boardZugeklapptProvider);
 
+    // Sonstige Aufgaben je Abteilung und Tag. Beim Neuladen bleibt der
+    // alte Stand stehen, statt kurz zu leeren.
+    final aufgaben =
+        ref.watch(tagesaufgabenProvider(board.wochenStart)).valueOrNull ??
+            const <AufgabenZelle, List<Tagesaufgabe>>{};
+
     void umschalten(Abteilung abt) {
       final neu = {...zugeklappt};
       if (!neu.remove(abt.dbValue)) neu.add(abt.dbValue);
@@ -500,6 +622,7 @@ class _BoardGrid extends ConsumerWidget {
             board: board,
             abteilung: abt,
             spuren: gruppe,
+            aufgaben: aufgaben,
             kompakt: kompakt,
             onAufklappen: () => umschalten(abt),
           ),
@@ -522,6 +645,15 @@ class _BoardGrid extends ConsumerWidget {
           ),
         );
       }
+      // Unter den Anlagen: die sonstigen Aufgaben der Abteilung.
+      reihen.add(
+        _AufgabenZeile(
+          board: board,
+          abteilung: abt,
+          aufgaben: aufgaben,
+          kompakt: kompakt,
+        ),
+      );
     }
 
     final zeilen = Column(
@@ -987,6 +1119,7 @@ class _TagesZelle extends ConsumerWidget {
                               task: task,
                               kompakt: kompakt,
                               onTap: () => onTapTask(task),
+                              onHaken: () => _abhaken(ref, task),
                             ),
                             if (board.nachbarnFuer(task) != null)
                               _KettenMarker(
@@ -1281,11 +1414,13 @@ class _AuftragsKarte extends StatelessWidget {
   const _AuftragsKarte({
     required this.task,
     required this.onTap,
+    required this.onHaken,
     this.kompakt = false,
   });
 
   final BoardTask task;
   final VoidCallback onTap;
+  final VoidCallback onHaken;
   final bool kompakt;
 
   @override
@@ -1305,7 +1440,7 @@ class _AuftragsKarte extends StatelessWidget {
       ),
       child: GestureDetector(
         onTap: onTap,
-        child: _KartenInhalt(task: task, kompakt: kompakt),
+        child: _KartenInhalt(task: task, kompakt: kompakt, onHaken: onHaken),
       ),
     );
   }
@@ -1316,28 +1451,41 @@ class _KartenInhalt extends StatelessWidget {
     required this.task,
     this.dragging = false,
     this.kompakt = false,
+    this.onHaken,
   });
 
   final BoardTask task;
   final bool dragging;
   final bool kompakt;
 
+  /// Haken setzen oder entfernen. null: Der Haken wird nur angezeigt —
+  /// an der Karte, die gerade gezogen wird, und an ihrem Platzhalter.
+  final VoidCallback? onHaken;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final abtColor = task.abteilung.farbe;
     final kette = _kettenFarbe(task.kettenId, theme.brightness);
+    // Erledigt: grün hinterlegt und grün umrandet — so sieht man in der
+    // ganzen Woche auf einen Blick, was schon durch ist.
+    final erledigt = task.erledigt != null;
+    final hintergrund =
+        erledigt ? _erledigtHintergrund(theme) : theme.colorScheme.surface;
+    final rahmen = erledigt
+        ? _kErledigtFarbe.withValues(alpha: 0.75)
+        : theme.dividerColor;
 
     // Kompaktvariante: alles in EINER Zeile — Ketten-Kante, Kurzcode-Chip,
-    // Produktname (einzeilig), rechts die Kennzahl. So passt ein ganzer
-    // Tag ohne Scrollen ins Bild.
+    // Produktname (einzeilig), rechts die Kennzahl und der Haken. So passt
+    // ein ganzer Tag ohne Scrollen ins Bild.
     if (kompakt) {
       return Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          color: theme.colorScheme.surface,
+          color: hintergrund,
           borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: theme.dividerColor),
+          border: Border.all(color: rahmen),
         ),
         child: IntrinsicHeight(
           child: Row(
@@ -1386,18 +1534,22 @@ class _KartenInhalt extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 6),
-              Padding(
-                padding: const EdgeInsets.only(right: 7),
-                child: Text(
-                  '${task.mengeKg.toStringAsFixed(0)}kg·'
-                  '${_fmtStunden(task.dauerMinuten)} h',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+              Text(
+                '${task.mengeKg.toStringAsFixed(0)}kg·'
+                '${_fmtStunden(task.dauerMinuten)} h',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
+              const SizedBox(width: 2),
+              _HakenKnopf(
+                erledigt: task.erledigt,
+                onTap: onHaken,
+                groesse: 15,
+              ),
+              const SizedBox(width: 2),
             ],
           ),
         ),
@@ -1407,9 +1559,9 @@ class _KartenInhalt extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
+        color: hintergrund,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: theme.dividerColor),
+        border: Border.all(color: rahmen),
         boxShadow: dragging
             ? [
                 BoxShadow(
@@ -1452,45 +1604,55 @@ class _KartenInhalt extends StatelessWidget {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 6,
-                    ),
-                    child: Column(
+                    padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text.rich(
-                          TextSpan(
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              if (task.artikelnummer.isNotEmpty)
+                              Text.rich(
                                 TextSpan(
-                                  text: '${task.artikelnummer}  ',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: theme.colorScheme.primary,
-                                  ),
+                                  children: [
+                                    if (task.artikelnummer.isNotEmpty)
+                                      TextSpan(
+                                        text: '${task.artikelnummer}  ',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          color: theme.colorScheme.primary,
+                                        ),
+                                      ),
+                                    TextSpan(text: task.productName),
+                                  ],
                                 ),
-                              TextSpan(text: task.productName),
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  height: 1.25,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${task.mengeKg.toStringAsFixed(0)} kg · '
+                                '${_fmtStunden(task.dauerMinuten)} h',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
                             ],
                           ),
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            height: 1.25,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '${task.mengeKg.toStringAsFixed(0)} kg · '
-                          '${_fmtStunden(task.dauerMinuten)} h',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+                        const SizedBox(width: 2),
+                        _HakenKnopf(
+                          erledigt: task.erledigt,
+                          onTap: onHaken,
+                          groesse: 18,
                         ),
                       ],
                     ),
@@ -1555,7 +1717,7 @@ class _KettenMarker extends StatelessWidget {
           if (v != null)
             _chip(
               context,
-              '? Vorstufe · KW${v.kw}',
+              '← Vorstufe · KW${v.kw}',
               'Vorstufe: ${v.abteilung.anzeigeName} in KW${v.kw} '
                   '(${v.datum.day}.${v.datum.month}.) — antippen zum Springen',
               () => onSprung(v.datum),
@@ -1563,7 +1725,7 @@ class _KettenMarker extends StatelessWidget {
           if (n != null)
             _chip(
               context,
-              'Folgestufe · KW${n.kw} ?',
+              'Folgestufe · KW${n.kw} →',
               'Folgestufe: ${n.abteilung.anzeigeName} in KW${n.kw} '
                   '(${n.datum.day}.${n.datum.month}.) — antippen zum Springen',
               () => onSprung(n.datum),
@@ -1631,7 +1793,7 @@ class _LeerHinweis extends StatelessWidget {
 // Tagesansicht (abgespeckt)
 // ---------------------------------------------------------------------------
 
-class _DayList extends StatelessWidget {
+class _DayList extends ConsumerWidget {
   const _DayList({
     required this.day,
     required this.onTapTask,
@@ -1643,7 +1805,16 @@ class _DayList extends StatelessWidget {
   final void Function(List<BoardTask>, int, int) onReorder;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Derselbe Schlüssel wie in der Woche (Montag) — beide Ansichten teilen
+    // sich einen Ladevorgang.
+    final aufgaben =
+        ref.watch(tagesaufgabenProvider(mondayOfWeek(day.tag))).valueOrNull ??
+            const <AufgabenZelle, List<Tagesaufgabe>>{};
+
+    // Die sonstigen Aufgaben gehören der Abteilung, nicht der Anlage: Sie
+    // stehen in der ersten Karte jeder Abteilung.
+    final gesehen = <Abteilung>{};
     return ListView(
       padding: const EdgeInsets.all(12),
       children: [
@@ -1653,6 +1824,10 @@ class _DayList extends StatelessWidget {
             tag: day.tag,
             onTapTask: onTapTask,
             onReorder: onReorder,
+            aufgaben: gesehen.add(lane.abteilung)
+                ? aufgaben[(lane.abteilung.dbValue, day.tag)] ??
+                    const <Tagesaufgabe>[]
+                : null,
           ),
       ],
     );
@@ -1665,6 +1840,7 @@ class _DayDeptCard extends ConsumerWidget {
     required this.tag,
     required this.onTapTask,
     required this.onReorder,
+    this.aufgaben,
   });
 
   final DayLane lane;
@@ -1672,9 +1848,14 @@ class _DayDeptCard extends ConsumerWidget {
   final void Function(BoardTask) onTapTask;
   final void Function(List<BoardTask>, int, int) onReorder;
 
+  /// Sonstige Aufgaben der Abteilung an diesem Tag. Nur an der ersten
+  /// Karte einer Abteilung gesetzt, sonst null.
+  final List<Tagesaufgabe>? aufgaben;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final farbe = _ampelFarbe(lane.status);
+    final aufgaben = this.aufgaben;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -1717,6 +1898,15 @@ class _DayDeptCard extends ConsumerWidget {
                   visualDensity: VisualDensity.compact,
                   onPressed: () => _zusatzzeitAnlegen(context, ref),
                 ),
+                if (aufgaben != null)
+                  IconButton(
+                    icon: const Icon(Icons.add_task, size: 18),
+                    tooltip: 'Sonstige Aufgabe für '
+                        '${lane.abteilung.anzeigeName} eintragen',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () =>
+                        _aufgabeAnlegen(context, lane.abteilung, tag),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -1782,11 +1972,22 @@ class _DayDeptCard extends ConsumerWidget {
                 _DayTaskRow(
                   task: lane.tasks[i],
                   onTap: () => onTapTask(lane.tasks[i]),
+                  onHaken: () => _abhaken(ref, lane.tasks[i]),
                   onUp: i > 0 ? () => onReorder(lane.tasks, i, i - 1) : null,
                   onDown: i < lane.tasks.length - 1
                       ? () => onReorder(lane.tasks, i, i + 1)
                       : null,
                 ),
+            if (aufgaben != null && aufgaben.isNotEmpty) ...[
+              const Divider(height: 20),
+              _AufgabenAbschnitt(
+                abteilung: lane.abteilung,
+                aufgaben: aufgaben,
+                // Heißt die Karte nach einer Anlage, gehört der Name der
+                // Abteilung in die Überschrift.
+                mitAbteilung: lane.spur.istAnlage,
+              ),
+            ],
           ],
         ),
       ),
@@ -1889,7 +2090,7 @@ class _ZusatzzeitDialogState extends State<_ZusatzzeitDialog> {
               controller: _notiz,
               decoration: const InputDecoration(
                 labelText: 'Notiz (optional)',
-                hintText: 'z.B. Wechsel hell ? dunkel',
+                hintText: 'z.B. Wechsel hell → dunkel',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -1936,108 +2137,135 @@ class _DayTaskRow extends StatelessWidget {
   const _DayTaskRow({
     required this.task,
     required this.onTap,
+    required this.onHaken,
     this.onUp,
     this.onDown,
   });
 
   final BoardTask task;
   final VoidCallback onTap;
+  final VoidCallback onHaken;
   final VoidCallback? onUp;
   final VoidCallback? onDown;
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              padding: const EdgeInsets.symmetric(vertical: 5),
-              decoration: BoxDecoration(
-                color: task.abteilung.farbe,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                task.abteilung.kurzcode,
-                style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                ),
-              ),
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final erledigt = task.erledigt != null;
+
+    final zeile = Row(
+      children: [
+        _HakenKnopf(
+          erledigt: task.erledigt,
+          onTap: onHaken,
+          groesse: 20,
+        ),
+        const SizedBox(width: 6),
+        Container(
+          width: 36,
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          decoration: BoxDecoration(
+            color: task.abteilung.farbe,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            task.abteilung.kurzcode,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    task.artikelnummer.isEmpty
-                        ? task.productName
-                        : '${task.artikelnummer}  ${task.productName}',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    '${task.mengeKg.toStringAsFixed(0)} kg · '
-                    '${_fmtStunden(task.dauerMinuten)} h',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (task.startZeit != null)
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Text(
-                task.startZeit!,
+                task.artikelnummer.isEmpty
+                    ? task.productName
+                    : '${task.artikelnummer}  ${task.productName}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                '${task.mengeKg.toStringAsFixed(0)} kg · '
+                '${_fmtStunden(task.dauerMinuten)} h',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: 11,
                   color: colors.onSurfaceVariant,
                 ),
               ),
-            if (onUp != null || onDown != null) ...[
-              const SizedBox(width: 4),
-              Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  InkWell(
-                    onTap: onUp,
-                    borderRadius: BorderRadius.circular(4),
-                    child: Icon(
-                      Icons.keyboard_arrow_up,
-                      size: 22,
-                      color: onUp == null
-                          ? colors.onSurface.withValues(alpha: 0.25)
-                          : colors.onSurfaceVariant,
-                    ),
-                  ),
-                  InkWell(
-                    onTap: onDown,
-                    borderRadius: BorderRadius.circular(4),
-                    child: Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 22,
-                      color: onDown == null
-                          ? colors.onSurface.withValues(alpha: 0.25)
-                          : colors.onSurfaceVariant,
-                    ),
-                  ),
-                ],
+            ],
+          ),
+        ),
+        if (task.startZeit != null)
+          Text(
+            task.startZeit!,
+            style: TextStyle(
+              fontSize: 12,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        if (onUp != null || onDown != null) ...[
+          const SizedBox(width: 4),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              InkWell(
+                onTap: onUp,
+                borderRadius: BorderRadius.circular(4),
+                child: Icon(
+                  Icons.keyboard_arrow_up,
+                  size: 22,
+                  color: onUp == null
+                      ? colors.onSurface.withValues(alpha: 0.25)
+                      : colors.onSurfaceVariant,
+                ),
+              ),
+              InkWell(
+                onTap: onDown,
+                borderRadius: BorderRadius.circular(4),
+                child: Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 22,
+                  color: onDown == null
+                      ? colors.onSurface.withValues(alpha: 0.25)
+                      : colors.onSurfaceVariant,
+                ),
               ),
             ],
-          ],
+          ),
+        ],
+      ],
+    );
+
+    // Material statt Container: Auf einer eingefärbten Fläche wäre die
+    // Tipp-Welle des InkWell sonst unsichtbar.
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Material(
+        color: erledigt ? _erledigtHintergrund(theme) : Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(6),
+          side: erledigt
+              ? BorderSide(color: _kErledigtFarbe.withValues(alpha: 0.6))
+              : BorderSide.none,
+        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
+            child: zeile,
+          ),
         ),
       ),
     );
@@ -3196,6 +3424,20 @@ class _Legende extends StatelessWidget {
         ),
         punkt(_ampelFarbe(CapacityStatus.gut), 'gut gefüllt'),
         punkt(_ampelFarbe(CapacityStatus.ueberbucht), 'überbucht'),
+        const SizedBox(width: 14),
+        const Icon(
+          Icons.check_box_rounded,
+          size: 13,
+          color: _kErledigtFarbe,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          'erledigt',
+          style: TextStyle(
+            fontSize: 11,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+          ),
+        ),
       ],
     );
   }
@@ -3216,6 +3458,7 @@ class _ZugeklappteZeile extends StatelessWidget {
     required this.board,
     required this.abteilung,
     required this.spuren,
+    required this.aufgaben,
     required this.kompakt,
     required this.onAufklappen,
   });
@@ -3223,6 +3466,9 @@ class _ZugeklappteZeile extends StatelessWidget {
   final WeekBoard board;
   final Abteilung abteilung;
   final List<BoardSpur> spuren;
+
+  /// Sonstige Aufgaben der Woche — zugeklappt nur als Zahl.
+  final Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben;
   final bool kompakt;
   final VoidCallback onAufklappen;
 
@@ -3324,6 +3570,22 @@ class _ZugeklappteZeile extends StatelessWidget {
                   0,
                   (s, spur) => s + board.cellFor(spur, tag).tasks.length,
                 ),
+                erledigt: spuren.fold<int>(
+                  0,
+                  (s, spur) =>
+                      s +
+                      board
+                          .cellFor(spur, tag)
+                          .tasks
+                          .where((t) => t.erledigt != null)
+                          .length,
+                ),
+                aufgaben:
+                    aufgaben[(abteilung.dbValue, tag)]?.length ?? 0,
+                aufgabenErledigt: aufgaben[(abteilung.dbValue, tag)]
+                        ?.where((a) => a.erledigt)
+                        .length ??
+                    0,
                 farbe: farbe,
                 kompakt: kompakt,
               ),
@@ -3341,6 +3603,9 @@ class _SummenZelle extends StatelessWidget {
     required this.belegt,
     required this.kapazitaet,
     required this.auftraege,
+    required this.erledigt,
+    required this.aufgaben,
+    required this.aufgabenErledigt,
     required this.farbe,
     required this.kompakt,
   });
@@ -3349,6 +3614,13 @@ class _SummenZelle extends StatelessWidget {
   final double belegt;
   final double kapazitaet;
   final int auftraege;
+
+  /// Davon erledigt — abgehakt oder Produktion erfasst.
+  final int erledigt;
+
+  /// Sonstige Aufgaben der Abteilung an diesem Tag, davon erledigt.
+  final int aufgaben;
+  final int aufgabenErledigt;
   final Color farbe;
   final bool kompakt;
 
@@ -3363,6 +3635,10 @@ class _SummenZelle extends StatelessWidget {
         : (auftraege > 0
             ? _ampelFarbe(CapacityStatus.gut)
             : _ampelFarbe(CapacityStatus.frei));
+    final offeneAufgaben = aufgaben - aufgabenErledigt;
+    final aufgabenFarbe = offeneAufgaben == 0
+        ? _kErledigtFarbe
+        : theme.colorScheme.onSurfaceVariant;
 
     return Container(
       constraints: BoxConstraints(minHeight: kompakt ? 34 : 44),
@@ -3376,54 +3652,101 @@ class _SummenZelle extends StatelessWidget {
           bottom: BorderSide(color: theme.dividerColor),
         ),
       ),
-      child: auftraege == 0
+      child: auftraege == 0 && aufgaben == 0
           ? const SizedBox.shrink()
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Row(
-                  children: [
-                    Text(
-                      '${_fmtStunden(belegt)} / ${_fmtStunden(kapazitaet)} h',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.onSurface
-                            .withValues(alpha: 0.75),
-                      ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: farbe.withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: Text(
-                        '$auftraege',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
+                if (auftraege > 0) ...[
+                  Row(
+                    children: [
+                      Text(
+                        '${_fmtStunden(belegt)} / '
+                        '${_fmtStunden(kapazitaet)} h',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: theme.colorScheme.onSurface
+                              .withValues(alpha: 0.75),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(
-                    value: quote.clamp(0.0, 1.0).toDouble(),
-                    minHeight: 4,
-                    backgroundColor:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.10),
-                    color: ampel,
+                      const Spacer(),
+                      // Aufträge, davon erledigt: „2/5". Alles erledigt —
+                      // dann grün wie die Karten.
+                      Tooltip(
+                        message: erledigt == 0
+                            ? (auftraege == 1
+                                ? '1 Auftrag'
+                                : '$auftraege Aufträge')
+                            : '$erledigt von $auftraege erledigt',
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: erledigt == auftraege
+                                ? _kErledigtFarbe.withValues(alpha: 0.28)
+                                : farbe.withValues(alpha: 0.22),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            erledigt == 0
+                                ? '$auftraege'
+                                : '$erledigt/$auftraege',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                  const SizedBox(height: 3),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: LinearProgressIndicator(
+                      value: quote.clamp(0.0, 1.0).toDouble(),
+                      minHeight: 4,
+                      backgroundColor:
+                          theme.colorScheme.onSurface.withValues(alpha: 0.10),
+                      color: ampel,
+                    ),
+                  ),
+                ],
+                // Zugeklappt verschwinden die sonstigen Aufgaben nicht
+                // spurlos: Ihre Zahl steht in der Summenzeile.
+                if (aufgaben > 0) ...[
+                  if (auftraege > 0) const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.checklist_rounded,
+                        size: 12,
+                        color: aufgabenFarbe,
+                      ),
+                      const SizedBox(width: 3),
+                      Flexible(
+                        child: Text(
+                          switch (offeneAufgaben) {
+                            0 => 'Aufgaben erledigt',
+                            1 => '1 Aufgabe offen',
+                            _ => '$offeneAufgaben Aufgaben offen',
+                          },
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: aufgabenFarbe,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ],
             ),
     );
