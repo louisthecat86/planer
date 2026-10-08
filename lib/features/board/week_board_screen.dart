@@ -15,6 +15,7 @@ import '../../core/services/tagesaufgaben_service.dart';
 import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
+import 'board_druck_dialog.dart';
 import 'board_print_service.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/datum.dart';
@@ -220,6 +221,9 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
   _Modus _modus = _Modus.woche;
   bool _planenGeoeffnet = false;
 
+  /// Läuft gerade ein Druck (Laden, Dialog, Vorschau)?
+  bool _druckLaeuft = false;
+
   // ---- Navigation (je nach Modus Woche oder Tag) ----
 
   // Über die Tageszahl gerechnet, nicht mit `Duration`: Am Wochenende der
@@ -376,6 +380,57 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     ref.invalidate(dailyTasksProvider);
   }
 
+  /// Fragt, was gedruckt wird — Woche oder Tag, gesamte Übersicht oder
+  /// einzelne Abteilungen — und öffnet die Druckvorschau.
+  ///
+  /// Board und Aufgaben sind beim Klick meist schon geladen; der Dialog
+  /// zeigt damit je Abteilung, wie viel geplant ist.
+  Future<void> _drucken(DateTime montag, DateTime sel) async {
+    // Ein Doppelklick öffnete sonst zwei Dialoge.
+    if (_druckLaeuft) return;
+    _druckLaeuft = true;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final woche = await ref.read(weekBoardProvider(montag).future);
+      final tag = await ref.read(dayBoardProvider(sel).future);
+      final aufgaben = await ref.read(tagesaufgabenProvider(montag).future);
+      if (!mounted) return;
+      final auswahl = await zeigeBoardDruckDialog(
+        context,
+        zeitraum:
+            _modus == _Modus.woche ? DruckZeitraum.woche : DruckZeitraum.tag,
+        woche: 'KW ${isoKalenderwoche(montag)}',
+        tag: _fmtTagKurz(tag.tag),
+        umfangWoche: druckUmfangWoche(woche, aufgaben),
+        umfangTag: druckUmfangTag(tag, aufgaben),
+      );
+      if (auswahl == null) return;
+      switch (auswahl.zeitraum) {
+        case DruckZeitraum.woche:
+          await BoardPrintService.druckeWoche(
+            woche,
+            aufgaben: aufgaben,
+            abteilungen: auswahl.abteilungen,
+          );
+        case DruckZeitraum.tag:
+          await BoardPrintService.druckeTag(
+            tag,
+            aufgaben: aufgaben,
+            abteilungen: auswahl.abteilungen,
+          );
+      }
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text('Der Plan ließ sich nicht drucken. ($e)'),
+        ),
+      );
+    } finally {
+      _druckLaeuft = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final sel = ref.watch(selectedDateProvider);
@@ -414,22 +469,10 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
               : 'Tagesplan · ${_fmtTagTitel(sel)}',
         ),
         actions: [
-          PopupMenuButton<String>(
+          IconButton(
             icon: const Icon(Icons.print),
             tooltip: 'Drucken',
-            onSelected: (wahl) async {
-              if (wahl == 'woche') {
-                final b = ref.read(weekBoardProvider(montag)).valueOrNull;
-                if (b != null) await BoardPrintService.druckeWoche(b);
-              } else {
-                final day = await ref.read(dayBoardProvider(sel).future);
-                await BoardPrintService.druckeTag(day);
-              }
-            },
-            itemBuilder: (_) => const [
-              PopupMenuItem(value: 'woche', child: Text('Woche drucken')),
-              PopupMenuItem(value: 'tag', child: Text('Tag drucken')),
-            ],
+            onPressed: () => _drucken(montag, sel),
           ),
           IconButton(
             icon: const Icon(Icons.chevron_left),

@@ -14,6 +14,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
         kQuelleAuftragsbestand,
         ladeBedarfsPlanung,
         restBezuege;
+import '../../core/utils/pdf_text.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show berechneSchrittPlan, ermittleAusbeute;
 
@@ -483,7 +484,7 @@ Future<Uint8List> baueDatenblattPdf(
           alignment: pw.Alignment.centerRight,
           margin: const pw.EdgeInsets.only(top: 8),
           child: pw.Text(
-            _pdfText(
+            pdfText(
               '${b.artikelnummer} ${b.bezeichnung} · Seite '
               '${ctx.pageNumber}/${ctx.pagesCount}',
             ),
@@ -529,25 +530,25 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
           ),
         ),
         pw.Text(
-          _pdfText('Gedruckt ${_datumLang(jetzt)} ${_uhrzeit(jetzt)}'),
+          pdfText('Gedruckt ${_datumLang(jetzt)} ${_uhrzeit(jetzt)}'),
           style: const pw.TextStyle(fontSize: 8, color: grau),
         ),
       ],
     ),
     pw.SizedBox(height: 10),
     pw.Text(
-      _pdfText(b.artikelnummer),
+      pdfText(b.artikelnummer),
       style: pw.TextStyle(fontSize: 30, fontWeight: pw.FontWeight.bold),
     ),
     pw.Text(
-      _pdfText(b.bezeichnung),
+      pdfText(b.bezeichnung),
       style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
     ),
     if ((b.bezeichnung2 ?? '').trim().isNotEmpty)
       pw.Padding(
         padding: const pw.EdgeInsets.only(top: 2),
         child: pw.Text(
-          _pdfText(b.bezeichnung2!.trim()),
+          pdfText(b.bezeichnung2!.trim()),
           maxLines: 3,
           style: const pw.TextStyle(fontSize: 11, color: grau),
         ),
@@ -596,7 +597,7 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     if (b.status != null) ...[
       pw.SizedBox(height: 6),
       pw.Text(
-        _pdfText(b.status!),
+        pdfText(b.status!),
         style: const pw.TextStyle(fontSize: 9, color: grau),
       ),
     ],
@@ -621,7 +622,7 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     if (b.notiz != null) ...[
       pw.SizedBox(height: 8),
       pw.Text(
-        _pdfText('Notiz: ${b.notiz}'),
+        pdfText('Notiz: ${b.notiz}'),
         style: const pw.TextStyle(fontSize: 9),
       ),
     ],
@@ -722,12 +723,12 @@ pw.Widget _feld(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: [
       pw.Text(
-        _pdfText(label),
+        pdfText(label),
         style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
       ),
       pw.SizedBox(height: 3),
       pw.Text(
-        _pdfText(wert),
+        pdfText(wert),
         style: pw.TextStyle(
           fontSize: gross ? 24 : 15,
           fontWeight: pw.FontWeight.bold,
@@ -735,7 +736,7 @@ pw.Widget _feld(
       ),
       if (zusatz != null)
         pw.Text(
-          _pdfText(zusatz),
+          pdfText(zusatz),
           style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
         ),
     ],
@@ -749,13 +750,13 @@ pw.Widget _chip(String text) {
       color: PdfColors.grey200,
       borderRadius: pw.BorderRadius.circular(4),
     ),
-    child: pw.Text(_pdfText(text), style: const pw.TextStyle(fontSize: 9)),
+    child: pw.Text(pdfText(text), style: const pw.TextStyle(fontSize: 9)),
   );
 }
 
 pw.Widget _ueberschrift(String text) {
   return pw.Text(
-    _pdfText(text),
+    pdfText(text),
     style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
   );
 }
@@ -768,7 +769,7 @@ pw.Widget _linie(String label) {
       pw.Container(height: 0.8, color: PdfColors.grey600),
       pw.SizedBox(height: 2),
       pw.Text(
-        _pdfText(label),
+        pdfText(label),
         style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
       ),
     ],
@@ -787,7 +788,7 @@ pw.Widget _tabelle({
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 3),
       child: pw.Text(
-        _pdfText(text),
+        pdfText(text),
         textAlign: spalte >= rechtsAb ? pw.TextAlign.right : null,
         style: pw.TextStyle(
           fontSize: 9,
@@ -824,40 +825,6 @@ pw.Widget _tabelle({
 // ═══════════════════════════════════════════════════════════════════════
 // Formatierung
 // ═══════════════════════════════════════════════════════════════════════
-
-/// Die Standardschrift im PDF kennt nur Latin-1. Typografische Zeichen
-/// aus Navision- oder App-Texten werden ersetzt statt still zu fehlen.
-String _pdfText(String s) {
-  final ersetzt = s
-      .replaceAll('–', '-')
-      .replaceAll('—', '-')
-      .replaceAll('„', '"')
-      .replaceAll('“', '"')
-      .replaceAll('”', '"')
-      .replaceAll('‚', "'")
-      .replaceAll('‘', "'")
-      .replaceAll('’', "'")
-      .replaceAll('…', '...')
-      .replaceAll('≈', 'ca.')
-      .replaceAll('×', 'x')
-      .replaceAll('€', 'EUR')
-      .replaceAll('→', '->');
-  final puffer = StringBuffer();
-  for (final r in ersetzt.runes) {
-    if (r == 0x0D) continue; // Windows-Zeilenende: der Umbruch bleibt
-    if (r == 0x09) {
-      puffer.writeCharCode(0x20);
-      continue;
-    }
-    // Steuerzeichen und alles außerhalb von Latin-1 kann die Schrift
-    // nicht darstellen. Zeilenumbrüche setzt das PDF selbst um.
-    final darstellbar = r == 0x0A ||
-        (r >= 0x20 && r < 0x7F) ||
-        (r >= 0xA0 && r <= 0xFF);
-    puffer.writeCharCode(darstellbar ? r : 0x3F);
-  }
-  return puffer.toString();
-}
 
 const _wochentageKurz = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 const _wochentageLang = [
