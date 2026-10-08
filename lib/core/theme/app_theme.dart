@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'app_stil.dart';
+
 /// Zentrales Theme der App — angelehnt an Microsoft Dynamics NAV
 /// („Navision"), damit sich das Team optisch sofort zurechtfindet.
 ///
@@ -12,6 +14,9 @@ import 'package:flutter/material.dart';
 ///
 /// Beide Modi nutzen dieselbe Struktur; im Dunkelmodus sind lediglich die
 /// Flächen abgestuft und das Blau aufgehellt, damit der Kontrast stimmt.
+///
+/// Maße und Statusfarben für die Ansichten stehen in `app_stil.dart`
+/// ([AppMasse], [AppFarben]).
 class AppTheme {
   // ── Farbwelt Navision ───────────────────────────────────────────────
   /// Kräftiges NAV-Blau (Titelzeilen, aktive Elemente, Statusleiste).
@@ -45,7 +50,6 @@ class AppTheme {
     const flaeche = Colors.white; // Listen/Inhalte sind weiß
     const hintergrund = Color(0xFFF3F3F3); // Rahmen um den Inhalt
     const linie = Color(0xFFD4D4D4);
-    const leiste = Color(0xFFF5F6F7); // Ribbon/Kopfzeile
 
     const colorScheme = ColorScheme(
       brightness: Brightness.light,
@@ -70,7 +74,7 @@ class AppTheme {
     return _basis(
       colorScheme: colorScheme,
       scaffold: hintergrund,
-      leiste: leiste,
+      farben: AppFarben.hell,
       linie: linie,
       auswahl: navAuswahlHell,
       karte: flaeche,
@@ -82,7 +86,6 @@ class AppTheme {
     const flaeche = Color(0xFF252526); // Inhaltsflächen
     const hintergrund = Color(0xFF1E1E1E); // Rahmen um den Inhalt
     const linie = Color(0xFF3C3C3C);
-    const leiste = Color(0xFF2B2B2C); // Ribbon/Kopfzeile
 
     const colorScheme = ColorScheme(
       brightness: Brightness.dark,
@@ -107,7 +110,7 @@ class AppTheme {
     return _basis(
       colorScheme: colorScheme,
       scaffold: hintergrund,
-      leiste: leiste,
+      farben: AppFarben.dunkel,
       linie: linie,
       auswahl: navAuswahlDunkel,
       karte: flaeche,
@@ -118,16 +121,19 @@ class AppTheme {
   static ThemeData _basis({
     required ColorScheme colorScheme,
     required Color scaffold,
-    required Color leiste,
+    required AppFarben farben,
     required Color linie,
     required Color auswahl,
     required Color karte,
   }) {
     final radius = BorderRadius.circular(_radius);
+    // Ribbon/Kopfzeile und Navigationsleiste.
+    final leiste = farben.leiste;
 
     return ThemeData(
       useMaterial3: true,
       colorScheme: colorScheme,
+      extensions: <ThemeExtension<dynamic>>[farben],
       scaffoldBackgroundColor: scaffold,
       fontFamily: _schrift,
       fontFamilyFallback: _schriftFallback,
@@ -167,6 +173,22 @@ class AppTheme {
         color: linie,
         thickness: 1,
         space: 1,
+      ),
+
+      // Schwebende Knöpfe wie eine Aktion der Leiste: kantig, flach, in der
+      // Akzentfarbe — statt als hellblaue Pille mit Schatten.
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: colorScheme.primary,
+        foregroundColor: colorScheme.onPrimary,
+        elevation: 2,
+        focusElevation: 2,
+        hoverElevation: 3,
+        highlightElevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+        extendedTextStyle: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+        ),
       ),
 
       // Listen dicht wie ein NAV-Grid.
@@ -220,7 +242,7 @@ class AppTheme {
       inputDecorationTheme: _eingabefelder(colorScheme, linie),
       filledButtonTheme: _filledButtons(),
       outlinedButtonTheme: _outlinedButtons(linie),
-      textButtonTheme: _textButtons(),
+      textButtonTheme: _textButtons(colorScheme),
       chipTheme: _chips(colorScheme, linie),
       dialogTheme: _dialoge(colorScheme, linie),
       popupMenuTheme: _popupMenus(colorScheme, linie),
@@ -278,10 +300,13 @@ class AppTheme {
     );
   }
 
-  static TextButtonThemeData _textButtons() {
+  static TextButtonThemeData _textButtons(ColorScheme colors) {
     return TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: navLink,
+        // Das Link-Blau ist auf dunklem Grund kaum lesbar — dort das
+        // aufgehellte Blau des Dunkelmodus.
+        foregroundColor:
+            colors.brightness == Brightness.dark ? colors.primary : navLink,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(_radius),
         ),

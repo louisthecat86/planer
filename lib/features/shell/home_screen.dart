@@ -15,19 +15,13 @@ import '../../core/services/backup_service.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
-import '../../core/utils/vollbild.dart';
 import '../../core/utils/zeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
-
-/// Ausgewähltes Datum. Wird von anderen Screens (Board) genutzt und bleibt
-/// daher als gemeinsamer Zustand erhalten, auch wenn das Home es selbst
-/// nicht anzeigt.
-final selectedDateProvider = StateProvider<DateTime>((ref) {
-  final now = DateTime.now();
-  return DateTime(now.year, now.month, now.day);
-});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten der Tagesübersicht
@@ -101,11 +95,6 @@ class _Uebersicht {
     required this.heute,
     required this.auftraege,
     required this.auslastung,
-    required this.produktionenHeute,
-    required this.erfasstHeute,
-    required this.kgHeute,
-    required this.wocheMinuten,
-    required this.wocheProduktionen,
     required this.aufgaben,
     required this.hinweise,
   });
@@ -117,18 +106,7 @@ class _Uebersicht {
   /// einer Liste in der Reihenfolge der Abteilungen.
   final List<Tagesaufgabe> aufgaben;
   final List<_Auslastung> auslastung;
-  final int produktionenHeute;
-  final int erfasstHeute;
-  final double kgHeute;
-  final double wocheMinuten;
-  final int wocheProduktionen;
   final List<_Hinweis> hinweise;
-
-  _Auslastung? get hoechste {
-    final belegt = auslastung.where((a) => a.belegt > 0).toList()
-      ..sort((a, b) => b.anteil.compareTo(a.anteil));
-    return belegt.isEmpty ? null : belegt.first;
-  }
 }
 
 /// Alles, was die Startseite zeigt, in einem Durchgang.
@@ -139,8 +117,9 @@ class _Uebersicht {
 /// früher oder später abweichen.
 ///
 /// `autoDispose`, damit die Übersicht beim nächsten Öffnen frisch geladen
-/// wird. Kehrt man aus einem Fachscreen zurück, lädt [_oeffne] sie
-/// zusätzlich neu, weil das Home dabei im Stapel bleibt.
+/// wird. Kehrt man aus den Stammdaten eines Artikels zurück, lädt
+/// [_oeffneArtikel] sie zusätzlich neu, weil die Startseite dabei im
+/// Stapel bleibt.
 /// Parameter ist der angezeigte Tag. Ohne Angabe (`null`) der heutige —
 /// so bleibt „heute" die Voreinstellung und der Provider wird beim
 /// Blättern für jeden Tag einzeln gehalten.
@@ -211,10 +190,6 @@ final _uebersichtProvider =
       ),
   ];
 
-  final wurzelnHeute = heuteTasks.where((t) => t.parentTaskId == null);
-  final erfasstHeute =
-      wurzelnHeute.where((t) => istErfasst(t.productId, heute)).length;
-
   // ── Auslastung ────────────────────────────────────────────────────
   final kapazitaet =
       await tageskapazitaetJeAbteilung(db, wochenStart: montag);
@@ -272,8 +247,8 @@ final _uebersichtProvider =
     hinweise.add(
       _Hinweis(
         _Art.warnung,
-        '${_wochentage[d.weekday - 1]} ${d.day}.${d.month}. ist noch nicht '
-        'erfasst — $n ${n == 1 ? 'Produktion' : 'Produktionen'}',
+        '${Format.wochentage[d.weekday - 1]} ${d.day}.${d.month}. ist noch '
+        'nicht erfasst — $n ${n == 1 ? 'Produktion' : 'Produktionen'}',
         ziel: 'erfassung',
         aktion: 'Erfassen',
       ),
@@ -344,7 +319,7 @@ final _uebersichtProvider =
     hinweise.add(
       _Hinweis(
         _Art.warnung,
-        '$text ${_wochentage[d.weekday - 1]} ${d.day}.${d.month}.',
+        '$text ${Format.wochentage[d.weekday - 1]} ${d.day}.${d.month}.',
         ziel: 'board',
         aktion: 'Zum Board',
       ),
@@ -377,12 +352,6 @@ final _uebersichtProvider =
     heute: heute,
     auftraege: auftraege,
     auslastung: auslastung,
-    produktionenHeute: wurzelnHeute.length,
-    erfasstHeute: erfasstHeute,
-    kgHeute: wurzelnHeute.fold<double>(0, (s, t) => s + t.mengeKg),
-    wocheMinuten:
-        tasks.fold<double>(0, (s, t) => s + t.geplanteDauerMinuten),
-    wocheProduktionen: tasks.where((t) => t.parentTaskId == null).length,
     aufgaben: aufgabenHeute,
     hinweise: hinweise,
   );
@@ -392,12 +361,12 @@ final _uebersichtProvider =
 // Screen
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Startseite: zuerst der heutige Tag, danach die Navigation.
+/// Startseite: der Tag auf einen Blick — was heute läuft, wie voll die
+/// Abteilungen sind und was liegen geblieben ist.
 ///
-/// Wer die App morgens öffnet, will wissen, was heute läuft, wie voll die
-/// Abteilungen sind und was liegengeblieben ist. Die Wege in die
-/// Fachscreens folgen darunter, nach Arbeitsschritten geordnet statt als
-/// gleichförmige Kachelreihe.
+/// Die Wege in die Fachbereiche stehen in der Navigationsleiste links
+/// (siehe `AppRahmen`). Früher standen sie hier als farbige Kästen unter
+/// der Übersicht.
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -428,56 +397,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final daten = ref.watch(_uebersichtProvider(_tag));
+    // Ausdrücklich `DateTime`: Ohne den Typ leitet Dart aus `_tag` den
+    // Rückgabetyp von `watch` als `DateTime?` ab.
+    final DateTime tag = _tag ?? ref.watch(heuteProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Produktion Planer'),
+        title: const Text('Übersicht'),
         actions: [
-          IconButton(
-            tooltip: 'Aktualisieren',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: () => _neuLaden(ref),
+          TextButton.icon(
+            onPressed: () => _aktualisieren(ref),
+            icon: const Icon(Icons.refresh, size: 18),
+            label: const Text('Aktualisieren'),
           ),
-          // Im Vollbild gibt es keine Titelleiste — also auch kein ✕ und
-          // kein Minimieren. Deshalb alle drei hier, in der Reihenfolge der
-          // Fensterknöpfe von Windows.
-          const IconButton(
-            tooltip: 'Minimieren',
-            icon: Icon(Icons.minimize_rounded),
-            onPressed: Vollbild.minimieren,
+          const SizedBox(width: 8),
+          // Öffnet das Board gleich mit dem Planen-Fenster.
+          FilledButton.icon(
+            onPressed: () => context.goNamed('boardPlanen'),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Produkt planen'),
           ),
-          ValueListenableBuilder<bool>(
-            valueListenable: Vollbild.aktiv,
-            builder: (context, vollbild, _) => IconButton(
-              tooltip: vollbild ? 'Vollbild beenden (F11)' : 'Vollbild (F11)',
-              icon: Icon(
-                vollbild
-                    ? Icons.fullscreen_exit_rounded
-                    : Icons.fullscreen_rounded,
-              ),
-              onPressed: Vollbild.umschalten,
-            ),
-          ),
-          IconButton(
-            tooltip: 'App beenden',
-            icon: const Icon(Icons.power_settings_new_rounded),
-            onPressed: () => _beendenFragen(context, ref),
-          ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 12),
         ],
       ),
       body: LayoutBuilder(
         builder: (context, c) {
           final breit = c.maxWidth >= 1000;
+          final rand = breit ? 24.0 : 16.0;
           return ListView(
-            padding: EdgeInsets.symmetric(
-              horizontal: breit ? 24 : 16,
-              vertical: 20,
-            ),
+            padding: EdgeInsets.fromLTRB(rand, 16, rand, 24),
             children: [
-              daten.when(
-                loading: () => _kopf(null),
-                error: (_, __) => _kopf(null),
-                data: _kopf,
+              _Kopf(
+                tag: tag,
+                istHeute: _istHeute,
+                onZurueck: () => _blaettere(-1),
+                onVor: () => _blaettere(1),
+                onHeute: _istHeute ? null : () => setState(() => _tag = null),
               ),
               const SizedBox(height: 16),
               daten.when(
@@ -485,9 +439,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   padding: EdgeInsets.symmetric(vertical: 48),
                   child: Center(child: CircularProgressIndicator()),
                 ),
-                error: (e, _) => _Karte(
+                error: (e, _) => Bereich(
                   titel: 'Übersicht nicht verfügbar',
-                  icon: Icons.error_outline_rounded,
                   child: Text('$e'),
                 ),
                 data: (u) => _Tagesbereich(
@@ -496,109 +449,50 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   istHeute: _istHeute,
                 ),
               ),
-              const SizedBox(height: 20),
-              _Navigation(breit: breit),
             ],
           );
         },
       ),
     );
   }
-
-  Widget _kopf(_Uebersicht? u) => _Kopf(
-        uebersicht: u,
-        istHeute: _istHeute,
-        onZurueck: () => _blaettere(-1),
-        onVor: () => _blaettere(1),
-        onHeute: _istHeute ? null : () => setState(() => _tag = null),
-      );
 }
 
-void _neuLaden(WidgetRef ref) {
+void _aktualisieren(WidgetRef ref) {
   ref
     ..invalidate(bedarfProvider)
     ..invalidate(_uebersichtProvider);
 }
 
-/// Nachfrage vor dem Beenden — der Knopf sitzt neben „Aktualisieren", und
-/// ein versehentlicher Klick soll nicht die App schließen.
-Future<void> _beendenFragen(BuildContext context, WidgetRef ref) async {
-  final ja = await showDialog<bool>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('App beenden?'),
-      content: const Text('Beim Beenden wird automatisch ein Backup '
-          'geschrieben.'),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Beenden'),
-        ),
-      ],
-    ),
-  );
-  if (ja != true) return;
-  // Backup hier — vor dem Exit — schreiben, statt über den Lebenszyklus
-  // des Fensters: So läuft nur ein einziger, klar begrenzter Ausstiegsweg
-  // (siehe Vollbild.beenden).
-  final db = ref.read(databaseProvider);
-  try {
-    await BackupService.createAutoBackup(db)
-        .timeout(const Duration(seconds: 10));
-    await BackupService.cleanupOldAutoBackups()
-        .timeout(const Duration(seconds: 5));
-  } catch (_) {
-    // Das Beenden darf nie blockieren — im Zweifel ohne frisches Backup.
-  }
-  // Die native SQLite-Verbindung läuft auf einem eigenen Isolate
-  // (drift_flutter). Ohne sauberes Schließen kann das Beenden mitten in
-  // einer offenen Verbindung erwischen — das hat auf Windows zum Absturz
-  // beim Beenden geführt.
-  try {
-    await db.close().timeout(const Duration(seconds: 5));
-  } catch (_) {
-    // Auch hier: das Beenden darf nicht hängen bleiben.
-  }
-  await Vollbild.beenden();
-}
-
-/// Öffnet einen Fachscreen und lädt die Übersicht nach der Rückkehr neu —
-/// dort wurde vielleicht gerade geplant oder erfasst.
-Future<void> _oeffne(BuildContext context, WidgetRef ref, String ziel) async {
-  await context.pushNamed(ziel);
-  _neuLaden(ref);
-}
-
-/// Öffnet die Stammdaten eines Artikels. Auch danach neu laden: Im Artikel
-/// lässt sich eine Produktion erfassen, und die macht den Auftrag grün.
-Future<void> _oeffneArtikel(
-  BuildContext context,
-  WidgetRef ref,
-  String productId,
-) async {
+/// Öffnet die Stammdaten eines Artikels und lädt die Übersicht danach
+/// neu: Im Artikel lässt sich eine Produktion erfassen, und die macht den
+/// Auftrag grün.
+Future<void> _oeffneArtikel(BuildContext context, String productId) async {
+  // Vor dem Warten holen, damit nach der Rückkehr kein Kontext mehr nötig
+  // ist. Verlässt man den Artikel über die Leiste statt zurück, endet das
+  // Warten nicht — die Übersicht lädt beim nächsten Öffnen ohnehin neu.
+  final container = ProviderScope.containerOf(context, listen: false);
   await context.pushNamed(
     'articleDetail',
     pathParameters: {'productId': productId},
   );
-  _neuLaden(ref);
+  container
+    ..invalidate(bedarfProvider)
+    ..invalidate(_uebersichtProvider);
 }
 
 // ── Kopf ────────────────────────────────────────────────────────────────
 
-class _Kopf extends ConsumerWidget {
+/// Der angezeigte Tag, zum Blättern direkt daneben.
+class _Kopf extends StatelessWidget {
   const _Kopf({
-    required this.uebersicht,
+    required this.tag,
     required this.istHeute,
     required this.onZurueck,
     required this.onVor,
     required this.onHeute,
   });
 
-  final _Uebersicht? uebersicht;
+  final DateTime tag;
   final bool istHeute;
   final VoidCallback onZurueck;
   final VoidCallback onVor;
@@ -607,68 +501,91 @@ class _Kopf extends ConsumerWidget {
   final VoidCallback? onHeute;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tagDatum = uebersicht?.heute ?? DateTime.now();
-    final tag = tagDatum.weekday <= DateTime.friday
-        ? 'Tag ${tagDatum.weekday} von 5'
+    final wochentag = tag.weekday <= DateTime.friday
+        ? 'Tag ${tag.weekday} von 5'
         : 'Wochenende';
 
     return Row(
       children: [
-        // Blättern direkt am Datum: Der Tag ist die Klammer um alles
-        // darunter, also gehört die Navigation auch dorthin.
-        IconButton(
-          onPressed: onZurueck,
-          icon: const Icon(Icons.chevron_left_rounded),
+        // Wie im Kalender: „Heute" und die Pfeile vor dem Datum, in fester
+        // Reihenfolge — beim Blättern springt nichts.
+        OutlinedButton(
+          onPressed: onHeute,
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size(0, 34),
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            visualDensity: VisualDensity.standard,
+          ),
+          child: const Text('Heute'),
+        ),
+        const SizedBox(width: 6),
+        _TagKnopf(
+          icon: Icons.chevron_left,
           tooltip: 'Tag zurück',
+          onPressed: onZurueck,
         ),
-        IconButton(
-          onPressed: onVor,
-          icon: const Icon(Icons.chevron_right_rounded),
+        const SizedBox(width: 4),
+        _TagKnopf(
+          icon: Icons.chevron_right,
           tooltip: 'Tag vor',
+          onPressed: onVor,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 16),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      '${_wochentage[tagDatum.weekday - 1]}, '
-                      '${tagDatum.day}. ${_monate[tagDatum.month - 1]} '
-                      '${tagDatum.year}',
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  if (!istHeute) ...[
-                    const SizedBox(width: 10),
-                    TextButton.icon(
-                      onPressed: onHeute,
-                      icon: const Icon(Icons.today_rounded, size: 16),
-                      label: const Text('Heute'),
-                    ),
-                  ],
-                ],
+              Text(
+                Format.datumLang(tag),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 2),
               Text(
-                'KW ${isoKalenderwoche(tagDatum)} · $tag',
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                'KW ${isoKalenderwoche(tag)} · $wochentag'
+                '${istHeute ? ' · heute' : ''}',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
             ],
           ),
         ),
-        FilledButton.icon(
-          onPressed: () => _oeffne(context, ref, 'board'),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('Produkt planen'),
-        ),
       ],
+    );
+  }
+}
+
+/// Quadratischer Knopf zum Blättern.
+class _TagKnopf extends StatelessWidget {
+  const _TagKnopf({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(34, 34),
+          padding: EdgeInsets.zero,
+          visualDensity: VisualDensity.standard,
+        ),
+        child: Icon(icon, size: 20),
+      ),
     );
   }
 }
@@ -690,17 +607,16 @@ class _Tagesbereich extends StatelessWidget {
   Widget build(BuildContext context) {
     final u = uebersicht;
 
-    // Keine Kennzahlenleiste mehr: „3 Produktionen" stand direkt über der
-    // Liste, die genau diese drei zeigt. Der Platz gehört den Karten, die
-    // wirklich etwas zeigen.
     final heute = _HeuteKarte(
       auftraege: u.auftraege,
       titel: istHeute
           ? 'Heute in der Produktion'
-          : 'Produktion am ${u.heute.day.toString().padLeft(2, '0')}.'
-              '${u.heute.month.toString().padLeft(2, '0')}.${u.heute.year}',
+          : 'Produktion am ${Format.datum(u.heute)}',
     );
-    final auslastung = _AuslastungKarte(auslastung: u.auslastung);
+    final auslastung = _AuslastungKarte(
+      auslastung: u.auslastung,
+      titel: istHeute ? 'Auslastung heute' : 'Auslastung',
+    );
     final hinweise = _HinweisKarte(hinweise: u.hinweise);
     // Nur, wenn es für den Tag welche gibt — eingetragen wird im Board.
     final aufgaben =
@@ -708,6 +624,7 @@ class _Tagesbereich extends StatelessWidget {
 
     if (!breit) {
       return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           heute,
           const SizedBox(height: 12),
@@ -726,7 +643,7 @@ class _Tagesbereich extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Expanded(flex: 3, child: heute),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             flex: 2,
             child: Column(
@@ -748,55 +665,19 @@ class _Tagesbereich extends StatelessWidget {
   }
 }
 
-class _Karte extends StatelessWidget {
-  const _Karte({
-    required this.titel,
-    required this.icon,
-    required this.child,
-    this.aktion,
-  });
-
-  final String titel;
-  final IconData icon;
-  final Widget child;
-  final Widget? aktion;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        border: Border.all(color: theme.dividerColor),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  titel,
-                  style: theme.textTheme.titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-              ),
-              if (aktion != null) aktion!,
-            ],
-          ),
-          const SizedBox(height: 8),
-          child,
-        ],
-      ),
-    );
-  }
+/// Spaltenbreiten der Tagesliste — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double abteilung = 30;
+  static const double nummer = 60;
+  static const double menge = 92;
+  static const double dauer = 66;
+  static const double status = 32;
 }
 
-class _HeuteKarte extends ConsumerStatefulWidget {
+/// Ziffern gleich breit, damit Mengen und Zeiten untereinander stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
+
+class _HeuteKarte extends StatefulWidget {
   const _HeuteKarte({required this.auftraege, required this.titel});
 
   final List<_Auftrag> auftraege;
@@ -809,20 +690,18 @@ class _HeuteKarte extends ConsumerStatefulWidget {
   /// Besuch neu verkleinern.
   static double _skala = 1.0;
 
-  /// Ausgeblendete Abteilungen, als dbValue. Gilt nur für diese Karte
+  /// Ausgeblendete Abteilungen, als dbValue. Gilt nur für diese Liste
   /// und überlebt wie die Zoomstufe den Seitenwechsel. Absichtlich eine
   /// Ausblend- und keine Einblendliste: Kommt später eine Abteilung
   /// dazu, ist sie sichtbar, statt still zu fehlen.
   static final Set<String> _versteckt = <String>{};
 
   @override
-  ConsumerState<_HeuteKarte> createState() => _HeuteKarteState();
+  State<_HeuteKarte> createState() => _HeuteKarteState();
 }
 
-class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
+class _HeuteKarteState extends State<_HeuteKarte> {
   /// Ab dieser Höhe wird gescrollt statt die Seite länger zu machen.
-  /// Seit die Kennzahlenleiste weg ist, passt deutlich mehr — rund
-  /// vierzehn Zeilen bei voller Schriftgröße, kleiner gestellt mehr.
   static const double _maxHoehe = 560;
 
   static const double _minSkala = 0.7;
@@ -861,7 +740,7 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
   VoidCallback? _oeffnerFuer(_Auftrag a) {
     final id = a.productId;
     if (id == null) return null;
-    return () => _oeffneArtikel(context, ref, id);
+    return () => _oeffneArtikel(context, id);
   }
 
   @override
@@ -869,36 +748,32 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
     final theme = Theme.of(context);
     final skala = _HeuteKarte._skala;
     final sichtbare = _sichtbare;
-    final gefiltert = sichtbare.length != widget.auftraege.length;
+    final ausgeblendet = widget.auftraege.length - sichtbare.length;
 
-    final zumBoard = TextButton.icon(
-      onPressed: () => _oeffne(context, ref, 'board'),
-      icon: const Icon(Icons.arrow_forward_rounded, size: 16),
-      label: const Text('Zum Board'),
+    final zumBoard = TextButton(
+      onPressed: () => context.goNamed('board'),
+      child: const Text('Zum Board'),
     );
 
     if (widget.auftraege.isEmpty) {
-      return _Karte(
+      return Bereich(
         titel: widget.titel,
-        icon: Icons.event_note_rounded,
-        aktion: zumBoard,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          child: Center(
-            child: Text(
-              'Für diesen Tag ist nichts geplant.',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ),
+        aktionen: [zumBoard],
+        child: const LeerHinweis(
+          'Für diesen Tag ist nichts geplant.',
+          icon: Icons.event_note_outlined,
         ),
       );
     }
 
-    final aktion = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    final erledigt = widget.auftraege.where((a) => a.erledigt != null).length;
+    final anzahl = widget.auftraege.length;
+
+    return Bereich(
+      titel: widget.titel,
+      untertitel: '$anzahl ${anzahl == 1 ? 'Auftrag' : 'Aufträge'}'
+          '${erledigt > 0 ? ' · $erledigt erledigt' : ''}',
+      aktionen: [
         _AbteilungsFilter(
           abteilungen: _abteilungenHeute,
           versteckt: _HeuteKarte._versteckt,
@@ -906,7 +781,7 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
         ),
         IconButton(
           onPressed: skala > _minSkala ? () => _zoom(-0.1) : null,
-          icon: const Icon(Icons.remove_rounded, size: 18),
+          icon: const Icon(Icons.remove, size: 18),
           tooltip: 'Kleiner anzeigen',
           visualDensity: VisualDensity.compact,
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -915,11 +790,12 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
           '${(skala * 100).round()} %',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
+            fontFeatures: _ziffern,
           ),
         ),
         IconButton(
           onPressed: skala < _maxSkala ? () => _zoom(0.1) : null,
-          icon: const Icon(Icons.add_rounded, size: 18),
+          icon: const Icon(Icons.add, size: 18),
           tooltip: 'Größer anzeigen',
           visualDensity: VisualDensity.compact,
           constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -927,65 +803,66 @@ class _HeuteKarteState extends ConsumerState<_HeuteKarte> {
         const SizedBox(width: 4),
         zumBoard,
       ],
-    );
-
-    return _Karte(
-      titel: widget.titel,
-      icon: Icons.event_note_rounded,
-      aktion: aktion,
-      // Deckel auf der Höhe: Sonst wächst die Karte mit jeder Produktion
-      // weiter und schiebt Auslastung und Hinweise aus dem Bild.
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxHeight: _maxHoehe),
-        child: Scrollbar(
-          controller: _scroll,
-          thumbVisibility: true,
-          child: SingleChildScrollView(
-            controller: _scroll,
+      innenAbstand: const EdgeInsets.fromLTRB(12, 0, 4, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Spaltenköpfe stehen fest, nur die Zeilen scrollen.
+          Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: Column(
-              children: [
-                if (sichtbare.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Text(
-                      'Alle Abteilungen ausgeblendet.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
+            child: _TabellenKopf(skala: skala),
+          ),
+          // Deckel auf der Höhe: Sonst wächst die Liste mit jeder
+          // Produktion weiter und schiebt Auslastung und Hinweise aus dem
+          // Bild.
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: _maxHoehe),
+            child: Scrollbar(
+              controller: _scroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scroll,
+                padding: const EdgeInsets.only(right: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (sichtbare.isEmpty)
+                      const LeerHinweis('Alle Abteilungen ausgeblendet.'),
+                    for (final a in sichtbare)
+                      _AuftragZeile(
+                        auftrag: a,
+                        skala: skala,
+                        onTap: _oeffnerFuer(a),
                       ),
-                    ),
-                  ),
-                for (final a in sichtbare)
-                  _AuftragZeile(
-                    auftrag: a,
-                    skala: skala,
-                    onTap: _oeffnerFuer(a),
-                  ),
-                if (gefiltert && sichtbare.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.filter_alt_rounded,
-                          size: 13,
-                          color: theme.colorScheme.onSurfaceVariant,
+                    if (ausgeblendet > 0 && sichtbare.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.filter_alt,
+                              size: 13,
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$ausgeblendet '
+                              '${ausgeblendet == 1 ? 'Zeile' : 'Zeilen'} '
+                              'ausgeblendet',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${widget.auftraege.length - sichtbare.length} '
-                          'Zeilen ausgeblendet',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -1044,13 +921,15 @@ class _AbteilungsFilter extends StatelessWidget {
                       children: [
                         Icon(
                           sichtbar
-                              ? Icons.check_box_rounded
-                              : Icons.check_box_outline_blank_rounded,
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
                           size: 18,
                           color: sichtbar
-                              ? a.farbe
+                              ? theme.colorScheme.primary
                               : theme.colorScheme.outline,
                         ),
+                        const SizedBox(width: 10),
+                        AbteilungsMarke(abteilung: a),
                         const SizedBox(width: 10),
                         Text(a.anzeigeName),
                       ],
@@ -1074,11 +953,58 @@ class _AbteilungsFilter extends StatelessWidget {
         }
       },
       icon: Icon(
-        aktiv ? Icons.filter_alt_rounded : Icons.filter_alt_outlined,
+        aktiv ? Icons.filter_alt : Icons.filter_alt_outlined,
         size: 18,
         color: aktiv ? theme.colorScheme.primary : null,
       ),
-      constraints: const BoxConstraints(minWidth: 220),
+      constraints: const BoxConstraints(minWidth: 240),
+    );
+  }
+}
+
+/// Spaltenköpfe der Tagesliste — dieselben Breiten wie [_AuftragZeile].
+class _TabellenKopf extends StatelessWidget {
+  const _TabellenKopf({required this.skala});
+
+  final double skala;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stil = TextStyle(
+      fontSize: 11.5 * skala,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget rechts(String text, double breite) => SizedBox(
+          width: breite * skala,
+          child: Text(text, textAlign: TextAlign.right, style: stil),
+        );
+
+    return Container(
+      padding: EdgeInsets.symmetric(vertical: 7 * skala),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _Spalten.abteilung * skala,
+            child: Text('Abt.', style: stil),
+          ),
+          SizedBox(width: 10 * skala),
+          SizedBox(
+            width: _Spalten.nummer * skala,
+            child: Text('Nr.', style: stil),
+          ),
+          Expanded(child: Text('Bezeichnung', style: stil)),
+          rechts('Menge', _Spalten.menge),
+          rechts('Dauer', _Spalten.dauer),
+          SizedBox(width: _Spalten.status * skala),
+        ],
+      ),
     );
   }
 }
@@ -1088,42 +1014,33 @@ class _AuftragZeile extends StatelessWidget {
 
   final _Auftrag auftrag;
 
-  /// Zoomfaktor der Karte: skaliert Schrift, Abstände und die festen
+  /// Zoomfaktor der Liste: skaliert Schrift, Abstände und die festen
   /// Spaltenbreiten gemeinsam, damit die Zeile im Raster bleibt.
   final double skala;
 
   /// Öffnet die Stammdaten des Artikels. null, wenn es ihn nicht mehr gibt.
   final VoidCallback? onTap;
 
-  /// Dasselbe Grün wie im Board.
-  static const Color _gruen = Color(0xFF43A047);
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final a = auftrag;
-    final farbe = a.abteilung?.farbe ?? theme.colorScheme.outline;
+    final grau = theme.colorScheme.onSurfaceVariant;
 
-    TextStyle? skaliert(TextStyle? stil) =>
-        stil?.copyWith(fontSize: (stil.fontSize ?? 14) * skala);
+    final grund = theme.textTheme.bodyMedium;
+    final stil = grund?.copyWith(fontSize: (grund.fontSize ?? 14) * skala);
+    final zahlen = stil?.copyWith(fontFeatures: _ziffern);
 
     final haken = switch (a.erledigt) {
       null => null,
       Erledigt.erfasst => Tooltip(
           message: 'Produktion erfasst',
-          child: Icon(
-            Icons.fact_check_rounded,
-            size: 16 * skala,
-            color: _gruen,
-          ),
+          child: Icon(Icons.fact_check, size: 16 * skala, color: f.ok),
         ),
       Erledigt.abgehakt => Tooltip(
           message: 'Erledigt',
-          child: Icon(
-            Icons.check_box_rounded,
-            size: 16 * skala,
-            color: _gruen,
-          ),
+          child: Icon(Icons.check_box, size: 16 * skala, color: f.ok),
         ),
     };
 
@@ -1131,43 +1048,29 @@ class _AuftragZeile extends StatelessWidget {
     // InkWell malt auf das nächste Material. Läge die Farbe darüber, wäre
     // sie unsichtbar.
     return Material(
-      color: a.erledigt == null
-          ? Colors.transparent
-          : _gruen.withValues(alpha: 0.10),
+      color: a.erledigt == null ? Colors.transparent : f.okFlaeche,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: EdgeInsets.symmetric(vertical: 8 * skala),
+          padding: EdgeInsets.symmetric(vertical: 6 * skala),
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: theme.dividerColor)),
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
           ),
           child: Row(
             children: [
-              // Gefüllt wie im Board: Als Schrift auf blassem Grund war das
-              // Braun der Bratstraße im dunklen Modus kaum zu erkennen.
-              Container(
-                width: 30 * skala,
-                padding: EdgeInsets.symmetric(vertical: 2 * skala),
-                decoration: BoxDecoration(
-                  color: farbe,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  a.abteilung?.kurzcode ?? '?',
-                  style: skaliert(theme.textTheme.labelSmall)?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              AbteilungsMarke(abteilung: a.abteilung, skala: skala),
               SizedBox(width: 10 * skala),
               SizedBox(
-                width: 52 * skala,
+                width: _Spalten.nummer * skala,
                 child: Text(
                   a.nummer,
-                  style: skaliert(theme.textTheme.bodyMedium)
-                      ?.copyWith(color: theme.colorScheme.primary),
+                  maxLines: 1,
+                  style: zahlen?.copyWith(
+                    // Blau wie ein Link: Antippen öffnet den Artikel.
+                    color: onTap == null ? null : theme.colorScheme.primary,
+                  ),
                 ),
               ),
               Expanded(
@@ -1175,17 +1078,31 @@ class _AuftragZeile extends StatelessWidget {
                   a.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: skaliert(theme.textTheme.bodyMedium),
+                  style: stil,
                 ),
               ),
-              SizedBox(width: 12 * skala),
-              Text(
-                '${_kg(a.mengeKg)} · ${Zeit.kurz(a.minuten)}',
-                style: skaliert(theme.textTheme.bodySmall)
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+              SizedBox(
+                width: _Spalten.menge * skala,
+                child: Text(
+                  Format.kg(a.mengeKg),
+                  maxLines: 1,
+                  textAlign: TextAlign.right,
+                  style: zahlen,
+                ),
               ),
-              SizedBox(width: 10 * skala),
-              SizedBox(width: 18 * skala, child: haken),
+              SizedBox(
+                width: _Spalten.dauer * skala,
+                child: Text(
+                  Zeit.kurz(a.minuten),
+                  maxLines: 1,
+                  textAlign: TextAlign.right,
+                  style: zahlen?.copyWith(color: grau),
+                ),
+              ),
+              SizedBox(
+                width: _Spalten.status * skala,
+                child: haken == null ? null : Center(child: haken),
+              ),
             ],
           ),
         ),
@@ -1195,20 +1112,23 @@ class _AuftragZeile extends StatelessWidget {
 }
 
 class _AuslastungKarte extends StatelessWidget {
-  const _AuslastungKarte({required this.auslastung});
+  const _AuslastungKarte({required this.auslastung, required this.titel});
 
   final List<_Auslastung> auslastung;
+  final String titel;
 
   @override
   Widget build(BuildContext context) {
-    return _Karte(
-      titel: 'Auslastung heute',
-      icon: Icons.speed_rounded,
-      child: Column(
-        children: [
-          for (final a in auslastung) _AuslastungZeile(auslastung: a),
-        ],
-      ),
+    return Bereich(
+      titel: titel,
+      innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: auslastung.isEmpty
+          ? const LeerHinweis('Keine Kapazität hinterlegt.')
+          : Column(
+              children: [
+                for (final a in auslastung) _AuslastungZeile(auslastung: a),
+              ],
+            ),
     );
   }
 }
@@ -1227,11 +1147,11 @@ class _AuslastungZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final a = auslastung;
     final kap = a.kapazitaet;
-    // Dieselben Farben wie im Board: grün gefüllt, rot überbucht.
-    final farbe =
-        a.anteil > 1 ? theme.colorScheme.error : Colors.green.shade600;
+    // Dieselben Bedeutungen wie im Board: grün gefüllt, rot überbucht.
+    final farbe = a.anteil > 1 ? f.fehler : f.ok;
     final anteilBelegt = kap <= 0 ? 0.0 : (a.belegt / kap).clamp(0.0, 1.0);
     final anteilProduktion =
         kap <= 0 ? 0.0 : (a.produktion / kap).clamp(0.0, 1.0);
@@ -1249,53 +1169,50 @@ class _AuslastungZeile extends StatelessWidget {
         child: Row(
           children: [
             SizedBox(
-              width: 132,
+              width: 140,
               child: Text(
                 a.abteilung.anzeigeName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall,
+                style: theme.textTheme.bodyMedium,
               ),
             ),
             Expanded(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(3),
-                child: SizedBox(
-                  height: 6,
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      ColoredBox(
-                        color: theme.colorScheme.surfaceContainerHighest,
-                      ),
-                      // Gesamte Belegung, hell — der sichtbare Überstand
-                      // über die Produktion ist die Nebenzeit.
-                      FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: anteilBelegt,
-                        child: ColoredBox(
-                          color: farbe.withValues(alpha: .4),
-                        ),
-                      ),
-                      FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: anteilProduktion,
-                        child: ColoredBox(color: farbe),
-                      ),
-                    ],
-                  ),
+              child: SizedBox(
+                height: 8,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ColoredBox(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                    ),
+                    // Gesamte Belegung, hell — der sichtbare Überstand über
+                    // die Produktion ist die Nebenzeit.
+                    FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: anteilBelegt,
+                      child: ColoredBox(color: farbe.withValues(alpha: .4)),
+                    ),
+                    FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: anteilProduktion,
+                      child: ColoredBox(color: farbe),
+                    ),
+                  ],
                 ),
               ),
             ),
             SizedBox(
-              width: 48,
+              width: 52,
               child: Text(
                 a.belegt <= 0 ? '—' : '${(a.anteil * 100).round()} %',
                 textAlign: TextAlign.right,
-                style: theme.textTheme.bodySmall?.copyWith(
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontFeatures: _ziffern,
+                  fontWeight: a.anteil > 1 ? FontWeight.w600 : null,
                   color: a.belegt <= 0
                       ? theme.colorScheme.onSurfaceVariant
-                      : null,
+                      : (a.anteil > 1 ? f.fehler : null),
                 ),
               ),
             ),
@@ -1312,9 +1229,6 @@ class _AufgabenKarte extends StatelessWidget {
   const _AufgabenKarte({required this.aufgaben});
 
   final List<Tagesaufgabe> aufgaben;
-
-  /// Dasselbe Grün wie im Board.
-  static const Color _gruen = Color(0xFF43A047);
 
   /// Über den Container statt über `ref`: Baut die Übersicht während des
   /// Speicherns um, ist diese Karte womöglich schon weg — der Container
@@ -1334,18 +1248,18 @@ class _AufgabenKarte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final offen = aufgaben.where((a) => !a.erledigt).length;
-    return _Karte(
+    return Bereich(
       titel: 'Sonstige Aufgaben',
-      icon: Icons.checklist_rounded,
-      aktion: Text(
-        offen == 0 ? 'alles erledigt' : '$offen offen',
-        style: theme.textTheme.bodySmall?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: offen == 0 ? _gruen : theme.colorScheme.onSurfaceVariant,
+      aktionen: [
+        Padding(
+          padding: const EdgeInsets.only(right: 6),
+          child: offen == 0
+              ? const StatusMarke('alles erledigt', art: StatusArt.ok)
+              : StatusMarke('$offen offen'),
         ),
-      ),
+      ],
+      innenAbstand: const EdgeInsets.fromLTRB(4, 0, 4, 4),
       child: Column(
         children: [
           for (final a in aufgaben)
@@ -1365,6 +1279,7 @@ class _AufgabeZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final a = aufgabe;
     final abteilung =
         Abteilung.values.where((x) => x.dbValue == a.abteilung).firstOrNull;
@@ -1372,15 +1287,15 @@ class _AufgabeZeile extends StatelessWidget {
     // Material statt Farbe am Container: Die Tipp-Welle malt auf das
     // nächste Material und wäre unter einer Containerfarbe unsichtbar.
     return Material(
-      color: a.erledigt
-          ? _AufgabenKarte._gruen.withValues(alpha: 0.10)
-          : Colors.transparent,
+      color: a.erledigt ? f.okFlaeche : Colors.transparent,
       child: InkWell(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: theme.dividerColor)),
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
           ),
           child: Row(
             children: [
@@ -1388,39 +1303,25 @@ class _AufgabeZeile extends StatelessWidget {
                 message:
                     a.erledigt ? 'Haken entfernen' : 'Als erledigt abhaken',
                 child: Icon(
-                  a.erledigt
-                      ? Icons.check_box_rounded
-                      : Icons.check_box_outline_blank_rounded,
+                  a.erledigt ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 18,
-                  color: a.erledigt
-                      ? _AufgabenKarte._gruen
-                      : theme.colorScheme.onSurfaceVariant,
+                  color:
+                      a.erledigt ? f.ok : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                width: 30,
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                decoration: BoxDecoration(
-                  color: abteilung?.farbe ?? theme.colorScheme.outline,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  abteilung?.kurzcode ?? '?',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
+              const SizedBox(width: 10),
+              AbteilungsMarke(abteilung: abteilung),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   a.inhalt,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: a.erledigt
+                        ? theme.colorScheme.onSurfaceVariant
+                        : null,
+                  ),
                 ),
               ),
             ],
@@ -1431,332 +1332,76 @@ class _AufgabeZeile extends StatelessWidget {
   }
 }
 
-class _HinweisKarte extends ConsumerWidget {
+class _HinweisKarte extends StatelessWidget {
   const _HinweisKarte({required this.hinweise});
 
   final List<_Hinweis> hinweise;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    return _Karte(
+  Widget build(BuildContext context) {
+    return Bereich(
       titel: 'Hinweise',
-      icon: Icons.notifications_none_rounded,
-      child: Column(
-        children: [
-          for (final h in hinweise)
-            InkWell(
-              onTap: h.ziel == null
-                  ? null
-                  : () => _oeffne(context, ref, h.ziel!),
-              borderRadius: BorderRadius.circular(6),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 7),
-                child: Row(
-                  children: [
-                    Icon(
-                      switch (h.art) {
-                        _Art.warnung => Icons.warning_amber_rounded,
-                        _Art.info => Icons.info_outline_rounded,
-                        _Art.gut => Icons.cloud_done_outlined,
-                      },
-                      size: 18,
-                      color: switch (h.art) {
-                        _Art.warnung => Colors.orange.shade700,
-                        _Art.info => theme.colorScheme.primary,
-                        _Art.gut => Colors.green.shade600,
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        h.text,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: h.art == _Art.gut
-                              ? theme.colorScheme.onSurfaceVariant
-                              : null,
-                        ),
-                      ),
-                    ),
-                    if (h.aktion != null)
-                      Text(
-                        h.aktion!,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.colorScheme.primary),
-                      ),
-                  ],
-                ),
-              ),
+      innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+      child: hinweise.isEmpty
+          ? const LeerHinweis('Keine Hinweise.')
+          : Column(
+              children: [
+                for (final h in hinweise) _HinweisZeile(hinweis: h),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
 
-// ── Navigation ─────────────────────────────────────────────────────────
+class _HinweisZeile extends StatelessWidget {
+  const _HinweisZeile({required this.hinweis});
 
-class _Ziel {
-  const _Ziel(this.icon, this.titel, this.zusatz, this.route);
-
-  final IconData icon;
-  final String titel;
-  final String zusatz;
-  final String route;
-}
-
-/// Die Wege in die Fachscreens, nach Arbeitsschritten gruppiert.
-class _Navigation extends StatefulWidget {
-  const _Navigation({required this.breit});
-
-  final bool breit;
-
-  static const _gruppen = <(String, IconData, Color, List<_Ziel>)>[
-    (
-      'Planen',
-      Icons.edit_calendar_outlined,
-      Color(0xFF1E88E5),
-      [
-        _Ziel(Icons.playlist_add_check_rounded, 'Bedarf',
-            'Was produziert werden muss', 'bedarf',),
-        _Ziel(Icons.local_shipping_outlined, 'Auftragsbestand',
-            'Aufträge nach Versandtag gegen das Lager', 'auftragsbestand',),
-        _Ziel(Icons.auto_awesome_rounded, 'Planungsvorschlag',
-            'Tage aus dem offenen Bedarf vorschlagen lassen',
-            'planungsvorschlag',),
-        _Ziel(Icons.view_week_rounded, 'Planungsboard',
-            'Woche im Board einplanen', 'board',),
-      ],
-    ),
-    (
-      'Auswerten',
-      Icons.insights_rounded,
-      Color(0xFF26A69A),
-      [
-        _Ziel(Icons.fact_check_outlined, 'Produktionserfassung',
-            'Ist-Daten der Woche', 'erfassung',),
-        _Ziel(Icons.history_rounded, 'Wochen-Historie',
-            'Rückblick und Kennzahlen', 'wochenHistorie',),
-      ],
-    ),
-    (
-      'Stammdaten',
-      Icons.folder_open_rounded,
-      Color(0xFF9575CD),
-      [
-        _Ziel(Icons.inventory_2_outlined, 'Artikel',
-            'Abläufe, Maschinen, Zeiten', 'articles',),
-        _Ziel(Icons.swap_horiz_rounded, 'Navision-Artikel',
-            'Neue Artikel und Allergene aus der Warenwirtschaft',
-            'navisionImport',),
-        _Ziel(Icons.precision_manufacturing_outlined, 'Maschinen-Katalog',
-            'Anlagen und Steckbriefe', 'maschinen',),
-        _Ziel(Icons.settings_outlined, 'Einstellungen',
-            'Excel, Backup, Darstellung', 'settings',),
-      ],
-    ),
-  ];
-
-  @override
-  State<_Navigation> createState() => _NavigationState();
-}
-
-class _NavigationState extends State<_Navigation> {
-  /// Index der offenen Gruppe. Immer nur eine — bei drei geöffneten
-  /// Kästen springt die Seite sonst stark.
-  int? _offen;
+  final _Hinweis hinweis;
 
   @override
   Widget build(BuildContext context) {
-    final felder = [
-      for (var i = 0; i < _Navigation._gruppen.length; i++)
-        Builder(
-          builder: (context) {
-            final (titel, icon, farbe, ziele) = _Navigation._gruppen[i];
-            return _NavFeld(
-              titel: titel,
-              icon: icon,
-              farbe: farbe,
-              ziele: ziele,
-              offen: _offen == i,
-              onUmschalten: () =>
-                  setState(() => _offen = _offen == i ? null : i),
-            );
-          },
-        ),
-    ];
-
-    if (!widget.breit) {
-      return Column(
-        children: [
-          for (final f in felder) ...[f, const SizedBox(height: 10)],
-        ],
-      );
-    }
-    // Oben ausrichten statt strecken: Das geöffnete Feld wächst nach
-    // unten, die beiden anderen bleiben flach.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (var i = 0; i < felder.length; i++) ...[
-          if (i > 0) const SizedBox(width: 12),
-          Expanded(child: felder[i]),
-        ],
-      ],
-    );
-  }
-}
-
-/// Eine Gruppe als aufklappbarer Kasten. Die Ziele erscheinen innerhalb
-/// des farbigen Rahmens, nicht als Überlagerung darüber.
-class _NavFeld extends ConsumerWidget {
-  const _NavFeld({
-    required this.titel,
-    required this.icon,
-    required this.farbe,
-    required this.ziele,
-    required this.offen,
-    required this.onUmschalten,
-  });
-
-  final String titel;
-  final IconData icon;
-  final Color farbe;
-  final List<_Ziel> ziele;
-  final bool offen;
-  final VoidCallback onUmschalten;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
+    final h = hinweis;
+    final (symbol, farbe) = switch (h.art) {
+      _Art.warnung => (Icons.warning_amber_outlined, f.warnung),
+      _Art.info => (Icons.info_outline, f.info),
+      _Art.gut => (Icons.cloud_done_outlined, f.ok),
+    };
+    final ziel = h.ziel;
+    final aktion = h.aktion;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      curve: Curves.easeOut,
-      decoration: BoxDecoration(
-        color: farbe.withValues(alpha: offen ? .10 : .07),
-        border: Border.all(color: farbe.withValues(alpha: offen ? .45 : .28)),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: onUmschalten,
-            borderRadius: BorderRadius.circular(12),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 16,
-              ),
-              child: Row(
-                children: [
-                  Icon(icon, size: 22, color: farbe),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      titel,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: farbe,
-                      ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: offen ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Icon(
-                      Icons.expand_more_rounded,
-                      size: 20,
-                      color: farbe.withValues(alpha: .8),
-                    ),
-                  ),
-                ],
+    return InkWell(
+      onTap: ziel == null ? null : () => context.goNamed(ziel),
+      borderRadius: AppMasse.ecken,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        child: Row(
+          children: [
+            Icon(symbol, size: 17, color: farbe),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                h.text,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: h.art == _Art.gut
+                      ? theme.colorScheme.onSurfaceVariant
+                      : null,
+                ),
               ),
             ),
-          ),
-          // AnimatedSize statt Ein- und Ausblenden: Der Kasten wächst und
-          // schiebt den Inhalt darunter weich nach unten.
-          AnimatedSize(
-            duration: const Duration(milliseconds: 150),
-            curve: Curves.easeOut,
-            alignment: Alignment.topCenter,
-            child: offen
-                ? Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Divider(
-                          height: 12,
-                          color: farbe.withValues(alpha: .25),
-                        ),
-                        for (final z in ziele)
-                          InkWell(
-                            onTap: () => _oeffne(context, ref, z.route),
-                            borderRadius: BorderRadius.circular(9),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 9,
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 34,
-                                    height: 34,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: farbe.withValues(alpha: .14),
-                                      borderRadius: BorderRadius.circular(9),
-                                    ),
-                                    child: Icon(
-                                      z.icon,
-                                      size: 19,
-                                      color: farbe,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          z.titel,
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        Text(
-                                          z.zusatz,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                            color: theme
-                                                .colorScheme.onSurfaceVariant,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  Icon(
-                                    Icons.chevron_right_rounded,
-                                    size: 18,
-                                    color: theme.colorScheme.onSurfaceVariant,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: double.infinity),
-          ),
-        ],
+            if (aktion != null) ...[
+              const SizedBox(width: 8),
+              Text(
+                '$aktion ›',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1766,58 +1411,17 @@ class _NavFeld extends ConsumerWidget {
 // Formatierung
 // ═══════════════════════════════════════════════════════════════════════════
 
-const _wochentage = [
-  'Montag',
-  'Dienstag',
-  'Mittwoch',
-  'Donnerstag',
-  'Freitag',
-  'Samstag',
-  'Sonntag',
-];
-
-const _monate = [
-  'Januar',
-  'Februar',
-  'März',
-  'April',
-  'Mai',
-  'Juni',
-  'Juli',
-  'August',
-  'September',
-  'Oktober',
-  'November',
-  'Dezember',
-];
-
-/// „1.786 kg" — Tausenderpunkt ohne intl, dessen Sprachdaten die App
-/// nicht initialisiert.
-String _kg(double kg) {
-  final s = kg.round().toString();
-  final b = StringBuffer();
-  for (var i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) b.write('.');
-    b.write(s[i]);
-  }
-  return '$b kg';
-}
-
 /// „heute 07:41", „gestern 18:02", „vor 4 Tagen".
 String _wann(DateTime t) {
   final jetzt = DateTime.now();
   final heute = DateTime(jetzt.year, jetzt.month, jetzt.day);
   final tag = DateTime(t.year, t.month, t.day);
-  final uhr = '${t.hour.toString().padLeft(2, '0')}:'
-      '${t.minute.toString().padLeft(2, '0')}';
   // In UTC gezählt, sonst ergibt eine Nacht mit Zeitumstellung 23 oder
   // 25 Stunden statt eines Tages.
   final tage = DateTime.utc(heute.year, heute.month, heute.day)
       .difference(DateTime.utc(tag.year, tag.month, tag.day))
       .inDays;
-  if (tage <= 0) return 'heute $uhr';
-  if (tage == 1) return 'gestern $uhr';
+  if (tage <= 0) return 'heute ${Format.uhrzeit(t)}';
+  if (tage == 1) return 'gestern ${Format.uhrzeit(t)}';
   return 'vor $tage Tagen';
 }
-
-

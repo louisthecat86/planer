@@ -163,7 +163,7 @@ class MaschinenKatalogScreen extends ConsumerWidget {
   Future<void> _seedDialog(BuildContext context, WidgetRef ref) async {
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Standard-Maschinen ergänzen'),
         content: Text(
           'Legt die ${kSeedMaschinen.length} Maschinen des Standard-'
@@ -172,11 +172,11 @@ class MaschinenKatalogScreen extends ConsumerWidget {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Ergänzen'),
           ),
         ],
@@ -433,7 +433,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     if (!mounted) return;
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Maschine löschen'),
         content: Text(
           nutzendeSchritte.isEmpty
@@ -447,12 +447,12 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Löschen'),
           ),
         ],

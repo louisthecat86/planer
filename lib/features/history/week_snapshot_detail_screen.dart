@@ -85,11 +85,9 @@ class _WeekSnapshotDetailScreenState
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         title: Text(
           snap == null ? 'Auswertung' : 'KW ${snap.kw} · ${snap.jahr}',
         ),
-        centerTitle: true,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

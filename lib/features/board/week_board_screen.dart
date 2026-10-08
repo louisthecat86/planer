@@ -408,7 +408,6 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         title: Text(
           istWoche
               ? 'Planungsboard · KW ${isoKalenderwoche(montag)}'

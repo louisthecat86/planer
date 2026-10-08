@@ -26,6 +26,7 @@ import 'features/intro/intro_screen.dart';
 import 'features/settings/maschinen_katalog_screen.dart';
 import 'features/settings/parameter_grenzen_screen.dart';
 import 'features/settings/settings_screen.dart';
+import 'features/shell/app_rahmen.dart';
 import 'features/shell/home_screen.dart';
 import 'features/planung/planungsvorschlag_screen.dart';
 
@@ -36,9 +37,9 @@ import 'features/planung/planungsvorschlag_screen.dart';
 /// der Navigations-Zustand verloren.
 ///
 /// Die App startet auf `/intro` (Intro-Animation). Nach der Animation
-/// geht es zum Home (`/home`): Artikel · Planung · Wochen-Historie ·
-/// Einstellungen. Stammdaten/Excel/Backup und die Kapazität sitzen
-/// unter `/settings`.
+/// geht es zur Übersicht (`/home`). Alle Seiten danach stehen in einem
+/// gemeinsamen Rahmen mit der Navigationsleiste ([AppRahmen]).
+/// Stammdaten/Excel/Backup und die Kapazität sitzen unter `/settings`.
 final routerProvider = Provider<GoRouter>((ref) {
   final db = ref.watch(databaseProvider);
   final router = GoRouter(
@@ -51,157 +52,169 @@ final routerProvider = Provider<GoRouter>((ref) {
           child: IntroScreen(),
         ),
       ),
-      GoRoute(
-        path: '/home',
-        name: 'home',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: HomeScreen(),
+      // Alles außer dem Intro steht im Rahmen mit der Navigationsleiste.
+      // Der Rahmen bekommt den aktuellen Pfad und hebt den passenden
+      // Bereich hervor — auch für Unterseiten, die per push geöffnet sind.
+      // Wie alle Seiten ohne Übergang — sonst zoomte der ganze Rahmen nach
+      // dem Intro herein.
+      ShellRoute(
+        pageBuilder: (context, state, child) => NoTransitionPage(
+          child: AppRahmen(ort: state.uri.path, child: child),
         ),
-      ),
-      // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
-      GoRoute(
-        path: '/articles',
-        name: 'articles',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: ArticleListScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/article/:productId',
-        name: 'articleDetail',
-        pageBuilder: (context, state) {
-          final productId = state.pathParameters['productId']!;
-          return NoTransitionPage(
-            child: ArticleDetailScreen(productId: productId),
-          );
-        },
-      ),
-      // Bedarfsliste: WAS muss produziert werden (Auslöser der Planung).
-      GoRoute(
-        path: '/bedarf',
-        name: 'bedarf',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: BedarfScreen(),
-        ),
-      ),
-      // Planungsvorschlag: rechnet aus dem offenen Bedarf mögliche Tage
-      // und überträgt sie auf Wunsch ins Board. Bewusst eine eigene Seite
-      // — hier wird gerechnet und verworfen, im Board geplant.
-      GoRoute(
-        path: '/planungsvorschlag',
-        name: 'planungsvorschlag',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: PlanungsvorschlagScreen(),
-        ),
-      ),
-      // Navision-Artikel: die Artikelübersicht aus der Warenwirtschaft mit
-      // dem Artikelstamm abgleichen — neue Artikel und Allergene. Bedarf
-      // entsteht im Auftragsbestand.
-      GoRoute(
-        path: '/navision',
-        name: 'navisionImport',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: NavisionImportScreen(),
-        ),
-      ),
-      // Auftragsbestand aus Navision: Aufträge je Kunde mit Warenausgang,
-      // gegen das Lager gerechnet.
-      GoRoute(
-        path: '/auftragsbestand',
-        name: 'auftragsbestand',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: AuftragsbestandScreen(),
-        ),
-      ),
-      // Änderungen seit dem vorigen Auftragsbestand — und welche Planung
-      // deshalb nicht mehr passt.
-      GoRoute(
-        path: '/auftragsbestand/aenderungen',
-        name: 'auftragsbestandAenderungen',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: AuftragsbestandAenderungenScreen(),
-        ),
-      ),
-      // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
-      GoRoute(
-        path: '/erfassung',
-        name: 'erfassung',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: ProduktionErfassungScreen(),
-        ),
-      ),
-      // Planung ansehen: das Board (Woche/Tag).
-      GoRoute(
-        path: '/board',
-        name: 'board',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: WeekBoardScreen(),
-        ),
-      ),
-      // Planen: dasselbe Board, öffnet direkt den Produkt-planen-Dialog.
-      GoRoute(
-        path: '/board/planen',
-        name: 'boardPlanen',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: WeekBoardScreen(oeffnePlanenDirekt: true),
-        ),
-      ),
-      GoRoute(
-        path: '/history',
-        name: 'wochenHistorie',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: WeekSnapshotArchiveScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/history/:snapshotId',
-        name: 'wochenHistorieDetail',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: WeekSnapshotDetailScreen(
-            snapshotId: state.pathParameters['snapshotId']!,
+        routes: [
+          GoRoute(
+            path: '/home',
+            name: 'home',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: HomeScreen(),
+            ),
           ),
-        ),
-      ),
-      // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
-      // Maschinen-Katalog: Anlagen + Parameter-Steckbriefe pflegen.
-      GoRoute(
-        path: '/maschinen',
-        name: 'maschinen',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: MaschinenKatalogScreen(),
-        ),
-      ),
-      // Plausibilitätsgrenzen für Maschinen-/Prozessparameter.
-      GoRoute(
-        path: '/grenzen',
-        name: 'grenzen',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: ParameterGrenzenScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/settings',
-        name: 'settings',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: SettingsScreen(),
-        ),
-      ),
-      // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den
-      // Einstellungen aus verlinkt.
-      GoRoute(
-        path: '/data',
-        name: 'data',
-        pageBuilder: (context, state) => const NoTransitionPage(
-          child: DataManagementScreen(),
-        ),
-      ),
-      // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
-      GoRoute(
-        path: '/backup',
-        name: 'backup',
-        pageBuilder: (context, state) => NoTransitionPage(
-          child: BackupManagementScreen(database: db),
-        ),
+          // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
+          GoRoute(
+            path: '/articles',
+            name: 'articles',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ArticleListScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/article/:productId',
+            name: 'articleDetail',
+            pageBuilder: (context, state) {
+              final productId = state.pathParameters['productId']!;
+              return NoTransitionPage(
+                child: ArticleDetailScreen(productId: productId),
+              );
+            },
+          ),
+          // Bedarfsliste: WAS muss produziert werden (Auslöser der Planung).
+          GoRoute(
+            path: '/bedarf',
+            name: 'bedarf',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: BedarfScreen(),
+            ),
+          ),
+          // Planungsvorschlag: rechnet aus dem offenen Bedarf mögliche Tage
+          // und überträgt sie auf Wunsch ins Board. Bewusst eine eigene Seite
+          // — hier wird gerechnet und verworfen, im Board geplant.
+          GoRoute(
+            path: '/planungsvorschlag',
+            name: 'planungsvorschlag',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: PlanungsvorschlagScreen(),
+            ),
+          ),
+          // Navision-Artikel: die Artikelübersicht aus der Warenwirtschaft mit
+          // dem Artikelstamm abgleichen — neue Artikel und Allergene. Bedarf
+          // entsteht im Auftragsbestand.
+          GoRoute(
+            path: '/navision',
+            name: 'navisionImport',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: NavisionImportScreen(),
+            ),
+          ),
+          // Auftragsbestand aus Navision: Aufträge je Kunde mit Warenausgang,
+          // gegen das Lager gerechnet.
+          GoRoute(
+            path: '/auftragsbestand',
+            name: 'auftragsbestand',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: AuftragsbestandScreen(),
+            ),
+          ),
+          // Änderungen seit dem vorigen Auftragsbestand — und welche Planung
+          // deshalb nicht mehr passt.
+          GoRoute(
+            path: '/auftragsbestand/aenderungen',
+            name: 'auftragsbestandAenderungen',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: AuftragsbestandAenderungenScreen(),
+            ),
+          ),
+          // Produktionserfassung: geplante Woche als Liste, Ist-Daten erfassen.
+          GoRoute(
+            path: '/erfassung',
+            name: 'erfassung',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ProduktionErfassungScreen(),
+            ),
+          ),
+          // Planung ansehen: das Board (Woche/Tag).
+          GoRoute(
+            path: '/board',
+            name: 'board',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: WeekBoardScreen(),
+            ),
+          ),
+          // Planen: dasselbe Board, öffnet direkt den Produkt-planen-Dialog.
+          GoRoute(
+            path: '/board/planen',
+            name: 'boardPlanen',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: WeekBoardScreen(oeffnePlanenDirekt: true),
+            ),
+          ),
+          GoRoute(
+            path: '/history',
+            name: 'wochenHistorie',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: WeekSnapshotArchiveScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/history/:snapshotId',
+            name: 'wochenHistorieDetail',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: WeekSnapshotDetailScreen(
+                snapshotId: state.pathParameters['snapshotId']!,
+              ),
+            ),
+          ),
+          // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
+          // Maschinen-Katalog: Anlagen + Parameter-Steckbriefe pflegen.
+          GoRoute(
+            path: '/maschinen',
+            name: 'maschinen',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: MaschinenKatalogScreen(),
+            ),
+          ),
+          // Plausibilitätsgrenzen für Maschinen-/Prozessparameter.
+          GoRoute(
+            path: '/grenzen',
+            name: 'grenzen',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ParameterGrenzenScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            name: 'settings',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: SettingsScreen(),
+            ),
+          ),
+          // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den
+          // Einstellungen aus verlinkt.
+          GoRoute(
+            path: '/data',
+            name: 'data',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: DataManagementScreen(),
+            ),
+          ),
+          // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
+          GoRoute(
+            path: '/backup',
+            name: 'backup',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: BackupManagementScreen(database: db),
+            ),
+          ),
+        ],
       ),
     ],
   );

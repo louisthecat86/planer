@@ -217,7 +217,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     final p = info.product;
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Artikel löschen'),
         content: Text(
           '„${p.artikelbezeichnung}" (Nr. ${p.artikelnummer}) wirklich '
@@ -227,12 +227,12 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
+            onPressed: () => Navigator.of(dialogContext).pop(false),
             child: const Text('Abbrechen'),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Löschen'),
           ),
         ],

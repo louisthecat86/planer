@@ -10,7 +10,10 @@ import '../../core/services/week_snapshot_service.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
-import '../shell/home_screen.dart';
+// Dasselbe Datum wie im Board: Die Auswahl zum Archivieren beginnt bei der
+// Woche, die dort gerade zu sehen ist. Vorher hatte die Startseite eine
+// eigene Kopie dieses Providers, die nie jemand setzte.
+import '../whiteboard/whiteboard_provider.dart' show selectedDateProvider;
 
 /// Archiv der eingefrorenen Wochenpläne.
 ///
@@ -149,9 +152,7 @@ class _WeekSnapshotArchiveScreenState
 
     return Scaffold(
       appBar: AppBar(
-        leading: const BackButton(),
         title: const Text('Wochen-Historie'),
-        centerTitle: true,
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _busy ? null : _archiviere,
