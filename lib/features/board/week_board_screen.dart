@@ -2334,6 +2334,12 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   _PlanStufe _stufe = _PlanStufe.auswahl;
   List<GeplanterSchritt> _plan = [];
 
+  /// Abteilungen des Plans, die diesmal nicht ins Board kommen — etwa die
+  /// Zerlegung, wenn das Fleisch schon zerlegt angeliefert wird. Als
+  /// [GeplanterSchritt.stepId]; gilt nur für diese Planung und bleibt beim
+  /// Zurückblättern erhalten, solange der Artikel derselbe ist.
+  final Set<String> _abgewaehlt = <String>{};
+
   /// Rohware und Fertigware des berechneten Plans.
   double _planRohKg = 0;
   double _planFertigKg = 0;
@@ -2370,6 +2376,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   void _waehleProdukt(Product p) {
     setState(() {
       _gewaehlt = p;
+      _abgewaehlt.clear();
       _ausbeute = null;
       _dauerModelle = [];
       _zeitAbteilung = null;
@@ -2381,6 +2388,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     _ladeNr++; // laufende Rechnungen verwerfen
     setState(() {
       _gewaehlt = null;
+      _abgewaehlt.clear();
       _ausbeute = null;
       _dauerModelle = [];
       _zeitAbteilung = null;
@@ -2701,9 +2709,25 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   }
 
   // -- Stufe 2: Tasks anlegen --------------------------------------------
+  /// Die Schritte, die angelegt werden — ohne die abgewählten.
+  List<GeplanterSchritt> get _ausgewaehlt => [
+        for (final s in _plan)
+          if (!_abgewaehlt.contains(s.stepId)) s,
+      ];
+
   Future<void> _anlegen() async {
     final produkt = _gewaehlt;
     if (produkt == null) return;
+    // Abgewählte Abteilungen fehlen in der Kette: Der erste ausgewählte
+    // Schritt wird ihre Wurzel und trägt Bedarf, Fertigmenge und
+    // Auftragszeilen, die übrigen hängen sich in Prozessreihenfolge an.
+    final schritte = _ausgewaehlt;
+    if (schritte.isEmpty) return;
+    final ohne = [
+      for (final s in _plan)
+        if (_abgewaehlt.contains(s.stepId))
+          s.abteilung?.anzeigeName ?? s.abteilungDbValue,
+    ];
 
     setState(() => _busy = true);
     final db = ref.read(databaseProvider);
@@ -2721,7 +2745,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       await erstelleTasksAusPlan(
         db: db,
         productId: produkt.id,
-        schritte: _plan,
+        schritte: schritte,
         bedarfId: bedarf?.id,
         fertigMengeKg: fertigMenge,
         auftragsBezuege: bezuege,
@@ -2750,14 +2774,14 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     ref.invalidate(bedarfProvider);
 
     if (!mounted) return;
+    final mengen = _planFertigBekannt
+        ? 'Rohware ${_fmtKg(_planRohKg)} kg → '
+            'Fertigware ${_fmtKg(_planFertigKg)} kg'
+        : 'Rohware ${_fmtKg(_planRohKg)} kg';
+    final zusatz = ohne.isEmpty ? '' : ' · ohne ${ohne.join(', ')}';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          _planFertigBekannt
-              ? 'Eingeplant · Rohware ${_fmtKg(_planRohKg)} kg → '
-                  'Fertigware ${_fmtKg(_planFertigKg)} kg'
-              : 'Eingeplant · Rohware ${_fmtKg(_planRohKg)} kg',
-        ),
+        content: Text('Eingeplant · $mengen$zusatz'),
         duration: const Duration(seconds: 3),
       ),
     );
@@ -3154,6 +3178,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
   // -- Stufe 2: Tag je Schritt zuweisen ----------------------------------
   Widget _buildTage(ScrollController sc) {
     final colors = Theme.of(context).colorScheme;
+    final anzahl = _ausgewaehlt.length;
     return ListView(
       controller: sc,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
@@ -3166,7 +3191,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         const SizedBox(height: 4),
         Text(
           'Jede Abteilung kann auf einen eigenen Tag. Standard: alle auf dem '
-          'Starttag — schieb einzelne Schritte nach Bedarf.',
+          'Starttag — schieb einzelne Schritte nach Bedarf. Ohne Haken kommt '
+          'eine Abteilung diesmal nicht ins Board.',
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
         if (_planRohKg > 0) ...[
@@ -3186,9 +3212,25 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             schritt: s,
             tagLabel: _fmtTag(s.tag),
             dauerLabel: _fmtStunden(s.dauerMinuten),
+            ausgewaehlt: !_abgewaehlt.contains(s.stepId),
+            onAuswahl: (an) => setState(() {
+              if (an) {
+                _abgewaehlt.remove(s.stepId);
+              } else {
+                _abgewaehlt.add(s.stepId);
+              }
+            }),
             onMinus: () => _schiebeTag(s, -1),
             onPlus: () => _schiebeTag(s, 1),
             onPick: () => _waehleTag(s),
+          ),
+        if (anzahl == 0)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Mindestens eine Abteilung auswählen.',
+              style: TextStyle(fontSize: 12, color: colors.error),
+            ),
           ),
         const SizedBox(height: 16),
         Row(
@@ -3205,7 +3247,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: _busy ? null : _anlegen,
+                onPressed: _busy || anzahl == 0 ? null : _anlegen,
                 icon: _busy
                     ? const SizedBox(
                         width: 18,
@@ -3216,7 +3258,13 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                         ),
                       )
                     : const Icon(Icons.auto_awesome),
-                label: Text(_busy ? 'Wird angelegt …' : 'Tasks anlegen'),
+                label: Text(
+                  _busy
+                      ? 'Wird angelegt …'
+                      : anzahl < _plan.length
+                          ? 'Tasks anlegen ($anzahl von ${_plan.length})'
+                          : 'Tasks anlegen',
+                ),
               ),
             ),
           ],
@@ -3235,6 +3283,8 @@ class _SchrittTagKarte extends StatelessWidget {
     required this.schritt,
     required this.tagLabel,
     required this.dauerLabel,
+    required this.ausgewaehlt,
+    required this.onAuswahl,
     required this.onMinus,
     required this.onPlus,
     required this.onPick,
@@ -3243,6 +3293,10 @@ class _SchrittTagKarte extends StatelessWidget {
   final GeplanterSchritt schritt;
   final String tagLabel;
   final String dauerLabel;
+
+  /// Ob die Abteilung diesmal ins Board kommt.
+  final bool ausgewaehlt;
+  final ValueChanged<bool> onAuswahl;
   final VoidCallback onMinus;
   final VoidCallback onPlus;
   final VoidCallback onPick;
@@ -3286,17 +3340,26 @@ class _SchrittTagKarte extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(4, 8, 12, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
+                Tooltip(
+                  message: ausgewaehlt
+                      ? 'Diesmal nicht einplanen'
+                      : 'Doch einplanen',
+                  child: Checkbox(
+                    value: ausgewaehlt,
+                    onChanged: (v) => onAuswahl(v ?? true),
+                  ),
+                ),
                 Container(
                   width: 10,
                   height: 10,
                   decoration: BoxDecoration(
-                    color: farbe,
+                    color: ausgewaehlt ? farbe : colors.outline,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -3307,9 +3370,10 @@ class _SchrittTagKarte extends StatelessWidget {
                     children: [
                       Text(
                         abt?.anzeigeName ?? schritt.abteilungDbValue,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w700,
                           fontSize: 13,
+                          color: ausgewaehlt ? null : colors.onSurfaceVariant,
                         ),
                       ),
                       if (schritt.prozessschritt != null &&
@@ -3330,12 +3394,27 @@ class _SchrittTagKarte extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: farbe,
+                    color: ausgewaehlt ? farbe : colors.onSurfaceVariant,
+                    decoration:
+                        ausgewaehlt ? null : TextDecoration.lineThrough,
                   ),
                 ),
               ],
             ),
-            if (herkunft != null) ...[
+            // Abgewählt: kein Tag zu wählen, nur der Hinweis.
+            if (!ausgewaehlt)
+              Padding(
+                padding: const EdgeInsets.only(left: 44, top: 4),
+                child: Text(
+                  'Kommt diesmal nicht ins Board.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontStyle: FontStyle.italic,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            if (ausgewaehlt && herkunft != null) ...[
               const SizedBox(height: 4),
               Text(
                 herkunft.text,
@@ -3346,30 +3425,32 @@ class _SchrittTagKarte extends StatelessWidget {
                 ),
               ),
             ],
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                IconButton(
-                  onPressed: onMinus,
-                  icon: const Icon(Icons.chevron_left),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Einen Tag früher',
-                ),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onPick,
-                    icon: const Icon(Icons.event, size: 16),
-                    label: Text(tagLabel),
+            if (ausgewaehlt) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  IconButton(
+                    onPressed: onMinus,
+                    icon: const Icon(Icons.chevron_left),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Einen Tag früher',
                   ),
-                ),
-                IconButton(
-                  onPressed: onPlus,
-                  icon: const Icon(Icons.chevron_right),
-                  visualDensity: VisualDensity.compact,
-                  tooltip: 'Einen Tag später',
-                ),
-              ],
-            ),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: onPick,
+                      icon: const Icon(Icons.event, size: 16),
+                      label: Text(tagLabel),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: onPlus,
+                    icon: const Icon(Icons.chevron_right),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Einen Tag später',
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
