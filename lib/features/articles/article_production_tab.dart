@@ -387,11 +387,12 @@ class _HistWert extends StatelessWidget {
 class _LeistungsdatenDialog extends ConsumerStatefulWidget {
   const _LeistungsdatenDialog({required this.eintraege});
 
-  /// Je Abteilung: der erste Schritt (dort landen die Referenzwerte) und
-  /// alle Schritte der Gruppe (für die geltenden Werte und die
-  /// Personensumme in der Anzeige).
+  /// Je Station: ihre Nummer in der Prozesskette, die Abteilung, der erste
+  /// Schritt (dort landen die Referenzwerte) und alle Schritte der Station
+  /// (für die geltenden Werte und die Personensumme in der Anzeige).
   final List<
       ({
+        int nummer,
         Abteilung abteilung,
         ProductStep erster,
         List<ProductStep> schritte,
@@ -566,7 +567,11 @@ class _LeistungsdatenDialogState
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: const Text('Leistungsdaten je Abteilung'),
+      title: Text(
+        widget.eintraege.length == 1
+            ? 'Leistungsdaten · ${widget.eintraege.first.abteilung.anzeigeName}'
+            : 'Leistungsdaten je Abteilung',
+      ),
       content: SizedBox(
         // Breit genug für Menge + Std./Min. + die Kennzahlen rechts.
         // Bei 560 lief der Minutenwert in seine eigene Beschriftung.
@@ -592,8 +597,12 @@ class _LeistungsdatenDialogState
                 Row(
                   children: [
                     Expanded(
+                      // Mit der Nummer der Station — so passt die Zeile
+                      // zur Kette, auch wenn eine Abteilung zweimal darin
+                      // vorkommt.
                       child: Text(
-                        widget.eintraege[i].abteilung.anzeigeName,
+                        '${widget.eintraege[i].nummer} · '
+                        '${widget.eintraege[i].abteilung.anzeigeName}',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                     ),

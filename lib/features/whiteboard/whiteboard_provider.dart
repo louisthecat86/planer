@@ -559,6 +559,21 @@ Future<GeplanterPlan> berechneSchrittPlan({
   // fehlende Leistungsdaten in allen anderen Abteilungen.
   final historie = leistungAusProduktionen(produktionen);
 
+  // Stammabteilung jeder Anlage: Ein Block plant auf eine Anlage SEINER
+  // Abteilung — nur deren Spur gibt es im Board unter der Abteilung.
+  final anlagenIds = {
+    for (final s in steps)
+      if (s.maschineId case final id?) id,
+  };
+  final stammabteilung = anlagenIds.isEmpty
+      ? const <String, String>{}
+      : {
+          for (final m in await (db.select(db.machines)
+                ..where((t) => t.id.isIn(anlagenIds)))
+              .get())
+            m.id: m.abteilung,
+        };
+
   final tagNorm = DateTime(startTag.year, startTag.month, startTag.day);
 
   // Aufeinanderfolgende Schritte derselben Abteilung zu EINEM Block bündeln
@@ -590,15 +605,25 @@ Future<GeplanterPlan> berechneSchrittPlan({
         .map((s) => s.basisMitarbeiter)
         .fold<int>(1, (m, v) => v > m ? v : m);
 
+    // Anlage des Blocks: die erste aus der eigenen Abteilung. Arbeitet
+    // vorn eine Anlage aus einer anderen Abteilung mit (etwa der
+    // Rollenschneider der Zerlegung an der Bratstraße), plant der Auftrag
+    // trotzdem auf die Bratstraße. Erst ohne eigene Anlage zählt die erste
+    // überhaupt — das Board legt den Auftrag dann in die Sammelspur.
+    final anlagen = [
+      for (final s in block)
+        if (s.maschineId case final id?) id,
+    ];
+    final maschineId =
+        anlagen.where((id) => stammabteilung[id] == abt).firstOrNull ??
+            anlagen.firstOrNull;
+
     result.add(
       GeplanterSchritt(
         stepId: block.first.id,
         reihenfolge: block.first.reihenfolge,
         abteilungDbValue: abt,
-        // Anlage aus dem ersten Schritt des Blocks, der eine hat.
-        maschineId: block
-            .map((s) => s.maschineId)
-            .firstWhere((m) => m != null, orElse: () => null),
+        maschineId: maschineId,
         prozessschritt: labels.isEmpty ? null : labels.join(' · '),
         mengeKg: blockMenge,
         dauerMinuten: dauer.minuten.roundToDouble(),

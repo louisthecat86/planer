@@ -207,6 +207,50 @@ void main() {
 
       expect(plan.schritte.length, 1);
     });
+
+    test('eine Anlage aus einer anderen Abteilung bestimmt nicht die Spur',
+        () async {
+      // Der Rollenschneider steht im Katalog der Zerlegung, arbeitet bei
+      // diesem Artikel aber vorn an der Bratstraße mit.
+      await seedArtikel(db, id: 'p7', nummer: '1007');
+      await seedAnlage(
+        db,
+        id: 'rs',
+        name: 'Rollenschneider',
+        abteilung: 'zerlegung',
+      );
+      await seedAnlage(
+        db,
+        id: 'bs',
+        name: 'Bratstraße 1',
+        abteilung: 'bratstrasse',
+      );
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p7',
+        reihenfolge: 1,
+        abteilung: 'bratstrasse',
+        maschineId: 'rs',
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p7',
+        reihenfolge: 2,
+        abteilung: 'bratstrasse',
+        maschineId: 'bs',
+      );
+
+      final plan = await berechneSchrittPlan(
+        db: db,
+        productId: 'p7',
+        mengeKg: 100,
+        startTag: DateTime(2026, 9, 14),
+      );
+
+      expect(plan.schritte.single.maschineId, 'bs');
+    });
   });
 
   group('Ausbeute: Rohware und Fertigware', () {

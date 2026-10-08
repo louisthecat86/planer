@@ -8,9 +8,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/erledigt_service.dart';
+import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/vollbild.dart';
@@ -103,11 +106,16 @@ class _Uebersicht {
     required this.kgHeute,
     required this.wocheMinuten,
     required this.wocheProduktionen,
+    required this.aufgaben,
     required this.hinweise,
   });
 
   final DateTime heute;
   final List<_Auftrag> auftraege;
+
+  /// Sonstige Aufgaben des Tages — wie im Board je Abteilung, hier in
+  /// einer Liste in der Reihenfolge der Abteilungen.
+  final List<Tagesaufgabe> aufgaben;
   final List<_Auslastung> auslastung;
   final int produktionenHeute;
   final int erfasstHeute;
@@ -301,6 +309,48 @@ final _uebersichtProvider =
     );
   }
 
+  // Sonstige Aufgaben: die des Tages für die Karte, die liegen gebliebenen
+  // der Woche für einen Hinweis.
+  final aufgabenWoche = await TagesaufgabenService.fuerZeitraum(
+    db,
+    von: montag,
+    bisExkl: wochenEnde,
+  );
+  final aufgabenHeute = [
+    for (final e in aufgabenWoche.entries)
+      if (e.key.$2 == heute) ...e.value,
+  ]..sort((a, b) {
+      final ia = abteilungVon(a.abteilung)?.index ?? 99;
+      final ib = abteilungVon(b.abteilung)?.index ?? 99;
+      if (ia != ib) return ia.compareTo(ib);
+      return a.sortierung.compareTo(b.sortierung);
+    });
+  // Liegen geblieben: offen und ihr Tag ist vorbei. Vier Wochen zurück —
+  // sonst verschwände am Montag still, was am Freitag offen blieb.
+  final vorher = await TagesaufgabenService.fuerZeitraum(
+    db,
+    von: DateTime(heute.year, heute.month, heute.day - 28),
+    bisExkl: heute,
+  );
+  final liegenGeblieben = [
+    for (final liste in vorher.values) ...liste.where((a) => !a.erledigt),
+  ]..sort((a, b) => a.datum.compareTo(b.datum));
+  if (liegenGeblieben.isNotEmpty) {
+    final n = liegenGeblieben.length;
+    final d = liegenGeblieben.first.datum;
+    final text = n == 1
+        ? 'Eine Aufgabe aus den Vortagen ist noch offen — vom'
+        : '$n Aufgaben aus den Vortagen sind noch offen — älteste vom';
+    hinweise.add(
+      _Hinweis(
+        _Art.warnung,
+        '$text ${_wochentage[d.weekday - 1]} ${d.day}.${d.month}.',
+        ziel: 'board',
+        aktion: 'Zum Board',
+      ),
+    );
+  }
+
   final backup = await BackupService.getLatestBackup();
   if (backup == null) {
     hinweise.add(
@@ -333,6 +383,7 @@ final _uebersichtProvider =
     wocheMinuten:
         tasks.fold<double>(0, (s, t) => s + t.geplanteDauerMinuten),
     wocheProduktionen: tasks.where((t) => t.parentTaskId == null).length,
+    aufgaben: aufgabenHeute,
     hinweise: hinweise,
   );
 });
@@ -651,6 +702,9 @@ class _Tagesbereich extends StatelessWidget {
     );
     final auslastung = _AuslastungKarte(auslastung: u.auslastung);
     final hinweise = _HinweisKarte(hinweise: u.hinweise);
+    // Nur, wenn es für den Tag welche gibt — eingetragen wird im Board.
+    final aufgaben =
+        u.aufgaben.isEmpty ? null : _AufgabenKarte(aufgaben: u.aufgaben);
 
     if (!breit) {
       return Column(
@@ -658,6 +712,10 @@ class _Tagesbereich extends StatelessWidget {
           heute,
           const SizedBox(height: 12),
           auslastung,
+          if (aufgaben != null) ...[
+            const SizedBox(height: 12),
+            aufgaben,
+          ],
           const SizedBox(height: 12),
           hinweise,
         ],
@@ -675,6 +733,10 @@ class _Tagesbereich extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 auslastung,
+                if (aufgaben != null) ...[
+                  const SizedBox(height: 12),
+                  aufgaben,
+                ],
                 const SizedBox(height: 12),
                 Expanded(child: hinweise),
               ],
@@ -1238,6 +1300,131 @@ class _AuslastungZeile extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Die sonstigen Aufgaben des Tages — abhakbar wie im Board. Antippen
+/// einer Zeile setzt oder entfernt den Haken.
+class _AufgabenKarte extends StatelessWidget {
+  const _AufgabenKarte({required this.aufgaben});
+
+  final List<Tagesaufgabe> aufgaben;
+
+  /// Dasselbe Grün wie im Board.
+  static const Color _gruen = Color(0xFF43A047);
+
+  /// Über den Container statt über `ref`: Baut die Übersicht während des
+  /// Speicherns um, ist diese Karte womöglich schon weg — der Container
+  /// nicht. Neu geladen wird nur die Übersicht, nicht der ganze Bedarf.
+  Future<void> _abhaken(BuildContext context, Tagesaufgabe a) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    await TagesaufgabenService.abhaken(
+      container.read(databaseProvider),
+      a.id,
+      erledigt: !a.erledigt,
+    );
+    container.read(autoBackupTriggerProvider).fireDebounced(
+          reason: a.erledigt ? 'Haken entfernt' : 'Aufgabe abgehakt',
+        );
+    container.invalidate(_uebersichtProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final offen = aufgaben.where((a) => !a.erledigt).length;
+    return _Karte(
+      titel: 'Sonstige Aufgaben',
+      icon: Icons.checklist_rounded,
+      aktion: Text(
+        offen == 0 ? 'alles erledigt' : '$offen offen',
+        style: theme.textTheme.bodySmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: offen == 0 ? _gruen : theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      child: Column(
+        children: [
+          for (final a in aufgaben)
+            _AufgabeZeile(aufgabe: a, onTap: () => _abhaken(context, a)),
+        ],
+      ),
+    );
+  }
+}
+
+class _AufgabeZeile extends StatelessWidget {
+  const _AufgabeZeile({required this.aufgabe, required this.onTap});
+
+  final Tagesaufgabe aufgabe;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final a = aufgabe;
+    final abteilung =
+        Abteilung.values.where((x) => x.dbValue == a.abteilung).firstOrNull;
+
+    // Material statt Farbe am Container: Die Tipp-Welle malt auf das
+    // nächste Material und wäre unter einer Containerfarbe unsichtbar.
+    return Material(
+      color: a.erledigt
+          ? _AufgabenKarte._gruen.withValues(alpha: 0.10)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: theme.dividerColor)),
+          ),
+          child: Row(
+            children: [
+              Tooltip(
+                message:
+                    a.erledigt ? 'Haken entfernen' : 'Als erledigt abhaken',
+                child: Icon(
+                  a.erledigt
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  size: 18,
+                  color: a.erledigt
+                      ? _AufgabenKarte._gruen
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 30,
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                decoration: BoxDecoration(
+                  color: abteilung?.farbe ?? theme.colorScheme.outline,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  abteilung?.kurzcode ?? '?',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  a.inhalt,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

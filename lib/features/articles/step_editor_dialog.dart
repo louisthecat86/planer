@@ -1,7 +1,6 @@
 import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
@@ -15,30 +14,25 @@ import '../../core/services/prozesskette_service.dart';
 /// Zwei Modi:
 /// - **Edit-Modus**: [step] gesetzt → bestehende Werte vorbelegt, `UPDATE`.
 /// - **Insert-Modus**: [step] = null, [productId] gesetzt → leere Felder
-///   mit Defaults, `INSERT` mit nächster freier `reihenfolge`.
+///   mit Defaults; der [ProzesskettenService] fügt den Schritt ein.
 ///
 /// Editierbare Felder (Phase A):
 /// - Abteilung (Dropdown aus Abteilung-Enum)
 /// - Prozessschritt (Freitext)
-/// - Anlage (Dropdown aus Anlagen-Katalog, gefiltert nach Abteilung)
+/// - Anlage (Dropdown aus dem Anlagen-Katalog: zuerst die der Abteilung,
+///   darunter die der anderen — eine Anlage darf bei einem Artikel auch für
+///   eine fremde Abteilung arbeiten)
 /// - Personen an diesem Schritt (Zahl, Default 1 beim Anlegen)
 ///
 /// Zeiten gibt es am Schritt keine: Menge und Zeit sind Leistungsdaten der
 /// Abteilung und werden dort gepflegt. Wechselt ein Schritt die Abteilung,
 /// bleiben deren Leistungsdaten zurück (siehe [ProzesskettenService]).
 ///
-/// **Reihenfolge-Logik im Insert-Modus:**
-/// Die neue `reihenfolge` ist `MAX(reihenfolge) + 1` über **alle** Schritte
-/// des Produkts — *inklusive* Soft-deleted. So erbt ein neuer Schritt nicht
-/// die Excel-Spalte (B..U) eines gelöschten Schritts; die Spaltenzuordnung
-/// im Excel-Export bleibt stabil (Variante 2: gelöschte Spalten unangetastet).
-///
-/// **Spalten-Sperre des Artikelblatts:**
-/// Die v3-Excel-Vorlage hat 20 Schritt-Spalten (B..U). Bei `MAX(reihenfolge)
-/// >= 20` wird der Insert blockiert und eine Fehlermeldung im Dialog
-/// angezeigt. Der aufrufende Screen sollte zusätzlich vor dem Öffnen des
-/// Dialogs prüfen und mit einer Snackbar abweisen — der Check hier ist
-/// das Sicherheitsnetz.
+/// **Position im Insert-Modus:** an [einfuegenAn], ohne Angabe ans Ende der
+/// Abteilung — gibt es sie im Prozess noch nicht, ans Ende der Kette. Der
+/// Service nummeriert danach alle Schritte lückenlos (Excel-Spalten B..U)
+/// und lässt höchstens 20 aktive Schritte zu; darüber bleibt der Dialog mit
+/// einer Fehlermeldung offen.
 ///
 /// **Anlagen-Doppelpflege:**
 /// Sowohl die FK-Spalte `maschineId` als auch das Legacy-Freitextfeld
@@ -54,6 +48,8 @@ class StepEditorDialog extends ConsumerStatefulWidget {
     this.stepNumber,
     this.productId,
     this.startMaschine,
+    this.startAbteilung,
+    this.einfuegenAn,
   }) : assert(
           step != null || productId != null,
           'Entweder step (Edit-Modus) oder productId (Insert-Modus) muss '
@@ -76,6 +72,15 @@ class StepEditorDialog extends ConsumerStatefulWidget {
   /// Optional im Insert-Modus: vorausgewählte Maschine (z. B. aus der
   /// Produktionsmittel-Sidebar). Belegt Abteilung + Maschine vor.
   final Machine? startMaschine;
+
+  /// Optional im Insert-Modus: Abteilung des neuen Schritts (dbValue) —
+  /// etwa die Station, an deren „+ Anlage" getippt wurde. Geht vor der
+  /// Stammabteilung von [startMaschine].
+  final String? startAbteilung;
+
+  /// Optional im Insert-Modus: Position in der Kette (0 = ganz vorn). Ohne
+  /// Angabe kommt der Schritt ans Ende seiner Abteilung.
+  final int? einfuegenAn;
 
   bool get _isInsertMode => step == null;
 
@@ -101,6 +106,8 @@ class StepEditorDialog extends ConsumerStatefulWidget {
     int? stepNumber,
     String? productId,
     Machine? startMaschine,
+    String? startAbteilung,
+    int? einfuegenAn,
   }) async {
     final result = await showDialog<bool>(
       context: context,
@@ -110,6 +117,8 @@ class StepEditorDialog extends ConsumerStatefulWidget {
         stepNumber: stepNumber,
         productId: productId,
         startMaschine: startMaschine,
+        startAbteilung: startAbteilung,
+        einfuegenAn: einfuegenAn,
       ),
     );
     return result ?? false;
@@ -131,15 +140,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
   bool _isSaving = false;
   String? _saveError;
 
-  /// Maximalzahl Schritte = Spalten des Artikelblatts (B..U = 20).
-  ///
-  /// Zehn reichten nicht: Allein die Bratstraße durchläuft bei panierten
-  /// Artikeln bis zu acht Anlagen (Verbufa, Panieranlage, Öl-/Wasserzugabe,
-  /// Bratstraße, Heißluftofen, Schockfroster …), dazu kommen Zerlegung,
-  /// Waage und Verpackung. Der Wert muss mit `_maxSchritte` im
-  /// Excel-Export und der Spaltengrenze im Import übereinstimmen.
-  static const int _maxSchritte = 20;
-
   bool get _isInsertMode => widget._isInsertMode;
 
   @override
@@ -157,7 +157,9 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     } else {
       // Insert-Modus: leere Felder mit sinnvollen Defaults
       final start = widget.startMaschine;
-      _abteilungDbValue = start?.abteilung ?? Abteilung.values.first.dbValue;
+      _abteilungDbValue = widget.startAbteilung ??
+          start?.abteilung ??
+          Abteilung.values.first.dbValue;
       _prozessschrittCtrl = TextEditingController();
       _maschineId = start?.id;
       _personenCtrl = TextEditingController(text: '1');
@@ -186,39 +188,98 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
     }
   }
 
-  /// Maschinen gefiltert nach der gewählten Abteilung.
-  /// Wenn keine Maschine zur Abteilung passt, werden alle gezeigt.
-  List<Machine> get _maschinenGefiltert {
-    final passend =
-        _alleMaschinen.where((m) => m.abteilung == _abteilungDbValue).toList();
-    return passend.isEmpty ? _alleMaschinen : passend;
+  /// Einträge der Anlagen-Auswahl: zuerst die Anlagen der gewählten
+  /// Abteilung, darunter die der anderen — mit ihrer Abteilung dahinter.
+  List<DropdownMenuItem<String?>> _anlagenEintraege(ThemeData theme) {
+    Abteilung? abteilungVon(String dbValue) {
+      for (final a in Abteilung.values) {
+        if (a.dbValue == dbValue) return a;
+      }
+      return null;
+    }
+
+    String abteilungsName(String dbValue) =>
+        abteilungVon(dbValue)?.anzeigeName ?? dbValue;
+
+    final eigene = _alleMaschinen
+        .where((m) => m.abteilung == _abteilungDbValue)
+        .toList();
+    final fremde = _alleMaschinen
+        .where((m) => m.abteilung != _abteilungDbValue)
+        .toList()
+      ..sort((a, b) {
+        final ia = abteilungVon(a.abteilung)?.index ?? 99;
+        final ib = abteilungVon(b.abteilung)?.index ?? 99;
+        return ia != ib ? ia.compareTo(ib) : a.name.compareTo(b.name);
+      });
+    final gedaempft = TextStyle(color: theme.colorScheme.onSurfaceVariant);
+    final gewaehlt = _maschineId;
+
+    return [
+      const DropdownMenuItem<String?>(
+        value: null,
+        child: Text(
+          '— keine Anlage —',
+          style: TextStyle(fontStyle: FontStyle.italic),
+        ),
+      ),
+      for (final m in eigene)
+        DropdownMenuItem<String?>(value: m.id, child: Text(m.name)),
+      if (fremde.isNotEmpty)
+        // Zwischenüberschrift — nicht wählbar.
+        DropdownMenuItem<String?>(
+          value: _kUeberschriftFremde,
+          enabled: false,
+          child: Text(
+            'Aus anderen Abteilungen',
+            style: gedaempft.copyWith(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      for (final m in fremde)
+        DropdownMenuItem<String?>(
+          value: m.id,
+          child: Text.rich(
+            TextSpan(
+              text: m.name,
+              children: [
+                TextSpan(
+                  text: ' · ${abteilungsName(m.abteilung)}',
+                  style: gedaempft,
+                ),
+              ],
+            ),
+          ),
+        ),
+      // Die Anlage des Schritts gibt es im Katalog nicht mehr: trotzdem
+      // anzeigen, statt die Auswahl ins Leere zeigen zu lassen.
+      if (gewaehlt != null && !_alleMaschinen.any((m) => m.id == gewaehlt))
+        DropdownMenuItem<String?>(
+          value: gewaehlt,
+          child: Text(
+            '${_ermittleMaschinenName() ?? 'Anlage'} (nicht mehr im Katalog)',
+            style: gedaempft,
+          ),
+        ),
+    ];
   }
+
+  /// Wert der Zwischenüberschrift in der Anlagen-Auswahl — keine Anlage
+  /// hat diese ID.
+  static const String _kUeberschriftFremde = '__andere_abteilungen__';
 
   /// Anlagen-Name für das Legacy-Feld `step.maschine`. Wird parallel zur
   /// FK-Spalte `step.maschineId` gepflegt, weil der Excel-Export teilweise
   /// noch das Freitext-Feld liest.
   String? _ermittleMaschinenName() {
-    if (_maschineId == null) return null;
-    if (_alleMaschinen.isEmpty) return null;
-    return _alleMaschinen
-        .firstWhere(
-          (m) => m.id == _maschineId,
-          orElse: () => _alleMaschinen.first,
-        )
-        .name;
-  }
-
-  /// `MAX(reihenfolge)` über alle Schritte des Produkts —
-  /// **inklusive** Soft-deleted, damit gelöschte Excel-Spalten nicht
-  /// neu vergeben werden. Liefert 0 wenn das Produkt noch keine Schritte hat.
-  Future<int> _ermittleMaxReihenfolge(AppDatabase db) async {
-    final productId = widget.productId!;
-    final maxExpr = db.productSteps.reihenfolge.max();
-    final row = await (db.selectOnly(db.productSteps)
-          ..addColumns([maxExpr])
-          ..where(db.productSteps.productId.equals(productId)))
-        .getSingleOrNull();
-    return row?.read(maxExpr) ?? 0;
+    final id = _maschineId;
+    if (id == null) return null;
+    final m = _alleMaschinen.where((m) => m.id == id).firstOrNull;
+    if (m != null) return m.name;
+    // Nicht mehr im Katalog: den bisherigen Namen behalten.
+    return widget.step?.maschineId == id ? widget.step?.maschine : null;
   }
 
   Future<void> _speichere() async {
@@ -237,27 +298,21 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       final db = ref.read(databaseProvider);
 
       if (_isInsertMode) {
-        // Pre-Check: Spaltenlimit des Artikelblatts (B..U = 20).
-        final currentMax = await _ermittleMaxReihenfolge(db);
-        if (currentMax >= _maxSchritte) {
-          if (mounted) {
-            setState(() {
-              _saveError =
-                  'Maximale Anzahl Schritte ($_maxSchritte) erreicht. '
-                  'Bitte zuerst einen Schritt löschen.';
-              _isSaving = false;
-            });
-          }
-          return; // kein Pop — Dialog bleibt offen mit Fehlermeldung
-        }
-
-        await _insert(
-          db: db,
-          neueReihenfolge: currentMax + 1,
+        // Fügt ein und nummeriert die Kette lückenlos. Hat der Artikel schon
+        // 20 Schritte (Spalten B..U der Vorlage), kommt ein StateError.
+        await ProzesskettenService.fuegeEin(
+          db,
+          productId: widget.productId!,
+          abteilung: _abteilungDbValue,
+          index: widget.einfuegenAn,
+          maschineId: _maschineId,
+          maschine: maschineName,
+          prozessschritt: prozess.isEmpty ? null : prozess,
           personen: personen,
-          prozess: prozess,
-          maschineName: maschineName,
         );
+        ref
+            .read(autoBackupTriggerProvider)
+            .fireDebounced(reason: 'Schritt angelegt');
       } else {
         await _update(
           db: db,
@@ -270,6 +325,14 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
       if (mounted) {
         Navigator.of(context).pop(true);
       }
+    } on StateError catch (e) {
+      // Kette voll — der Dialog bleibt mit dem Hinweis offen.
+      if (mounted) {
+        setState(() {
+          _saveError = e.message;
+          _isSaving = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -278,40 +341,6 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
         });
       }
     }
-  }
-
-  Future<void> _insert({
-    required AppDatabase db,
-    required int neueReihenfolge,
-    required int personen,
-    required String prozess,
-    required String? maschineName,
-  }) async {
-    final neueId = const Uuid().v4();
-
-    await db.into(db.productSteps).insert(
-          ProductStepsCompanion(
-            id: Value(neueId),
-            productId: Value(widget.productId!),
-            reihenfolge: Value(neueReihenfolge),
-            abteilung: Value(_abteilungDbValue),
-            prozessschritt: Value(prozess.isEmpty ? null : prozess),
-            maschineId: Value(_maschineId),
-            // Legacy-Feld parallel pflegen — Excel-Export liest beide.
-            maschine: Value(maschineName),
-            // Leistungsdaten hat ein neuer Schritt keine — sie gehören der
-            // Abteilung und werden dort gepflegt.
-            basisMengeKg: const Value(0),
-            basisDauerMinuten: const Value(0),
-            basisMitarbeiter: Value(personen),
-            // basisAnzahlMessungen: Default 0 aus dem Schema
-            // createdAt / updatedAt: Default currentDateAndTime aus Schema
-          ),
-        );
-
-    ref
-        .read(autoBackupTriggerProvider)
-        .fireDebounced(reason: 'Schritt angelegt');
   }
 
   Future<void> _update({
@@ -400,25 +429,12 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                       ),
                     )
                     .toList(),
+                // Die Anlage bleibt: Sie darf bei diesem Artikel auch für
+                // eine andere Abteilung als ihre eigene arbeiten.
                 onChanged: _isSaving
                     ? null
                     : (v) {
-                        if (v != null) {
-                          setState(() {
-                            _abteilungDbValue = v;
-                            // Maschine zurücksetzen wenn sie nicht zur
-                            // neuen Abteilung passt
-                            if (_maschineId != null) {
-                              final m = _alleMaschinen.firstWhere(
-                                (x) => x.id == _maschineId,
-                                orElse: () => _alleMaschinen.first,
-                              );
-                              if (m.abteilung != v) {
-                                _maschineId = null;
-                              }
-                            }
-                          });
-                        }
+                        if (v != null) setState(() => _abteilungDbValue = v);
                       },
               ),
               const SizedBox(height: 12),
@@ -446,21 +462,7 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                   decoration: const InputDecoration(
                     labelText: 'Anlage',
                   ),
-                  items: [
-                    const DropdownMenuItem<String?>(
-                      value: null,
-                      child: Text(
-                        '— keine Anlage —',
-                        style: TextStyle(fontStyle: FontStyle.italic),
-                      ),
-                    ),
-                    ..._maschinenGefiltert.map(
-                      (m) => DropdownMenuItem<String?>(
-                        value: m.id,
-                        child: Text(m.name),
-                      ),
-                    ),
-                  ],
+                  items: _anlagenEintraege(Theme.of(context)),
                   onChanged: _isSaving
                       ? null
                       : (v) => setState(() => _maschineId = v),

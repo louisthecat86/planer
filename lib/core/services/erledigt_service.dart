@@ -121,18 +121,22 @@ class ErledigtService {
   /// Die IDs der Aufträge aus [auftraege], deren Produktion erfasst ist:
   /// Für den Artikel gibt es am Tag der Wurzel ihrer Kette eine
   /// Erfassung.
+  ///
+  /// [wurzelVon]: schon ermittelte Wurzeln (siehe [wurzeln]) — spart das
+  /// zweite Hochlaufen, wenn der Aufrufer sie ohnehin braucht.
   static Future<Set<String>> erfassteAuftraege(
     AppDatabase db,
-    Iterable<ProductionTask> auftraege,
-  ) async {
+    Iterable<ProductionTask> auftraege, {
+    Map<String, ProductionTask>? wurzelVon,
+  }) async {
     final liste = auftraege.toList();
     if (liste.isEmpty) return <String>{};
-    final wurzelVon = await wurzeln(db, liste);
+    final wurzelVonAuftrag = wurzelVon ?? await wurzeln(db, liste);
 
     DateTime? von;
     DateTime? bis;
     final produkte = <String>{};
-    for (final w in wurzelVon.values) {
+    for (final w in wurzelVonAuftrag.values) {
       final tag = tagOhneZeit(w.datum);
       if (von == null || tag.isBefore(von)) von = tag;
       if (bis == null || tag.isAfter(bis)) bis = tag;
@@ -157,7 +161,7 @@ class ErledigtService {
 
     return {
       for (final t in liste)
-        if (wurzelVon[t.id] case final w?
+        if (wurzelVonAuftrag[t.id] case final w?
             when erfasst.contains(_schluessel(w.productId, w.datum)))
           t.id,
     };
@@ -170,10 +174,12 @@ class ErledigtService {
   /// dann nicht mehr zurück, die Erfassung entscheidet.
   static Future<Map<String, Erledigt>> stand(
     AppDatabase db,
-    Iterable<ProductionTask> auftraege,
-  ) async {
+    Iterable<ProductionTask> auftraege, {
+    Map<String, ProductionTask>? wurzelVon,
+  }) async {
     final liste = auftraege.toList();
-    final erfasst = await erfassteAuftraege(db, liste);
+    final erfasst =
+        await erfassteAuftraege(db, liste, wurzelVon: wurzelVon);
     return {
       for (final t in liste)
         if (erfasst.contains(t.id))

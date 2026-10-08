@@ -76,7 +76,9 @@ class BoardTask {
     this.parentTaskId,
     this.maschineId,
     this.erledigt,
-  });
+    String? kettenId,
+    required this.spurId,
+  }) : kettenId = kettenId ?? parentTaskId ?? id;
 
   final String id;
   final String productId;
@@ -99,14 +101,26 @@ class BoardTask {
   /// Anlage, auf der der Auftrag läuft (null = keine/unbekannt).
   final String? maschineId;
 
-  /// Verkettung: Aufträge derselben Produktion (die durch mehrere
-  /// Abteilungen läuft) teilen sich eine Wurzel. `null` = dieser Auftrag
-  /// IST die Wurzel.
+  /// Spur, in der die Karte im Board steht (wie [BoardSpur.id]): die Spur
+  /// ihrer Anlage — oder die Sammelspur ihrer Abteilung, wenn die Anlage
+  /// dort keine eigene Spur hat, etwa weil sie aus einer anderen Abteilung
+  /// stammt. Beim Verschieben zählt diese Spur, nicht die Anlage: Bleibt
+  /// ein Auftrag in seiner Spur, behält er seine Anlage.
+  final String spurId;
+
+  /// Verkettung: der Vorgänger in der Produktion (die durch mehrere
+  /// Abteilungen läuft). `null` = dieser Auftrag IST die Wurzel.
   final String? parentTaskId;
 
-  /// Stabile Kennung der Auftragskette — alle Karten einer Produktion
-  /// liefern denselben Wert und bekommen dadurch dieselbe Akzentfarbe.
-  String get kettenId => parentTaskId ?? id;
+  /// Stabile Kennung der Auftragskette: die ID ihrer Wurzel. Alle Karten
+  /// einer Produktion liefern denselben Wert und bekommen dadurch dieselbe
+  /// Akzentfarbe und dieselben Kettenmarker.
+  ///
+  /// Früher stand hier `parentTaskId ?? id`. Weil jeder Schritt auf seinen
+  /// VORGÄNGER zeigt, nicht auf die Wurzel, bekam ab dem dritten Schritt
+  /// jede Karte eine eigene Kette — andere Farbe, keine Marker. Die Wurzel
+  /// ermittelt jetzt das Laden des Boards; ohne sie bleibt der alte Wert.
+  final String kettenId;
 
   /// Manuelle Reihenfolge innerhalb der Abteilung an einem Tag.
   final int sortierung;
@@ -369,11 +383,13 @@ final weekBoardProvider = FutureProvider.autoDispose
   final tage = List.generate(5, (i) => tagPlus(wochenStart, i));
   final wochenEndeExkl = tagPlus(wochenStart, 7);
 
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
   final alleTasks = await _ladeBoardTasks(
     db,
     wochenStart,
     wochenEndeExkl,
-    mitErledigt: true,
+    anlagenSpuren: _anlagenSpuren(planungsAnlagen),
+    fuerAnzeige: true,
   );
 
   // Kettenmarker: Vor-/Folgestufen derselben Auftragskette, die außerhalb
@@ -385,18 +401,9 @@ final weekBoardProvider = FutureProvider.autoDispose
     kettenIds: alleTasks.map((t) => t.kettenId).toSet(),
   );
 
-  final planungsAnlagen = await _ladePlanungsAnlagen(db);
-  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
-
   // Abteilungen, in denen Aufträge OHNE gültige Anlagen-Spur liegen —
   // nur für die wird zusätzlich eine Sammelspur gezeigt.
-  final ohneAnlage = <String>{};
-  for (final t in alleTasks) {
-    final mid = t.maschineId;
-    if (mid == null || !anlagenIds.contains(mid)) {
-      ohneAnlage.add(t.abteilung.dbValue);
-    }
-  }
+  final ohneAnlage = _abteilungenOhneAnlagenSpur(alleTasks);
 
   final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
   final spuren = _baueSpuren(
@@ -408,8 +415,7 @@ final weekBoardProvider = FutureProvider.autoDispose
   // Tasks den Spuren zuordnen.
   final tasksProZelle = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
-    final spurKey = _spurKeyFuerTask(task, anlagenIds);
-    final key = '$spurKey|${task.datum.toIso8601String()}';
+    final key = '${task.spurId}|${task.datum.toIso8601String()}';
     (tasksProZelle[key] ??= []).add(task);
   }
   for (final liste in tasksProZelle.values) {
@@ -458,22 +464,15 @@ final dayBoardProvider = FutureProvider.autoDispose
   final tag = DateTime(datum.year, datum.month, datum.day);
   final naechsterTag = tagPlus(tag, 1);
 
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
   final alleTasks = await _ladeBoardTasks(
     db,
     tag,
     naechsterTag,
-    mitErledigt: true,
+    anlagenSpuren: _anlagenSpuren(planungsAnlagen),
+    fuerAnzeige: true,
   );
-  final planungsAnlagen = await _ladePlanungsAnlagen(db);
-  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
-
-  final ohneAnlage = <String>{};
-  for (final t in alleTasks) {
-    final mid = t.maschineId;
-    if (mid == null || !anlagenIds.contains(mid)) {
-      ohneAnlage.add(t.abteilung.dbValue);
-    }
-  }
+  final ohneAnlage = _abteilungenOhneAnlagenSpur(alleTasks);
 
   final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
   final spuren = _baueSpuren(
@@ -484,7 +483,7 @@ final dayBoardProvider = FutureProvider.autoDispose
 
   final tasksProSpur = <String, List<BoardTask>>{};
   for (final task in alleTasks) {
-    (tasksProSpur[_spurKeyFuerTask(task, anlagenIds)] ??= []).add(task);
+    (tasksProSpur[task.spurId] ??= []).add(task);
   }
 
   final zusatzProSpur = await _ladeZusatzzeiten(db, vonTag: tag, bisTag: tag);
@@ -533,14 +532,18 @@ final tagesaufgabenProvider = FutureProvider.autoDispose
 /// [startInkl] (inklusive) bis [endeExkl] (exklusive) und reichert sie mit
 /// dem Produktnamen an.
 ///
-/// [mitErledigt]: zusätzlich bestimmen, welche Karten erledigt sind
-/// (abgehakt oder Produktion erfasst). Nur das Board braucht das — die
-/// Kapazitätsrechnung spart sich die Abfragen.
+/// [anlagenSpuren]: die Anlagen-Spuren (siehe [_anlagenSpuren]) — daraus
+/// die Spur jeder Karte.
+///
+/// [fuerAnzeige]: zusätzlich die Wurzel jeder Kette (für Farbe und
+/// Kettenmarker) und den Erledigt-Stand bestimmen. Nur das Board braucht
+/// das — die Kapazitätsrechnung spart sich die Abfragen.
 Future<List<BoardTask>> _ladeBoardTasks(
   AppDatabase db,
   DateTime startInkl,
   DateTime endeExkl, {
-  bool mitErledigt = false,
+  required Set<String> anlagenSpuren,
+  bool fuerAnzeige = false,
 }) async {
   final rows = await (db.select(db.productionTasks)
         ..where((t) => t.deletedAt.isNull())
@@ -564,8 +567,11 @@ Future<List<BoardTask>> _ladeBoardTasks(
     for (final p in produkte) p.id: p.artikelnummer,
   };
 
-  final erledigtStand = mitErledigt
-      ? await ErledigtService.stand(db, rows)
+  final wurzelVon = fuerAnzeige
+      ? await ErledigtService.wurzeln(db, rows)
+      : const <String, ProductionTask>{};
+  final erledigtStand = fuerAnzeige
+      ? await ErledigtService.stand(db, rows, wurzelVon: wurzelVon)
       : const <String, Erledigt>{};
 
   final perRow = <BoardTask>[];
@@ -589,6 +595,8 @@ Future<List<BoardTask>> _ladeBoardTasks(
         status: t.status,
         mitgliederIds: [t.id],
         erledigt: erledigtStand[t.id],
+        kettenId: wurzelVon[t.id]?.id,
+        spurId: _spurKey(abteilung.dbValue, t.maschineId, anlagenSpuren),
       ),
     );
   }
@@ -639,6 +647,8 @@ Future<List<BoardTask>> _ladeBoardTasks(
         status: g.first.status,
         mitgliederIds: [for (final t in g) t.id],
         erledigt: _erledigtGebuendelt(g),
+        kettenId: g.first.kettenId,
+        spurId: g.first.spurId,
       ),
     );
   }
@@ -689,9 +699,15 @@ Abteilung? _abteilungOf(String dbValue) {
 }
 
 /// Sammelt je Auftragskette den nächstgelegenen Schritt VOR und NACH der
-/// aktuell gezeigten Woche. Lädt dazu alle Tasks der betroffenen Ketten —
-/// Wurzeln (`id ∈ kettenIds`) und Kinder (`parentTaskId ∈ kettenIds`) —
-/// auch außerhalb des Wochenfensters.
+/// aktuell gezeigten Woche. [kettenIds] sind die Wurzeln der Ketten (siehe
+/// [BoardTask.kettenId]); von ihnen aus werden alle Schritte geladen —
+/// Ebene für Ebene abwärts über `parentTaskId`, auch außerhalb des
+/// Wochenfensters.
+///
+/// Jeder Schritt zeigt auf seinen Vorgänger, nicht auf die Wurzel. Früher
+/// wurde nur eine Ebene geladen: Ab dem dritten Schritt fehlten die Marker.
+/// Gelöschte Schritte zählen beim Durchlaufen mit — ein gelöschter
+/// Zwischenschritt trennt die Kette nicht —, als Marker aber nicht.
 Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
   AppDatabase db, {
   required DateTime wochenStart,
@@ -700,25 +716,37 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
 }) async {
   if (kettenIds.isEmpty) return const {};
 
-  // Blockweise abfragen und über die Task-ID zusammenführen: Ein Auftrag
-  // kann in zwei Blöcken auftauchen (einmal über seine eigene ID, einmal
-  // über parent_task_id). Für die Vor-/Folgestufen ist das zwar unschädlich
-  // — es wird ohnehin nur das früheste bzw. späteste Datum gesucht — aber
-  // doppelte Zeilen sind ein Stolperstein für jede spätere Erweiterung.
+  // Schritt-ID → Wurzel seiner Kette, dazu die Zeilen selbst.
+  final wurzelVon = {for (final id in kettenIds) id: id};
   final jeId = <String, ProductionTask>{};
   for (final block in _idBloecke(kettenIds)) {
-    final teil = await (db.select(db.productionTasks)
-          ..where((t) => t.deletedAt.isNull())
-          ..where((t) => t.status.isNotIn(const ['storniert']))
-          ..where(
-            (t) => t.id.isIn(block) | t.parentTaskId.isIn(block),
-          ))
+    final wurzeln = await (db.select(db.productionTasks)
+          ..where((t) => t.id.isIn(block)))
         .get();
-    for (final t in teil) {
-      jeId[t.id] = t;
+    for (final w in wurzeln) {
+      jeId[w.id] = w;
     }
   }
-  final rows = jeId.values;
+  var ebene = kettenIds;
+  // Sicherung gegen Kreise in den Daten — echte Ketten sind kurz.
+  for (var tiefe = 0; ebene.isNotEmpty && tiefe < 20; tiefe++) {
+    final naechste = <String>{};
+    for (final block in _idBloecke(ebene)) {
+      final kinder = await (db.select(db.productionTasks)
+            ..where((t) => t.parentTaskId.isIn(block)))
+          .get();
+      for (final k in kinder) {
+        final wurzel = wurzelVon[k.parentTaskId];
+        if (wurzel == null || wurzelVon.containsKey(k.id)) continue;
+        wurzelVon[k.id] = wurzel;
+        jeId[k.id] = k;
+        naechste.add(k.id);
+      }
+    }
+    ebene = naechste;
+  }
+  final rows = jeId.values
+      .where((t) => t.deletedAt == null && t.status != 'storniert');
 
   final vorher = <String, ({Abteilung abteilung, DateTime datum})>{};
   final nachher = <String, ({Abteilung abteilung, DateTime datum})>{};
@@ -726,7 +754,8 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
     final abt = _abteilungOf(t.abteilung);
     if (abt == null) continue;
     final tag = DateTime(t.datum.year, t.datum.month, t.datum.day);
-    final ketten = t.parentTaskId ?? t.id;
+    final ketten = wurzelVon[t.id];
+    if (ketten == null) continue;
     if (tag.isBefore(wochenStart)) {
       final cur = vorher[ketten];
       if (cur == null || tag.isAfter(cur.datum)) {
@@ -775,17 +804,37 @@ String _cellKey(BoardSpur spur, DateTime tag) {
   return '${spur.id}|${tagNorm.toIso8601String()}';
 }
 
-/// Ordnet einen Auftrag seiner Spur zu.
+/// Kennungen aller Anlagen-Spuren („<abteilung>|<maschineId>") — wie
+/// [BoardSpur.id]. Eine Anlage hat ihre Spur in ihrer Stammabteilung.
+Set<String> _anlagenSpuren(List<Machine> planungsAnlagen) => {
+      for (final m in planungsAnlagen) '${m.abteilung}|${m.id}',
+    };
+
+/// Abteilungen, in denen Aufträge ohne eigene Anlagen-Spur liegen — sie
+/// brauchen zusätzlich eine Sammelspur.
+Set<String> _abteilungenOhneAnlagenSpur(List<BoardTask> tasks) => {
+      for (final t in tasks)
+        if (t.spurId == '${t.abteilung.dbValue}|') t.abteilung.dbValue,
+    };
+
+/// Die Spur eines Auftrags der Abteilung [abteilung] (dbValue) auf der
+/// Anlage [maschineId].
 ///
-/// Läuft der Auftrag auf einer Anlage, die eine eigene Kapazitätsspur hat,
-/// zählt er dort. Sonst fällt er in die Sammelspur seiner Abteilung — so
-/// geht kein Auftrag verloren, auch wenn die Anlage fehlt oder gelöscht wurde.
-String _spurKeyFuerTask(BoardTask task, Set<String> anlagenSpuren) {
-  final mid = task.maschineId;
-  if (mid != null && anlagenSpuren.contains(mid)) {
-    return '${task.abteilung.dbValue}|$mid';
-  }
-  return '${task.abteilung.dbValue}|';
+/// Hat die Anlage in SEINER Abteilung eine eigene Kapazitätsspur, zählt er
+/// dort. Sonst fällt er in die Sammelspur seiner Abteilung — so geht kein
+/// Auftrag verloren: nicht, wenn die Anlage fehlt oder gelöscht wurde, und
+/// nicht, wenn sie aus einer anderen Abteilung stammt (der Rollenschneider
+/// der Zerlegung, der bei einem Artikel an der Bratstraße arbeitet).
+/// Früher landete ein solcher Auftrag auf einer Spur, die es nicht gab —
+/// und verschwand aus dem Board.
+String _spurKey(
+  String abteilung,
+  String? maschineId,
+  Set<String> anlagenSpuren,
+) {
+  final key = '$abteilung|$maschineId';
+  if (maschineId != null && anlagenSpuren.contains(key)) return key;
+  return '$abteilung|';
 }
 
 /// Baut die Spuren-Liste: je Abteilung entweder Anlagen-Spuren (wenn dort
@@ -872,21 +921,19 @@ Future<Map<String, double>> tageskapazitaetJeAbteilung(
   final start = _montag(wochenStart);
   final endeExkl = tagPlus(start, 7);
 
-  final tasks = await _ladeBoardTasks(db, start, endeExkl);
   final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final tasks = await _ladeBoardTasks(
+    db,
+    start,
+    endeExkl,
+    anlagenSpuren: _anlagenSpuren(planungsAnlagen),
+  );
   final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
-  final anlagenIds = planungsAnlagen.map((m) => m.id).toSet();
 
   // Abteilungen, in denen Aufträge ohne gültige Anlagen-Spur liegen —
   // für sie zeigt das Board zusätzlich eine Sammelspur, die genauso
   // mitzählt.
-  final ohneAnlage = <String>{};
-  for (final t in tasks) {
-    final mid = t.maschineId;
-    if (mid == null || !anlagenIds.contains(mid)) {
-      ohneAnlage.add(t.abteilung.dbValue);
-    }
-  }
+  final ohneAnlage = _abteilungenOhneAnlagenSpur(tasks);
 
   final ergebnis = <String, double>{};
   for (final spur in _baueSpuren(

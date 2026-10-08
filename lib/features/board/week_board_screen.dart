@@ -262,8 +262,10 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     BoardSpur? zielSpur,
   }) async {
     final ziel = DateTime(zielTag.year, zielTag.month, zielTag.day);
-    final anlageWechselt =
-        zielSpur != null && zielSpur.maschineId != task.maschineId;
+    // Verglichen wird die Spur, nicht die Anlage: Ein Auftrag in der
+    // Sammelspur kann trotzdem eine Anlage haben (etwa eine aus einer
+    // anderen Abteilung) — die behält er, solange er in der Spur bleibt.
+    final anlageWechselt = zielSpur != null && zielSpur.id != task.spurId;
     final abteilungWechselt =
         zielSpur != null && zielSpur.abteilung != task.abteilung;
     if (task.datum == ziel && !anlageWechselt && !abteilungWechselt) return;
@@ -1002,8 +1004,7 @@ class _TagesZelle extends ConsumerWidget {
             (t.abteilung.istVerpackung && cell.abteilung.istVerpackung);
         if (!gleicheGruppe) return false;
         // Nichts tun, wenn Tag UND Spur identisch sind.
-        final gleicheSpur = t.maschineId == cell.spur.maschineId &&
-            t.abteilung == cell.abteilung;
+        final gleicheSpur = t.spurId == cell.spur.id;
         return !(gleicheSpur && t.datum == cell.tag);
       },
       onAcceptWithDetails: (details) => onMoveHere(details.data),

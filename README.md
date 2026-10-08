@@ -54,6 +54,14 @@ hat jede Abteilung eine Zeile „Sonstige Aufgaben" für alles, was nicht aus de
 Planung eines Artikels kommt — mit + je Tag, abhakbar und per Ziehen auf einen
 anderen Tag verschiebbar.
 
+Im Artikel steht der Prozess als Kette: die Stationen (Abteilungen)
+untereinander, ihre Anlagen von links nach rechts. Anlagen und ganze Stationen
+lassen sich ziehen — auch aus dem Katalog an jede Stelle der Kette. Eine Anlage
+kann bei einem Artikel für eine andere Abteilung arbeiten (etwa ein Gerät der
+Zerlegung an der Bratstraße); im Katalog bleibt sie in ihrer Abteilung. Jede
+Station zeigt, womit die Planung ihre Dauer rechnet: hinterlegte
+Leistungsdaten, der Ø der erfassten Produktionen oder „Leistung fehlt".
+
 ## Excel-Vorlage (v3) — das Datenfundament
 
 Die Stammdaten werden in der **v3-Vorlage** gesammelt und importiert. Aufbau:

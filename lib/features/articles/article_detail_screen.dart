@@ -26,6 +26,7 @@ import 'article_print_service.dart';
 import 'bratstrasse_schema.dart';
 import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
+import 'prozesskette_umbau.dart';
 import 'step_editor_dialog.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/constants/artikel_merkmale.dart';
@@ -43,7 +44,8 @@ part 'article_maschinen_ansicht.dart';
 part 'article_parameter_liste.dart';
 part 'article_production_tab.dart';
 part 'article_produktionsmittel_katalog.dart';
-part 'article_prozess_diagramm.dart';
+part 'article_prozesskette.dart';
+
 class ArticleDetailScreen extends ConsumerWidget {
   const ArticleDetailScreen({super.key, required this.productId});
 
@@ -356,216 +358,98 @@ class _ProcessTab extends ConsumerWidget {
 // Schritte-Liste
 // ---------------------------------------------------------------------------
 
-/// Ansichtsmodus des Prozess-Tabs: Fließdiagramm (Standard) oder Karten.
-final prozessDiagrammProvider = StateProvider<bool>((ref) => true);
-
+/// Der Prozess-Tab: die Prozesskette, daneben (breit) der Katalog der
+/// Produktionsmittel, aus dem sich Anlagen in die Kette ziehen lassen.
 class _StepsList extends ConsumerWidget {
   const _StepsList({required this.productId, required this.steps});
 
   final String productId;
   final List<ProductStep> steps;
 
-  /// Schreibt die `reihenfolge` aller Schritte gemäß der übergebenen
-  /// Gruppen-Anordnung neu durch (1..n) und lädt die Ansicht neu.
-  ///
-  /// Der Excel-Export schreibt die Schritte nach `reihenfolge` in die
-  /// Spalten B..U — jede neue Abfolge landet also automatisch im Export.
-  Future<void> _schreibeReihenfolge(
-    WidgetRef ref,
-    List<List<({ProductStep step, int nummer})>> neu, {
-    required String grund,
-  }) async {
-    final db = ref.read(databaseProvider);
-    var lauf = 1;
-    for (final gruppe in neu) {
-      for (final eintrag in gruppe) {
-        await (db.update(db.productSteps)
-              ..where((s) => s.id.equals(eintrag.step.id)))
-            .write(
-          ProductStepsCompanion(
-            reihenfolge: Value(lauf),
-            updatedAt: Value(DateTime.now()),
-          ),
-        );
-        lauf++;
-      }
-    }
-
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: grund);
-    ref.invalidate(productStepsProvider(productId));
-  }
-
-  /// Verschiebt einen Abteilungs-Block (alle konsekutiven Schritte einer
-  /// Abteilung) um eine Position nach oben/unten.
-  Future<void> _verschiebeGruppe(
-    WidgetRef ref,
-    List<List<({ProductStep step, int nummer})>> gruppen,
-    int index,
-    int richtung,
-  ) async {
-    final ziel = index + richtung;
-    if (ziel < 0 || ziel >= gruppen.length) return;
-
-    final neu = [...gruppen];
-    final block = neu.removeAt(index);
-    neu.insert(ziel, block);
-
-    await _schreibeReihenfolge(
-      ref,
-      neu,
-      grund: 'Abteilungs-Reihenfolge geändert',
-    );
-  }
-
-  /// Verschiebt einen Schritt INNERHALB seiner Abteilungs-Gruppe.
-  ///
-  /// Drop-Konvention wie bei ReorderableListView: nach rechts gezogen
-  /// landet der Schritt HINTER dem Ziel, nach links gezogen DAVOR.
-  Future<void> _verschiebeSchrittInGruppe(
-    WidgetRef ref,
-    List<List<({ProductStep step, int nummer})>> gruppen,
-    int gruppenIndex,
-    int von,
-    int nach,
-  ) async {
-    if (von == nach) return;
-    final gruppe = [...gruppen[gruppenIndex]];
-    final item = gruppe.removeAt(von);
-    gruppe.insert(nach.clamp(0, gruppe.length), item);
-
-    final neu = [...gruppen];
-    neu[gruppenIndex] = gruppe;
-
-    await _schreibeReihenfolge(
-      ref,
-      neu,
-      grund: 'Schritt-Reihenfolge geändert',
-    );
-  }
-
-  /// Öffnet die geführte Leistungsdaten-Maske: fragt je Abteilung des
-  /// Prozesses Menge und Zeit ab und schreibt die Werte auf den jeweils
-  /// ersten Schritt der Abteilungsgruppe (Excel-Konvention).
+  /// Öffnet die Leistungsdaten-Maske für die Stationen [stationen] (Index
+  /// in `bau.stationen`): je Station Menge und Zeit, gespeichert am ersten
+  /// Schritt der Station.
   ///
   /// Personen werden dort NICHT gepflegt — die Zahl hängt am einzelnen
-  /// Schritt und wird im Step-Editor gesetzt. Die Gruppe wird trotzdem
-  /// komplett übergeben, damit der Dialog die Summe je Abteilung anzeigen
-  /// kann.
+  /// Schritt und wird im Step-Editor gesetzt. Die Station wird trotzdem
+  /// komplett übergeben, damit der Dialog die Summe anzeigen kann.
   Future<void> _leistungsdatenErfassen(
     BuildContext context,
-    WidgetRef ref,
-    List<List<({ProductStep step, int nummer})>> gruppen,
+    Kettenbau bau,
+    Iterable<int> stationen,
   ) async {
-    if (gruppen.isEmpty) return;
+    final eintraege = [
+      for (final k in stationen)
+        if (_abteilungAus(bau.stationen[k].first.abteilung)
+            case final abteilung?)
+          (
+            nummer: k + 1,
+            abteilung: abteilung,
+            erster: bau.stationen[k].first,
+            schritte: bau.stationen[k],
+          ),
+    ];
+    if (eintraege.isEmpty) return;
+    // Vor dem await holen: Nach dem Speichern steht die Ansicht neu.
+    final container = ProviderScope.containerOf(context, listen: false);
     final geaendert = await showDialog<bool>(
       context: context,
-      builder: (_) => _LeistungsdatenDialog(
-        eintraege: [
-          for (final g in gruppen)
-            (
-              abteilung: Abteilung.fromDbValue(g.first.step.abteilung),
-              erster: g.first.step,
-              schritte: [for (final e in g) e.step],
-            ),
-        ],
-      ),
+      builder: (_) => _LeistungsdatenDialog(eintraege: eintraege),
     );
     if (geaendert == true) {
-      ref.invalidate(productStepsProvider(productId));
+      container.invalidate(productStepsProvider(productId));
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final bau = Kettenbau(productId: productId, steps: steps);
+    final maschinen = {
+      for (final m in ref.watch(alleMaschinenProvider).valueOrNull ??
+          const <Machine>[])
+        m.id: m,
+    };
+    // Dieselben Produktionen, mit denen die Planung rechnet.
+    final historie = leistungAusProduktionen(
+      ref.watch(productionHistoryProvider(productId)).valueOrNull ??
+          const <ProductionHistoryData>[],
+    );
 
-    // Aufeinanderfolgende Schritte derselben Abteilung zu EINER Karte bündeln
-    // (z.B. Bratstraße = Verbufa + Bratstraße + Dampftunnel → eine Karte).
-    final gruppen = <List<({ProductStep step, int nummer})>>[];
-    for (var i = 0; i < steps.length; i++) {
-      final eintrag = (step: steps[i], nummer: i + 1);
-      if (gruppen.isNotEmpty &&
-          gruppen.last.first.step.abteilung == steps[i].abteilung) {
-        gruppen.last.add(eintrag);
-      } else {
-        gruppen.add([eintrag]);
-      }
-    }
+    final kette = _Prozesskette(
+      bau: bau,
+      maschinen: maschinen,
+      historie: historie,
+      onUpdated: () => ref.invalidate(productStepsProvider(productId)),
+      onLeistungsdaten: (station) =>
+          _leistungsdatenErfassen(context, bau, [station]),
+    );
 
-    final diagramm = ref.watch(prozessDiagrammProvider);
-
-    Widget inhalt(bool zweiSpaltig) => diagramm
-        ? _ProzessDiagramm(
-            productId: productId,
-            gruppen: gruppen,
-            onMove: (index, richtung) =>
-                _verschiebeGruppe(ref, gruppen, index, richtung),
-            onReorderSchritt: (gruppenIndex, von, nach) =>
-                _verschiebeSchrittInGruppe(
-              ref,
-              gruppen,
-              gruppenIndex,
-              von,
-              nach,
-            ),
-            onUpdated: () => ref.invalidate(productStepsProvider(productId)),
-          )
-        : _KartenAnsicht(
-            productId: productId,
-            gruppen: gruppen,
-            onMoveTo: (von, nach) =>
-                _verschiebeGruppe(ref, gruppen, von, nach - von),
-            onUpdated: () => ref.invalidate(productStepsProvider(productId)),
-          );
-
-    Widget umschalter() => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SegmentedButton<bool>(
-              segments: const [
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.account_tree_outlined, size: 16),
-                  label: Text('Diagramm', style: TextStyle(fontSize: 12)),
-                ),
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.view_agenda_outlined, size: 16),
-                  label: Text('Karten', style: TextStyle(fontSize: 12)),
-                ),
-              ],
-              selected: {diagramm},
-              onSelectionChanged: (sel) =>
-                  ref.read(prozessDiagrammProvider.notifier).state = sel.first,
-              style: const ButtonStyle(
-                visualDensity: VisualDensity.compact,
+    // Alle Stationen in einer Maske — für die erste Pflege eines Artikels.
+    // Einzelne Stationen öffnen sich über ihren Leistungs-Chip.
+    final leistungsdaten = OutlinedButton.icon(
+      onPressed: bau.stationen.isEmpty
+          ? null
+          : () => _leistungsdatenErfassen(
+                context,
+                bau,
+                [for (var k = 0; k < bau.stationen.length; k++) k],
               ),
-              showSelectedIcon: false,
-            ),
-            const SizedBox(width: 8),
-            // Geführte Erfassung der Referenzleistung je Abteilung
-            // (Menge/Zeit/Personen) — daraus rechnet die App kg/h und
-            // skaliert die Dauer jeder Planmenge.
-            OutlinedButton.icon(
-              onPressed: () => _leistungsdatenErfassen(context, ref, gruppen),
-              icon: const Icon(Icons.speed, size: 16),
-              label: const Text(
-                'Leistungsdaten',
-                style: TextStyle(fontSize: 12),
-              ),
-              style: OutlinedButton.styleFrom(
-                visualDensity: VisualDensity.compact,
-              ),
-            ),
-          ],
-        );
+      icon: const Icon(Icons.speed, size: 16),
+      label: const Text(
+        'Leistungsdaten',
+        style: TextStyle(fontSize: 12),
+      ),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+      ),
+    );
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Ab ~900px: feste Produktionsmittel-Sidebar links.
-        final mitSidebar = constraints.maxWidth >= 900;
-
-        if (mitSidebar) {
+        // Ab ~900px: feste Produktionsmittel-Sidebar links — aus ihr lassen
+        // sich Anlagen direkt an ihre Stelle in der Kette ziehen.
+        if (constraints.maxWidth >= 900) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -576,7 +460,10 @@ class _StepsList extends ConsumerWidget {
                       .withValues(alpha: 0.35),
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(12),
-                    child: _ProduktionsmittelKatalog(productId: productId),
+                    child: _ProduktionsmittelKatalog(
+                      productId: productId,
+                      ziehbar: true,
+                    ),
                   ),
                 ),
               ),
@@ -589,11 +476,11 @@ class _StepsList extends ConsumerWidget {
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                       child: Align(
                         alignment: Alignment.centerRight,
-                        child: umschalter(),
+                        child: leistungsdaten,
                       ),
                     ),
                     _BesonderheitBanner(productId: productId),
-                    Expanded(child: inhalt(false)),
+                    Expanded(child: kette),
                   ],
                 ),
               ),
@@ -601,8 +488,8 @@ class _StepsList extends ConsumerWidget {
           );
         }
 
-        // Schmaler: „+ Produktionsmittel"-Button + Umschalter oben.
-        final zweiSpaltig = constraints.maxWidth >= 700;
+        // Schmaler: „+ Produktionsmittel"-Button oben, der Katalog öffnet
+        // sich als Sheet.
         return Column(
           children: [
             Padding(
@@ -611,19 +498,15 @@ class _StepsList extends ConsumerWidget {
                 children: [
                   _ProduktionsmittelButton(productId: productId),
                   const Spacer(),
-                  umschalter(),
+                  leistungsdaten,
                 ],
               ),
             ),
             _BesonderheitBanner(productId: productId),
-            Expanded(child: inhalt(zweiSpaltig)),
+            Expanded(child: kette),
           ],
         );
       },
     );
   }
-
-  /// Karten-Bereich: leerer Hinweis, einspaltig oder zweispaltig verteilt.
 }
-
-

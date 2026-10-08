@@ -5,12 +5,21 @@ part of 'article_detail_screen.dart';
 // ---------------------------------------------------------------------------
 
 /// Listet alle angelegten Maschinen, nach Abteilung gruppiert. Tippen legt
-/// einen Prozess-Schritt mit dieser Maschine an (Editor öffnet vorausgewählt).
+/// einen Prozess-Schritt mit dieser Maschine an (Editor öffnet vorausgewählt,
+/// der Schritt kommt ans Ende seiner Abteilung). Neben der Kette lassen sich
+/// die Anlagen auch direkt an eine Stelle der Kette ziehen.
 /// Häkchen = bereits im Prozess, Plus = noch nicht.
 class _ProduktionsmittelKatalog extends ConsumerWidget {
-  const _ProduktionsmittelKatalog({required this.productId});
+  const _ProduktionsmittelKatalog({
+    required this.productId,
+    this.ziehbar = false,
+  });
 
   final String productId;
+
+  /// Anlagen lassen sich in die Kette ziehen — nur in der Sidebar neben
+  /// der Kette, nicht im Sheet, das über ihr liegt.
+  final bool ziehbar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -42,7 +51,9 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Tippen, um es dem Prozess hinzuzufügen.',
+          ziehbar
+              ? 'In die Kette ziehen oder antippen.'
+              : 'Tippen, um es dem Prozess hinzuzufügen.',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
           ),
@@ -65,8 +76,8 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
                   abt: abt,
                   maschinen: liste,
                   imProzess: imProzess,
-                  onTapMaschine: (m) =>
-                      _hinzufuegen(context, ref, m, steps.length),
+                  ziehbar: ziehbar,
+                  onTapMaschine: (m) => _hinzufuegen(context, m),
                   onNeueAnlage: () => _neueAnlage(context, ref, abt),
                 ),
               );
@@ -81,8 +92,8 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
                   abt: null,
                   maschinen: rest,
                   imProzess: imProzess,
-                  onTapMaschine: (m) =>
-                      _hinzufuegen(context, ref, m, steps.length),
+                  ziehbar: ziehbar,
+                  onTapMaschine: (m) => _hinzufuegen(context, m),
                   onNeueAnlage: null,
                 ),
               );
@@ -112,19 +123,17 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
     );
   }
 
-  Future<void> _hinzufuegen(
-    BuildContext context,
-    WidgetRef ref,
-    Machine m,
-    int anzahlSchritte,
-  ) async {
+  /// Legt einen Schritt mit [m] an — am Ende seiner Abteilung, gibt es
+  /// sie noch nicht, am Ende der Kette.
+  Future<void> _hinzufuegen(BuildContext context, Machine m) async {
+    // Vor dem await holen: Das Sheet mit dem Katalog kann inzwischen zu sein.
+    final container = ProviderScope.containerOf(context, listen: false);
     final ok = await StepEditorDialog.show(
       context,
       productId: productId,
       startMaschine: m,
-      stepNumber: anzahlSchritte + 1,
     );
-    if (ok) ref.invalidate(productStepsProvider(productId));
+    if (ok) container.invalidate(productStepsProvider(productId));
   }
 
   /// Legt eine neue Anlage in der gewählten Abteilung an.
@@ -214,6 +223,7 @@ class _KatalogAbteilung extends StatefulWidget {
     required this.abt,
     required this.maschinen,
     required this.imProzess,
+    required this.ziehbar,
     required this.onTapMaschine,
     required this.onNeueAnlage,
   });
@@ -222,6 +232,7 @@ class _KatalogAbteilung extends StatefulWidget {
   final Abteilung? abt;
   final List<Machine> maschinen;
   final Set<String> imProzess;
+  final bool ziehbar;
   final void Function(Machine) onTapMaschine;
   final VoidCallback? onNeueAnlage;
 
@@ -317,8 +328,9 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
                 for (final m in widget.maschinen)
                   _KatalogZeile(
                     farbe: farbe,
-                    name: m.name,
+                    maschine: m,
                     imProzess: widget.imProzess.contains(m.id),
+                    ziehbar: widget.ziehbar,
                     onTap: () => widget.onTapMaschine(m),
                   ),
                 if (widget.onNeueAnlage != null)
@@ -358,22 +370,53 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
   }
 }
 
-/// Eine Maschinen-Zeile im Katalog — tippen fügt sie dem Prozess hinzu.
+/// Eine Maschinen-Zeile im Katalog — tippen fügt sie dem Prozess hinzu,
+/// [ziehbar] lässt sie sich an eine Stelle der Kette ziehen.
 class _KatalogZeile extends StatelessWidget {
   const _KatalogZeile({
     required this.farbe,
-    required this.name,
+    required this.maschine,
     required this.imProzess,
+    required this.ziehbar,
     required this.onTap,
   });
 
   final Color farbe;
-  final String name;
+  final Machine maschine;
   final bool imProzess;
+  final bool ziehbar;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
+    final zeile = _inhalt(context);
+    if (!ziehbar) return zeile;
+    return Draggable<KettenZug>(
+      data: AnlagenZug(maschine),
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      feedback: Material(
+        color: Colors.transparent,
+        child: Chip(
+          backgroundColor: farbe,
+          avatar: const Icon(
+            Icons.precision_manufacturing,
+            size: 16,
+            color: Colors.white,
+          ),
+          label: Text(
+            maschine.name,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+      child: zeile,
+    );
+  }
+
+  Widget _inhalt(BuildContext context) {
     final theme = Theme.of(context);
     return InkWell(
       onTap: onTap,
@@ -390,7 +433,7 @@ class _KatalogZeile extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                name,
+                maschine.name,
                 style: theme.textTheme.bodySmall,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
