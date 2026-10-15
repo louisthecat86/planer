@@ -7,6 +7,8 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show teileBezuegeZu;
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/zeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider;
 import '../datenblatt/datenblatt.dart';
@@ -269,6 +271,7 @@ class _PlanungsvorschlagScreenState
     final container = ProviderScope.containerOf(context, listen: false);
     final db = ref.read(databaseProvider);
     final messenger = ScaffoldMessenger.of(context);
+    final fehlerFarbe = AppFarben.von(context).fehler;
     try {
       final anzahl = await PlanungsvorschlagService(db).uebernehmeTag(t);
       container.invalidate(bedarfProvider);
@@ -289,7 +292,7 @@ class _PlanungsvorschlagScreenState
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Fehler: $e'), backgroundColor: fehlerFarbe),
       );
     }
   }
@@ -392,7 +395,6 @@ class _PlanungsvorschlagScreenState
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tage = vorschlagsTage(_einstellungen);
 
     return Scaffold(
@@ -409,14 +411,26 @@ class _PlanungsvorschlagScreenState
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Bedarfe neu laden und neu berechnen',
           ),
+          const SizedBox(width: 8),
         ],
       ),
+      // Grauer Grund wie auf den übrigen Seiten, die Bereiche weiß darauf.
+      // Vorher war die Seite selbst weiß und die Karten hoben sich kaum ab.
       body: _laedt
           ? const Center(child: CircularProgressIndicator())
           : _fehler != null
-              ? Center(child: Text('Fehler: $_fehler'))
+              ? ListView(
+                  padding: const EdgeInsets.all(14),
+                  children: [
+                    HinweisBox(
+                      'Fehler: $_fehler',
+                      art: StatusArt.fehler,
+                      auswaehlbar: true,
+                    ),
+                  ],
+                )
               : ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 40),
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
                   children: [
                     if (_bedarfe.isEmpty)
                       const _LeerKarte(
@@ -481,14 +495,11 @@ class _PlanungsvorschlagScreenState
                             onDatenblatt: (p) => _datenblatt(i, p),
                             onDatenblaetter: () => _datenblaetter(i),
                           ),
-                      if (_nichtPlanbar.isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                      if (_nichtPlanbar.isNotEmpty)
                         _NichtPlanbarKarte(eintraege: _nichtPlanbar),
-                      ],
                     ],
                   ],
                 ),
-      backgroundColor: theme.colorScheme.surfaceContainerLowest,
     );
   }
 
@@ -550,6 +561,22 @@ class _PlanungsvorschlagScreenState
 // Auswahl
 // ═══════════════════════════════════════════════════════════════════════
 
+/// Spaltenbreiten der Auswahl — für Kopf und Zeilen dieselben.
+abstract final class _Auswahl {
+  static const double haken = 40;
+  static const double nummer = 78;
+  static const double menge = 80;
+  static const double termin = 170;
+  static const double herkunft = 130;
+  static const double prio = 28;
+
+  /// Abstand zwischen zwei Spalten.
+  static const double luecke = 12;
+
+  /// Ab dieser Breite ist Platz für die Herkunft.
+  static const double breitAb = 760;
+}
+
 /// Welche offenen Bedarfe in den Vorschlag kommen — und wie geplant wird.
 class _AuswahlKarte extends StatelessWidget {
   const _AuswahlKarte({
@@ -585,44 +612,52 @@ class _AuswahlKarte extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final grau = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final farben = theme.colorScheme;
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: farben.onSurfaceVariant,
+    );
     final gewaehlt = [
       for (final b in bedarfe)
         if (auswahl.contains(b.bedarfId)) b,
     ];
     final kg = gewaehlt.fold<double>(0, (s, b) => s + b.offenKg);
 
-    final rahmen = BoxDecoration(
-      color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(14),
-      border: Border.all(color: theme.dividerColor),
-    );
-
     if (!offen) {
-      return Container(
-        padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-        decoration: rahmen,
-        child: Row(
-          children: [
-            Icon(
-              Icons.checklist_rounded,
-              size: 20,
-              color: theme.colorScheme.primary,
+      // Zugeklappt: eine Zeile mit Rahmen — wie der Kopf eines Bereichs.
+      return Material(
+        color: farben.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppMasse.ecken,
+          side: BorderSide(color: farben.outline),
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: AppMasse.kopfHoehe),
+          child: Padding(
+            padding: const EdgeInsets.only(left: 12, right: 6),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.checklist_rounded,
+                  size: 16,
+                  color: farben.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${gewaehlt.length} von ${bedarfe.length} offenen '
+                    'Bedarfen im Vorschlag',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ),
+                TextButton(
+                  onPressed: onAufklappen,
+                  child: const Text('Auswahl ändern'),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                '${gewaehlt.length} von ${bedarfe.length} offenen Bedarfen '
-                'im Vorschlag',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ),
-            TextButton(
-              onPressed: onAufklappen,
-              child: const Text('Auswahl ändern'),
-            ),
-          ],
+          ),
         ),
       );
     }
@@ -631,36 +666,30 @@ class _AuswahlKarte extends StatelessWidget {
     final letzter = tage.isEmpty ? null : tage.last;
     final bis = letzter == null ? 'im Zeitraum' : 'bis ${_tagKurz(letzter)}';
 
-    return Container(
-      decoration: rahmen,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Was soll eingeplant werden?',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (berechnet)
-                      IconButton(
-                        onPressed: onZuklappen,
-                        icon: const Icon(Icons.expand_less, size: 20),
-                        tooltip: 'Zuklappen',
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
+    return Bereich(
+      titel: 'Was soll eingeplant werden?',
+      icon: Icons.checklist_rounded,
+      untertitel: '${bedarfe.length} offene '
+          '${bedarfe.length == 1 ? 'Bedarf' : 'Bedarfe'}',
+      aktionen: [
+        if (berechnet)
+          IconButton(
+            onPressed: onZuklappen,
+            icon: const Icon(Icons.expand_less, size: 20),
+            tooltip: 'Zuklappen',
+            visualDensity: VisualDensity.compact,
+          ),
+      ],
+      innenAbstand: EdgeInsets.zero,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final breit = constraints.maxWidth >= _Auswahl.breitAb;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 2),
+                child: Text(
                   'Vorausgewählt ist, was $bis fällig ist, und alles ohne '
                   'Termin. Was noch nicht dran ist oder wegen der '
                   'Haltbarkeit nicht mitgebündelt werden soll, einfach '
@@ -668,102 +697,168 @@ class _AuswahlKarte extends StatelessWidget {
                   'es vorher nicht mehr, steht es unten in der Restliste.',
                   style: grau,
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Wrap(
-              spacing: 4,
-              children: [
-                TextButton(
-                  onPressed: () => onSetze(faellig),
-                  child: Text('Vorauswahl (${faellig.length})'),
-                ),
-                TextButton(
-                  onPressed: () =>
-                      onSetze({for (final b in bedarfe) b.bedarfId}),
-                  child: Text('Alle (${bedarfe.length})'),
-                ),
-                TextButton(
-                  onPressed: () => onSetze(<String>{}),
-                  child: const Text('Keine'),
-                ),
-              ],
-            ),
-          ),
-          const Divider(height: 1),
-          for (final b in bedarfe)
-            _AuswahlZeile(
-              bedarf: b,
-              gewaehlt: auswahl.contains(b.bedarfId),
-              tage: tage,
-              onChanged: (v) => onWaehle(b.bedarfId, v),
-            ),
-          const Divider(height: 1),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 10,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(
-                      value: true,
-                      label: Text('Möglichst spät'),
-                      tooltip: 'Nah am Termin: frische Ware, wenig Lager',
-                    ),
-                    ButtonSegment(
-                      value: false,
-                      label: Text('Möglichst früh'),
-                      tooltip: 'Früh produzieren, hinten bleibt Luft',
-                    ),
-                  ],
-                  selected: {moeglichstSpaet},
-                  onSelectionChanged: (s) => onSpaet(s.first),
-                  showSelectedIcon: false,
-                ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+                child: Wrap(
+                  spacing: 4,
                   children: [
-                    Text(
-                      '${gewaehlt.length} gewählt · ${kg.round()} kg',
-                      style: grau,
+                    TextButton(
+                      onPressed: () => onSetze(faellig),
+                      child: Text('Vorauswahl (${faellig.length})'),
                     ),
-                    const SizedBox(width: 12),
-                    FilledButton.icon(
-                      onPressed: gewaehlt.isEmpty ? null : onBerechnen,
-                      icon: const Icon(Icons.auto_awesome_rounded, size: 18),
-                      label: Text(
-                        berechnet ? 'Neu berechnen' : 'Vorschlag berechnen',
-                      ),
+                    TextButton(
+                      onPressed: () =>
+                          onSetze({for (final b in bedarfe) b.bedarfId}),
+                      child: Text('Alle (${bedarfe.length})'),
+                    ),
+                    TextButton(
+                      onPressed: () => onSetze(<String>{}),
+                      child: const Text('Keine'),
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              _AuswahlKopf(breit: breit),
+              for (final b in bedarfe)
+                _AuswahlZeile(
+                  bedarf: b,
+                  gewaehlt: auswahl.contains(b.bedarfId),
+                  tage: tage,
+                  breit: breit,
+                  onChanged: (v) => onWaehle(b.bedarfId, v),
+                ),
+              // Unten wie eine Aktionsleiste: wie geplant wird, was
+              // gewählt ist, und der Knopf.
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                color: AppFarben.von(context).leiste,
+                child: Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SegmentedButton<bool>(
+                      segments: const [
+                        ButtonSegment(
+                          value: true,
+                          label: Text('Möglichst spät'),
+                          tooltip: 'Nah am Termin: frische Ware, wenig Lager',
+                        ),
+                        ButtonSegment(
+                          value: false,
+                          label: Text('Möglichst früh'),
+                          tooltip: 'Früh produzieren, hinten bleibt Luft',
+                        ),
+                      ],
+                      selected: {moeglichstSpaet},
+                      onSelectionChanged: (s) => onSpaet(s.first),
+                      showSelectedIcon: false,
+                    ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '${gewaehlt.length} gewählt · ${kg.round()} kg',
+                          style: grau,
+                        ),
+                        const SizedBox(width: 12),
+                        FilledButton.icon(
+                          onPressed: gewaehlt.isEmpty ? null : onBerechnen,
+                          icon: const Icon(
+                            Icons.auto_awesome_rounded,
+                            size: 18,
+                          ),
+                          label: Text(
+                            berechnet
+                                ? 'Neu berechnen'
+                                : 'Vorschlag berechnen',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Spaltenköpfe der Auswahl auf der Fläche der Leisten.
+class _AuswahlKopf extends StatelessWidget {
+  const _AuswahlKopf({required this.breit});
+
+  /// Breit genug für die Herkunft.
+  final bool breit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4 + _Auswahl.haken, 7, 12, 7),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outline),
+          bottom: BorderSide(color: theme.colorScheme.outline),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _Auswahl.nummer,
+            child: Text('Nr.', style: stil),
           ),
+          Expanded(child: Text('Artikel', style: stil)),
+          const SizedBox(width: _Auswahl.luecke),
+          SizedBox(
+            width: _Auswahl.menge,
+            child: Text('offen', textAlign: TextAlign.right, style: stil),
+          ),
+          const SizedBox(width: _Auswahl.luecke + 4),
+          SizedBox(
+            width: _Auswahl.termin,
+            child: Text('Termin', style: stil),
+          ),
+          if (breit)
+            SizedBox(
+              width: _Auswahl.herkunft,
+              child: Text('Herkunft', style: stil),
+            ),
+          const SizedBox(width: _Auswahl.prio),
         ],
       ),
     );
   }
 }
 
-/// Ein offener Bedarf in der Auswahl.
+/// Ein offener Bedarf in der Auswahl — eine Zeile der Tabelle. Ein Klick
+/// irgendwo in der Zeile setzt oder entfernt den Haken.
 class _AuswahlZeile extends StatelessWidget {
   const _AuswahlZeile({
     required this.bedarf,
     required this.gewaehlt,
     required this.tage,
+    required this.breit,
     required this.onChanged,
   });
 
   final OffenerBedarf bedarf;
   final bool gewaehlt;
   final List<DateTime> tage;
+
+  /// Breit genug für die Herkunft.
+  final bool breit;
   final ValueChanged<bool> onChanged;
 
   static const _quellen = {
@@ -776,59 +871,138 @@ class _AuswahlZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final farben = theme.colorScheme;
     final b = bedarf;
-    final grau = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
-    final rot = theme.colorScheme.error;
+    final stil = theme.textTheme.bodyMedium;
+    final zahlen = stil?.copyWith(fontFeatures: _ziffern);
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: farben.onSurfaceVariant,
+    );
 
+    // Der Termin als Text — überschritten als rote Marke.
     final termin = b.termin;
-    final String terminText;
-    var ueberfaellig = false;
+    final Widget terminAnzeige;
     if (termin == null) {
-      terminText = 'ohne Termin';
+      terminAnzeige = Text(
+        'ohne Termin',
+        style: stil?.copyWith(color: farben.onSurfaceVariant),
+      );
     } else if (tage.isNotEmpty && _tagVon(termin).isBefore(tage.first)) {
-      terminText = 'Termin ${_tagKurz(termin)} überschritten';
-      ueberfaellig = true;
+      terminAnzeige = StatusMarke(
+        'überfällig · ${_tagKurz(termin)}',
+        art: StatusArt.fehler,
+        hinweis: 'Termin ${_tagKurz(termin)} überschritten',
+      );
     } else if (tage.isNotEmpty && _tagVon(termin).isAfter(tage.last)) {
-      terminText = 'fällig erst ${_tagKurz(termin)}';
+      terminAnzeige = Text(
+        'fällig erst ${_tagKurz(termin)}',
+        style: zahlen?.copyWith(color: farben.onSurfaceVariant),
+      );
     } else {
-      terminText = 'spätestens ${_tagKurz(termin)}';
+      terminAnzeige = Text('spätestens ${_tagKurz(termin)}', style: zahlen);
     }
     final notiz = b.notizen?.trim() ?? '';
 
-    return CheckboxListTile(
-      dense: true,
-      controlAffinity: ListTileControlAffinity.leading,
-      value: gewaehlt,
-      onChanged: (v) => onChanged(v ?? false),
-      secondary: b.prioritaet > 0
-          ? Tooltip(
-              message: 'Hohe Priorität',
-              child: Icon(Icons.priority_high, size: 18, color: rot),
-            )
-          : null,
-      title: Text(
-        '${b.artikelnummer}  ${b.bezeichnung}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text.rich(
-        TextSpan(
-          style: grau,
-          children: [
-            TextSpan(text: '${b.offenKg.round()} kg · '),
-            TextSpan(
-              text: terminText,
-              style: ueberfaellig
-                  ? TextStyle(color: rot, fontWeight: FontWeight.w700)
-                  : null,
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!gewaehlt),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 38),
+          padding: const EdgeInsets.fromLTRB(4, 3, 12, 3),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: farben.outlineVariant),
             ),
-            TextSpan(text: ' · ${_quellen[b.quelle] ?? b.quelle}'),
-            if (notiz.isNotEmpty) TextSpan(text: '\n$notiz'),
-          ],
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _Auswahl.haken,
+                child: Checkbox(
+                  value: gewaehlt,
+                  onChanged: (v) => onChanged(v ?? false),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              SizedBox(
+                width: _Auswahl.nummer,
+                child: Text(
+                  b.artikelnummer,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: zahlen?.copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      b.bezeichnung,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: stil,
+                    ),
+                    if (notiz.isNotEmpty)
+                      Text(
+                        notiz,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: grau,
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _Auswahl.luecke),
+              SizedBox(
+                width: _Auswahl.menge,
+                child: Text(
+                  '${b.offenKg.round()} kg',
+                  maxLines: 1,
+                  textAlign: TextAlign.right,
+                  style: zahlen,
+                ),
+              ),
+              const SizedBox(width: _Auswahl.luecke + 4),
+              SizedBox(
+                width: _Auswahl.termin,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  heightFactor: 1,
+                  child: terminAnzeige,
+                ),
+              ),
+              if (breit)
+                SizedBox(
+                  width: _Auswahl.herkunft,
+                  child: Text(
+                    _quellen[b.quelle] ?? b.quelle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: grau,
+                  ),
+                ),
+              SizedBox(
+                width: _Auswahl.prio,
+                child: b.prioritaet > 0
+                    ? Tooltip(
+                        message: 'Hohe Priorität',
+                        child: Icon(
+                          Icons.priority_high,
+                          size: 18,
+                          color: AppFarben.von(context).fehler,
+                        ),
+                      )
+                    : null,
+              ),
+            ],
+          ),
         ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
@@ -838,6 +1012,8 @@ class _AuswahlZeile extends StatelessWidget {
 // Kopf
 // ═══════════════════════════════════════════════════════════════════════
 
+/// Die Zusammenfassung des Vorschlags: wie viel, nach welchen Regeln und
+/// mit welchen Zeiten gerechnet.
 class _Kopfzeile extends StatelessWidget {
   const _Kopfzeile({
     required this.tage,
@@ -852,7 +1028,8 @@ class _Kopfzeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final farbe = Abteilung.bratstrasse.farbe;
+    final farben = theme.colorScheme;
+    final farbe = _bratFarbe(theme);
     final posten = tage.fold<int>(0, (s, t) => s + t.posten.length);
     final tageMitInhalt = tage.where((t) => t.posten.isNotEmpty).length;
     final rohware = tage.fold<double>(0, (s, t) => s + t.rohwareKg);
@@ -860,77 +1037,80 @@ class _Kopfzeile extends StatelessWidget {
     final wann =
         e.moeglichstSpaet ? 'So spät wie möglich' : 'So früh wie möglich';
 
+    // Weiße Fläche mit Rand wie jeder Bereich, links eine Kante in der
+    // Farbe der Bratstraße — für sie plant der Vorschlag. Vorher ein
+    // Farbverlauf. Ohne Rundung: Eine Kante auf nur einer Seite lässt
+    // sich nicht runden.
     return Container(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(14),
-        gradient: LinearGradient(
-          colors: [
-            farbe.withValues(alpha: 0.14),
-            farbe.withValues(alpha: 0.04),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+        color: farben.surface,
+        border: Border(
+          left: BorderSide(color: farbe, width: 3),
+          top: BorderSide(color: farben.outline),
+          right: BorderSide(color: farben.outline),
+          bottom: BorderSide(color: farben.outline),
         ),
-        border: Border.all(color: farbe.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(Icons.auto_awesome_rounded, size: 20, color: farbe),
-              const SizedBox(width: 10),
+              Icon(Icons.auto_awesome_rounded, size: 18, color: farbe),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   '$posten ${posten == 1 ? 'Auftrag' : 'Aufträge'} · '
                   '$tageMitInhalt ${tageMitInhalt == 1 ? 'Tag' : 'Tage'} · '
                   '${rohware.round()} kg Rohware',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: _ziffern,
+                  ),
                 ),
               ),
               if (geaendert)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.secondaryContainer,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    'angepasst',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSecondaryContainer,
-                    ),
-                  ),
+                const StatusMarke(
+                  'angepasst',
+                  art: StatusArt.info,
+                  hinweis: 'Von Hand geändert. Ins Board kommt erst etwas '
+                      'mit „Tag ins Board übernehmen".',
                 ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             '$wann, nie nach dem Termin · Allergene aufsteigend · Bio vor '
             'konventionell · roh nach gegart · dann ähnliche '
             'Bratstraßen-Einstellungen',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: farben.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 10),
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              _Pille(
+              StatusMarke(
                 e.moeglichstSpaet ? 'möglichst spät' : 'möglichst früh',
-                farbe: theme.colorScheme.primary,
+                art: StatusArt.info,
               ),
-              _Pille('Rüsten ${e.ruestenMinuten.round()} min'),
-              _Pille('Reinigen ${e.zwischenreinigungMinuten.round()} min'),
-              _Pille('Endreinigung ${e.endreinigungMinuten.round()} min'),
-              _Pille('${e.maxArbeitstage} Arbeitstage'),
-              if (e.planeSamstag) const _Pille('inkl. Samstag'),
+              StatusMarke('Rüsten ${e.ruestenMinuten.round()} min'),
+              StatusMarke(
+                'Reinigen ${e.zwischenreinigungMinuten.round()} min',
+              ),
+              StatusMarke(
+                'Endreinigung ${e.endreinigungMinuten.round()} min',
+              ),
+              StatusMarke('${e.maxArbeitstage} Arbeitstage'),
+              if (e.planeSamstag) const StatusMarke('inkl. Samstag'),
               if (e.gesperrteTage.isNotEmpty)
-                _Pille('${e.gesperrteTage.length} gesperrt'),
+                StatusMarke(
+                  '${e.gesperrteTage.length} gesperrt',
+                  art: StatusArt.warnung,
+                ),
             ],
           ),
         ],
@@ -939,31 +1119,8 @@ class _Kopfzeile extends StatelessWidget {
   }
 }
 
-class _Pille extends StatelessWidget {
-  const _Pille(this.text, {this.farbe});
-
-  final String text;
-  final Color? farbe;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final c = farbe ?? theme.colorScheme.onSurfaceVariant;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: c.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: c.withValues(alpha: 0.25)),
-      ),
-      child: Text(
-        text,
-        style: theme.textTheme.bodySmall?.copyWith(fontSize: 11, color: c),
-      ),
-    );
-  }
-}
-
+/// Hinweis, wenn es nichts einzuplanen gibt — auf einer Fläche wie ein
+/// Bereich.
 class _LeerKarte extends StatelessWidget {
   const _LeerKarte({required this.text});
 
@@ -971,10 +1128,16 @@ class _LeerKarte extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(text),
+    final farben = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: farben.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppMasse.ecken,
+          side: BorderSide(color: farben.outline),
+        ),
+        child: LeerHinweis(text, icon: Icons.inbox_outlined),
       ),
     );
   }
@@ -984,6 +1147,8 @@ class _LeerKarte extends StatelessWidget {
 // Tageskarte
 // ═══════════════════════════════════════════════════════════════════════
 
+/// Ein Tag des Vorschlags: Kopf mit Auslastung, darunter die Posten zum
+/// Umsortieren, unten Hinweise und die Aktionen.
 class _TagKarte extends StatelessWidget {
   const _TagKarte({
     required this.tag,
@@ -1028,249 +1193,247 @@ class _TagKarte extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final farbe = Abteilung.bratstrasse.farbe;
+    final farben = theme.colorScheme;
+    final f = AppFarben.von(context);
     final voll = tag.auslastung > 1;
+    final balken = voll ? f.fehler : _bratFarbe(theme);
     final brueche = Planungsrechner.regelbrueche(tag.posten);
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: farben.onSurfaceVariant,
+    );
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Kopf mit Auslastungsbalken ──────────────────────────────
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
-            decoration: BoxDecoration(
-              color: farbe.withValues(alpha: 0.06),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(13),
+    // Ein Bereich wie die übrigen: Kopf auf der Fläche der Leisten, weiße
+    // Posten darunter. Material statt bemalter Box: Die Klick-Welle der
+    // Posten malt darauf.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Material(
+        color: farben.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppMasse.ecken,
+          side: BorderSide(color: farben.outline),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Kopf mit Auslastungsbalken ────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
+              decoration: BoxDecoration(
+                color: f.leiste,
+                border: Border(bottom: BorderSide(color: farben.outline)),
               ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${_wochentage[tag.tag.weekday - 1]}, '
-                        '${_zwei(tag.tag.day)}.${_zwei(tag.tag.month)}.'
-                        '${tag.tag.year}',
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (uebernommen) ...[
-                      Icon(
-                        Icons.check_circle_rounded,
-                        size: 18,
-                        color: Colors.green.shade600,
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Text(
-                      '${(tag.auslastung * 100).round()} %',
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: voll ? theme.colorScheme.error : farbe,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: tag.auslastung.clamp(0, 1).toDouble(),
-                    minHeight: 6,
-                    backgroundColor:
-                        theme.colorScheme.surfaceContainerHighest,
-                    valueColor: AlwaysStoppedAnimation(
-                      voll ? theme.colorScheme.error : farbe,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    if (tag.belegtVorherMinuten > 0)
-                      _Pille(
-                        'im Board ${Zeit.kurz(tag.belegtVorherMinuten)}',
-                      ),
-                    _Pille('neu ${Zeit.kurz(tag.neuMinuten)}'),
-                    _Pille('von ${Zeit.kurz(tag.kapazitaetMinuten)}'),
-                    _Pille('${tag.rohwareKg.round()} kg Rohware'),
-                    if (manuellSortiert)
-                      _Pille(
-                        'manuell sortiert',
-                        farbe: theme.colorScheme.primary,
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ── Posten, per Griff umsortierbar ──────────────────────────
-          ReorderableListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            buildDefaultDragHandles: false,
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            itemCount: tag.posten.length,
-            // Die Flutter-Version der CI kennt `onReorderItem` noch nicht,
-            // die lokale hält `onReorder` bereits für veraltet. Bis beide
-            // auf derselben Version sind, gewinnt die CI — ein Fehler dort
-            // wiegt schwerer als ein Hinweis im Terminal.
-            // ignore: deprecated_member_use
-            onReorder: onReorder,
-            itemBuilder: (context, i) {
-              final p = tag.posten[i];
-              return _PostenZeile(
-                key: ValueKey('${p.productId}-${p.bedarfId}-$i'),
-                index: i,
-                posten: p,
-                tag: tag.tag,
-                kannZurueck: kannZurueck,
-                kannVor: kannVor,
-                onMenge: () => onMenge(p),
-                onEntfernen: () => onEntfernen(p),
-                onVerschieben: (r) => onVerschieben(p, r),
-                onDatenblatt: () => onDatenblatt(p),
-              );
-            },
-          ),
-
-          // ── Fuß ─────────────────────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (tag.endreinigungMinuten > 0)
-                  _Hinweis(
-                    icon: Icons.cleaning_services_outlined,
-                    text:
-                        'Endreinigung ${Zeit.kurz(tag.endreinigungMinuten)}',
-                  ),
-                for (final b in brueche)
-                  _Hinweis(
-                    icon: Icons.warning_amber_rounded,
-                    text: b,
-                    farbe: theme.colorScheme.error,
-                  ),
-                if (tag.warnungen.isNotEmpty)
-                  Theme(
-                    data: theme.copyWith(dividerColor: Colors.transparent),
-                    child: ExpansionTile(
-                      tilePadding: EdgeInsets.zero,
-                      childrenPadding: const EdgeInsets.only(bottom: 8),
-                      dense: true,
-                      leading: Icon(
-                        Icons.info_outline,
-                        size: 16,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                      title: Text(
-                        '${tag.warnungen.length} '
-                        '${tag.warnungen.length == 1 ? 'Hinweis' : 'Hinweise'}',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '${_wochentage[tag.tag.weekday - 1]}, '
+                          '${_zwei(tag.tag.day)}.${_zwei(tag.tag.month)}.'
+                          '${tag.tag.year}',
+                          style: theme.textTheme.titleSmall
+                              ?.copyWith(fontWeight: FontWeight.w700),
                         ),
                       ),
-                      children: [
-                        for (final w in tag.warnungen)
-                          Align(
-                            alignment: Alignment.centerLeft,
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 2),
-                              child: Text(
-                                w,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          ),
+                      if (uebernommen) ...[
+                        const StatusMarke(
+                          'übernommen',
+                          art: StatusArt.ok,
+                          icon: Icons.check,
+                        ),
+                        const SizedBox(width: 10),
                       ],
+                      Text(
+                        '${(tag.auslastung * 100).round()} %',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontFeatures: _ziffern,
+                          color: voll ? f.fehler : farben.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: AppMasse.eckenKlein,
+                    child: LinearProgressIndicator(
+                      value: tag.auslastung.clamp(0, 1).toDouble(),
+                      minHeight: 6,
+                      backgroundColor: farben.outlineVariant,
+                      valueColor: AlwaysStoppedAnimation(balken),
                     ),
                   ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    if (manuellSortiert)
-                      TextButton.icon(
-                        onPressed: onNachRegeln,
-                        icon: const Icon(Icons.sort_rounded, size: 18),
-                        label: const Text('Nach Regeln sortieren'),
-                      ),
-                    TextButton.icon(
-                      onPressed: onDatenblaetter,
-                      icon: const Icon(Icons.print_outlined, size: 18),
-                      label: Text(
-                        tag.posten.length == 1
-                            ? 'Datenblatt'
-                            : 'Datenblätter (${tag.posten.length})',
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (tag.belegtVorherMinuten > 0)
+                        StatusMarke(
+                          'im Board ${Zeit.kurz(tag.belegtVorherMinuten)}',
+                        ),
+                      StatusMarke('neu ${Zeit.kurz(tag.neuMinuten)}'),
+                      StatusMarke('von ${Zeit.kurz(tag.kapazitaetMinuten)}'),
+                      StatusMarke('${tag.rohwareKg.round()} kg Rohware'),
+                      if (manuellSortiert)
+                        const StatusMarke(
+                          'manuell sortiert',
+                          art: StatusArt.info,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Posten, per Griff umsortierbar ────────────────────────
+            ReorderableListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              buildDefaultDragHandles: false,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: tag.posten.length,
+              // Die Flutter-Version der CI kennt `onReorderItem` noch
+              // nicht, die lokale hält `onReorder` bereits für veraltet.
+              // Bis beide auf derselben Version sind, gewinnt die CI — ein
+              // Fehler dort wiegt schwerer als ein Hinweis im Terminal.
+              // ignore: deprecated_member_use
+              onReorder: onReorder,
+              itemBuilder: (context, i) {
+                final p = tag.posten[i];
+                return _PostenZeile(
+                  key: ValueKey('${p.productId}-${p.bedarfId}-$i'),
+                  index: i,
+                  posten: p,
+                  tag: tag.tag,
+                  kannZurueck: kannZurueck,
+                  kannVor: kannVor,
+                  onMenge: () => onMenge(p),
+                  onEntfernen: () => onEntfernen(p),
+                  onVerschieben: (r) => onVerschieben(p, r),
+                  onDatenblatt: () => onDatenblatt(p),
+                );
+              },
+            ),
+
+            // ── Hinweise ──────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (tag.endreinigungMinuten > 0)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.cleaning_services_outlined,
+                            size: 15,
+                            color: farben.onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Endreinigung '
+                            '${Zeit.kurz(tag.endreinigungMinuten)}',
+                            style: grau,
+                          ),
+                        ],
                       ),
                     ),
-                    const Spacer(),
-                    if (uebernommen)
-                      Text('übernommen', style: theme.textTheme.bodySmall)
-                    else
-                      FilledButton.icon(
-                        onPressed: onUebernehmen,
-                        icon: const Icon(Icons.playlist_add_rounded, size: 18),
-                        label: const Text('Tag ins Board übernehmen'),
+                  // Von Hand gegen die Regeln sortiert: kostet eine
+                  // Reinigung — Achtung, kein Fehler.
+                  for (final b in brueche)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: HinweisBox(b, art: StatusArt.warnung),
+                    ),
+                  if (tag.warnungen.isNotEmpty)
+                    Theme(
+                      data: theme.copyWith(dividerColor: Colors.transparent),
+                      child: ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: const EdgeInsets.only(bottom: 8),
+                        dense: true,
+                        leading: Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: farben.onSurfaceVariant,
+                        ),
+                        title: Text(
+                          tag.warnungen.length == 1
+                              ? '1 Hinweis'
+                              : '${tag.warnungen.length} Hinweise',
+                          style: grau,
+                        ),
+                        children: [
+                          for (final w in tag.warnungen)
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Padding(
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 2),
+                                child: Text(w, style: grau),
+                              ),
+                            ),
+                        ],
                       ),
-                  ],
-                ),
-              ],
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+
+            // ── Aktionen ──────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(6, 6, 10, 6),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: farben.outlineVariant),
+                ),
+              ),
+              child: Row(
+                children: [
+                  if (manuellSortiert)
+                    TextButton.icon(
+                      onPressed: onNachRegeln,
+                      icon: const Icon(Icons.sort_rounded, size: 18),
+                      label: const Text('Nach Regeln sortieren'),
+                    ),
+                  TextButton.icon(
+                    onPressed: onDatenblaetter,
+                    icon: const Icon(Icons.print_outlined, size: 18),
+                    label: Text(
+                      tag.posten.length == 1
+                          ? 'Datenblatt'
+                          : 'Datenblätter (${tag.posten.length})',
+                    ),
+                  ),
+                  const Spacer(),
+                  if (uebernommen)
+                    const StatusMarke(
+                      'Tag ist im Board',
+                      art: StatusArt.ok,
+                      icon: Icons.check,
+                    )
+                  else
+                    FilledButton.icon(
+                      onPressed: onUebernehmen,
+                      icon: const Icon(Icons.playlist_add_rounded, size: 18),
+                      label: const Text('Tag ins Board übernehmen'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   static String _zwei(int v) => v.toString().padLeft(2, '0');
-}
-
-class _Hinweis extends StatelessWidget {
-  const _Hinweis({required this.icon, required this.text, this.farbe});
-
-  final IconData icon;
-  final String text;
-  final Color? farbe;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final c = farbe ?? theme.colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 15, color: c),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(color: c),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1306,11 +1469,15 @@ class _PostenZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final farben = theme.colorScheme;
+    final f = AppFarben.von(context);
     final reinigen = posten.wechselGrund == WechselGrund.reinigen;
     final grau = theme.textTheme.bodySmall?.copyWith(
       fontSize: 11,
-      color: theme.colorScheme.onSurfaceVariant,
+      color: farben.onSurfaceVariant,
     );
+    // Reinigen kostet Zeit — orange als Achtung, kein Fehler.
+    final wechselFarbe = reinigen ? f.warnung : farben.onSurfaceVariant;
 
     // Der Wechsel gehört zum ÜBERGANG, nicht zum Artikel — deshalb steht
     // er als eigene, eingerückte Zeile darüber.
@@ -1351,51 +1518,47 @@ class _PostenZeile extends StatelessWidget {
                       ? Icons.cleaning_services_rounded
                       : Icons.swap_horiz_rounded,
                   size: 13,
-                  color: reinigen
-                      ? theme.colorScheme.error
-                      : theme.colorScheme.onSurfaceVariant,
+                  color: wechselFarbe,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  wechsel,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontSize: 11,
-                    color: reinigen
-                        ? theme.colorScheme.error
-                        : theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                Text(wechsel, style: grau?.copyWith(color: wechselFarbe)),
               ],
             ),
           ),
         InkWell(
           onTap: onMenge,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+            padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
             child: Row(
               children: [
                 ReorderableDragStartListener(
                   index: index,
-                  child: Icon(
-                    Icons.drag_indicator_rounded,
-                    size: 18,
-                    color: theme.colorScheme.outlineVariant,
+                  child: MouseRegion(
+                    cursor: SystemMouseCursors.grab,
+                    child: Icon(
+                      Icons.drag_indicator_rounded,
+                      size: 18,
+                      color: farben.outline,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 6),
+                // Die Nummer als blasse Marke — der Griff für den Blick.
                 Container(
-                  width: 46,
+                  width: 56,
                   padding: const EdgeInsets.symmetric(vertical: 3),
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(6),
+                    color: f.infoFlaeche,
+                    borderRadius: AppMasse.eckenKlein,
                   ),
                   child: Text(
                     posten.artikelnummer,
+                    maxLines: 1,
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.primary,
+                      color: farben.primary,
                       fontWeight: FontWeight.w600,
+                      fontFeatures: _ziffern,
                     ),
                   ),
                 ),
@@ -1417,7 +1580,7 @@ class _PostenZeile extends StatelessWidget {
                           herkunft,
                           style: zuSpaet
                               ? grau?.copyWith(
-                                  color: theme.colorScheme.error,
+                                  color: f.fehler,
                                   fontWeight: FontWeight.w700,
                                 )
                               : grau,
@@ -1431,13 +1594,15 @@ class _PostenZeile extends StatelessWidget {
                   children: [
                     Text(
                       '${posten.mengeKg.round()} kg',
-                      style: theme.textTheme.bodyMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: _ziffern,
+                      ),
                     ),
                     Text(
                       '${Zeit.kurz(posten.dauerMinuten)} · '
                       '${posten.rohwareKg.round()} kg roh',
-                      style: grau,
+                      style: grau?.copyWith(fontFeatures: _ziffern),
                     ),
                   ],
                 ),
@@ -1446,7 +1611,7 @@ class _PostenZeile extends StatelessWidget {
                   icon: Icon(
                     Icons.more_vert_rounded,
                     size: 18,
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: farben.onSurfaceVariant,
                   ),
                   itemBuilder: (_) => [
                     const PopupMenuItem(
@@ -1580,83 +1745,100 @@ class _MengeDialogState extends State<_MengeDialog> {
 // Restliste
 // ═══════════════════════════════════════════════════════════════════════
 
-class _NichtPlanbarKarte extends StatelessWidget {
+/// Was nicht in den Vorschlag passt — je Artikel mit dem Grund.
+class _NichtPlanbarKarte extends StatefulWidget {
   const _NichtPlanbarKarte({required this.eintraege});
 
   final List<NichtPlanbar> eintraege;
 
   @override
+  State<_NichtPlanbarKarte> createState() => _NichtPlanbarKarteState();
+}
+
+class _NichtPlanbarKarteState extends State<_NichtPlanbarKarte> {
+  /// Anfangs offen: Der Grund soll gleich zu sehen sein.
+  bool _offen = true;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Theme(
-        data: theme.copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          initiallyExpanded: true,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          leading: Icon(
-            Icons.inbox_rounded,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          title: Text(
-            'Nicht eingeplant (${eintraege.length})',
-            style: theme.textTheme.titleSmall
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          children: [
-            for (final n in eintraege)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 5),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: 52,
-                      child: Text(
-                        n.artikelnummer,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: theme.colorScheme.primary),
-                      ),
+    final farben = theme.colorScheme;
+    final eintraege = widget.eintraege;
+    final zahlen = theme.textTheme.bodyMedium?.copyWith(
+      fontFeatures: _ziffern,
+    );
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: farben.onSurfaceVariant,
+    );
+
+    return Bereich(
+      titel: 'Nicht eingeplant',
+      icon: Icons.inbox_rounded,
+      untertitel: '${eintraege.length}',
+      aktionen: [
+        IconButton(
+          onPressed: () => setState(() => _offen = !_offen),
+          icon: Icon(_offen ? Icons.expand_less : Icons.expand_more, size: 20),
+          tooltip: _offen ? 'Zuklappen' : 'Aufklappen',
+          visualDensity: VisualDensity.compact,
+        ),
+      ],
+      innenAbstand: EdgeInsets.zero,
+      child: !_offen
+          ? const SizedBox.shrink()
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final (i, n) in eintraege.indexed)
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+                    decoration: BoxDecoration(
+                      border: i == 0
+                          ? null
+                          : Border(
+                              top: BorderSide(color: farben.outlineVariant),
+                            ),
                     ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            n.bezeichnung,
-                            maxLines: 2,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: _Auswahl.nummer,
+                          child: Text(
+                            n.artikelnummer,
+                            maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium,
-                          ),
-                          Text(
-                            n.grund,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              fontSize: 11,
-                              color: theme.colorScheme.onSurfaceVariant,
+                            style: zahlen?.copyWith(
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                n.bezeichnung,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                              Text(n.grund, style: grau),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          '${n.mengeKg.round()} kg',
+                          style: zahlen?.copyWith(
+                            color: farben.onSurfaceVariant,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(width: 10),
-                    Text(
-                      '${n.mengeKg.round()} kg',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
+                  ),
+              ],
+            ),
     );
   }
 }
@@ -1715,12 +1897,14 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Höchstens 80 % der Fensterhöhe, der Inhalt scrollt darin. So bleibt
-    // der Knopf immer erreichbar, egal wie klein das Fenster ist.
-    final maxHoehe = MediaQuery.of(context).size.height * 0.8;
+    // Höchstens 70 % der Fensterhöhe, der Inhalt scrollt darin. So bleiben
+    // Titel und Knöpfe immer erreichbar, egal wie klein das Fenster ist.
+    final maxHoehe = MediaQuery.sizeOf(context).height * 0.7;
 
+    // Der Titel steht im Kopf des Fensters wie bei den übrigen Fenstern —
+    // vorher stand er als Text im Inhalt.
     return AlertDialog(
-      contentPadding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+      title: const Text('Zeiten und Zeitraum'),
       content: ConstrainedBox(
         constraints: BoxConstraints(maxWidth: 520, maxHeight: maxHoehe),
         child: SingleChildScrollView(
@@ -1728,12 +1912,6 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Zeiten und Zeitraum',
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 4),
               Text(
                 'Die Nebenzeiten sind Pauschalen. Sobald beim Erfassen echte '
                 'Rüst- und Reinigungszeiten anfallen, lassen sie sich daran '
@@ -1914,8 +2092,20 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Formatierung
+// Farben und Formatierung
 // ═══════════════════════════════════════════════════════════════════════
+
+/// Die Farbe der Bratstraße — für sie plant der Vorschlag. Im Dunkelmodus
+/// aufgehellt: Das dunkle Braun verschwände sonst auf der dunklen Fläche.
+Color _bratFarbe(ThemeData theme) {
+  final farbe = Abteilung.bratstrasse.farbe;
+  return theme.brightness == Brightness.dark
+      ? Color.alphaBlend(Colors.white.withValues(alpha: 0.45), farbe)
+      : farbe;
+}
+
+/// Ziffern gleich breit, damit Mengen und Zeiten ruhig stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
 
 const _wochentageKurz = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
