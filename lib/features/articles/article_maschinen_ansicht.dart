@@ -8,35 +8,7 @@ part of 'article_detail_screen.dart';
 // was sich beim Antippen einer Anlage öffnet: Personen, Plattenschema oder
 // Notizen und die Parameter.
 
-/// Kleine farbige Pille für Kennzahlen.
-class _Pille extends StatelessWidget {
-  const _Pille({required this.text, required this.farbe});
-
-  final String text;
-  final Color farbe;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: farbe.withValues(alpha: 0.45)),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: farbe,
-        ),
-      ),
-    );
-  }
-}
-
-/// Details einer Anlage — Inhalt des Sheets, das sich beim Antippen einer
+/// Details einer Anlage — Inhalt des Fensters, das sich beim Antippen einer
 /// Anlage in der Prozesskette öffnet.
 class _MaschinenBlock extends ConsumerStatefulWidget {
   const _MaschinenBlock({
@@ -70,27 +42,31 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
         : 'Dieser Schritt';
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aus Prozess entfernen?'),
-        content: Text(
-          '„$name" wird aus dem Prozess dieses Artikels entfernt. '
-          'Die Maschine selbst bleibt erhalten und kann jederzeit wieder '
-          'hinzugefügt werden.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
+      builder: (ctx) {
+        final farben = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Aus Prozess entfernen?'),
+          content: Text(
+            '„$name" wird aus dem Prozess dieses Artikels entfernt. '
+            'Die Maschine selbst bleibt erhalten und kann jederzeit wieder '
+            'hinzugefügt werden.',
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Abbrechen'),
             ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Entfernen'),
-          ),
-        ],
-      ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: farben.error,
+                foregroundColor: farben.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Entfernen'),
+            ),
+          ],
+        );
+      },
     );
     if (bestaetigt != true) return;
     // Nummeriert den Rest lückenlos neu (Excel-Spalten) und gibt die
@@ -104,7 +80,7 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           reason: 'Schritt aus Prozess entfernt',
         );
     widget.onUpdated();
-    // Den Schritt gibt es nicht mehr — das Sheet mit seinen Details
+    // Den Schritt gibt es nicht mehr — das Fenster mit seinen Details
     // schließen, statt ihn weiter bearbeitbar zu zeigen.
     if (mounted) await Navigator.of(context).maybePop();
   }
@@ -129,7 +105,6 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
           decoration: InputDecoration(
             labelText: 'Wert',
             suffixText: suffix,
-            border: const OutlineInputBorder(),
           ),
           onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
         ),
@@ -160,7 +135,9 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final s = widget.step;
+    final abt = _abteilungAus(s.abteilung);
     final maschineName = (s.maschine != null && s.maschine!.isNotEmpty)
         ? s.maschine!
         : ((s.prozessschritt != null && s.prozessschritt!.isNotEmpty)
@@ -170,35 +147,44 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
         s.prozessschritt!.isNotEmpty &&
         s.maschine != null &&
         s.maschine!.isNotEmpty;
+    // Unter dem Namen: Abteilung und Prozessschritt, soweit bekannt.
+    final untertitel = [
+      if (abt != null) abt.anzeigeName,
+      if (zeigeProzess) s.prozessschritt!,
+    ].join(' · ');
 
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Maschinen-Kopf
+          // Kopf: Nummer in der Abteilungsfarbe — wie an der Kachel in der
+          // Kette —, Name, darunter Abteilung und Prozessschritt.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.factory, size: 16, color: theme.colorScheme.primary),
-              const SizedBox(width: 8),
+              _NummernMarke(
+                nummer: widget.stepNumber,
+                farbe: abt?.farbe ?? theme.colorScheme.outline,
+                groesse: 28,
+              ),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       maschineName,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: theme.textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (zeigeProzess) ...[
+                    if (untertitel.isNotEmpty) ...[
                       const SizedBox(height: 2),
                       Text(
-                        s.prozessschritt!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color:
-                              theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        untertitel,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: grau,
                         ),
                       ),
                     ],
@@ -206,7 +192,7 @@ class _MaschinenBlockState extends ConsumerState<_MaschinenBlock> {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.edit, size: 18),
+                icon: const Icon(Icons.edit_outlined, size: 18),
                 tooltip: 'Maschine/Schritt bearbeiten',
                 visualDensity: VisualDensity.compact,
                 onPressed: _openEditor,

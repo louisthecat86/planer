@@ -24,6 +24,10 @@ part of 'article_detail_screen.dart';
 // geschrieben wird über den ProzesskettenService. Er nummeriert die Schritte
 // für die Excel-Spalten lückenlos und hält die Leistungsdaten bei ihrer
 // Station.
+//
+// Aussehen wie überall in der App: weiße Flächen mit dünnem Rand, die
+// Abteilungsfarbe nur als Kennung (Nummer, Kürzel, Rand der Station),
+// Statusfarben nur als Signal — grün hinterlegt, blau Hinweis, orange fehlt.
 
 /// Abteilung aus dem dbValue — null bei unbekanntem Wert, statt zu werfen.
 Abteilung? _abteilungAus(String dbValue) {
@@ -38,6 +42,9 @@ String _kgh(double kg) => kg.round().toString().replaceAllMapped(
       RegExp(r'\B(?=(\d{3})+(?!\d))'),
       (_) => '.',
     );
+
+/// Breite der Leiste links mit den Nummern der Stationen.
+const double _leisteBreite = 46;
 
 /// Führt einen Umbau aus der Ansicht heraus aus: Hinweise (Kette voll,
 /// inzwischen geändert) kommen als Meldung, danach wird die Kette neu
@@ -104,6 +111,7 @@ class _Prozesskette extends StatelessWidget {
   Widget build(BuildContext context) {
     final stationen = bau.stationen;
     if (stationen.isEmpty) return _LeereKette(bau: bau);
+    final grau = Theme.of(context).colorScheme.outline;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -123,8 +131,7 @@ class _Prozesskette extends StatelessWidget {
             vorStation: k + 1,
             // Zwischen zwei Stationen läuft die Leiste weiter.
             leistenFarbe: k + 1 < stationen.length
-                ? (_abteilungAus(stationen[k].first.abteilung)?.farbe ??
-                    Colors.grey)
+                ? (_abteilungAus(stationen[k].first.abteilung)?.farbe ?? grau)
                 : null,
           ),
         ],
@@ -142,6 +149,7 @@ class _LeereKette extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     const ziel = ZielLuecke(0);
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -152,26 +160,21 @@ class _LeereKette extends StatelessWidget {
         builder: (context, kandidaten, abgelehnt) {
           final aktiv = kandidaten.isNotEmpty;
           return Container(
-            padding: const EdgeInsets.all(32),
+            padding: const EdgeInsets.all(24),
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: aktiv
-                  ? theme.colorScheme.primary.withValues(alpha: 0.06)
-                  : null,
-              borderRadius: BorderRadius.circular(14),
+              color: aktiv ? f.infoFlaeche : theme.colorScheme.surface,
+              borderRadius: AppMasse.ecken,
               border: Border.all(
-                color: aktiv
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.outlineVariant,
+                color: aktiv ? f.info : theme.colorScheme.outline,
                 width: aktiv ? 2 : 1,
               ),
             ),
-            child: Text(
-              'Noch keine Produktionsschritte.\n\n'
+            child: const LeerHinweis(
+              'Noch keine Produktionsschritte.\n'
               'Zieh ein Produktionsmittel aus dem Katalog hierher, tippe es '
               'an — oder importiere eine Excel-Vorlage.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+              icon: Icons.account_tree_outlined,
             ),
           );
         },
@@ -198,7 +201,7 @@ class _Luecke extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final ziel = ZielLuecke(vorStation);
     final farbe = leistenFarbe;
     return DragTarget<KettenZug>(
@@ -217,21 +220,21 @@ class _Luecke extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(
-                width: 46,
+                width: _leisteBreite,
                 child: farbe == null
                     ? null
                     : Column(
                         children: [
                           Expanded(
                             child: Container(
-                              width: 2.5,
-                              color: farbe.withValues(alpha: 0.45),
+                              width: 2,
+                              color: farbe.withValues(alpha: 0.4),
                             ),
                           ),
                           Icon(
                             Icons.arrow_drop_down,
                             size: 18,
-                            color: farbe.withValues(alpha: 0.8),
+                            color: farbe.withValues(alpha: 0.7),
                           ),
                         ],
                       ),
@@ -243,13 +246,9 @@ class _Luecke extends StatelessWidget {
                         margin: const EdgeInsets.symmetric(vertical: 4),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
-                          color: theme.colorScheme.primary
-                              .withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: theme.colorScheme.primary,
-                            width: 1.5,
-                          ),
+                          color: f.infoFlaeche,
+                          borderRadius: AppMasse.ecken,
+                          border: Border.all(color: f.info, width: 1.5),
                         ),
                         child: Text(
                           zug is StationsZug
@@ -258,7 +257,7 @@ class _Luecke extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: theme.colorScheme.primary,
+                            color: f.info,
                           ),
                         ),
                       )
@@ -294,10 +293,10 @@ class _Station extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
+    final f = AppFarben.von(context);
     final station = bau.stationen[index];
     final abt = _abteilungAus(station.first.abteilung);
-    final farbe = abt?.farbe ?? Colors.grey;
+    final farbe = abt?.farbe ?? theme.colorScheme.outline;
     final ziel = ZielStation(index);
     final istLetzte = index == bau.stationen.length - 1;
 
@@ -313,34 +312,22 @@ class _Station extends StatelessWidget {
             children: [
               // Leiste: Nummer der Station, darunter die Linie zur nächsten.
               SizedBox(
-                width: 46,
+                width: _leisteBreite,
                 child: Column(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 30,
+                      height: 30,
                       decoration: BoxDecoration(
                         color: farbe,
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color:
-                              Colors.white.withValues(alpha: dark ? 0.25 : 0.6),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: farbe.withValues(alpha: 0.45),
-                            blurRadius: 8,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         '${index + 1}',
                         style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
                       ),
@@ -348,8 +335,8 @@ class _Station extends StatelessWidget {
                     if (!istLetzte)
                       Expanded(
                         child: Container(
-                          width: 2.5,
-                          color: farbe.withValues(alpha: 0.45),
+                          width: 2,
+                          color: farbe.withValues(alpha: 0.4),
                         ),
                       ),
                   ],
@@ -357,23 +344,16 @@ class _Station extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Expanded(
+                // Weiße Fläche, Rand in der Abteilungsfarbe. Beim
+                // Darüberziehen blau wie jedes Ablageziel der App.
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 120),
                   padding: const EdgeInsets.fromLTRB(12, 10, 10, 12),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        farbe.withValues(alpha: dark ? 0.14 : 0.08),
-                        farbe.withValues(alpha: dark ? 0.04 : 0.02),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(14),
+                    color: istZiel ? f.infoFlaeche : theme.colorScheme.surface,
+                    borderRadius: AppMasse.ecken,
                     border: Border.all(
-                      color: istZiel
-                          ? theme.colorScheme.primary
-                          : farbe.withValues(alpha: 0.5),
+                      color: istZiel ? f.info : farbe.withValues(alpha: 0.45),
                       width: istZiel ? 2 : 1,
                     ),
                   ),
@@ -409,7 +389,7 @@ class _Station extends StatelessWidget {
                                   : Icons.more_horiz_rounded,
                               size: 18,
                               color: farbe.withValues(
-                                alpha: i < station.length - 1 ? 0.75 : 0.35,
+                                alpha: i < station.length - 1 ? 0.7 : 0.35,
                               ),
                             ),
                           ],
@@ -466,22 +446,7 @@ class _StationsKopf extends StatelessWidget {
       children: [
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-              decoration: BoxDecoration(
-                color: farbe,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                abteilung?.kurzcode ?? '?',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
+            AbteilungsMarke(abteilung: abteilung, skala: 1.15),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -489,8 +454,7 @@ class _StationsKopf extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.3,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -500,19 +464,7 @@ class _StationsKopf extends StatelessWidget {
             Draggable<KettenZug>(
               data: StationsZug(index),
               dragAnchorStrategy: pointerDragAnchorStrategy,
-              feedback: Material(
-                color: Colors.transparent,
-                child: Chip(
-                  backgroundColor: farbe,
-                  label: Text(
-                    name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
+              feedback: _ZiehSchild(text: name, farbe: farbe),
               child: Tooltip(
                 message: 'Station ziehen, um sie zu verschieben',
                 child: MouseRegion(
@@ -536,9 +488,9 @@ class _StationsKopf extends StatelessWidget {
           runSpacing: 6,
           children: [
             if (personen > 0)
-              _Pille(
-                text: personen == 1 ? '1 Person' : '$personen Personen',
-                farbe: farbe,
+              StatusMarke(
+                personen == 1 ? '1 Person' : '$personen Personen',
+                icon: Icons.groups_outlined,
               ),
             _LeistungChip(
               station: station,
@@ -557,6 +509,9 @@ class _StationsKopf extends StatelessWidget {
 /// Planung: an der Bratstraße die erfassten Produktionen, sonst die
 /// hinterlegten Leistungsdaten, ersatzweise die Produktionen. Antippen
 /// öffnet die Leistungsdaten der Station.
+///
+/// Grün: hinterlegt. Blau: gerechnet aus den Produktionen. Orange: es gibt
+/// weder das eine noch das andere.
 class _LeistungChip extends StatelessWidget {
   const _LeistungChip({
     required this.station,
@@ -572,74 +527,119 @@ class _LeistungChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
     final l = leistungsdatenVon(station);
     final h = historie;
     final bratstrasse = abteilung == Abteilung.bratstrasse;
 
-    const gruen = Color(0xFF2E7D32);
-    const blau = Color(0xFF1565C0);
-    const orange = Color(0xFFEF6C00);
-
-    final (text, farbe, hinweis) = switch ((l, h)) {
+    final (text, art, hinweis) = switch ((l, h)) {
       (_, final h?) when bratstrasse => (
           'Ø ${_kgh(h.kgProStunde)} kg/h · '
               '${h.anzahl == 1 ? '1 Produktion' : '${h.anzahl} Produktionen'}',
-          blau,
+          StatusArt.info,
           'Die Bratstraße rechnet mit den erfassten Produktionen: '
               '${h.kennzahlen}.',
         ),
       (final l?, _) => (
           '${_kgh(l.kgProStunde)} kg/h · hinterlegt',
-          gruen,
+          StatusArt.ok,
           'Hinterlegt: ${_kgh(l.mengeKg)} kg in ${Zeit.kurz(l.minuten)}. '
               'Antippen zum Ändern.',
         ),
       (null, final h?) => (
           'Ø ${_kgh(h.kgProStunde)} kg/h · aus '
               '${h.anzahl == 1 ? '1 Produktion' : '${h.anzahl} Produktionen'}',
-          blau,
+          StatusArt.info,
           'Keine Leistungsdaten hinterlegt — gerechnet wird mit dem '
               '${h.herkunft}: ${h.kennzahlen}. Antippen zum Hinterlegen.',
         ),
       (null, null) => (
           'Leistung fehlt',
-          orange,
+          StatusArt.warnung,
           'Weder Leistungsdaten noch eine Produktion mit Zeit — die Dauer '
               'ist ein Platzhalter. Antippen zum Hinterlegen.',
         ),
     };
-    final schrift = dark ? Color.lerp(farbe, Colors.white, 0.45)! : farbe;
 
-    return Tooltip(
-      message: hinweis,
-      child: Material(
-        color: farbe.withValues(alpha: 0.14),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
-          side: BorderSide(color: farbe.withValues(alpha: 0.5)),
-        ),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.speed, size: 13, color: schrift),
-                const SizedBox(width: 4),
-                Text(
-                  text,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: schrift,
-                  ),
-                ),
-              ],
+    return StatusMarke(
+      text,
+      art: art,
+      icon: Icons.speed,
+      hinweis: hinweis,
+      onTap: onTap,
+    );
+  }
+}
+
+/// Was beim Ziehen am Mauszeiger hängt: der Name in der Abteilungsfarbe.
+class _ZiehSchild extends StatelessWidget {
+  const _ZiehSchild({required this.text, required this.farbe, this.icon});
+
+  final String text;
+  final Color farbe;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final symbol = icon;
+    // Der einzige Schatten der Ansicht: Er zeigt, dass die Karte gerade
+    // über der Kette schwebt.
+    return Material(
+      color: farbe,
+      elevation: 3,
+      borderRadius: AppMasse.ecken,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (symbol != null) ...[
+              Icon(symbol, size: 16, color: Colors.white),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+              ),
             ),
-          ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Nummer eines Schritts in der Kette, in der Farbe seiner Abteilung —
+/// an der Kachel und im Kopf der Schritt-Details.
+class _NummernMarke extends StatelessWidget {
+  const _NummernMarke({
+    required this.nummer,
+    required this.farbe,
+    this.groesse = 20,
+  });
+
+  final int nummer;
+  final Color farbe;
+  final double groesse;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: groesse,
+      height: groesse,
+      decoration: BoxDecoration(
+        color: farbe,
+        borderRadius: AppMasse.eckenKlein,
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        '$nummer',
+        style: TextStyle(
+          fontSize: groesse * 0.55,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
         ),
       ),
     );
@@ -669,7 +669,7 @@ class _AnlagenKachel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final nummer = bau.indexVon(step.id) + 1;
     final ziel = ZielAnlage(step, station);
     final inhalt = _KachelInhalt(
@@ -712,8 +712,7 @@ class _AnlagenKachel extends StatelessWidget {
           final dahinter = zug is SchrittZug &&
               bau.stationVon(zug.step.id) == station &&
               bau.indexVon(zug.step.id) < bau.indexVon(step.id);
-          final linie =
-              BorderSide(color: theme.colorScheme.primary, width: 4);
+          final linie = BorderSide(color: f.info, width: 4);
           marke = dahinter ? Border(right: linie) : Border(left: linie);
         }
         return Draggable<KettenZug>(
@@ -753,6 +752,7 @@ class _KachelInhalt extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
 
     // Name: Katalog > Legacy-Text > Prozessschritt.
     final prozess = (step.prozessschritt ?? '').trim();
@@ -783,10 +783,8 @@ class _KachelInhalt extends ConsumerWidget {
       child: Material(
         color: theme.colorScheme.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(11),
-          side: BorderSide(
-            color: theme.colorScheme.outlineVariant.withValues(alpha: 0.7),
-          ),
+          borderRadius: AppMasse.ecken,
+          side: BorderSide(color: theme.colorScheme.outline),
         ),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -800,23 +798,7 @@ class _KachelInhalt extends ConsumerWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: farbe.withValues(alpha: 0.9),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '$nummer',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
+                    _NummernMarke(nummer: nummer, farbe: farbe),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -830,30 +812,12 @@ class _KachelInhalt extends ConsumerWidget {
                       ),
                     ),
                     if (stamm != null)
-                      Tooltip(
-                        message: 'Anlage aus ${stamm.anzeigeName} — arbeitet '
-                            'bei diesem Artikel hier mit',
-                        child: Container(
-                          margin: const EdgeInsets.only(left: 4),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: stamm.farbe.withValues(alpha: 0.18),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: stamm.farbe.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          child: Text(
-                            'aus ${stamm.kurzcode}',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                          ),
+                      Padding(
+                        padding: const EdgeInsets.only(left: 4),
+                        child: StatusMarke(
+                          'aus ${stamm.kurzcode}',
+                          hinweis: 'Anlage aus ${stamm.anzeigeName} — '
+                              'arbeitet bei diesem Artikel hier mit',
                         ),
                       ),
                   ],
@@ -864,20 +828,14 @@ class _KachelInhalt extends ConsumerWidget {
                     prozess,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    style: theme.textTheme.bodySmall?.copyWith(color: grau),
                   ),
                 ],
                 const SizedBox(height: 7),
                 Row(
                   children: [
                     if (step.basisMitarbeiter > 0) ...[
-                      Icon(
-                        Icons.groups_outlined,
-                        size: 14,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
+                      Icon(Icons.groups_outlined, size: 14, color: grau),
                       const SizedBox(width: 3),
                       Text(
                         '${step.basisMitarbeiter}',
@@ -888,20 +846,16 @@ class _KachelInhalt extends ConsumerWidget {
                       const SizedBox(width: 8),
                     ],
                     if (gesamt > 0)
-                      _Pille(
-                        text: '$gepflegt/$gesamt Werte',
-                        farbe: gepflegt == gesamt
-                            ? Colors.green
+                      StatusMarke(
+                        '$gepflegt/$gesamt Werte',
+                        art: gepflegt == gesamt
+                            ? StatusArt.ok
                             : (gepflegt == 0
-                                ? Colors.redAccent
-                                : Colors.orange),
+                                ? StatusArt.fehler
+                                : StatusArt.warnung),
                       ),
                     const Spacer(),
-                    Icon(
-                      Icons.chevron_right,
-                      size: 18,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                    Icon(Icons.chevron_right, size: 18, color: grau),
                   ],
                 ),
               ],
@@ -968,12 +922,12 @@ class _PlusAnlage extends StatelessWidget {
       child: Material(
         color: Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: AppMasse.ecken,
           side: BorderSide(color: farbe.withValues(alpha: 0.45)),
         ),
         child: InkWell(
           onTap: () => _waehlen(context),
-          borderRadius: BorderRadius.circular(11),
+          borderRadius: AppMasse.ecken,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: Row(
@@ -1035,14 +989,7 @@ class _AnlagenWahlState extends ConsumerState<_AnlagenWahl> {
       final abt = _abteilungAus(m.abteilung);
       return ListTile(
         dense: true,
-        leading: Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: abt?.farbe ?? theme.colorScheme.outline,
-            shape: BoxShape.circle,
-          ),
-        ),
+        leading: AbteilungsMarke(abteilung: abt),
         title: Text(m.name),
         subtitle: m.abteilung == widget.abteilung
             ? null
@@ -1065,7 +1012,10 @@ class _AnlagenWahlState extends ConsumerState<_AnlagenWahl> {
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   'Für diese Abteilung sind keine Anlagen angelegt.',
-                  style: theme.textTheme.bodySmall,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontStyle: FontStyle.italic,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             for (final m in passend) zeile(m),
@@ -1105,7 +1055,7 @@ class _AnlagenWahlState extends ConsumerState<_AnlagenWahl> {
   }
 }
 
-/// Öffnet die volle Detailansicht eines Prozessschritts als Bottom-Sheet.
+/// Öffnet die volle Detailansicht eines Prozessschritts als Fenster.
 void _zeigeSchrittDetail(
   BuildContext context, {
   required String productId,
@@ -1121,9 +1071,6 @@ void _zeigeSchrittDetail(
     useSafeArea: true,
     showDragHandle: true,
     constraints: const BoxConstraints(maxWidth: 820),
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => UncontrolledProviderScope(
       container: container,
       child: _SchrittDetailSheet(
@@ -1137,7 +1084,7 @@ void _zeigeSchrittDetail(
   );
 }
 
-/// Inhalt des Schritt-Detail-Sheets — zeigt den Maschinen-Block
+/// Inhalt des Schritt-Detail-Fensters — zeigt den Maschinen-Block
 /// (Personen, Plattenschema, Parameter) und bleibt durch das Watching des
 /// Steps-Providers auch nach Bearbeitungen aktuell.
 class _SchrittDetailSheet extends ConsumerWidget {

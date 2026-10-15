@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/theme/app_stil.dart';
+
 /// Schematische Darstellung der Plattentemperaturen einer Bratstraße bzw.
 /// eines Kombiofens — analog zur Excel-Vorlage:
 ///
@@ -132,46 +134,42 @@ class BratstrasseSchema extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final titel = _zeigtOben
         ? 'Plattentemperaturen (oben / unten)'
         : 'Plattentemperaturen unten';
 
+    // Graue Fläche wie die Leisten der App: Hier liegt ein Bedienfeld,
+    // die Platten darauf sind die weißen Felder.
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
       decoration: BoxDecoration(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
+        color: AppFarben.von(context).leiste,
+        borderRadius: AppMasse.ecken,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(
-                titel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              Expanded(
+                child: Text(
+                  titel,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const Spacer(),
-              Icon(
-                Icons.arrow_back,
-                size: 13,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+              Icon(Icons.arrow_back, size: 13, color: grau),
               const SizedBox(width: 4),
               Text(
                 'Laufrichtung: rechts → links',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                ),
+                style: theme.textTheme.bodySmall?.copyWith(color: grau),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           if (_zeigtOben) ...[
             _ZonenReihe(
               label: 'oben',
@@ -180,7 +178,7 @@ class BratstrasseSchema extends StatelessWidget {
               onSetAll: () => _setzeAlle(context, true),
             ),
             const SizedBox(height: 6),
-            _BandBalken(),
+            const _BandBalken(),
             const SizedBox(height: 6),
           ],
           _ZonenReihe(
@@ -226,7 +224,7 @@ class _ZonenReihe extends StatelessWidget {
                 child: Text(
                   'Platten\n$label',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: theme.colorScheme.onSurfaceVariant,
                     height: 1.1,
                   ),
                 ),
@@ -234,7 +232,7 @@ class _ZonenReihe extends StatelessWidget {
               const SizedBox(height: 2),
               InkWell(
                 onTap: onSetAll,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: AppMasse.eckenKlein,
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 2),
                   child: Row(
@@ -284,7 +282,12 @@ class _ZonenReihe extends StatelessWidget {
   }
 }
 
-/// Eine einzelne Platten-Zelle — Farbe nach Temperatur, tippen zum Ändern.
+/// Eine einzelne Platten-Zelle — tippen zum Ändern.
+///
+/// Gesetzte Platten tragen einen warmen Ton, der mit der Temperatur
+/// kräftiger wird: So liest man das Profil der Straße auf einen Blick.
+/// Leere Platten bleiben weiß mit einem „–". Die Zahl selbst steht in der
+/// normalen Schriftfarbe — die Wärme zeigt die Fläche, nicht die Schrift.
 class _ZonenZelle extends StatelessWidget {
   const _ZonenZelle({
     required this.index,
@@ -296,72 +299,63 @@ class _ZonenZelle extends StatelessWidget {
   final double? wert;
   final VoidCallback onTap;
 
-  /// Akzentfarbe der Werte — IDENTISCH zu den übrigen Parameterwerten
-  /// (Bratzeit, Höhe …), damit das Schema optisch dazugehört und nicht
-  /// wie ein Fremdkörper wirkt. Vorher waren hier feste Hell-Töne
-  /// (orange/creme) verdrahtet, die im dunklen Theme herausstachen.
-  static Color _akzent(bool dark) =>
-      dark ? const Color(0xFF9CCC65) : const Color(0xFF2E7D32);
-
-  /// Die Hintergrund-Deckkraft steigt mit der Temperatur: heißere Platten
-  /// wirken kräftiger. So bleibt die Information auf einen Blick lesbar,
-  /// ohne die Farbfamilie zu verlassen.
-  static double _deckkraft(double? t, bool dark) {
-    if (t == null) return 0.0;
+  /// Deckkraft des warmen Tons: steigt mit der Temperatur (0–300 °C).
+  static double _deckkraft(double t, bool dunkel) {
     final anteil = (t.clamp(0, 300) / 300).toDouble();
-    final basis = dark ? 0.14 : 0.08;
-    final spanne = dark ? 0.20 : 0.14;
+    final basis = dunkel ? 0.16 : 0.08;
+    final spanne = dunkel ? 0.30 : 0.26;
     return basis + spanne * anteil;
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final gesetzt = wert != null;
-    final akzent = _akzent(dark);
+    final f = AppFarben.von(context);
+    final dunkel = theme.brightness == Brightness.dark;
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final t = wert;
+    final flaeche = t == null
+        ? theme.colorScheme.surface
+        : Color.alphaBlend(
+            f.warnung.withValues(alpha: _deckkraft(t, dunkel)),
+            theme.colorScheme.surface,
+          );
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
-        width: 44,
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(
-          color: gesetzt
-              ? akzent.withValues(alpha: _deckkraft(wert, dark))
-              : theme.colorScheme.onSurface.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: gesetzt
-                ? akzent.withValues(alpha: 0.35)
-                : theme.colorScheme.outline.withValues(alpha: 0.20),
-          ),
+    return Material(
+      color: flaeche,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppMasse.ecken,
+        side: BorderSide(
+          color: t == null
+              ? theme.colorScheme.outline
+              : f.warnung.withValues(alpha: 0.45),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${index + 1}',
-              style: TextStyle(
-                fontSize: 9,
-                color: gesetzt
-                    ? akzent.withValues(alpha: 0.75)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          width: 44,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${index + 1}',
+                  style: TextStyle(fontSize: 9, color: grau),
+                ),
+                Text(
+                  t == null ? '–' : '${t.round()}°',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: t == null ? grau : theme.colorScheme.onSurface,
+                  ),
+                ),
+              ],
             ),
-            Text(
-              gesetzt ? '${wert!.round()}°' : '–',
-              style: TextStyle(
-                fontSize: 12,
-                // Gleiches Gewicht wie die übrigen Werte-Pillen.
-                fontWeight: FontWeight.w700,
-                color: gesetzt
-                    ? akzent
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -370,24 +364,24 @@ class _ZonenZelle extends StatelessWidget {
 
 /// Der laufende Band-Balken zwischen oben und unten (rein visuell).
 class _BandBalken extends StatelessWidget {
+  const _BandBalken();
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
       height: 16,
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.25),
-        ),
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: AppMasse.eckenKlein,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       alignment: Alignment.center,
       child: Text(
         'Band',
         style: theme.textTheme.bodySmall?.copyWith(
           fontSize: 10,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          color: theme.colorScheme.onSurfaceVariant,
         ),
       ),
     );
@@ -446,7 +440,6 @@ class _ZahlDialogState extends State<_ZahlDialog> {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: const InputDecoration(
           suffixText: '°C',
-          border: OutlineInputBorder(),
           hintText: 'leer = nicht gesetzt',
         ),
       ),

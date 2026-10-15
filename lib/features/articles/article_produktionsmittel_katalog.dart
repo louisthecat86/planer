@@ -1,14 +1,14 @@
 part of 'article_detail_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Produktionsmittel-Katalog (Sidebar / Sheet)
+// Produktionsmittel-Katalog (Leiste / Fenster)
 // ---------------------------------------------------------------------------
 
 /// Listet alle angelegten Maschinen, nach Abteilung gruppiert. Tippen legt
 /// einen Prozess-Schritt mit dieser Maschine an (Editor öffnet vorausgewählt,
 /// der Schritt kommt ans Ende seiner Abteilung). Neben der Kette lassen sich
 /// die Anlagen auch direkt an eine Stelle der Kette ziehen.
-/// Häkchen = bereits im Prozess, Plus = noch nicht.
+/// Grüner Haken = bereits im Prozess, Plus = noch nicht.
 class _ProduktionsmittelKatalog extends ConsumerWidget {
   const _ProduktionsmittelKatalog({
     required this.productId,
@@ -17,13 +17,14 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
 
   final String productId;
 
-  /// Anlagen lassen sich in die Kette ziehen — nur in der Sidebar neben
-  /// der Kette, nicht im Sheet, das über ihr liegt.
+  /// Anlagen lassen sich in die Kette ziehen — nur in der Leiste neben
+  /// der Kette, nicht im Fenster, das über ihr liegt.
   final bool ziehbar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final maschinenAsync = ref.watch(alleMaschinenProvider);
     final steps = ref.watch(productStepsProvider(productId)).valueOrNull ??
         const <ProductStep>[];
@@ -36,16 +37,12 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
       children: [
         Row(
           children: [
-            Icon(
-              Icons.precision_manufacturing,
-              size: 16,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-            ),
+            Icon(Icons.precision_manufacturing, size: 16, color: grau),
             const SizedBox(width: 6),
             Text(
               'Produktionsmittel',
               style: theme.textTheme.titleSmall
-                  ?.copyWith(fontWeight: FontWeight.w700),
+                  ?.copyWith(fontWeight: FontWeight.w600),
             ),
           ],
         ),
@@ -54,9 +51,7 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
           ziehbar
               ? 'In die Kette ziehen oder antippen.'
               : 'Tippen, um es dem Prozess hinzuzufügen.',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-          ),
+          style: theme.textTheme.bodySmall?.copyWith(color: grau),
         ),
         const SizedBox(height: 10),
         maschinenAsync.when(
@@ -116,7 +111,7 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
           ),
           error: (e, _) => Text(
             'Fehler: $e',
-            style: const TextStyle(color: Colors.red, fontSize: 12),
+            style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
           ),
         ),
       ],
@@ -126,7 +121,8 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
   /// Legt einen Schritt mit [m] an — am Ende seiner Abteilung, gibt es
   /// sie noch nicht, am Ende der Kette.
   Future<void> _hinzufuegen(BuildContext context, Machine m) async {
-    // Vor dem await holen: Das Sheet mit dem Katalog kann inzwischen zu sein.
+    // Vor dem await holen: Das Fenster mit dem Katalog kann inzwischen zu
+    // sein.
     final container = ProviderScope.containerOf(context, listen: false);
     final ok = await StepEditorDialog.show(
       context,
@@ -217,7 +213,7 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
 }
 
 /// Aufklappbare Abteilungs-Gruppe im Katalog. Standard: zugeklappt —
-/// so bleibt die Sidebar kurz und das Diagramm bekommt die Bühne.
+/// so bleibt die Leiste kurz und die Kette bekommt die Bühne.
 class _KatalogAbteilung extends StatefulWidget {
   const _KatalogAbteilung({
     required this.abt,
@@ -246,6 +242,7 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final farbe = widget.abt?.farbe ?? theme.colorScheme.outline;
     final name = widget.abt?.anzeigeName ?? 'Weitere';
     final anzahlImProzess = widget.maschinen
@@ -257,63 +254,35 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
       children: [
         InkWell(
           onTap: () => setState(() => _offen = !_offen),
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: AppMasse.ecken,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
             child: Row(
               children: [
                 AnimatedRotation(
                   turns: _offen ? 0.25 : 0,
                   duration: const Duration(milliseconds: 150),
-                  child: Icon(
-                    Icons.chevron_right,
-                    size: 17,
-                    color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                  ),
+                  child: Icon(Icons.chevron_right, size: 17, color: grau),
                 ),
-                const SizedBox(width: 2),
-                Container(
-                  width: 9,
-                  height: 9,
-                  decoration:
-                      BoxDecoration(color: farbe, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 7),
+                const SizedBox(width: 4),
+                AbteilungsMarke(abteilung: widget.abt, skala: 0.9),
+                const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     name,
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                // Anzahl (grün, wenn welche im Prozess sind)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: anzahlImProzess > 0
-                        ? const Color(0xFF2E7D32).withValues(alpha: 0.25)
-                        : theme.colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    anzahlImProzess > 0
-                        ? '$anzahlImProzess/${widget.maschinen.length}'
-                        : '${widget.maschinen.length}',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: anzahlImProzess > 0
-                          ? (theme.brightness == Brightness.dark
-                              ? const Color(0xFF9CCC65)
-                              : const Color(0xFF2E7D32))
-                          : theme.colorScheme.onSurface
-                              .withValues(alpha: 0.6),
-                    ),
-                  ),
+                // Anzahl — grün, wenn welche davon im Prozess sind.
+                StatusMarke(
+                  anzahlImProzess > 0
+                      ? '$anzahlImProzess/${widget.maschinen.length}'
+                      : '${widget.maschinen.length}',
+                  art: anzahlImProzess > 0 ? StatusArt.ok : StatusArt.neutral,
                 ),
               ],
             ),
@@ -321,7 +290,7 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
         ),
         if (_offen)
           Padding(
-            padding: const EdgeInsets.only(left: 14),
+            padding: const EdgeInsets.fromLTRB(20, 2, 0, 6),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -336,7 +305,7 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
                 if (widget.onNeueAnlage != null)
                   InkWell(
                     onTap: widget.onNeueAnlage,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: AppMasse.ecken,
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 6,
@@ -345,11 +314,11 @@ class _KatalogAbteilungState extends State<_KatalogAbteilung> {
                       child: Row(
                         children: [
                           Icon(
-                            Icons.add_circle_outline,
-                            size: 15,
+                            Icons.add,
+                            size: 16,
                             color: theme.colorScheme.primary,
                           ),
-                          const SizedBox(width: 8),
+                          const SizedBox(width: 6),
                           Text(
                             'Neue Anlage …',
                             style: TextStyle(
@@ -394,67 +363,65 @@ class _KatalogZeile extends StatelessWidget {
     return Draggable<KettenZug>(
       data: AnlagenZug(maschine),
       dragAnchorStrategy: pointerDragAnchorStrategy,
-      feedback: Material(
-        color: Colors.transparent,
-        child: Chip(
-          backgroundColor: farbe,
-          avatar: const Icon(
-            Icons.precision_manufacturing,
-            size: 16,
-            color: Colors.white,
-          ),
-          label: Text(
-            maschine.name,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+      feedback: _ZiehSchild(
+        text: maschine.name,
+        farbe: farbe,
+        icon: Icons.precision_manufacturing,
       ),
-      child: zeile,
+      child: MouseRegion(cursor: SystemMouseCursors.grab, child: zeile),
     );
   }
 
   Widget _inhalt(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 7),
-        child: Row(
-          children: [
-            Container(
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(color: farbe, shape: BoxShape.circle),
+    final f = AppFarben.von(context);
+    // Weiße Zeile auf der grauen Leiste — wie ein Teil, das man nehmen
+    // kann.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Material(
+        color: theme.colorScheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppMasse.ecken,
+          side: BorderSide(color: theme.colorScheme.outline),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(8, 6, 6, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    maschine.name,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Tooltip(
+                  message:
+                      imProzess ? 'Schon im Prozess' : 'Noch nicht im Prozess',
+                  child: Icon(
+                    imProzess ? Icons.check_circle : Icons.add_circle_outline,
+                    size: 16,
+                    color: imProzess ? f.ok : theme.colorScheme.primary,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                maschine.name,
-                style: theme.textTheme.bodySmall,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Icon(
-              imProzess ? Icons.check_circle : Icons.add_circle_outline,
-              size: 16,
-              color: imProzess
-                  ? Colors.green.shade600
-                  : theme.colorScheme.primary,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Button (schmale Screens) — öffnet den Katalog als Bottom-Sheet.
+/// Knopf (schmale Fenster) — öffnet den Katalog als Fenster.
 class _ProduktionsmittelButton extends StatelessWidget {
   const _ProduktionsmittelButton({required this.productId});
 
@@ -470,9 +437,6 @@ class _ProduktionsmittelButton extends StatelessWidget {
           isScrollControlled: true,
           useSafeArea: true,
           showDragHandle: true,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
           builder: (_) => UncontrolledProviderScope(
             container: container,
             child: _ProduktionsmittelSheet(productId: productId),
@@ -481,11 +445,14 @@ class _ProduktionsmittelButton extends StatelessWidget {
       },
       icon: const Icon(Icons.add, size: 18),
       label: const Text('Produktionsmittel'),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+      ),
     );
   }
 }
 
-/// Inhalt des Produktionsmittel-Bottom-Sheets.
+/// Inhalt des Produktionsmittel-Fensters.
 class _ProduktionsmittelSheet extends StatelessWidget {
   const _ProduktionsmittelSheet({required this.productId});
 

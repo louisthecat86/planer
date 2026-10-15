@@ -144,40 +144,17 @@ class _PlattenSchemaBereich extends ConsumerWidget {
 
     return paramsAsync.when(
       data: (params) {
-        // Nur das Raster der EIGENEN Maschine anzeigen.
+        // Nur das Raster der EIGENEN Maschine anzeigen. Der Titel steht im
+        // Schema selbst — vorher lag hier noch ein grauer Kasten mit einer
+        // zweiten Überschrift darum.
         final typ = _istDampftunnel
             ? BratschemaTyp.kombiofen
             : BratschemaTyp.bratstrasse;
-        final titel = _istDampftunnel
-            ? 'PLATTEN DAMPFTUNNEL (12)'
-            : 'PLATTEN BRATSTRASSE (10+10)';
 
-        return Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color:
-                theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                titel,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              const SizedBox(height: 6),
-              BratstrasseSchema(
-                typ: typ,
-                werte: _leseWerte(params, typ),
-                onChanged: (neu) => _speichereWerte(ref, params, typ, neu),
-              ),
-            ],
-          ),
+        return BratstrasseSchema(
+          typ: typ,
+          werte: _leseWerte(params, typ),
+          onChanged: (neu) => _speichereWerte(ref, params, typ, neu),
         );
       },
       loading: () => const SizedBox(
@@ -192,7 +169,7 @@ class _PlattenSchemaBereich extends ConsumerWidget {
       ),
       error: (e, _) => Text(
         'Schema-Fehler: $e',
-        style: const TextStyle(color: Colors.red, fontSize: 12),
+        style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
       ),
     );
   }
@@ -216,66 +193,82 @@ class _WertFeld extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
+    final grau = theme.colorScheme.onSurfaceVariant;
     final hatWert = wert.trim().isNotEmpty && wert.trim() != '–';
-    final accent = dark ? const Color(0xFF66BB6A) : const Color(0xFF2E7D32);
-    final bg = hatWert
-        ? accent.withValues(alpha: dark ? 0.22 : 0.12)
-        : theme.colorScheme.onSurface.withValues(alpha: 0.05);
-    final border = hatWert
-        ? accent.withValues(alpha: 0.5)
-        : theme.colorScheme.onSurface.withValues(alpha: 0.10);
-    final wertColor = hatWert
-        ? (dark ? const Color(0xFF9CCC65) : accent)
-        : theme.colorScheme.onSurface.withValues(alpha: 0.4);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: border),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    // Ein Feld wie in einer Navision-Karte: weiß, dünner Rand, der Wert
+    // groß. Vorher war jeder gesetzte Wert grün hinterlegt — Grün heißt in
+    // der App aber „erledigt", nicht „ausgefüllt".
+    return Material(
+      color: theme.colorScheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppMasse.ecken,
+        side: BorderSide(color: theme.colorScheme.outline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(fontSize: 12, color: grau),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
-                Icon(
-                  Icons.edit,
-                  size: 12,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              wert,
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: wertColor,
+                  Icon(Icons.edit_outlined, size: 13, color: grau),
+                ],
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+              const SizedBox(height: 4),
+              Text(
+                wert,
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: hatWert ? theme.colorScheme.onSurface : grau,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Zeilen untereinander, getrennt durch dünne Linien — wie die Zeilen
+/// eines Infofensters.
+class _Trennzeilen extends StatelessWidget {
+  const _Trennzeilen({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final linie = Theme.of(context).colorScheme.outlineVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < children.length; i++)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: i == children.length - 1
+                  ? null
+                  : Border(bottom: BorderSide(color: linie)),
+            ),
+            child: children[i],
+          ),
+      ],
     );
   }
 }
@@ -307,21 +300,27 @@ class _ParameterListe extends ConsumerWidget {
   ) async {
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Parameter löschen?'),
-        content: Text('Parameter „${param.parameterName}" wird gelöscht.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
+      builder: (ctx) {
+        final farben = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Parameter löschen?'),
+          content: Text('Parameter „${param.parameterName}" wird gelöscht.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: farben.error,
+                foregroundColor: farben.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Löschen'),
+            ),
+          ],
+        );
+      },
     );
     if (bestaetigt != true) return;
 
@@ -511,20 +510,20 @@ class _ParameterListe extends ConsumerWidget {
         }
 
         return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Row(
               children: [
                 Icon(
                   Icons.tune,
                   size: 16,
-                  color: theme.colorScheme.primary,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'Parameter',
                   style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
@@ -572,14 +571,12 @@ class _ParameterListe extends ConsumerWidget {
       ),
       error: (e, _) => Text(
         'Parameter-Fehler: $e',
-        style: const TextStyle(color: Colors.red, fontSize: 12),
+        style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
       ),
     );
   }
 }
 
-/// Block für Standard-Parameter aus der Excel-Vorlage. Editierbar
-/// (Werte werden beim Export wieder in die Excel zurückgeschrieben).
 /// Block für die Steckbrief-Felder der zugeordneten Maschine: zeigt alle
 /// im Maschinen-Katalog definierten Parameter — mit Wert, wenn am Artikel
 /// gepflegt, sonst als leere Zeile zum Ausfüllen.
@@ -623,37 +620,14 @@ class _SteckbriefBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.2),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    final grau = theme.colorScheme.onSurfaceVariant;
+    return Bereich(
+      titel: maschinenName ?? 'Maschine',
+      icon: Icons.precision_manufacturing,
+      untertitel: 'Steckbrief',
+      innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
+      child: _Trennzeilen(
         children: [
-          Row(
-            children: [
-              Icon(
-                Icons.precision_manufacturing,
-                size: 14,
-                color: theme.colorScheme.primary,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                (maschinenName ?? 'MASCHINE').toUpperCase(),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
           for (final def in defs)
             Builder(
               builder: (context) {
@@ -662,12 +636,8 @@ class _SteckbriefBlock extends StatelessWidget {
                 final hatWert = wert != null && wert.isNotEmpty;
                 return InkWell(
                   onTap: () => onEdit(def, zeile),
-                  borderRadius: BorderRadius.circular(6),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 5,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     // Beide Spalten sind fest verteilt (2 : 3). Vorher war
                     // nur die Beschriftung dehnbar, der Wert nicht — ein
                     // langer Satz in „Sonstige Informationen" nahm sich
@@ -683,7 +653,9 @@ class _SteckbriefBlock extends StatelessWidget {
                             (def.einheit ?? '').isEmpty
                                 ? def.parameterName
                                 : '${def.parameterName} (${def.einheit})',
-                            style: theme.textTheme.bodySmall,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: grau,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 10),
@@ -694,10 +666,9 @@ class _SteckbriefBlock extends StatelessWidget {
                               : Text(
                                   'eintragen …',
                                   textAlign: TextAlign.right,
-                                  style: theme.textTheme.bodySmall?.copyWith(
+                                  style: theme.textTheme.bodyMedium?.copyWith(
                                     fontStyle: FontStyle.italic,
-                                    color: theme.colorScheme.onSurfaceVariant
-                                        .withValues(alpha: 0.7),
+                                    color: grau,
                                   ),
                                 ),
                         ),
@@ -713,6 +684,8 @@ class _SteckbriefBlock extends StatelessWidget {
   }
 }
 
+/// Block für Standard-Parameter aus der Excel-Vorlage. Editierbar
+/// (Werte werden beim Export wieder in die Excel zurückgeschrieben).
 class _StandardGruppenBlock extends StatelessWidget {
   const _StandardGruppenBlock({
     required this.gruppenName,
@@ -726,36 +699,16 @@ class _StandardGruppenBlock extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Bereich(
+      titel: gruppenName,
+      innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
+      child: _Trennzeilen(
         children: [
-          Row(
-            children: [
-              Text(
-                gruppenName,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ...parameter.map(
-            (p) => _ParameterZeileStandard(
+          for (final p in parameter)
+            _ParameterZeileStandard(
               param: p,
               onEdit: () => onEdit(p),
             ),
-          ),
         ],
       ),
     );
@@ -779,53 +732,37 @@ class _CustomGruppenBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color:
-            theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Zusätzliche Parameter',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+    return Bereich(
+      titel: 'Zusätzliche Parameter',
+      aktionen: [
+        TextButton.icon(
+          onPressed: onAdd,
+          icon: const Icon(Icons.add, size: 16),
+          label: const Text('Neu'),
+        ),
+      ],
+      innenAbstand: const EdgeInsets.fromLTRB(12, 0, 4, 2),
+      child: parameter.isEmpty
+          ? Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Keine — über „Neu" legst du eigene Werte an.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontStyle: FontStyle.italic,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),
-              const Spacer(),
-              TextButton.icon(
-                onPressed: onAdd,
-                icon: const Icon(Icons.add, size: 16),
-                label: const Text(
-                  'Neu',
-                  style: TextStyle(fontSize: 12),
-                ),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ),
-          if (parameter.isNotEmpty)
-            ...parameter.map(
-              (p) => _ParameterZeileEditierbar(
-                param: p,
-                onEdit: () => onEdit(p),
-                onDelete: () => onDelete(p),
-              ),
+            )
+          : _Trennzeilen(
+              children: [
+                for (final p in parameter)
+                  _ParameterZeileEditierbar(
+                    param: p,
+                    onEdit: () => onEdit(p),
+                    onDelete: () => onDelete(p),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 }
@@ -843,11 +780,11 @@ class _ParameterZeileStandard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     return InkWell(
       onTap: onEdit,
-      borderRadius: BorderRadius.circular(6),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -855,7 +792,7 @@ class _ParameterZeileStandard extends StatelessWidget {
               flex: 2,
               child: Text(
                 param.parameterName,
-                style: theme.textTheme.bodyMedium,
+                style: theme.textTheme.bodyMedium?.copyWith(color: grau),
               ),
             ),
             const SizedBox(width: 8),
@@ -868,11 +805,7 @@ class _ParameterZeileStandard extends StatelessWidget {
             const SizedBox(width: 6),
             Padding(
               padding: const EdgeInsets.only(top: 2),
-              child: Icon(
-                Icons.edit,
-                size: 15,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
+              child: Icon(Icons.edit_outlined, size: 15, color: grau),
             ),
           ],
         ),
@@ -881,49 +814,40 @@ class _ParameterZeileStandard extends StatelessWidget {
   }
 }
 
-/// Wert-Anzeige für Parameter: gefüllt = grüne Pille, leer = gedämpftes „—".
+/// Wert-Anzeige für Parameter: gefüllt fett, leer ein graues „—".
+///
+/// Vorher stand jeder gefüllte Wert in einer grünen Pille. Grün heißt in
+/// der App aber „erledigt" — und eine Maske voller grüner Pillen ließ das
+/// Wichtige, die Lücken, nicht mehr hervortreten.
 class _ParamWert extends StatelessWidget {
   const _ParamWert({required this.wert, this.rechts = false});
 
   final String? wert;
 
-  /// Pille am rechten Rand ausrichten (Steckbrief-Block) statt am linken.
+  /// Am rechten Rand ausrichten (Steckbrief-Block) statt am linken.
   final bool rechts;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
-    final hat = wert != null && wert!.trim().isNotEmpty;
-    if (!hat) {
+    final text = wert?.trim() ?? '';
+    if (text.isEmpty) {
       return Text(
         '—',
         textAlign: rechts ? TextAlign.right : TextAlign.left,
         style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+          color: theme.colorScheme.onSurfaceVariant,
         ),
       );
     }
-    final accent = dark ? const Color(0xFF9CCC65) : const Color(0xFF2E7D32);
-    return Align(
-      alignment: rechts ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-        decoration: BoxDecoration(
-          color: accent.withValues(alpha: dark ? 0.20 : 0.12),
-          borderRadius: BorderRadius.circular(6),
-        ),
-        // Ohne weiche Umbrüche stünde ein ganzer Satz in einer einzigen
-        // Zeile und liefe aus der Karte heraus.
-        child: Text(
-          wert!,
-          softWrap: true,
-          textAlign: rechts ? TextAlign.right : TextAlign.left,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            color: accent,
-          ),
-        ),
+    // Ohne weiche Umbrüche stünde ein ganzer Satz in einer einzigen Zeile
+    // und liefe aus dem Bereich heraus.
+    return Text(
+      text,
+      softWrap: true,
+      textAlign: rechts ? TextAlign.right : TextAlign.left,
+      style: theme.textTheme.bodyMedium?.copyWith(
+        fontWeight: FontWeight.w600,
       ),
     );
   }
@@ -944,6 +868,7 @@ class _ParameterZeileEditierbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -951,32 +876,37 @@ class _ParameterZeileEditierbar extends StatelessWidget {
         children: [
           Expanded(
             flex: 2,
-            child: Text(
-              param.parameterName,
-              style: theme.textTheme.bodyMedium,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                param.parameterName,
+                style: theme.textTheme.bodyMedium?.copyWith(color: grau),
+              ),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 3,
-            child: _ParamWert(wert: param.wert),
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: _ParamWert(wert: param.wert),
+            ),
           ),
           IconButton(
-            icon: const Icon(Icons.edit, size: 16),
+            icon: Icon(Icons.edit_outlined, size: 16, color: grau),
             tooltip: 'Bearbeiten',
             onPressed: onEdit,
             visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
           ),
-          const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.delete_outline, size: 16),
+            icon: Icon(
+              Icons.delete_outline,
+              size: 16,
+              color: theme.colorScheme.error,
+            ),
             tooltip: 'Löschen',
             onPressed: onDelete,
             visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
           ),
         ],
       ),

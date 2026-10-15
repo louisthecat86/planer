@@ -161,18 +161,27 @@ enum StatusArt { ok, warnung, fehler, info, neutral }
 /// Kurzer Status als Marke: „erledigt", „überbucht", „fehlt 94,2 kg".
 ///
 /// Blasse Fläche, Schrift in der Statusfarbe, kein Rand — gut lesbar,
-/// ohne laut zu sein.
+/// ohne laut zu sein. Mit [onTap] wird sie antippbar, etwa um den Wert
+/// dahinter zu ändern; [hinweis] erklärt sie beim Darüberfahren.
 class StatusMarke extends StatelessWidget {
   const StatusMarke(
     this.text, {
     super.key,
     this.art = StatusArt.neutral,
     this.icon,
+    this.onTap,
+    this.hinweis,
   });
 
   final String text;
   final StatusArt art;
   final IconData? icon;
+
+  /// Antippen — null: reine Anzeige.
+  final VoidCallback? onTap;
+
+  /// Erklärung beim Darüberfahren — null: keine.
+  final String? hinweis;
 
   @override
   Widget build(BuildContext context) {
@@ -189,31 +198,52 @@ class StatusMarke extends StatelessWidget {
         ),
     };
     final symbol = icon;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: hinten,
-        borderRadius: AppMasse.eckenKlein,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (symbol != null) ...[
-            Icon(symbol, size: 13, color: vorne),
-            const SizedBox(width: 4),
-          ],
-          Text(
-            text,
-            maxLines: 1,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: vorne,
-            ),
-          ),
+    final zeile = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (symbol != null) ...[
+          Icon(symbol, size: 13, color: vorne),
+          const SizedBox(width: 4),
         ],
-      ),
+        Text(
+          text,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.w600,
+            color: vorne,
+          ),
+        ),
+      ],
     );
+    const abstand = EdgeInsets.symmetric(horizontal: 6, vertical: 2);
+
+    final tippen = onTap;
+    final Widget marke = tippen == null
+        ? Container(
+            padding: abstand,
+            decoration: BoxDecoration(
+              color: hinten,
+              borderRadius: AppMasse.eckenKlein,
+            ),
+            child: zeile,
+          )
+        // Antippbar: Material statt bemalter Box — die Tipp-Welle malt auf
+        // das nächste Material und wäre unter der Fläche unsichtbar.
+        : Material(
+            color: hinten,
+            borderRadius: AppMasse.eckenKlein,
+            child: InkWell(
+              onTap: tippen,
+              borderRadius: AppMasse.eckenKlein,
+              child: Padding(padding: abstand, child: zeile),
+            ),
+          );
+
+    final erklaerung = hinweis;
+    return erklaerung == null
+        ? marke
+        : Tooltip(message: erklaerung, child: marke);
   }
 }
 
