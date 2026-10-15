@@ -13,8 +13,10 @@ import '../../core/services/auftragsbestand_deckung.dart'
         beschreibeBezuege,
         kQuelleAuftragsbestand,
         ladeBedarfsPlanung;
-import '../../core/utils/sheet_utils.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
+import '../../core/utils/sheet_utils.dart';
 import '../datenblatt/datenblatt.dart';
 
 // ---------------------------------------------------------------------------
@@ -194,63 +196,58 @@ class BedarfScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final async = ref.watch(bedarfProvider);
+    // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Bedarfsliste'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Bedarf hinzufügen',
-            onPressed: () => _bearbeiten(context, ref, null),
-          ),
+          // Die Hauptaktion der Seite oben rechts — wie „Neuer Artikel" in
+          // der Artikelliste.
+          if (schmal)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Bedarf hinzufügen',
+              onPressed: () => _bearbeiten(context, ref, null),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _bearbeiten(context, ref, null),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Bedarf hinzufügen'),
+            ),
+          const SizedBox(width: 12),
         ],
       ),
       body: async.when(
         data: (liste) {
           if (liste.isEmpty) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.playlist_add,
-                      size: 48,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.35),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Noch kein Bedarf erfasst.\n\n'
-                      'Trage hier ein, was produziert werden muss — '
-                      'Bestellungen oder Bestandsauffüllung. Beim Planen '
-                      'wählst du dann direkt daraus aus.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        height: 1.4,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: () => _bearbeiten(context, ref, null),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Ersten Bedarf anlegen'),
-                    ),
-                  ],
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: LeerHinweis(
+                  'Noch kein Bedarf erfasst. Trage hier ein, was produziert '
+                  'werden muss — Bestellungen oder Bestandsauffüllung. Beim '
+                  'Planen wählst du dann direkt daraus aus.',
+                  icon: Icons.playlist_add,
+                  aktion: FilledButton.icon(
+                    onPressed: () => _bearbeiten(context, ref, null),
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('Ersten Bedarf anlegen'),
+                  ),
                 ),
               ),
             );
           }
 
+          final farben = Theme.of(context).colorScheme;
           final offen = liste.where((b) => !b.erledigt).toList();
           final offenSumme =
               offen.fold<double>(0, (s, b) => s + b.offenKg);
           final ueberfaellig = offen.where((b) => b.ueberfaellig).length;
+          final erledigt = liste.length - offen.length;
           final altNavision = [
             for (final b in offen)
               if (ausAltemNavisionImport(b.bedarf)) b,
@@ -258,53 +255,100 @@ class BedarfScreen extends ConsumerWidget {
 
           return Column(
             children: [
-              // Kopfzeile mit den Kennzahlen
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                color: theme.colorScheme.surfaceContainerHighest
-                    .withValues(alpha: 0.4),
-                child: Row(
-                  children: [
-                    _Kennzahl(
-                      wert: '${offen.length}',
-                      label: 'offen',
-                    ),
-                    const SizedBox(width: 24),
-                    _Kennzahl(
-                      wert: '${offenSumme.round()} kg',
-                      label: 'noch einzuplanen',
-                    ),
-                    if (ueberfaellig > 0) ...[
-                      const SizedBox(width: 24),
-                      _Kennzahl(
-                        wert: '$ueberfaellig',
-                        label: 'überfällig',
-                        farbe: theme.colorScheme.error,
+              // Kennzahlen in einem Bereich wie im Auftragsbestand — vorher
+              // ein grau hinterlegter Streifen.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                child: Bereich(
+                  titel: 'Offener Bedarf',
+                  icon: Icons.assignment_outlined,
+                  untertitel: erledigt == 0 ? null : '$erledigt erledigt',
+                  innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                  child: Wrap(
+                    spacing: 28,
+                    runSpacing: 10,
+                    children: [
+                      Kennzahl(wert: '${offen.length}', label: 'offen'),
+                      Kennzahl(
+                        wert: '${offenSumme.round()} kg',
+                        label: 'noch einzuplanen',
                       ),
+                      if (ueberfaellig > 0)
+                        Kennzahl(
+                          wert: '$ueberfaellig',
+                          label: 'überfällig',
+                          farbe: AppFarben.von(context).fehler,
+                        ),
                     ],
-                  ],
+                  ),
                 ),
               ),
-              const Divider(height: 1),
               if (altNavision.isNotEmpty)
-                _AltNavisionBanner(
-                  anzahl: altNavision.length,
-                  onErledigen: () =>
-                      _altNavisionErledigen(context, ref, altNavision),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                  child: HinweisBox(
+                    altNavision.length == 1
+                        ? '1 offener Bedarf stammt noch aus dem früheren '
+                            'Navision-Import. Bedarf aus Navision entsteht '
+                            'jetzt im Auftragsbestand.'
+                        : '${altNavision.length} offene Bedarfe stammen noch '
+                            'aus dem früheren Navision-Import. Bedarf aus '
+                            'Navision entsteht jetzt im Auftragsbestand.',
+                    art: StatusArt.warnung,
+                    icon: Icons.history_toggle_off_rounded,
+                    aktion: TextButton(
+                      onPressed: () =>
+                          _altNavisionErledigen(context, ref, altNavision),
+                      child: const Text('Als erledigt markieren …'),
+                    ),
+                  ),
                 ),
+              // Die Bedarfe als Zeilen einer weißen Fläche mit Spaltenkopf —
+              // wie die Listen in Navision. Vorher stand jeder Bedarf auf
+              // einer eigenen Karte.
               Expanded(
-                child: ListView.separated(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: liste.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: 8),
-                  itemBuilder: (context, i) => _BedarfKarte(
-                    info: liste[i],
-                    onTap: () => _bearbeiten(context, ref, liste[i].bedarf),
-                    onErledigt: () => _erledigtUmschalten(ref, liste[i]),
-                    onLoeschen: () =>
-                        _loeschen(context, ref, liste[i]),
-                    onDatenblatt: () => _datenblatt(context, ref, liste[i]),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                  child: Material(
+                    color: farben.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppMasse.ecken,
+                      side: BorderSide(color: farben.outline),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        // Ab dieser Breite steht der Fortschritt als Balken
+                        // in der Zeile.
+                        final breit = constraints.maxWidth >= 900;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _BedarfKopf(breit: breit),
+                            Expanded(
+                              child: ListView.builder(
+                                itemCount: liste.length,
+                                itemBuilder: (context, i) {
+                                  final info = liste[i];
+                                  return _BedarfZeile(
+                                    info: info,
+                                    breit: breit,
+                                    onTap: () =>
+                                        _bearbeiten(context, ref, info.bedarf),
+                                    onErledigt: () =>
+                                        _erledigtUmschalten(ref, info),
+                                    onLoeschen: () =>
+                                        _loeschen(context, ref, info),
+                                    onDatenblatt: () =>
+                                        _datenblatt(context, ref, info),
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -440,11 +484,12 @@ class BedarfScreen extends ConsumerWidget {
     WidgetRef ref,
     Demand? vorhanden,
   ) async {
+    // Ohne Anfasser: Das Fenster hat einen eigenen Kopf mit Titel und
+    // Kreuz wie jedes Fenster der App.
     final geaendert = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      showDragHandle: true,
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (_) => _BedarfEditor(bedarf: vorhanden),
     );
@@ -452,41 +497,79 @@ class BedarfScreen extends ConsumerWidget {
   }
 }
 
-class _Kennzahl extends StatelessWidget {
-  const _Kennzahl({required this.wert, required this.label, this.farbe});
+/// Spaltenbreiten der Bedarfsliste — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double nummer = 78;
+  static const double termin = 150;
+  static const double menge = 80;
+  static const double fortschritt = 170;
+  static const double status = 150;
+  static const double prio = 28;
+  static const double menue = 40;
 
-  final String wert;
-  final String label;
-  final Color? farbe;
+  /// Abstand zwischen zwei Spalten.
+  static const double luecke = 12;
+}
+
+/// Spaltenköpfe der Bedarfsliste auf der Fläche der Leisten.
+class _BedarfKopf extends StatelessWidget {
+  const _BedarfKopf({required this.breit});
+
+  /// Breit genug für den Fortschritt.
+  final bool breit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          wert,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: farbe,
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget spalte(String text, double breite, {bool rechts = false}) =>
+        SizedBox(
+          width: breite,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: rechts ? TextAlign.right : TextAlign.left,
+            style: stil,
           ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4 + _Spalten.menue, 8),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline),
         ),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
+      ),
+      child: Row(
+        children: [
+          spalte('Nr.', _Spalten.nummer),
+          Expanded(child: Text('Artikel', style: stil)),
+          const SizedBox(width: _Spalten.luecke),
+          spalte('Termin', _Spalten.termin),
+          spalte('Menge', _Spalten.menge, rechts: true),
+          if (breit) ...[
+            const SizedBox(width: _Spalten.luecke + 4),
+            spalte('Fortschritt', _Spalten.fortschritt),
+          ],
+          const SizedBox(width: _Spalten.luecke + 4),
+          spalte('Status', _Spalten.status),
+          const SizedBox(width: _Spalten.prio),
+        ],
+      ),
     );
   }
 }
 
-class _BedarfKarte extends StatelessWidget {
-  const _BedarfKarte({
+/// Ein Bedarf als Zeile der Liste. Antippen öffnet ihn zum Bearbeiten.
+class _BedarfZeile extends StatelessWidget {
+  const _BedarfZeile({
     required this.info,
+    required this.breit,
     required this.onTap,
     required this.onErledigt,
     required this.onLoeschen,
@@ -494,6 +577,9 @@ class _BedarfKarte extends StatelessWidget {
   });
 
   final BedarfInfo info;
+
+  /// Breit genug für den Fortschritt.
+  final bool breit;
   final VoidCallback onTap;
   final VoidCallback onErledigt;
   final VoidCallback onLoeschen;
@@ -519,211 +605,247 @@ class _BedarfKarte extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final farben = theme.colorScheme;
+    final f = AppFarben.von(context);
     final b = info.bedarf;
-    final akzent = info.erledigt
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.3)
-        : info.ueberfaellig
-            ? theme.colorScheme.error
-            : theme.colorScheme.primary;
+    final stil = theme.textTheme.bodyMedium;
+    final zahlen = stil?.copyWith(fontFeatures: _ziffern);
+    final grau = theme.textTheme.bodySmall?.copyWith(
+      color: farben.onSurfaceVariant,
+    );
 
-    String terminText() {
-      final t = b.termin;
-      if (t == null) return 'ohne Termin';
-      return '${t.day.toString().padLeft(2, '0')}.'
-          '${t.month.toString().padLeft(2, '0')}.${t.year}';
+    // Farbe des Fortschritts: grün gedeckt, rot überfällig, sonst blau.
+    final akzent = info.erledigt
+        ? f.ok
+        : info.ueberfaellig
+            ? f.fehler
+            : f.info;
+
+    // Der Status nennt das Wichtigste: gedeckt, was noch offen ist — rot,
+    // wenn der Termin vorbei ist —, oder was schon eingeplant ist.
+    final StatusMarke status;
+    if (info.erledigt) {
+      final vonHand =
+          b.manuellErledigt && info.produziertKg < b.mengeKgFertig - 0.5;
+      status = StatusMarke(
+        vonHand ? 'erledigt' : 'gedeckt',
+        art: StatusArt.ok,
+        hinweis: vonHand ? 'Von Hand als erledigt markiert' : null,
+      );
+    } else if (info.offenKg >= 0.5) {
+      status = StatusMarke(
+        '${info.offenKg.round()} kg offen',
+        art: info.ueberfaellig ? StatusArt.fehler : StatusArt.warnung,
+      );
+    } else {
+      status = StatusMarke(
+        '${info.inPlanungKg.round()} kg geplant',
+        art: StatusArt.info,
+      );
     }
 
-    return Opacity(
-      opacity: info.erledigt ? 0.55 : 1,
-      child: Card(
-        margin: EdgeInsets.zero,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 8, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final termin = b.termin;
+    final Widget terminAnzeige;
+    if (termin == null) {
+      terminAnzeige = Text(
+        'ohne Termin',
+        style: stil?.copyWith(color: farben.onSurfaceVariant),
+      );
+    } else if (info.ueberfaellig) {
+      terminAnzeige = StatusMarke(
+        'überfällig · ${_tagKurz(termin)}',
+        art: StatusArt.fehler,
+        hinweis: 'Termin ${_datum(termin)} überschritten',
+      );
+    } else {
+      terminAnzeige = Text(
+        termin.year == info.heute.year ? _tagKurz(termin) : _datum(termin),
+        style: zahlen,
+      );
+    }
+
+    // Unter der Bezeichnung grau: woher der Bedarf kommt und die Notiz.
+    final notiz = b.notizen?.trim() ?? '';
+    final herkunft = [
+      _quellen[b.quelle] ?? b.quelle,
+      if (notiz.isNotEmpty) notiz,
+    ].join(' · ');
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(12, 5, 4, 5),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: farben.outlineVariant),
+            ),
+          ),
+          // Erledigte blass — sie stehen am Ende der Liste.
+          child: Opacity(
+            opacity: info.erledigt ? 0.55 : 1,
+            child: Row(
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(width: 4, height: 34, color: akzent),
-                    const SizedBox(width: 10),
-                    Expanded(
+                SizedBox(
+                  width: _Spalten.nummer,
+                  child: Text(
+                    info.artikelNummer,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: zahlen?.copyWith(
+                      // Blau wie ein Link: Antippen öffnet den Bedarf.
+                      color: farben.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        info.artikelName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: stil?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                        herkunft,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: grau,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: _Spalten.luecke),
+                SizedBox(
+                  width: _Spalten.termin,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    heightFactor: 1,
+                    child: terminAnzeige,
+                  ),
+                ),
+                SizedBox(
+                  width: _Spalten.menge,
+                  child: Text(
+                    '${b.mengeKgFertig.round()} kg',
+                    maxLines: 1,
+                    textAlign: TextAlign.right,
+                    style: zahlen,
+                  ),
+                ),
+                if (breit) ...[
+                  const SizedBox(width: _Spalten.luecke + 4),
+                  SizedBox(
+                    width: _Spalten.fortschritt,
+                    child: Tooltip(
+                      message: _fortschrittText(info),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            info.artikelName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                          // Zweistufig: kräftig = schon produziert (Tag
+                          // vorbei), blasser = eingeplant, aber noch offen.
+                          ClipRRect(
+                            borderRadius: AppMasse.eckenKlein,
+                            child: Stack(
+                              children: [
+                                LinearProgressIndicator(
+                                  value: info.fortschritt,
+                                  minHeight: 6,
+                                  backgroundColor: farben.outlineVariant,
+                                  color: akzent.withValues(alpha: 0.35),
+                                ),
+                                LinearProgressIndicator(
+                                  value: info.produziertAnteil,
+                                  minHeight: 6,
+                                  backgroundColor: Colors.transparent,
+                                  color: akzent,
+                                ),
+                              ],
                             ),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
                           ),
+                          const SizedBox(height: 3),
                           Text(
-                            '${info.artikelNummer} · '
-                            '${_quellen[b.quelle] ?? b.quelle} · '
-                            '${terminText()}',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: info.ueberfaellig
-                                  ? theme.colorScheme.error
-                                  : theme.colorScheme.onSurfaceVariant,
-                              fontWeight: info.ueberfaellig
-                                  ? FontWeight.w700
-                                  : FontWeight.normal,
-                            ),
+                            _fortschrittText(info),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: grau?.copyWith(fontSize: 11),
                           ),
                         ],
                       ),
                     ),
-                    if (b.prioritaet > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 4),
-                        child: Icon(
-                          Icons.priority_high,
-                          size: 18,
-                          color: theme.colorScheme.error,
-                        ),
-                      ),
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, size: 18),
-                      onSelected: (v) {
-                        if (v == 'datenblatt') onDatenblatt();
-                        if (v == 'erledigt') onErledigt();
-                        if (v == 'loeschen') onLoeschen();
-                      },
-                      itemBuilder: (_) => [
-                        const PopupMenuItem(
-                          value: 'datenblatt',
-                          child: Text('Datenblatt drucken'),
-                        ),
-                        PopupMenuItem(
-                          value: 'erledigt',
-                          child: Text(
-                            b.manuellErledigt
-                                ? 'Wieder öffnen'
-                                : 'Als erledigt markieren',
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'loeschen',
-                          child: Text('Löschen'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Fortschritt: geplant von benötigt
-                Row(
-                  children: [
-                    Expanded(
-                      // Zweistufige Leiste: kräftig = bereits produziert
-                      // (Tag vorbei), blasser = eingeplant aber noch offen.
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(3),
-                        child: Stack(
-                          children: [
-                            LinearProgressIndicator(
-                              value: info.fortschritt,
-                              minHeight: 6,
-                              backgroundColor: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.10),
-                              color: akzent.withValues(alpha: 0.35),
-                            ),
-                            LinearProgressIndicator(
-                              value: info.produziertAnteil,
-                              minHeight: 6,
-                              backgroundColor: Colors.transparent,
-                              color: akzent,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      info.erledigt
-                          ? 'gedeckt'
-                          : info.inPlanungKg > 0.5
-                              ? '${info.inPlanungKg.round()} kg geplant'
-                              : '${info.offenKg.round()} kg offen',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: akzent,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  _fortschrittText(info),
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                if (b.notizen != null && b.notizen!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    b.notizen!.trim(),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontStyle: FontStyle.italic,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
                   ),
                 ],
+                const SizedBox(width: _Spalten.luecke + 4),
+                SizedBox(
+                  width: _Spalten.status,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    heightFactor: 1,
+                    // Wird es mit großer Schrift zu eng, wird die Marke
+                    // kleiner, statt über den Rand zu laufen.
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: status,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: _Spalten.prio,
+                  child: b.prioritaet > 0
+                      ? Tooltip(
+                          message: 'Hohe Priorität',
+                          child: Icon(
+                            Icons.priority_high,
+                            size: 18,
+                            color: f.fehler,
+                          ),
+                        )
+                      : null,
+                ),
+                SizedBox(
+                  width: _Spalten.menue,
+                  child: PopupMenuButton<String>(
+                    tooltip: 'Mehr',
+                    icon: const Icon(Icons.more_vert, size: 18),
+                    onSelected: (v) {
+                      if (v == 'datenblatt') onDatenblatt();
+                      if (v == 'erledigt') onErledigt();
+                      if (v == 'loeschen') onLoeschen();
+                    },
+                    itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'datenblatt',
+                        child: Text('Datenblatt drucken'),
+                      ),
+                      PopupMenuItem(
+                        value: 'erledigt',
+                        child: Text(
+                          b.manuellErledigt
+                              ? 'Wieder öffnen'
+                              : 'Als erledigt markieren',
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'loeschen',
+                        child: Text('Löschen'),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Hinweis auf offene Bedarfe aus dem früheren Navision-Import.
-class _AltNavisionBanner extends StatelessWidget {
-  const _AltNavisionBanner({required this.anzahl, required this.onErledigen});
-
-  final int anzahl;
-  final VoidCallback onErledigen;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final farbe = theme.brightness == Brightness.dark
-        ? const Color(0xFFFBBF24)
-        : const Color(0xFFB45309);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-      color: farbe.withValues(alpha: 0.10),
-      child: Row(
-        children: [
-          Icon(Icons.history_toggle_off_rounded, size: 20, color: farbe),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              anzahl == 1
-                  ? '1 offener Bedarf stammt noch aus dem früheren '
-                      'Navision-Import. Bedarf aus Navision entsteht jetzt '
-                      'im Auftragsbestand.'
-                  : '$anzahl offene Bedarfe stammen noch aus dem früheren '
-                      'Navision-Import. Bedarf aus Navision entsteht jetzt '
-                      'im Auftragsbestand.',
-              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
-            ),
-          ),
-          const SizedBox(width: 10),
-          OutlinedButton(
-            onPressed: onErledigen,
-            child: const Text('Als erledigt markieren …'),
-          ),
-        ],
       ),
     );
   }
@@ -828,27 +950,52 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
     if (mounted) Navigator.of(context).pop(true);
   }
 
+  Future<void> _terminWaehlen() async {
+    final jetzt = DateTime.now();
+    final d = await showDatePicker(
+      context: context,
+      initialDate: _termin ?? jetzt,
+      firstDate: jetzt.subtract(const Duration(days: 30)),
+      lastDate: jetzt.add(const Duration(days: 365)),
+    );
+    if (d != null) setState(() => _termin = d);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final produkteAsync = ref.watch(_produkteProvider);
+    final termin = _termin;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        0,
-        16,
-        16 + MediaQuery.of(context).viewInsets.bottom,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: ListView(
         shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
-          Text(
-            widget.bedarf == null ? 'Bedarf hinzufügen' : 'Bedarf bearbeiten',
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
+          // Kopf wie bei jedem Fenster der App: Titel in Blau, rechts ein
+          // Kreuz. Vorher saß hier der Anfasser aus der Bottom-Sheet-Zeit.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.bedarf == null
+                      ? 'Bedarf hinzufügen'
+                      : 'Bedarf bearbeiten',
+                  style: theme.dialogTheme.titleTextStyle ??
+                      theme.textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Schließen ohne Speichern',
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 2),
           Text(
             'Menge in Fertigware — die benötigte Rohware rechnet die '
             'Planung daraus zurück.',
@@ -868,13 +1015,14 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                 return Card(
                   margin: EdgeInsets.zero,
                   child: ListTile(
-                    leading: const Icon(Icons.inventory_2),
+                    leading: const Icon(Icons.inventory_2_outlined),
                     title: Text(gewaehlt.artikelbezeichnung),
                     subtitle: Text(gewaehlt.artikelnummer),
                     trailing: _ausAuftragsbestand
                         ? null
                         : IconButton(
                             icon: const Icon(Icons.close),
+                            tooltip: 'Anderen Artikel wählen',
                             onPressed: () =>
                                 setState(() => _productId = null),
                           ),
@@ -899,35 +1047,49 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                   TextField(
                     controller: _suche,
                     decoration: const InputDecoration(
+                      labelText: 'Artikel suchen',
                       prefixIcon: Icon(Icons.search),
-                      hintText: 'Artikel suchen',
                     ),
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 8),
-                  ConstrainedBox(
+                  // Die Treffer in einer Fläche mit Rand — wie eine Liste
+                  // der App, nicht frei im Fenster.
+                  Container(
                     constraints: BoxConstraints(
                       maxHeight: MediaQuery.sizeOf(context).height * 0.3,
                     ),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: gefiltert.length,
-                      itemBuilder: (context, i) {
-                        final p = gefiltert[i];
-                        return ListTile(
-                          dense: true,
-                          title: Text(p.artikelbezeichnung),
-                          subtitle: Text(p.artikelnummer),
-                          onTap: () => setState(() => _productId = p.id),
-                        );
-                      },
+                    decoration: BoxDecoration(
+                      border: Border.all(color: theme.colorScheme.outline),
+                      borderRadius: AppMasse.ecken,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: ListView.builder(
+                        shrinkWrap: true,
+                        itemCount: gefiltert.length,
+                        itemBuilder: (context, i) {
+                          final p = gefiltert[i];
+                          return ListTile(
+                            dense: true,
+                            title: Text(p.artikelbezeichnung),
+                            subtitle: Text(p.artikelnummer),
+                            onTap: () => setState(() => _productId = p.id),
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ],
               );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Text('Fehler: $e'),
+            error: (e, _) => HinweisBox(
+              'Artikel konnten nicht geladen werden: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
           ),
 
           const SizedBox(height: 16),
@@ -939,40 +1101,26 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
               suffixText: 'kg',
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
 
-          // Termin
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () async {
-                    final jetzt = DateTime.now();
-                    final d = await showDatePicker(
-                      context: context,
-                      initialDate: _termin ?? jetzt,
-                      firstDate: jetzt.subtract(const Duration(days: 30)),
-                      lastDate: jetzt.add(const Duration(days: 365)),
-                    );
-                    if (d != null) setState(() => _termin = d);
-                  },
-                  icon: const Icon(Icons.event, size: 18),
-                  label: Text(
-                    _termin == null
-                        ? 'Termin wählen'
-                        : '${_termin!.day.toString().padLeft(2, '0')}.'
-                            '${_termin!.month.toString().padLeft(2, '0')}.'
-                            '${_termin!.year}',
-                  ),
-                ),
+          // Termin — ein Feld wie das Datum beim Erfassen einer Produktion.
+          InkWell(
+            onTap: _terminWaehlen,
+            borderRadius: AppMasse.ecken,
+            child: InputDecorator(
+              decoration: InputDecoration(
+                labelText: 'Termin',
+                prefixIcon: const Icon(Icons.event),
+                suffixIcon: termin == null
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.clear),
+                        tooltip: 'Termin entfernen',
+                        onPressed: () => setState(() => _termin = null),
+                      ),
               ),
-              if (_termin != null)
-                IconButton(
-                  icon: const Icon(Icons.clear),
-                  tooltip: 'Termin entfernen',
-                  onPressed: () => setState(() => _termin = null),
-                ),
-            ],
+              child: Text(termin == null ? 'ohne Termin' : _datum(termin)),
+            ),
           ),
           const SizedBox(height: 16),
 
@@ -1015,18 +1163,29 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
           ),
           const SizedBox(height: 20),
 
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _busy ? null : _speichern,
-              child: _busy
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Speichern'),
-            ),
+          // Knöpfe unten rechts wie in jedem Fenster der App.
+          Row(
+            children: [
+              const Spacer(),
+              TextButton(
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _busy ? null : _speichern,
+                // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein
+                // weißer Kreisel wäre darauf unsichtbar.
+                icon: _busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save, size: 18),
+                label: Text(_busy ? 'Speichern …' : 'Speichern'),
+              ),
+            ],
           ),
         ],
       ),
@@ -1043,39 +1202,14 @@ class _AuftragsbestandHinweis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final beschreibung = beschreibeBezuege(bezuege);
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.local_shipping_outlined,
-            size: 20,
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Planungsauftrag aus dem Auftragsbestand'
-              '${beschreibung.isEmpty ? '' : ' · $beschreibung'}.\n'
-              'Der Termin ist der späteste Produktionstag — der '
-              'Planungsvorschlag plant nie danach. Wird der Bedarf '
-              'gelöscht, sind die Aufträge im Auftragsbestand wieder offen.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.35,
-              ),
-            ),
-          ),
-        ],
-      ),
+    return HinweisBox(
+      'Planungsauftrag aus dem Auftragsbestand'
+      '${beschreibung.isEmpty ? '' : ' · $beschreibung'}.\n'
+      'Der Termin ist der späteste Produktionstag — der '
+      'Planungsvorschlag plant nie danach. Wird der Bedarf '
+      'gelöscht, sind die Aufträge im Auftragsbestand wieder offen.',
+      icon: Icons.local_shipping_outlined,
     );
   }
 }
@@ -1089,5 +1223,20 @@ final _produkteProvider = FutureProvider<List<Product>>((ref) async {
       .get();
 });
 
+// ---------------------------------------------------------------------------
+// Formatierung
+// ---------------------------------------------------------------------------
 
+/// Ziffern gleich breit, damit Nummern und Mengen untereinander stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
 
+const _wochentage = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+
+String _zwei(int n) => n.toString().padLeft(2, '0');
+
+/// „Mo 19.10."
+String _tagKurz(DateTime d) =>
+    '${_wochentage[d.weekday - 1]} ${_zwei(d.day)}.${_zwei(d.month)}.';
+
+/// „19.10.2026"
+String _datum(DateTime d) => '${_zwei(d.day)}.${_zwei(d.month)}.${d.year}';

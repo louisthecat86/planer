@@ -4,11 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../articles/article_detail_providers.dart'
     show productionHistoryProvider;
 import '../articles/production_entry_dialog.dart';
+import '../bedarf/bedarf_screen.dart' show heuteProvider;
 
 // ---------------------------------------------------------------------------
 // Modell + Provider
@@ -129,6 +131,7 @@ class _ProduktionErfassungScreenState
     final theme = Theme.of(context);
     final montag = ref.watch(erfassungWocheProvider);
     final async = ref.watch(erfassungWocheDatenProvider);
+    final heute = ref.watch(heuteProvider);
     final kw = isoKalenderwoche(montag);
 
     return Scaffold(
@@ -140,11 +143,20 @@ class _ProduktionErfassungScreenState
             tooltip: 'Aktualisieren',
             onPressed: () => ref.invalidate(erfassungWocheDatenProvider),
           ),
+          const SizedBox(width: 8),
         ],
+        // Die Woche als eigene Leiste unter dem Titel: links und rechts
+        // blättern, in der Mitte die Kalenderwoche.
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          child: Container(
+            height: 48,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: theme.colorScheme.outline),
+              ),
+            ),
             child: Row(
               children: [
                 IconButton(
@@ -156,10 +168,12 @@ class _ProduktionErfassungScreenState
                 ),
                 Expanded(
                   child: Text(
-                    'KW $kw · ab ${montag.day}.${montag.month}.${montag.year}',
+                    'KW $kw · ab ${_datum(montag)}',
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.titleMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
                 IconButton(
@@ -176,48 +190,42 @@ class _ProduktionErfassungScreenState
       ),
       body: async.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            HinweisBox(
+              'Fehler: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
+          ],
+        ),
         data: (gruppen) {
           if (gruppen.isEmpty) {
+            // ConstrainedBox hat keinen const-Konstruktor — deshalb steht
+            // `const` erst innen.
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.fact_check_outlined,
-                      size: 48,
-                      color: theme.colorScheme.onSurface
-                          .withValues(alpha: 0.35),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Für diese Woche ist nichts geplant.\n\n'
-                      'Sobald im Wochenplan Produktionen stehen, erscheinen '
-                      'sie hier zum Erfassen der Ist-Daten.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: const LeerHinweis(
+                  'Für diese Woche ist nichts geplant. Sobald im Wochenplan '
+                  'Produktionen stehen, erscheinen sie hier zum Erfassen der '
+                  'Ist-Daten.',
+                  icon: Icons.fact_check_outlined,
                 ),
               ),
             );
           }
 
           return ListView(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
             children: [
               for (var i = 0; i < 5; i++)
                 ..._tagAbschnitt(
-                  context,
-                  ref,
                   tagPlus(montag, i),
                   _wochentage[i],
                   gruppen[tagPlus(montag, i)] ?? const [],
+                  heute,
                 ),
             ],
           );
@@ -226,40 +234,49 @@ class _ProduktionErfassungScreenState
     );
   }
 
+  /// Ein Tag als Bereich — leer, wenn an dem Tag nichts zu erfassen ist.
   List<Widget> _tagAbschnitt(
-    BuildContext context,
-    WidgetRef ref,
     DateTime tag,
     String name,
     List<GeplanteProduktion> produktionen,
+    DateTime heute,
   ) {
-    final theme = Theme.of(context);
     if (produktionen.isEmpty) return const [];
+    final n = produktionen.length;
 
     return [
       Padding(
-        padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-        child: Text(
-          '$name · ${tag.day}.${tag.month}.',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w800,
-            color: theme.colorScheme.primary,
+        padding: const EdgeInsets.only(bottom: 14),
+        child: Bereich(
+          titel: '$name, ${_tagMonat(tag)}',
+          untertitel: '$n ${n == 1 ? 'Produktion' : 'Produktionen'}',
+          aktionen: [
+            // Was hier steht, ist noch nicht erfasst. Liegt der Tag schon
+            // zurück, ist das nachzuholen.
+            if (tag.isBefore(heute))
+              const StatusMarke('noch nicht erfasst', art: StatusArt.warnung)
+            else if (tag == heute)
+              const StatusMarke('heute', art: StatusArt.info),
+            const SizedBox(width: 6),
+          ],
+          innenAbstand: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, prod) in produktionen.indexed)
+                _ProduktionZeile(
+                  prod: prod,
+                  erste: i == 0,
+                  onErfassen: () => _erfassen(prod),
+                ),
+            ],
           ),
         ),
       ),
-      for (final prod in produktionen)
-        _ProduktionKarte(
-          prod: prod,
-          onErfassen: () => _erfassen(context, ref, prod),
-        ),
     ];
   }
 
-  Future<void> _erfassen(
-    BuildContext context,
-    WidgetRef ref,
-    GeplanteProduktion prod,
-  ) async {
+  Future<void> _erfassen(GeplanteProduktion prod) async {
     // Dasselbe Formular wie im Artikel. Vorgeschlagen wird die geplante
     // ROHWARE: Die Wurzel der Kette ist der erste Schritt, ihre Menge die
     // Rohware — die Fertigmenge wird erst nach dem Wiegen eingetragen.
@@ -277,53 +294,83 @@ class _ProduktionErfassungScreenState
   }
 }
 
-class _ProduktionKarte extends StatelessWidget {
-  const _ProduktionKarte({required this.prod, required this.onErfassen});
+/// Eine geplante Produktion als Zeile im Bereich ihres Tages. Antippen
+/// öffnet das Formular zum Erfassen.
+class _ProduktionZeile extends StatelessWidget {
+  const _ProduktionZeile({
+    required this.prod,
+    required this.erste,
+    required this.onErfassen,
+  });
 
   final GeplanteProduktion prod;
+
+  /// Erste Zeile des Tages: ohne Linie darüber — dort steht schon die des
+  /// Kopfes.
+  final bool erste;
   final VoidCallback onErfassen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+    final farben = theme.colorScheme;
+    final zahlen = theme.textTheme.bodyMedium?.copyWith(
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
       child: InkWell(
         onTap: onErfassen,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 44),
+          padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+          decoration: BoxDecoration(
+            border: erste
+                ? null
+                : Border(
+                    top: BorderSide(color: farben.outlineVariant),
+                  ),
+          ),
           child: Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      prod.artikelName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${prod.artikelNummer} · '
-                      '${prod.mengeKg.toStringAsFixed(0)} kg geplant',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+              SizedBox(
+                width: 78,
+                child: Text(
+                  prod.artikelNummer,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: zahlen?.copyWith(
+                    color: farben.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  prod.artikelName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                '${prod.mengeKg.toStringAsFixed(0)} kg geplant',
+                style: zahlen?.copyWith(color: farben.onSurfaceVariant),
+              ),
+              const SizedBox(width: 16),
               FilledButton.tonalIcon(
                 onPressed: onErfassen,
                 icon: const Icon(Icons.edit_note, size: 18),
                 label: const Text('Erfassen'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
             ],
           ),
@@ -333,5 +380,14 @@ class _ProduktionKarte extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Formatierung
+// ---------------------------------------------------------------------------
 
+String _zwei(int n) => n.toString().padLeft(2, '0');
 
+/// „14.10."
+String _tagMonat(DateTime d) => '${_zwei(d.day)}.${_zwei(d.month)}.';
+
+/// „12.10.2026"
+String _datum(DateTime d) => '${_tagMonat(d)}${d.year}';
