@@ -69,36 +69,31 @@ class Bereich extends StatelessWidget {
                   Icon(icon, size: 16, color: farben.onSurfaceVariant),
                   const SizedBox(width: 8),
                 ],
-                // Titel und Zusatz teilen sich den Platz bis zu den
-                // Aktionen; ein langer Titel wird gekürzt.
+                // Titel und Zusatz in einem Text: Sie teilen sich den Platz
+                // bis zu den Aktionen und stehen auf einer Grundlinie.
+                // Gekürzt wird am Ende — erst der Zusatz, dann der Titel.
+                // (Als zwei Texte in einer Zeile bekäme der Zusatz nur die
+                // Hälfte des Platzes, auch wenn der Titel kurz ist.)
                 Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          titel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: farben.onSurface,
-                          ),
-                        ),
+                  child: Text.rich(
+                    TextSpan(
+                      text: titel,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: farben.onSurface,
                       ),
-                      if (zusatz != null) ...[
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            zusatz,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                      children: [
+                        if (zusatz != null)
+                          TextSpan(
+                            text: '   $zusatz',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: farben.onSurfaceVariant,
                             ),
                           ),
-                        ),
                       ],
-                    ],
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 ...aktionen,
@@ -254,8 +249,9 @@ class StatusMarke extends StatelessWidget {
 
 /// Ein Hinweis mitten im Inhalt: blasse Statusfläche, kräftige Kante links,
 /// davor ein Symbol. Für Erklärungen in Fenstern („Zeiten gibt es an der
-/// Anlage keine …") und für Fehler, die stehen bleiben sollen, bis man sie
-/// behebt.
+/// Anlage keine …"), für Fehler, die stehen bleiben sollen, bis man sie
+/// behebt — und als Leiste über einer Liste, mit [aktion] rechts („Prüfen
+/// …") oder einem Kreuz zum Wegklicken ([onSchliessen]).
 ///
 /// Bewusst ohne Rundung: Eine Kante auf nur einer Seite lässt sich nicht
 /// runden.
@@ -265,6 +261,9 @@ class HinweisBox extends StatelessWidget {
     super.key,
     this.art = StatusArt.info,
     this.icon,
+    this.aktion,
+    this.onSchliessen,
+    this.auswaehlbar = false,
   });
 
   final String text;
@@ -272,6 +271,15 @@ class HinweisBox extends StatelessWidget {
 
   /// Eigenes Symbol — sonst das passende zur [art].
   final IconData? icon;
+
+  /// Knopf rechts neben dem Text — null: keiner.
+  final Widget? aktion;
+
+  /// Kreuz zum Wegklicken — null: keins.
+  final VoidCallback? onSchliessen;
+
+  /// Text markier- und kopierbar, etwa für Fehlermeldungen.
+  final bool auswaehlbar;
 
   @override
   Widget build(BuildContext context) {
@@ -284,26 +292,44 @@ class HinweisBox extends StatelessWidget {
           StatusArt.fehler => Icons.error_outline,
           StatusArt.info || StatusArt.neutral => Icons.info_outline,
         };
+    final stil = theme.textTheme.bodySmall?.copyWith(
+      height: 1.35,
+      color: theme.colorScheme.onSurface,
+    );
+    final knopf = aktion;
+    final schliessen = onSchliessen;
+    final mitKnopf = knopf != null || schliessen != null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      padding: mitKnopf
+          ? const EdgeInsets.fromLTRB(10, 6, 6, 6)
+          : const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
         color: hinten,
         border: Border(left: BorderSide(color: vorne, width: 3)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        // Mit Knopf mittig, damit Text und Knopf auf einer Höhe stehen.
+        crossAxisAlignment:
+            mitKnopf ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         children: [
           Icon(symbol, size: 16, color: vorne),
           const SizedBox(width: 8),
           Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(
-                height: 1.35,
-                color: theme.colorScheme.onSurface,
-              ),
-            ),
+            child: auswaehlbar
+                ? SelectableText(text, style: stil)
+                : Text(text, style: stil),
           ),
+          if (knopf != null) ...[
+            const SizedBox(width: 8),
+            knopf,
+          ],
+          if (schliessen != null)
+            IconButton(
+              onPressed: schliessen,
+              icon: const Icon(Icons.close, size: 16),
+              tooltip: 'Schließen',
+              visualDensity: VisualDensity.compact,
+            ),
         ],
       ),
     );
