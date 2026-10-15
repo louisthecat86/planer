@@ -5,9 +5,12 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart';
 import 'article_info_editor_dialog.dart';
 
@@ -62,10 +65,21 @@ class ArticleListScreen extends ConsumerStatefulWidget {
 }
 
 class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
+  /// Hält den Text im Suchfeld. Vorher leerte das Kreuz nur den Filter —
+  /// im Feld stand der alte Suchbegriff weiter, und die Liste zeigte
+  /// trotzdem alles.
+  final _suche = TextEditingController();
+
   String _search = '';
   _SortField _sortField = _SortField.bezeichnung;
   bool _sortAsc = true;
   bool _nurNichtEingepflegt = false;
+
+  @override
+  void dispose() {
+    _suche.dispose();
+    super.dispose();
+  }
 
   List<_ArticleInfo> _filtered(
     List<_ArticleInfo> all,
@@ -136,6 +150,18 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
         _sortAsc = true;
       }
     });
+  }
+
+  void _sucheLeeren() {
+    _suche.clear();
+    setState(() => _search = '');
+  }
+
+  void _oeffne(BuildContext context, Product p) {
+    context.pushNamed(
+      'articleDetail',
+      pathParameters: {'productId': p.id},
+    );
   }
 
   /// Legt einen neuen Artikel an (Artikelnummer, Bezeichnung, Gruppe)
@@ -217,26 +243,32 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     final p = info.product;
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Artikel löschen'),
-        content: Text(
-          '„${p.artikelbezeichnung}" (Nr. ${p.artikelnummer}) wirklich '
-          'löschen? Die Prozessdaten des Artikels werden entfernt.\n\n'
-          'Hinweis: In einer bereits exportierten Excel bleibt das '
-          'Artikel-Blatt bestehen und muss dort separat gelöscht werden.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Abbrechen'),
+      builder: (dialogContext) {
+        final farben = Theme.of(dialogContext).colorScheme;
+        return AlertDialog(
+          title: const Text('Artikel löschen'),
+          content: Text(
+            '„${p.artikelbezeichnung}" (Nr. ${p.artikelnummer}) wirklich '
+            'löschen? Die Prozessdaten des Artikels werden entfernt.\n\n'
+            'Hinweis: In einer bereits exportierten Excel bleibt das '
+            'Artikel-Blatt bestehen und muss dort separat gelöscht werden.',
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: farben.error,
+                foregroundColor: farben.onError,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Löschen'),
+            ),
+          ],
+        );
+      },
     );
     if (bestaetigt != true) return;
 
@@ -282,12 +314,11 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
           (bedarfKg[b.artikelNummer] ?? 0) + b.offenKg;
     }
 
+    // Schmale Fenster: „Neuer Artikel" nur als Symbol, sonst bliebe für
+    // den Titel kein Platz.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
+
     return Scaffold(
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _neuerArtikel(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Neuer Artikel'),
-      ),
       appBar: AppBar(
         title: const Text('Artikel-Stammdaten'),
         actions: [
@@ -296,12 +327,36 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
             onPressed: () => ref.invalidate(articlesProvider),
             tooltip: 'Aktualisieren',
           ),
+          const SizedBox(width: 8),
+          // Die Hauptaktion der Seite steht oben rechts in der Kopfleiste —
+          // wie „Produkt planen" im Board. Ein schwebender Knopf verdeckte
+          // unten rechts die letzte Zeile der Liste.
+          if (schmal)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Neuer Artikel',
+              onPressed: () => _neuerArtikel(context),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _neuerArtikel(context),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Neuer Artikel'),
+            ),
+          const SizedBox(width: 12),
         ],
       ),
       body: articlesAsync.when(
         data: (articles) => articles.isEmpty
-            ? const _EmptyState()
-            : _buildBody(articles, bedarfKg),
+            ? const Center(
+                child: LeerHinweis(
+                  'Noch keine Artikel vorhanden.\n'
+                  'Stammdaten über den Excel-Import einlesen — oder oben '
+                  'rechts mit „Neuer Artikel" anlegen.',
+                  icon: Icons.inventory_2_outlined,
+                ),
+              )
+            : _buildBody(context, articles, bedarfKg),
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('Fehler: $e')),
       ),
@@ -309,118 +364,146 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   }
 
   Widget _buildBody(
+    BuildContext context,
     List<_ArticleInfo> all,
     Map<String, double> bedarfKg,
   ) {
+    final theme = Theme.of(context);
     final filtered = _filtered(all, bedarfKg);
 
+    final suchfeld = TextField(
+      controller: _suche,
+      decoration: InputDecoration(
+        hintText: 'Suche nach Name, Artikelnr, Planungsgruppe…',
+        prefixIcon: const Icon(Icons.search, size: 18),
+        suffixIcon: _search.isNotEmpty
+            ? IconButton(
+                icon: const Icon(Icons.clear, size: 16),
+                tooltip: 'Suche leeren',
+                onPressed: _sucheLeeren,
+              )
+            : null,
+      ),
+      onChanged: (v) => setState(() => _search = v),
+    );
+    final filter = FilterChip(
+      label: const Text('Nicht eingepflegt'),
+      selected: _nurNichtEingepflegt,
+      visualDensity: VisualDensity.compact,
+      onSelected: (v) => setState(() => _nurNichtEingepflegt = v),
+    );
+    final anzahl = Text(
+      '${filtered.length} von ${all.length} Artikel',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.right,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+    final sortierung = _SortKnopf(
+      feld: _sortField,
+      aufsteigend: _sortAsc,
+      onWahl: _toggleSort,
+    );
+
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // --- Suchleiste (Stil kommt zentral aus dem Theme) ---
+        // --- Werkzeugleiste: Suche, Filter, Anzahl, Sortierung ---
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-          child: TextField(
-            decoration: InputDecoration(
-              hintText: 'Suche nach Name, Artikelnr, Planungsgruppe…',
-              prefixIcon: const Icon(Icons.search),
-              suffixIcon: _search.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear),
-                      onPressed: () => setState(() => _search = ''),
-                    )
-                  : null,
-            ),
-            onChanged: (v) => setState(() => _search = v),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Schmal: Suche über die volle Breite, darunter der Rest.
+              if (constraints.maxWidth < 720) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    suchfeld,
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        filter,
+                        const SizedBox(width: 8),
+                        Expanded(child: anzahl),
+                        const SizedBox(width: 8),
+                        sortierung,
+                      ],
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Flexible(
+                    flex: 3,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 420),
+                      child: suchfeld,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  filter,
+                  const Spacer(),
+                  anzahl,
+                  const SizedBox(width: 8),
+                  sortierung,
+                ],
+              );
+            },
           ),
         ),
 
-        // --- Filter-Chips + Sortierung ---
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-          child: Row(
-            children: [
-              // Ergebnis-Zähler links, Sortierung rechts
-              Expanded(
-                child: Text(
-                  '${filtered.length} von ${all.length} Artikel',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color:
-                            Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                ),
-              ),
-
-              // Filter: nur noch nicht eingepflegte Artikel
-              FilterChip(
-                label: const Text('Nicht eingepflegt'),
-                selected: _nurNichtEingepflegt,
-                visualDensity: VisualDensity.compact,
-                onSelected: (v) =>
-                    setState(() => _nurNichtEingepflegt = v),
-              ),
-              const SizedBox(width: 8),
-
-              // Sortier-Menü
-              PopupMenuButton<_SortField>(
-                icon: const Icon(Icons.sort),
-                tooltip: 'Sortierung',
-                onSelected: _toggleSort,
-                itemBuilder: (_) => _SortField.values
-                    .map(
-                      (f) => PopupMenuItem(
-                        value: f,
-                        child: Row(
-                          children: [
-                            if (_sortField == f)
-                              Icon(
-                                _sortAsc
-                                    ? Icons.arrow_upward
-                                    : Icons.arrow_downward,
-                                size: 16,
-                              )
-                            else
-                              const SizedBox(width: 16),
-                            const SizedBox(width: 8),
-                            Text(f.label),
-                          ],
-                        ),
-                      ),
-                    )
-                    .toList(),
-              ),
-            ],
-          ),
-        ),
-
-        const Divider(height: 1),
-
-        // --- Artikel-Liste ---
+        // --- Artikel-Tabelle: weiße Fläche mit dünnem Rand, wie eine
+        // Liste in Navision. Spaltenköpfe stehen fest, nur die Zeilen
+        // scrollen. ---
         Expanded(
-          child: filtered.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Material(
+              color: theme.colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppMasse.ecken,
+                side: BorderSide(color: theme.colorScheme.outline),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Ab dieser Breite eigene Spalten für Gruppe, Prozess,
+                  // Schritte und Anlagen — darunter rücken Prozess und
+                  // Status unter die Bezeichnung.
+                  final breit = constraints.maxWidth >= 860;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Icon(Icons.search_off, size: 48, color: Colors.grey[400]),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Keine Treffer',
-                        style: TextStyle(color: Colors.grey[500]),
+                      _TabellenKopf(breit: breit),
+                      Expanded(
+                        child: filtered.isEmpty
+                            ? const Center(
+                                child: LeerHinweis(
+                                  'Keine Treffer.',
+                                  icon: Icons.search_off,
+                                ),
+                              )
+                            : ListView.builder(
+                                itemCount: filtered.length,
+                                itemBuilder: (_, i) => _ArtikelZeile(
+                                  info: filtered[i],
+                                  breit: breit,
+                                  onOeffnen: () =>
+                                      _oeffne(context, filtered[i].product),
+                                  onLoeschen: () =>
+                                      _loescheArtikel(context, filtered[i]),
+                                ),
+                              ),
                       ),
                     ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  itemCount: filtered.length,
-                  itemBuilder: (_, i) => _ArticleTile(
-                    info: filtered[i],
-                    onDelete: () => _loescheArtikel(context, filtered[i]),
-                  ),
-                ),
+                  );
+                },
+              ),
+            ),
+          ),
         ),
       ],
     );
@@ -443,53 +526,176 @@ enum _SortField {
   final String label;
 }
 
-// ---------------------------------------------------------------------------
-// Empty State
-// ---------------------------------------------------------------------------
+/// Sortier-Menü. Zeigt die aktuelle Sortierung als Beschriftung — vorher
+/// stand dort nur ein Symbol, und man sah nicht, wonach die Liste gerade
+/// sortiert ist.
+class _SortKnopf extends StatelessWidget {
+  const _SortKnopf({
+    required this.feld,
+    required this.aufsteigend,
+    required this.onWahl,
+  });
 
-class _EmptyState extends StatelessWidget {
-  const _EmptyState();
+  final _SortField feld;
+  final bool aufsteigend;
+  final void Function(_SortField) onWahl;
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.inventory_2_outlined, size: 64, color: Colors.grey[400]),
-          const SizedBox(height: 16),
-          Text(
-            'Noch keine Artikel vorhanden',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: Colors.grey[600],
-                ),
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    return PopupMenuButton<_SortField>(
+      tooltip: 'Sortierung',
+      position: PopupMenuPosition.under,
+      onSelected: onWahl,
+      itemBuilder: (_) => [
+        for (final f in _SortField.values)
+          PopupMenuItem<_SortField>(
+            value: f,
+            child: Row(
+              children: [
+                if (feld == f)
+                  Icon(
+                    aufsteigend ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 16,
+                  )
+                else
+                  const SizedBox(width: 16),
+                const SizedBox(width: 8),
+                Text(f.label),
+              ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Importiere Stammdaten über den Excel-Import',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Colors.grey[500],
-                ),
-          ),
-        ],
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.sort, size: 18, color: grau),
+            const SizedBox(width: 6),
+            Text(
+              feld.label,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 2),
+            Icon(
+              aufsteigend ? Icons.arrow_upward : Icons.arrow_downward,
+              size: 14,
+              color: grau,
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Einzelne Artikel-Kachel
+// Tabelle
 // ---------------------------------------------------------------------------
 
-class _ArticleTile extends StatelessWidget {
-  const _ArticleTile({required this.info, required this.onDelete});
+/// Spaltenbreiten der Artikelliste — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double nummer = 78;
+  static const double gruppe = 150;
+  static const double prozess = 160;
+  static const double zahl = 64;
+  static const double status = 132;
+  static const double menue = 40;
 
-  final _ArticleInfo info;
-  final VoidCallback onDelete;
+  /// Abstand zwischen zwei Spalten.
+  static const double luecke = 12;
+}
+
+/// Ziffern gleich breit, damit Nummern und Anzahlen untereinander stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
+
+/// Abteilung aus dem dbValue — null bei unbekanntem Wert. Eine kaputte
+/// Zeile in der Datenbank soll die Liste nicht abstürzen lassen.
+Abteilung? _abteilungAus(String dbValue) {
+  for (final a in Abteilung.values) {
+    if (a.dbValue == dbValue) return a;
+  }
+  return null;
+}
+
+/// Spaltenköpfe der Tabelle — dieselben Breiten wie [_ArtikelZeile].
+class _TabellenKopf extends StatelessWidget {
+  const _TabellenKopf({required this.breit});
+
+  final bool breit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget spalte(String text, double breite, {bool rechts = false}) =>
+        SizedBox(
+          width: breite,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: rechts ? TextAlign.right : TextAlign.left,
+            style: stil,
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline),
+        ),
+      ),
+      child: Row(
+        children: [
+          spalte('Nr.', _Spalten.nummer),
+          Expanded(child: Text('Bezeichnung', style: stil)),
+          if (breit) ...[
+            const SizedBox(width: _Spalten.luecke),
+            spalte('Gruppe', _Spalten.gruppe),
+            const SizedBox(width: _Spalten.luecke),
+            spalte('Prozess', _Spalten.prozess),
+            spalte('Schritte', _Spalten.zahl, rechts: true),
+            spalte('Anlagen', _Spalten.zahl, rechts: true),
+            const SizedBox(width: _Spalten.luecke + 4),
+            spalte('Status', _Spalten.status),
+          ],
+          const SizedBox(width: _Spalten.menue),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Zeile der Artikelliste. Antippen öffnet den Artikel.
+class _ArtikelZeile extends StatelessWidget {
+  const _ArtikelZeile({
+    required this.info,
+    required this.breit,
+    required this.onOeffnen,
+    required this.onLoeschen,
+  });
+
+  final _ArticleInfo info;
+
+  /// Breite Tabelle mit allen Spalten — sonst zweizeilig.
+  final bool breit;
+  final VoidCallback onOeffnen;
+  final VoidCallback onLoeschen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final p = info.product;
     final steps = info.steps;
 
@@ -497,8 +703,8 @@ class _ArticleTile extends StatelessWidget {
     // in Reihenfolge ihres ersten Auftretens im Prozess.
     final abteilungen = <Abteilung>[];
     for (final s in steps) {
-      final a = Abteilung.fromDbValue(s.abteilung);
-      if (!abteilungen.contains(a)) abteilungen.add(a);
+      final a = _abteilungAus(s.abteilung);
+      if (a != null && !abteilungen.contains(a)) abteilungen.add(a);
     }
 
     // Anlagen-Zähler: wie viele verschiedene Anlagen im Prozess stecken.
@@ -506,8 +712,7 @@ class _ArticleTile extends StatelessWidget {
     // Gezählt wird, was an den Schritten hängt. Vorher stand hier ein
     // Zähler über `maschinenEinstellungenJson` — eine Spalte aus der Zeit
     // vor dem Maschinen-Katalog, in die seit dessen Einführung niemand
-    // mehr schreibt. Der Zähler stand deshalb bei jedem Artikel auf 0 und
-    // das Zahnrad tauchte nie auf.
+    // mehr schreibt. Der Zähler stand deshalb bei jedem Artikel auf 0.
     //
     // Maßgeblich ist die Maschinen-ID; nur wenn ein Schritt noch keine
     // hat (alte Importe führten die Anlage als Freitext), zählt der Name.
@@ -521,189 +726,244 @@ class _ArticleTile extends StatelessWidget {
       final name = s.maschine?.trim();
       if (name != null && name.isNotEmpty) anlagen.add(name);
     }
-    final machineCount = anlagen.length;
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () => context.pushNamed(
-          'articleDetail',
-          pathParameters: {'productId': p.id},
+    // Gruppe: die Produktgruppe. Ältere Artikel haben oft nur die frühere
+    // Freitext-Planungsgruppe — dann steht die da, grau.
+    final produktgruppe = produktgruppeLabel(p.produktgruppe);
+    final planungsgruppe = p.planungsgruppe?.trim() ?? '';
+    final gruppe = produktgruppe.isNotEmpty
+        ? produktgruppe
+        : (planungsgruppe.isNotEmpty ? planungsgruppe : '—');
+
+    final stil = theme.textTheme.bodyMedium;
+    final zahlen = stil?.copyWith(fontFeatures: _ziffern);
+    const status = StatusMarke('nicht eingepflegt', art: StatusArt.warnung);
+
+    final nummer = SizedBox(
+      width: _Spalten.nummer,
+      child: Text(
+        p.artikelnummer,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: zahlen?.copyWith(
+          // Blau wie ein Link: Antippen öffnet den Artikel.
+          color: theme.colorScheme.primary,
+          fontWeight: FontWeight.w600,
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              // Planungsgruppe-Badge
-              if (p.planungsgruppe != null)
-                Container(
-                  width: 56,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primaryContainer,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    p.planungsgruppe!.length > 6
-                        ? p.planungsgruppe!.substring(0, 6)
-                        : p.planungsgruppe!,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      color: theme.colorScheme.onPrimaryContainer,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-              if (p.planungsgruppe != null) const SizedBox(width: 12),
+      ),
+    );
+    final bezeichnung = Text(
+      p.artikelbezeichnung,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: stil?.copyWith(fontWeight: FontWeight.w600),
+    );
+    final menue = _ZeilenMenue(onOeffnen: onOeffnen, onLoeschen: onLoeschen);
 
-              // Artikel-Info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    final Widget inhalt;
+    if (breit) {
+      inhalt = Row(
+        children: [
+          nummer,
+          Expanded(child: bezeichnung),
+          const SizedBox(width: _Spalten.luecke),
+          SizedBox(
+            width: _Spalten.gruppe,
+            child: Text(
+              gruppe,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: stil?.copyWith(color: grau),
+            ),
+          ),
+          const SizedBox(width: _Spalten.luecke),
+          SizedBox(
+            width: _Spalten.prozess,
+            child: _ProzessMarken(abteilungen: abteilungen),
+          ),
+          SizedBox(
+            width: _Spalten.zahl,
+            child: Text(
+              steps.isEmpty ? '—' : '${steps.length}',
+              textAlign: TextAlign.right,
+              style: zahlen?.copyWith(color: steps.isEmpty ? grau : null),
+            ),
+          ),
+          SizedBox(
+            width: _Spalten.zahl,
+            child: Text(
+              anlagen.isEmpty ? '—' : '${anlagen.length}',
+              textAlign: TextAlign.right,
+              style: zahlen?.copyWith(color: grau),
+            ),
+          ),
+          const SizedBox(width: _Spalten.luecke + 4),
+          SizedBox(
+            width: _Spalten.status,
+            child: p.istEingepflegt
+                ? null
+                : const Align(
+                    alignment: Alignment.centerLeft,
+                    heightFactor: 1,
+                    child: status,
+                  ),
+          ),
+          menue,
+        ],
+      );
+    } else {
+      inhalt = Row(
+        children: [
+          nummer,
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                bezeichnung,
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
+                    if (abteilungen.isNotEmpty)
+                      _ProzessMarken(abteilungen: abteilungen),
                     Text(
-                      p.artikelbezeichnung,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                      steps.length == 1 ? '1 Schritt' : '${steps.length} Schritte',
+                      style: theme.textTheme.bodySmall?.copyWith(color: grau),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Art.-Nr.: ${p.artikelnummer}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (!p.istEingepflegt) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: Colors.orange.shade400),
-                        ),
-                        child: Text(
-                          'Noch nicht eingepflegt',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.orange.shade900,
-                          ),
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    // Abteilungs-Kürzel + Metadaten
-                    Row(
-                      children: [
-                        ...abteilungen.map(
-                          (a) => Container(
-                            width: 22,
-                            height: 22,
-                            margin: const EdgeInsets.only(right: 3),
-                            decoration: BoxDecoration(
-                              color: Color(a.farbwert),
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              a.kurzcode,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${steps.length} Schritte',
-                          style: theme.textTheme.bodySmall,
-                        ),
-                        if (machineCount > 0) ...[
-                          const SizedBox(width: 8),
-                          Icon(
-                            Icons.settings,
-                            size: 14,
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                          const SizedBox(width: 2),
-                          Text(
-                            '$machineCount',
-                            style: theme.textTheme.bodySmall,
-                          ),
-                        ],
-                        if (p.gebindeGroesseKg != null) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '${p.gebindeGroesseKg!.toStringAsFixed(1)} kg',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+                    if (!p.istEingepflegt) status,
                   ],
                 ),
-              ),
-
-              PopupMenuButton<String>(
-                icon: Icon(
-                  Icons.more_vert,
-                  size: 20,
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-                onSelected: (v) {
-                  if (v == 'oeffnen') {
-                    context.pushNamed(
-                      'articleDetail',
-                      pathParameters: {'productId': p.id},
-                    );
-                  } else if (v == 'loeschen') {
-                    onDelete();
-                  }
-                },
-                itemBuilder: (_) => const [
-                  PopupMenuItem(
-                    value: 'oeffnen',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_outlined, size: 18),
-                        SizedBox(width: 10),
-                        Text('Öffnen / Bearbeiten'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'loeschen',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 18,
-                          color: Colors.red,
-                        ),
-                        SizedBox(width: 10),
-                        Text(
-                          'Löschen',
-                          style: TextStyle(color: Colors.red),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
+          menue,
+        ],
+      );
+    }
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material — so bleibt sie in der
+    // scrollenden Liste an ihrer Zeile.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onOeffnen,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 38),
+          padding: EdgeInsets.fromLTRB(12, breit ? 3 : 6, 4, breit ? 3 : 6),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+          ),
+          child: inhalt,
         ),
+      ),
+    );
+  }
+}
+
+/// Die Abteilungen des Prozesses als Kürzel in Prozessreihenfolge. Passen
+/// nicht alle in die Spalte, steht der Rest als „+2" dahinter.
+class _ProzessMarken extends StatelessWidget {
+  const _ProzessMarken({required this.abteilungen});
+
+  final List<Abteilung> abteilungen;
+
+  static const int _maxSichtbar = 5;
+
+  @override
+  Widget build(BuildContext context) {
+    if (abteilungen.isEmpty) {
+      return Text(
+        '—',
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+      );
+    }
+    final zuViele = abteilungen.length > _maxSichtbar;
+    final sichtbar =
+        zuViele ? abteilungen.take(_maxSichtbar - 1) : abteilungen;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final a in sichtbar)
+          Padding(
+            padding: const EdgeInsets.only(right: 3),
+            child: Tooltip(
+              message: a.anzeigeName,
+              child: AbteilungsMarke(abteilung: a, skala: 0.85),
+            ),
+          ),
+        if (zuViele)
+          Text(
+            '+${abteilungen.length - (_maxSichtbar - 1)}',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Drei-Punkte-Menü am Zeilenende: Öffnen oder Löschen.
+class _ZeilenMenue extends StatelessWidget {
+  const _ZeilenMenue({required this.onOeffnen, required this.onLoeschen});
+
+  final VoidCallback onOeffnen;
+  final VoidCallback onLoeschen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final rot = theme.colorScheme.error;
+    // Feste Größe, damit der Knopf die Zeile nicht auf 48 px aufbläst.
+    return SizedBox(
+      width: _Spalten.menue,
+      height: 32,
+      child: PopupMenuButton<String>(
+        tooltip: 'Aktionen',
+        padding: EdgeInsets.zero,
+        icon: Icon(
+          Icons.more_vert,
+          size: 18,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+        onSelected: (v) {
+          switch (v) {
+            case 'oeffnen':
+              onOeffnen();
+            case 'loeschen':
+              onLoeschen();
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem<String>(
+            value: 'oeffnen',
+            child: Row(
+              children: [
+                Icon(Icons.edit_outlined, size: 18),
+                SizedBox(width: 10),
+                Text('Öffnen / Bearbeiten'),
+              ],
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'loeschen',
+            child: Row(
+              children: [
+                Icon(Icons.delete_outline, size: 18, color: rot),
+                const SizedBox(width: 10),
+                Text('Löschen', style: TextStyle(color: rot)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -748,6 +1008,7 @@ class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
 
   @override
   Widget build(BuildContext context) {
+    // Rahmen, Ecken und Dichte der Felder kommen aus dem Theme.
     return AlertDialog(
       title: const Text('Neuen Artikel anlegen'),
       content: SizedBox(
@@ -761,7 +1022,6 @@ class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
               decoration: const InputDecoration(
                 labelText: 'Artikelnummer',
                 hintText: 'z.B. 12345',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -770,7 +1030,6 @@ class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
               decoration: const InputDecoration(
                 labelText: 'Bezeichnung',
                 hintText: 'z.B. Schweinefrikadelle 60g, gebraten',
-                border: OutlineInputBorder(),
               ),
               onSubmitted: (_) => _ok(),
             ),
@@ -779,7 +1038,6 @@ class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
               initialValue: _gruppe,
               decoration: const InputDecoration(
                 labelText: 'Produktgruppe (optional)',
-                border: OutlineInputBorder(),
               ),
               items: [
                 for (final g in kProduktgruppen)

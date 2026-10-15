@@ -1,11 +1,21 @@
 part of 'article_detail_screen.dart';
 
 // ---------------------------------------------------------------------------
-// Besonderheiten-Karte (Infos-Tab)
+// Besonderheiten (Infos-Tab und Prozess-Tab)
 //
 // Zeigt den Freitext aus dem Excel-Block „Sonstige Informationen".
 // Wird beim Import gelesen und beim Export zurückgeschrieben.
 // ---------------------------------------------------------------------------
+
+/// Hinweis-Fläche: blasse Statusfarbe mit kräftiger Kante links.
+///
+/// Dieselbe Form für alles, was beim Arbeiten auffallen soll — die
+/// Besonderheit eines Artikels, der Hinweis am Dampftunnel. Bewusst ohne
+/// Rundung: Eine Kante auf nur einer Seite lässt sich nicht runden.
+BoxDecoration _hinweisFlaeche(Color farbe, Color flaeche) => BoxDecoration(
+      color: flaeche,
+      border: Border(left: BorderSide(color: farbe, width: 3)),
+    );
 
 class _BesonderheitenKarte extends StatelessWidget {
   const _BesonderheitenKarte({required this.text, required this.onEdit});
@@ -16,76 +26,39 @@ class _BesonderheitenKarte extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final dark = theme.brightness == Brightness.dark;
+    final f = AppFarben.von(context);
     final leer = text.isEmpty;
-    final akzent =
-        dark ? const Color(0xFFFFB74D) : const Color(0xFFEF6C00);
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: leer
-              ? theme.dividerColor
-              : akzent.withValues(alpha: 0.5),
+    return Bereich(
+      titel: 'Besonderheiten',
+      icon: leer ? Icons.info_outline : Icons.push_pin_outlined,
+      aktionen: [
+        TextButton.icon(
+          onPressed: onEdit,
+          icon: Icon(leer ? Icons.add : Icons.edit_outlined, size: 16),
+          label: Text(leer ? 'Eintragen' : 'Bearbeiten'),
         ),
-      ),
-      child: InkWell(
-        onTap: onEdit,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                leer ? Icons.info_outline : Icons.priority_high_rounded,
-                size: 20,
-                color: leer
-                    ? theme.colorScheme.onSurface.withValues(alpha: 0.4)
-                    : akzent,
+      ],
+      innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: leer
+          ? Text(
+              'Keine Besonderheiten hinterlegt.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontStyle: FontStyle.italic,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Besonderheiten',
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: leer
-                            ? theme.colorScheme.onSurface
-                                .withValues(alpha: 0.6)
-                            : akzent,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      leer
-                          ? 'Keine Besonderheiten hinterlegt — tippen zum '
-                              'Eintragen.'
-                          : text,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        fontStyle: leer ? FontStyle.italic : null,
-                        color: leer
-                            ? theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5)
-                            : null,
-                      ),
-                    ),
-                  ],
-                ),
+            )
+          // Gefüllt in der Warnfarbe — dieselbe Fläche wie im Prozess-Tab,
+          // damit man sie dort sofort wiedererkennt.
+          : Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+              decoration: _hinweisFlaeche(f.warnung, f.warnungFlaeche),
+              child: SelectableText(
+                text,
+                style: theme.textTheme.bodyMedium,
               ),
-              Icon(
-                Icons.edit,
-                size: 16,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 }
@@ -101,27 +74,20 @@ class _BesonderheitBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final text =
         ref.watch(productProvider(productId)).valueOrNull?.beschreibung;
     if (text == null || text.trim().isEmpty) return const SizedBox.shrink();
 
-    final akzent = theme.brightness == Brightness.dark
-        ? const Color(0xFFFFB74D)
-        : const Color(0xFFE65100);
-
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: akzent.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: akzent.withValues(alpha: 0.45)),
-      ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
+      decoration: _hinweisFlaeche(f.warnung, f.warnungFlaeche),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.push_pin_outlined, size: 18, color: akzent),
-          const SizedBox(width: 10),
+          Icon(Icons.push_pin_outlined, size: 16, color: f.warnung),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,9 +95,9 @@ class _BesonderheitBanner extends ConsumerWidget {
                 Text(
                   'Besonderheit',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     letterSpacing: 0.4,
-                    color: akzent,
+                    color: f.warnung,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -169,16 +135,19 @@ class _MaschinenNotizFeld extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Maschineneinstellungen'),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          minLines: 4,
-          maxLines: 12,
-          decoration: const InputDecoration(
-            hintText: 'Individuelle Einstellungen dieser Maschine …\n'
-                'z.B. Programm, Geschwindigkeit, Temperatur, Sonderhinweise',
-            border: OutlineInputBorder(),
-            alignLabelWithHint: true,
+        content: SizedBox(
+          width: 520,
+          child: TextField(
+            controller: ctrl,
+            autofocus: true,
+            minLines: 4,
+            maxLines: 12,
+            decoration: const InputDecoration(
+              hintText: 'Individuelle Einstellungen dieser Maschine …\n'
+                  'z.B. Programm, Geschwindigkeit, Temperatur, '
+                  'Sonderhinweise',
+              alignLabelWithHint: true,
+            ),
           ),
         ),
         actions: [
@@ -234,6 +203,7 @@ class _MaschinenNotizFeld extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final paramsAsync = ref.watch(stepParametersProvider(step.id));
 
     return paramsAsync.when(
@@ -242,57 +212,56 @@ class _MaschinenNotizFeld extends ConsumerWidget {
             .where((p) => p.parameterName == kMaschinenNotizParam)
             .firstOrNull
             ?.wert;
-        final hatText = notiz != null && notiz.trim().isNotEmpty;
+        final text = notiz?.trim() ?? '';
+        final hatText = text.isNotEmpty;
 
-        return InkWell(
-          onTap: () => _bearbeiten(context, ref, notiz),
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surfaceContainerHighest
-                  .withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: theme.dividerColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.settings_outlined,
-                      size: 16,
-                      color: theme.colorScheme.primary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Maschineneinstellungen',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
+        // Material statt bemalter Box: Die Tipp-Welle malt auf das
+        // nächste Material und wäre unter einer weißen Box unsichtbar.
+        return Material(
+          color: theme.colorScheme.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppMasse.ecken,
+            side: BorderSide(color: theme.colorScheme.outline),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () => _bearbeiten(context, ref, notiz),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.settings_outlined, size: 16, color: grau),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Maschineneinstellungen',
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                    ),
-                    const Spacer(),
-                    Icon(
-                      hatText ? Icons.edit_outlined : Icons.add,
-                      size: 15,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  hatText ? notiz.trim() : 'Tippen, um Einstellungen zu erfassen …',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    height: 1.35,
-                    color: hatText
-                        ? theme.colorScheme.onSurface
-                        : theme.colorScheme.onSurface.withValues(alpha: 0.45),
-                    fontStyle: hatText ? FontStyle.normal : FontStyle.italic,
+                      Icon(
+                        hatText ? Icons.edit_outlined : Icons.add,
+                        size: 16,
+                        color: grau,
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Text(
+                    hatText ? text : 'Tippen, um Einstellungen zu erfassen …',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      height: 1.35,
+                      color: hatText ? theme.colorScheme.onSurface : grau,
+                      fontStyle:
+                          hatText ? FontStyle.normal : FontStyle.italic,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -312,7 +281,6 @@ class _MaschinenNotizFeld extends ConsumerWidget {
   }
 }
 
-
 /// Hinweis am Dampftunnel-Schritt.
 ///
 /// Läuft der Artikel über die Bratstraße, passiert er den Dampftunnel
@@ -329,6 +297,7 @@ class _InlineHinweis extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final steps = ref.watch(productStepsProvider(productId)).valueOrNull;
     if (steps == null) return const SizedBox.shrink();
 
@@ -342,11 +311,10 @@ class _InlineHinweis extends ConsumerWidget {
       }
     }
 
-    final farbe = hatBratstrasse
-        ? theme.colorScheme.primary
-        : (theme.brightness == Brightness.dark
-            ? const Color(0xFFFFB74D)
-            : const Color(0xFFE65100));
+    // Blau: alles geregelt, nur zur Info. Orange: hier ist etwas zu tun.
+    final (farbe, flaeche) = hatBratstrasse
+        ? (f.info, f.infoFlaeche)
+        : (f.warnung, f.warnungFlaeche);
     final text = hatBratstrasse
         ? 'Läuft inline hinter der Bratstraße: Menge und Produktionszeit '
             'entsprechen der Bratstraße, eigenes Personal ist hier nicht '
@@ -357,12 +325,8 @@ class _InlineHinweis extends ConsumerWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: farbe.withValues(alpha: 0.4)),
-      ),
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: _hinweisFlaeche(farbe, flaeche),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

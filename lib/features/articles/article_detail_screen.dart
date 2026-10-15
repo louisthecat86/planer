@@ -11,6 +11,8 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/prozesskette_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show
         HistorienLeistung,
@@ -54,6 +56,17 @@ class ArticleDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final productAsync = ref.watch(productProvider(productId));
+    final nummer = productAsync.valueOrNull?.artikelnummer;
+    // Schmale Fenster: „Produktion erfassen" nur als Symbol, sonst bliebe
+    // für den Artikelnamen kein Platz.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
+
+    Future<void> produktionErfassen() async {
+      final gespeichert = await ProductionEntryDialog.show(context, productId);
+      if (gespeichert) {
+        ref.invalidate(productionHistoryProvider(productId));
+      }
+    }
 
     return DefaultTabController(
       length: 3,
@@ -75,7 +88,7 @@ class ArticleDetailScreen extends ConsumerWidget {
               ),
             ),
             IconButton(
-              icon: const Icon(Icons.print),
+              icon: const Icon(Icons.print_outlined),
               tooltip: 'Prozessblatt drucken',
               onPressed: () async {
                 final messenger = ScaffoldMessenger.of(context);
@@ -88,18 +101,27 @@ class ArticleDetailScreen extends ConsumerWidget {
                 }
               },
             ),
-            productAsync.maybeWhen(
-              data: (p) => p != null
-                  ? Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Chip(
-                        label: Text(p.artikelnummer),
-                        avatar: const Icon(Icons.tag, size: 16),
-                      ),
-                    )
-                  : const SizedBox.shrink(),
-              orElse: () => const SizedBox.shrink(),
-            ),
+            if (nummer != null) ...[
+              const SizedBox(width: 6),
+              _NummernFeld(nummer: nummer),
+            ],
+            const SizedBox(width: 8),
+            // Wie „Produkt planen" im Board: die Aktion oben rechts in der
+            // Kopfleiste statt als schwebender Knopf, der unten rechts die
+            // Prozesskette und die letzte Produktion verdeckte.
+            if (schmal)
+              IconButton(
+                icon: const Icon(Icons.add_chart),
+                tooltip: 'Produktion erfassen',
+                onPressed: produktionErfassen,
+              )
+            else
+              FilledButton.icon(
+                onPressed: produktionErfassen,
+                icon: const Icon(Icons.add_chart, size: 18),
+                label: const Text('Produktion erfassen'),
+              ),
+            const SizedBox(width: 12),
           ],
           bottom: const TabBar(
             tabs: [
@@ -116,16 +138,47 @@ class ArticleDetailScreen extends ConsumerWidget {
             _ProductionTab(productId: productId),
           ],
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () async {
-            final gespeichert =
-                await ProductionEntryDialog.show(context, productId);
-            if (gespeichert) {
-              ref.invalidate(productionHistoryProvider(productId));
-            }
-          },
-          icon: const Icon(Icons.add_chart),
-          label: const Text('Produktion erfassen'),
+      ),
+    );
+  }
+}
+
+/// Die Artikelnummer als festes Feld in der Kopfleiste — sie ist der
+/// Schlüssel zur Excel-Vorlage und lässt sich nicht ändern.
+class _NummernFeld extends StatelessWidget {
+  const _NummernFeld({required this.nummer});
+
+  final String nummer;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: 'Artikelnummer — Schlüssel zur Excel-Vorlage',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.surface,
+          borderRadius: AppMasse.ecken,
+          border: Border.all(color: theme.colorScheme.outline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.tag,
+              size: 15,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              nummer,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -150,26 +203,37 @@ class _InfoTab extends ConsumerWidget {
       error: (e, _) => Center(child: Text('Fehler: $e')),
       data: (p) {
         if (p == null) {
-          return const Center(child: Text('Artikel nicht gefunden.'));
+          return const Center(
+            child: LeerHinweis(
+              'Artikel nicht gefunden.',
+              icon: Icons.search_off,
+            ),
+          );
         }
 
-        final eintraege = <({String label, String wert})>[
-          (label: 'Artikelnummer', wert: p.artikelnummer),
-          (label: 'Bezeichnung', wert: p.artikelbezeichnung),
+        Future<void> bearbeiten() async {
+          final geaendert = await ArticleInfoEditorDialog.show(context, p);
+          if (geaendert) ref.invalidate(productProvider(productId));
+        }
+
+        final eintraege = <_Eintrag>[
+          (label: 'Artikelnummer', wert: p.artikelnummer, fehlt: false),
+          (label: 'Bezeichnung', wert: p.artikelbezeichnung, fehlt: false),
         ];
         if (p.produktgruppe != null && p.produktgruppe!.isNotEmpty) {
           eintraege.add((
             label: 'Produktgruppe',
             wert: produktgruppeLabels[p.produktgruppe] ?? p.produktgruppe!,
+            fehlt: false,
           ),);
         }
         if (p.notizen != null && p.notizen!.isNotEmpty) {
-          eintraege.add((label: 'Notizen', wert: p.notizen!));
+          eintraege.add((label: 'Notizen', wert: p.notizen!, fehlt: false));
         }
 
         final besonderheiten = p.beschreibung?.trim() ?? '';
 
-        // Merkmale als eigene Karte: Sie entscheiden später über die
+        // Merkmale als eigener Bereich: Sie entscheiden später über die
         // Reihenfolge in der Planung und sollen deshalb auf einen Blick
         // erkennbar sein — auch dann, wenn sie fehlen.
         final verpackung = <String>[
@@ -188,101 +252,109 @@ class _InfoTab extends ConsumerWidget {
             merkmalLabel(p.abgabeart, kAbgabearten)!,
         ].join(' · ');
 
-        final merkmalZeilen = <({String label, String wert})>[
+        final allergeneOk = allergeneGepflegt(p.allergene);
+        final merkmalZeilen = <_Eintrag>[
           (
             label: 'Allergene',
-            wert: allergeneGepflegt(p.allergene)
+            wert: allergeneOk
                 ? merkmaleLabel(p.allergene, kAllergene)
                 : 'nicht gepflegt',
+            fehlt: !allergeneOk,
           ),
           if (merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen) != null)
             (
               label: 'Qualitätsstufe',
               wert: merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen)!,
+              fehlt: false,
             ),
           if (merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen)
               .isNotEmpty)
             (
               label: 'Verarbeitungsstufe',
               wert: merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen),
+              fehlt: false,
             ),
           if (verpackung.isNotEmpty)
-            (label: 'Verpackung', wert: verpackung),
+            (label: 'Verpackung', wert: verpackung, fehlt: false),
         ];
+
+        final stammdaten = Bereich(
+          titel: 'Stammdaten',
+          aktionen: [
+            // Noch ein Stub aus Navision: Erst mit Produktgruppe gilt der
+            // Artikel als eingepflegt.
+            if (!p.istEingepflegt) ...[
+              const StatusMarke(
+                'nicht eingepflegt',
+                art: StatusArt.warnung,
+              ),
+              const SizedBox(width: 6),
+            ],
+            TextButton.icon(
+              onPressed: bearbeiten,
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Bearbeiten'),
+            ),
+          ],
+          innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
+          child: _InfoTabelle(zeilen: eintraege),
+        );
+        final merkmale = Bereich(
+          titel: 'Merkmale',
+          aktionen: [
+            TextButton.icon(
+              onPressed: bearbeiten,
+              icon: const Icon(Icons.edit_outlined, size: 16),
+              label: const Text('Bearbeiten'),
+            ),
+          ],
+          innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
+          child: _InfoTabelle(zeilen: merkmalZeilen),
+        );
 
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  children: [
-                    for (var i = 0; i < eintraege.length; i++) ...[
-                      if (i > 0) const Divider(height: 1),
-                      _InfoZeile(
-                        label: eintraege[i].label,
-                        wert: eintraege[i].wert,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Merkmale
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  children: [
-                    for (var i = 0; i < merkmalZeilen.length; i++) ...[
-                      if (i > 0) const Divider(height: 1),
-                      _InfoZeile(
-                        label: merkmalZeilen[i].label,
-                        wert: merkmalZeilen[i].wert,
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Besonderheiten — eigene Karte, damit sie auffällt
-            _BesonderheitenKarte(
-              text: besonderheiten,
-              onEdit: () async {
-                final geaendert =
-                    await ArticleInfoEditorDialog.show(context, p);
-                if (geaendert) ref.invalidate(productProvider(productId));
-              },
-            ),
-            const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: () async {
-                final geaendert =
-                    await ArticleInfoEditorDialog.show(context, p);
-                if (geaendert) {
-                  ref.invalidate(productProvider(productId));
+            LayoutBuilder(
+              builder: (context, constraints) {
+                // Breit: Stammdaten und Merkmale nebeneinander, gleich
+                // hoch. Schmal: untereinander.
+                if (constraints.maxWidth >= 980) {
+                  return IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(child: stammdaten),
+                        const SizedBox(width: 12),
+                        Expanded(child: merkmale),
+                      ],
+                    ),
+                  );
                 }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    stammdaten,
+                    const SizedBox(height: 12),
+                    merkmale,
+                  ],
+                );
               },
-              icon: const Icon(Icons.edit),
-              label: const Text('Stammdaten bearbeiten'),
             ),
+            const SizedBox(height: 12),
+
+            // Besonderheiten — eigener Bereich, damit sie auffallen.
+            _BesonderheitenKarte(text: besonderheiten, onEdit: bearbeiten),
           ],
         );
       },
     );
   }
 }
+
+/// Eine Zeile der Infos: Beschriftung, Wert und ob der Wert fehlt — dann
+/// steht er als Warnmarke da.
+typedef _Eintrag = ({String label, String wert, bool fehlt});
 
 /// Füllmenge lesbar: unter 1000 g in Gramm, darüber in Kilo.
 String _gramm(double g) {
@@ -296,22 +368,61 @@ String _gramm(double g) {
   return '${g == g.roundToDouble() ? g.round() : g} g';
 }
 
+/// Beschriftung links, Wert rechts, dünne Linie dazwischen — wie ein
+/// Infofenster in Navision.
+class _InfoTabelle extends StatelessWidget {
+  const _InfoTabelle({required this.zeilen});
+
+  final List<_Eintrag> zeilen;
+
+  @override
+  Widget build(BuildContext context) {
+    final linie = Theme.of(context).colorScheme.outlineVariant;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < zeilen.length; i++)
+          Container(
+            decoration: BoxDecoration(
+              border: i == zeilen.length - 1
+                  ? null
+                  : Border(bottom: BorderSide(color: linie)),
+            ),
+            child: _InfoZeile(
+              label: zeilen[i].label,
+              wert: zeilen[i].wert,
+              fehlt: zeilen[i].fehlt,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _InfoZeile extends StatelessWidget {
-  const _InfoZeile({required this.label, required this.wert});
+  const _InfoZeile({
+    required this.label,
+    required this.wert,
+    this.fehlt = false,
+  });
 
   final String label;
   final String wert;
+
+  /// Der Wert fehlt — als Warnmarke statt als Text.
+  final bool fehlt;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
+      padding: const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 120,
+            width: 140,
             child: Text(
               label,
               style: theme.textTheme.bodyMedium?.copyWith(
@@ -321,12 +432,18 @@ class _InfoZeile extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              wert,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
+            child: fehlt
+                ? Align(
+                    alignment: Alignment.centerLeft,
+                    heightFactor: 1,
+                    child: StatusMarke(wert, art: StatusArt.warnung),
+                  )
+                : Text(
+                    wert,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
           ),
         ],
       ),
@@ -436,10 +553,7 @@ class _StepsList extends ConsumerWidget {
                 [for (var k = 0; k < bau.stationen.length; k++) k],
               ),
       icon: const Icon(Icons.speed, size: 16),
-      label: const Text(
-        'Leistungsdaten',
-        style: TextStyle(fontSize: 12),
-      ),
+      label: const Text('Leistungsdaten'),
       style: OutlinedButton.styleFrom(
         visualDensity: VisualDensity.compact,
       ),
@@ -447,7 +561,7 @@ class _StepsList extends ConsumerWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Ab ~900px: feste Produktionsmittel-Sidebar links — aus ihr lassen
+        // Ab ~900px: feste Produktionsmittel-Leiste links — aus ihr lassen
         // sich Anlagen direkt an ihre Stelle in der Kette ziehen.
         if (constraints.maxWidth >= 900) {
           return Row(
@@ -455,9 +569,10 @@ class _StepsList extends ConsumerWidget {
             children: [
               SizedBox(
                 width: 212,
+                // Dieselbe ruhige Fläche wie die Navigationsleiste: Hier
+                // liegt Werkzeug, rechts wird gearbeitet.
                 child: ColoredBox(
-                  color: theme.colorScheme.surfaceContainerHighest
-                      .withValues(alpha: 0.35),
+                  color: AppFarben.von(context).leiste,
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(12),
                     child: _ProduktionsmittelKatalog(
@@ -467,7 +582,7 @@ class _StepsList extends ConsumerWidget {
                   ),
                 ),
               ),
-              const VerticalDivider(width: 1),
+              VerticalDivider(width: 1, color: theme.colorScheme.outline),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -489,7 +604,7 @@ class _StepsList extends ConsumerWidget {
         }
 
         // Schmaler: „+ Produktionsmittel"-Button oben, der Katalog öffnet
-        // sich als Sheet.
+        // sich als Fenster.
         return Column(
           children: [
             Padding(

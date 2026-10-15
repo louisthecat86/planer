@@ -46,6 +46,11 @@ Future<T?> showSheetOhneAnimation<T>({
       final mq = MediaQuery.of(dialogContext);
       final breite = math.min(breiteMax, mq.size.width - 2 * _rand);
       final hoehe = mq.size.height - 2 * _rand - mq.viewInsets.bottom;
+      // Dasselbe Aussehen wie jeder Dialog der App: kantig, dünner Rand,
+      // kein Schatten — so steht es im Theme. Vorher hatte nur dieses
+      // Fenster 20 px runde Ecken und einen Schatten, ein Überbleibsel
+      // aus der Bottom-Sheet-Zeit.
+      final dialog = theme.dialogTheme;
 
       return SafeArea(
         child: Center(
@@ -54,12 +59,13 @@ Future<T?> showSheetOhneAnimation<T>({
             child: ConstrainedBox(
               constraints: BoxConstraints(maxHeight: math.max(hoehe, 200)),
               child: Material(
-                color: theme.bottomSheetTheme.backgroundColor ??
-                    theme.colorScheme.surfaceContainerLow,
-                elevation: 8,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                color: dialog.backgroundColor ?? theme.colorScheme.surface,
+                elevation: dialog.elevation ?? 0,
+                shape: dialog.shape ??
+                    RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                      side: BorderSide(color: theme.colorScheme.outline),
+                    ),
                 clipBehavior: Clip.antiAlias,
                 child: Padding(
                   // Die Inhalte beginnen oben ohne eigenen Abstand, weil dort
