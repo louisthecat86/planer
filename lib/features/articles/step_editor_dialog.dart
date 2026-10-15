@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/prozesskette_service.dart';
+import '../../core/ui/bausteine.dart';
 
 /// Dialog zum Bearbeiten eines bestehenden oder Anlegen eines neuen
 /// Produktions-Schritts.
@@ -408,20 +409,15 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
                 decoration: const InputDecoration(
                   labelText: 'Abteilung',
                 ),
+                // Kürzel in der Abteilungsfarbe — wie im Board und in der
+                // Prozesskette.
                 items: Abteilung.values
                     .map(
                       (a) => DropdownMenuItem(
                         value: a.dbValue,
                         child: Row(
                           children: [
-                            Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: a.farbe,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
+                            AbteilungsMarke(abteilung: a),
                             const SizedBox(width: 8),
                             Text(a.anzeigeName),
                           ],
@@ -492,61 +488,15 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
               const SizedBox(height: 12),
 
               // ── Hinweis: Zeiten gehören der Abteilung ────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surfaceContainerHighest
-                      .withValues(alpha: 0.4),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      size: 18,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Zeiten gibt es an der Anlage keine: Die Dauer kommt '
-                        'aus den Leistungsdaten der Abteilung oder aus den '
-                        'erfassten Produktionen.',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ),
-                  ],
-                ),
+              const HinweisBox(
+                'Zeiten gibt es an der Anlage keine: Die Dauer kommt aus den '
+                'Leistungsdaten der Abteilung oder aus den erfassten '
+                'Produktionen.',
               ),
 
               if (_saveError != null) ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error, color: Colors.red, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _saveError!,
-                          style: TextStyle(
-                            color: Colors.red.shade700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                const SizedBox(height: 12),
+                HinweisBox(_saveError!, art: StatusArt.fehler),
               ],
             ],
           ),
@@ -560,14 +510,14 @@ class _StepEditorDialogState extends ConsumerState<StepEditorDialog> {
         ),
         FilledButton.icon(
           onPressed: _isSaving || !_maschinenGeladen ? null : _speichere,
+          // Ohne feste Farbe: Während des Speicherns ist der Knopf
+          // gesperrt und hellgrau — ein weißer Kreisel war darauf
+          // unsichtbar.
           icon: _isSaving
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : Icon(_saveIcon),
           label: Text(_saveLabel),

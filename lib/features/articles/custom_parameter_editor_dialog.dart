@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/ui/bausteine.dart';
 
 /// Dialog zum Anlegen oder Bearbeiten eines Custom-Parameters.
 ///
@@ -160,6 +161,7 @@ class _CustomParameterEditorDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Rahmen und Ecken der Felder kommen aus dem Theme.
             TextField(
               controller: _nameCtrl,
               enabled: !_isSaving,
@@ -167,7 +169,6 @@ class _CustomParameterEditorDialogState
               decoration: const InputDecoration(
                 labelText: 'Name *',
                 hintText: 'z.B. "Krustenfaktor", "Bratdauer-Modus"',
-                border: OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -177,39 +178,16 @@ class _CustomParameterEditorDialogState
               decoration: const InputDecoration(
                 labelText: 'Wert',
                 hintText: 'z.B. "230", "4:00", "automatisch"',
-                border: OutlineInputBorder(),
               ),
             ),
             if (_saveError != null) ...[
               const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red.shade200),
-                ),
-                child: Text(
-                  _saveError!,
-                  style: TextStyle(
-                    color: Colors.red.shade700,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
+              HinweisBox(_saveError!, art: StatusArt.fehler),
             ],
-            const SizedBox(height: 8),
-            Text(
-              'Custom-Parameter werden beim Excel-Export in den '
-              '„ZUSÄTZLICHE PARAMETER"-Block deiner Vorlage geschrieben.',
-              style: TextStyle(
-                fontSize: 11,
-                fontStyle: FontStyle.italic,
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.6),
-              ),
+            const SizedBox(height: 12),
+            const HinweisBox(
+              'Eigene Parameter landen beim Excel-Export im Block '
+              '„ZUSÄTZLICHE PARAMETER" deiner Vorlage.',
             ),
           ],
         ),
@@ -222,14 +200,13 @@ class _CustomParameterEditorDialogState
         ),
         FilledButton.icon(
           onPressed: _isSaving ? null : _speichere,
+          // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein weißer
+          // Kreisel war darauf unsichtbar.
           icon: _isSaving
               ? const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.save, size: 18),
           label: Text(_isSaving ? 'Speichern …' : 'Speichern'),

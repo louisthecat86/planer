@@ -23,9 +23,9 @@ const kProduktgruppen = <({String dbValue, String label})>[
   (dbValue: 'angebratene_bruehwurst', label: 'Angebratene Brühwürste'),
 ];
 
-/// Bottom-Sheet zum Bearbeiten der Artikel-Stammdaten (Bezeichnung,
-/// Produktgruppe, Beschreibung, Notizen). Die Artikelnummer ist der
-/// Schlüssel zur Excel-Vorlage und bleibt unveränderlich.
+/// Fenster zum Bearbeiten der Artikel-Stammdaten (Bezeichnung,
+/// Produktgruppe, Beschreibung, Merkmale, Notizen). Die Artikelnummer ist
+/// der Schlüssel zur Excel-Vorlage und bleibt unveränderlich.
 class ArticleInfoEditorDialog extends ConsumerStatefulWidget {
   const ArticleInfoEditorDialog({super.key, required this.product});
 
@@ -36,9 +36,6 @@ class ArticleInfoEditorDialog extends ConsumerStatefulWidget {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => UncontrolledProviderScope(
         container: ProviderScope.containerOf(context),
         child: ArticleInfoEditorDialog(product: product),
@@ -176,7 +173,10 @@ class _ArticleInfoEditorDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -186,7 +186,8 @@ class _ArticleInfoEditorDialogState
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
 
     return DraggableScrollableSheet(
       initialChildSize: 0.8,
@@ -200,27 +201,30 @@ class _ArticleInfoEditorDialogState
           ),
           child: ListView(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(2),
+              // Kopf wie bei jedem Dialog der App: Titel in Blau, rechts
+              // ein Kreuz. Der graue Anfasser oben stammte aus der Zeit,
+              // als das Fenster ein Bottom-Sheet war.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Stammdaten bearbeiten',
+                      style: theme.dialogTheme.titleTextStyle ??
+                          theme.textTheme.titleMedium,
+                    ),
                   ),
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    tooltip: 'Schließen ohne Speichern',
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                  ),
+                ],
               ),
-              const Text(
-                'Stammdaten bearbeiten',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
               // Artikelnummer (read-only)
               InputDecorator(
@@ -372,23 +376,31 @@ class _ArticleInfoEditorDialogState
               ),
               const SizedBox(height: 20),
 
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _speichern,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(_saving ? 'Speichern …' : 'Speichern'),
-                ),
+              // Knöpfe unten rechts wie in jedem Dialog der App.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    child: const Text('Abbrechen'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _speichern,
+                    // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau,
+                    // ein weißer Kreisel war darauf unsichtbar.
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save, size: 18),
+                    label: Text(_saving ? 'Speichern …' : 'Speichern'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -399,13 +411,26 @@ class _ArticleInfoEditorDialogState
 
   // ── Bausteine für die Auswahlfelder ──────────────────────────────────
 
-  Widget _abschnitt(String titel) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(
-          titel,
-          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+  /// Überschrift eines Abschnitts — mit dünner Linie darunter, damit die
+  /// lange Maske in Blöcke zerfällt.
+  Widget _abschnitt(String titel) {
+    final theme = Theme.of(context);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outlineVariant),
         ),
-      );
+      ),
+      child: Text(
+        titel,
+        style: theme.textTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
 
   Widget _unterzeile(String titel) => Padding(
         padding: const EdgeInsets.only(bottom: 6),

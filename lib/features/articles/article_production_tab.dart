@@ -19,46 +19,58 @@ class _ProductionTab extends ConsumerWidget {
       data: (rows) {
         if (rows.isEmpty) {
           return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Noch keine Produktionsdaten.\n\n'
-                'Importiere eine Excel-Vorlage mit ausgefülltem Block '
-                '„HISTORISCHE DATEN", dann erscheinen hier alle '
-                'vergangenen Produktionen samt Ausbeute und kg/h.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
-              ),
+            child: LeerHinweis(
+              'Noch keine Produktionsdaten.\n'
+              'Oben rechts mit „Produktion erfassen" eintragen — oder eine '
+              'Excel-Vorlage mit ausgefülltem Block „HISTORISCHE DATEN" '
+              'importieren. Dann stehen hier alle vergangenen Produktionen '
+              'samt Ausbeute und kg/h.',
+              icon: Icons.insights,
             ),
           );
+        }
+
+        Future<void> bearbeiten(ProductionHistoryData r) async {
+          final geaendert = await ProductionEntryDialog.show(
+            context,
+            productId,
+            existing: r,
+          );
+          if (geaendert) {
+            ref.invalidate(productionHistoryProvider(productId));
+          }
         }
 
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
             _KennzahlenCard(rows: rows),
-            const SizedBox(height: 16),
-            Text(
-              'Vergangene Produktionen (${rows.length})',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            for (final r in rows)
-              _HistorieCard(
-                eintrag: r,
-                onTap: () async {
-                  final geaendert = await ProductionEntryDialog.show(
-                    context,
-                    productId,
-                    existing: r,
+            const SizedBox(height: 12),
+            Bereich(
+              titel: 'Vergangene Produktionen',
+              untertitel: '${rows.length} · neueste zuerst',
+              innenAbstand: EdgeInsets.zero,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  // Breit: eine Spalte je Kennzahl. Schmal: zweizeilig.
+                  final breit = constraints.maxWidth >= 760;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (breit) const _HistorieKopf(),
+                      for (var i = 0; i < rows.length; i++)
+                        _HistorieZeile(
+                          eintrag: rows[i],
+                          breit: breit,
+                          letzte: i == rows.length - 1,
+                          onTap: () => bearbeiten(rows[i]),
+                        ),
+                    ],
                   );
-                  if (geaendert) {
-                    ref.invalidate(productionHistoryProvider(productId));
-                  }
                 },
               ),
+            ),
           ],
         );
       },
@@ -77,6 +89,8 @@ class _KennzahlenCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     double summeRoh = 0;
     double summeFertig = 0;
     var hatMengen = false;
@@ -90,78 +104,62 @@ class _KennzahlenCard extends StatelessWidget {
 
     final ausbeute = ausbeuteAusProduktionen(rows);
     final leistung = leistungAusProduktionen(rows);
+    final hinweis = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF37474F), Color(0xFF455A64)],
-          ),
-        ),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.insights, color: Colors.white, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'Kennzahlen',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 20,
-              runSpacing: 16,
-              children: [
-                _Kennzahl(
-                  value: '${rows.length}',
-                  label: 'Produktionen',
-                ),
-                if (ausbeute != null) ...[
-                  _Kennzahl(
-                    value: fmtProzent(ausbeute.faktor),
-                    label: 'Ø Ausbeute',
-                  ),
-                  _Kennzahl(
-                    value: fmtProzent(1 - ausbeute.faktor),
-                    label: 'Ø Garverlust',
-                    valueColor: const Color(0xFFFF8A65),
-                  ),
-                ],
-                if (leistung != null)
-                  _Kennzahl(
-                    value: '${fmtKg(leistung.kgProStunde.roundToDouble())} '
-                        'kg/h',
-                    label: 'Ø Leistung roh',
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            const Text(
-              'Ausbeute und Leistung: Ø der letzten $kLetzteProduktionen '
-              'Produktionen — damit rechnet die Planung.',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
-            ),
-            if (hatMengen) ...[
-              const SizedBox(height: 4),
-              Text(
-                'Gesamt: ${fmtKg(summeRoh)} kg Rohware → '
-                '${fmtKg(summeFertig)} kg Fertigware',
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
+    // Weiße Fläche wie jeder Bereich der App — vorher eine dunkle Karte mit
+    // Farbverlauf, die als einzige aus dem Rahmen fiel.
+    return Bereich(
+      titel: 'Kennzahlen',
+      icon: Icons.insights,
+      innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 32,
+            runSpacing: 14,
+            children: [
+              _Kennzahl(
+                value: '${rows.length}',
+                label: 'Produktionen',
               ),
+              if (ausbeute != null) ...[
+                _Kennzahl(
+                  value: fmtProzent(ausbeute.faktor),
+                  label: 'Ø Ausbeute',
+                ),
+                // Der Verlust in Orange: die Zahl, auf die man schaut.
+                _Kennzahl(
+                  value: fmtProzent(1 - ausbeute.faktor),
+                  label: 'Ø Garverlust',
+                  valueColor: f.warnung,
+                ),
+              ],
+              if (leistung != null)
+                _Kennzahl(
+                  value: '${fmtKg(leistung.kgProStunde.roundToDouble())} '
+                      'kg/h',
+                  label: 'Ø Leistung roh',
+                ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Ausbeute und Leistung: Ø der letzten $kLetzteProduktionen '
+            'Produktionen — damit rechnet die Planung.',
+            style: hinweis,
+          ),
+          if (hatMengen) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Gesamt: ${fmtKg(summeRoh)} kg Rohware → '
+              '${fmtKg(summeFertig)} kg Fertigware',
+              style: hinweis,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -180,6 +178,7 @@ class _Kennzahl extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,183 +186,235 @@ class _Kennzahl extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            color: valueColor ?? Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        Text(
-          label,
-          style: const TextStyle(color: Colors.white60, fontSize: 11),
-        ),
-      ],
-    );
-  }
-}
-
-/// Eine vergangene Produktion als Karte.
-class _HistorieCard extends StatelessWidget {
-  const _HistorieCard({required this.eintrag, this.onTap});
-
-  final ProductionHistoryData eintrag;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    // Garverlust: gespeicherten Anteil bevorzugen, sonst aus Roh/Fertig.
-    double? verlust = eintrag.verlustAnteil;
-    if (verlust == null &&
-        eintrag.kgRohware != null &&
-        eintrag.kgFertigware != null &&
-        eintrag.kgRohware! > 0) {
-      verlust = 1 - (eintrag.kgFertigware! / eintrag.kgRohware!);
-    }
-
-    final zeitText = (eintrag.startzeit != null && eintrag.endzeit != null)
-        ? '${eintrag.startzeit} – ${eintrag.endzeit}'
-        : (eintrag.startzeit ?? '');
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.event,
-                  size: 16,
-                  color: theme.colorScheme.primary,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  fmtDatum(eintrag.datum),
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const Spacer(),
-                if (eintrag.quelle == 'app')
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2E7D32).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'in App erfasst',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFF2E7D32),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 18,
-              runSpacing: 10,
-              children: [
-                _HistWert(
-                  label: 'Rohware',
-                  value: '${fmtKg(eintrag.kgRohware)} kg',
-                ),
-                _HistWert(
-                  label: 'Fertigware',
-                  value: '${fmtKg(eintrag.kgFertigware)} kg',
-                ),
-                if (verlust != null)
-                  _HistWert(
-                    label: 'Garverlust',
-                    value: fmtProzent(verlust),
-                  ),
-                if (eintrag.produktionszeitMinuten != null)
-                  _HistWert(
-                    label: 'Dauer',
-                    value: fmtDauer(eintrag.produktionszeitMinuten),
-                  ),
-                if (eintrag.kgProStundeRoh != null)
-                  _HistWert(
-                    label: 'kg/h roh',
-                    value: fmtKg(eintrag.kgProStundeRoh),
-                  ),
-              ],
-            ),
-            if (zeitText.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(
-                    Icons.schedule,
-                    size: 13,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    zeitText,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-            if (eintrag.notizen != null && eintrag.notizen!.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Text(
-                eintrag.notizen!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ],
-          ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _HistWert extends StatelessWidget {
-  const _HistWert({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: theme.textTheme.bodyMedium?.copyWith(
+            color: valueColor ?? theme.colorScheme.onSurface,
+            fontSize: 22,
             fontWeight: FontWeight.w700,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
         ),
         Text(
           label,
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
-            fontSize: 11,
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Spaltenbreiten der Produktionsliste — für Kopf und Zeilen dieselben.
+abstract final class _HistSpalten {
+  static const double datum = 120;
+  static const double menge = 96;
+  static const double anteil = 84;
+  static const double dauer = 104;
+  static const double leistung = 80;
+  static const double luecke = 16;
+}
+
+/// Ziffern gleich breit, damit Mengen untereinander stehen.
+const List<FontFeature> _histZiffern = [FontFeature.tabularFigures()];
+
+/// Spaltenköpfe der Produktionsliste — dieselben Breiten wie
+/// [_HistorieZeile].
+class _HistorieKopf extends StatelessWidget {
+  const _HistorieKopf();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    Widget rechts(String text, double breite) => SizedBox(
+          width: breite,
+          child: Text(text, textAlign: TextAlign.right, style: stil),
+        );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _HistSpalten.datum,
+            child: Text('Datum', style: stil),
+          ),
+          rechts('Rohware', _HistSpalten.menge),
+          rechts('Fertigware', _HistSpalten.menge),
+          rechts('Garverlust', _HistSpalten.anteil),
+          rechts('Dauer', _HistSpalten.dauer),
+          rechts('kg/h roh', _HistSpalten.leistung),
+          const SizedBox(width: _HistSpalten.luecke),
+          Expanded(child: Text('Quelle · Notiz', style: stil)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine vergangene Produktion als Tabellenzeile. Antippen öffnet sie zum
+/// Bearbeiten.
+class _HistorieZeile extends StatelessWidget {
+  const _HistorieZeile({
+    required this.eintrag,
+    required this.breit,
+    required this.letzte,
+    required this.onTap,
+  });
+
+  final ProductionHistoryData eintrag;
+
+  /// Breite Tabelle mit allen Spalten — sonst zweizeilig.
+  final bool breit;
+
+  /// Letzte Zeile: ohne Linie darunter, die zieht der Bereich.
+  final bool letzte;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final e = eintrag;
+
+    // Garverlust: gespeicherten Anteil bevorzugen, sonst aus Roh/Fertig.
+    var verlust = e.verlustAnteil;
+    final roh = e.kgRohware;
+    final fertig = e.kgFertigware;
+    if (verlust == null && roh != null && fertig != null && roh > 0) {
+      verlust = 1 - (fertig / roh);
+    }
+
+    final start = e.startzeit;
+    final ende = e.endzeit;
+    final zeitText = (start != null && ende != null)
+        ? '$start – $ende'
+        : (start ?? '');
+    final notiz = e.notizen?.trim() ?? '';
+    final ausApp = e.quelle == 'app';
+
+    final stil = theme.textTheme.bodyMedium;
+    final zahlen = stil?.copyWith(fontFeatures: _histZiffern);
+
+    final datum = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          fmtDatum(e.datum),
+          style: zahlen?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        if (zeitText.isNotEmpty)
+          Text(
+            zeitText,
+            style: theme.textTheme.bodySmall?.copyWith(color: grau),
+          ),
+      ],
+    );
+    final quelle = Wrap(
+      spacing: 8,
+      runSpacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (ausApp)
+          const StatusMarke('in App erfasst', art: StatusArt.ok),
+        if (notiz.isNotEmpty)
+          Text(
+            notiz,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontStyle: FontStyle.italic,
+              color: grau,
+            ),
+          ),
+      ],
+    );
+
+    // Fehlt eine Menge, steht nur „—" da, nicht „— kg".
+    String kg(double? wert) => wert == null ? '—' : '${fmtKg(wert)} kg';
+
+    Widget zelle(String text, double breite) => SizedBox(
+          width: breite,
+          child: Text(
+            text,
+            maxLines: 1,
+            textAlign: TextAlign.right,
+            style: zahlen,
+          ),
+        );
+
+    final Widget inhalt;
+    if (breit) {
+      inhalt = Row(
+        children: [
+          SizedBox(width: _HistSpalten.datum, child: datum),
+          zelle(kg(roh), _HistSpalten.menge),
+          zelle(kg(fertig), _HistSpalten.menge),
+          zelle(
+            verlust == null ? '—' : fmtProzent(verlust),
+            _HistSpalten.anteil,
+          ),
+          zelle(fmtDauer(e.produktionszeitMinuten), _HistSpalten.dauer),
+          zelle(fmtKg(e.kgProStundeRoh), _HistSpalten.leistung),
+          const SizedBox(width: _HistSpalten.luecke),
+          Expanded(child: quelle),
+        ],
+      );
+    } else {
+      // Schmal: Datum und Quelle oben, die Zahlen als eine Zeile darunter.
+      final teile = <String>[
+        '${kg(roh)} → ${kg(fertig)}',
+        if (verlust != null) '${fmtProzent(verlust)} Verlust',
+        if (e.produktionszeitMinuten != null)
+          fmtDauer(e.produktionszeitMinuten),
+        if (e.kgProStundeRoh != null) '${fmtKg(e.kgProStundeRoh)} kg/h roh',
+      ];
+      inhalt = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              datum,
+              const SizedBox(width: 12),
+              Expanded(child: quelle),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(teile.join(' · '), style: zahlen),
+        ],
+      );
+    }
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle malt auf
+    // das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          decoration: BoxDecoration(
+            border: letzte
+                ? null
+                : Border(
+                    bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+                  ),
+          ),
+          child: inhalt,
+        ),
+      ),
     );
   }
 }
@@ -566,9 +617,12 @@ class _LeistungsdatenDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final linie = theme.colorScheme.outlineVariant;
+    final anzahl = widget.eintraege.length;
     return AlertDialog(
       title: Text(
-        widget.eintraege.length == 1
+        anzahl == 1
             ? 'Leistungsdaten · ${widget.eintraege.first.abteilung.anzeigeName}'
             : 'Leistungsdaten je Abteilung',
       ),
@@ -579,94 +633,110 @@ class _LeistungsdatenDialogState
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
+              const HinweisBox(
                 'Welche Menge schafft die Abteilung bei diesem Artikel in '
                 'welcher Zeit? Daraus rechnet die App die Dauer jeder '
                 'Planmenge hoch. Bleibt eine Abteilung leer, rechnet sie mit '
                 'dem Ø der letzten $kLetzteProduktionen erfassten '
                 'Produktionen. Die Personen je Anlage pflegst du im '
                 'jeweiligen Schritt.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
               ),
-              const SizedBox(height: 14),
-              for (var i = 0; i < widget.eintraege.length; i++) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      // Mit der Nummer der Station — so passt die Zeile
-                      // zur Kette, auch wenn eine Abteilung zweimal darin
-                      // vorkommt.
-                      child: Text(
-                        '${widget.eintraege[i].nummer} · '
-                        '${widget.eintraege[i].abteilung.anzeigeName}',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    Text(
-                      '${_personenSumme(i)} Pers.',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      _kgProStunde(i),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 2,
-                      child: TextField(
-                        controller: _menge[i],
-                        decoration: const InputDecoration(
-                          labelText: 'Menge',
-                          suffixText: 'kg',
-                          border: OutlineInputBorder(),
-                          isDense: true,
-                        ),
-                        keyboardType: const TextInputType.numberWithOptions(
-                          decimal: true,
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Getrennte Stunden-/Minutenfelder: „0:08" war als
-                    // Freitext fehleranfällig und ließ offen, ob 8 Minuten
-                    // oder 8 Stunden gemeint sind.
-                    //
-                    // Nicht kompakt: Die schmalen Felder (66pt) sind zu eng,
-                    // sobald Wert und Einheit zusammen darin stehen.
-                    ZeitEingabe(
-                      kompakt: false,
-                      minuten: _zeitMin[i],
-                      onChanged: (m) => setState(() => _zeitMin[i] = m),
-                    ),
-                  ],
-                ),
-                if (_grundlage(i) case final text?) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    text,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      fontStyle: FontStyle.italic,
-                    ),
+              const SizedBox(height: 4),
+              for (var i = 0; i < anzahl; i++)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                    border: i == anzahl - 1
+                        ? null
+                        : Border(bottom: BorderSide(color: linie)),
                   ),
-                ],
-                const SizedBox(height: 14),
-              ],
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          AbteilungsMarke(
+                            abteilung: widget.eintraege[i].abteilung,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            // Mit der Nummer der Station — so passt die
+                            // Zeile zur Kette, auch wenn eine Abteilung
+                            // zweimal darin vorkommt.
+                            child: Text(
+                              '${widget.eintraege[i].nummer} · '
+                              '${widget.eintraege[i].abteilung.anzeigeName}',
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                          Text(
+                            '${_personenSumme(i)} Pers.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: grau,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            _kgProStunde(i),
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: theme.colorScheme.primary,
+                              fontFeatures: const [
+                                FontFeature.tabularFigures(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: TextField(
+                              controller: _menge[i],
+                              decoration: const InputDecoration(
+                                labelText: 'Menge',
+                                suffixText: 'kg',
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                decimal: true,
+                              ),
+                              onChanged: (_) => setState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Getrennte Stunden-/Minutenfelder: „0:08" war als
+                          // Freitext fehleranfällig und ließ offen, ob 8
+                          // Minuten oder 8 Stunden gemeint sind.
+                          //
+                          // Nicht kompakt: Die schmalen Felder (66pt) sind
+                          // zu eng, sobald Wert und Einheit zusammen darin
+                          // stehen.
+                          ZeitEingabe(
+                            kompakt: false,
+                            minuten: _zeitMin[i],
+                            onChanged: (m) => setState(() => _zeitMin[i] = m),
+                          ),
+                        ],
+                      ),
+                      if (_grundlage(i) case final text?) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          text,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: grau,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
@@ -684,5 +754,3 @@ class _LeistungsdatenDialogState
     );
   }
 }
-
-

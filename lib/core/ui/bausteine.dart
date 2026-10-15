@@ -155,8 +155,24 @@ class AbteilungsMarke extends StatelessWidget {
   }
 }
 
-/// Bedeutung einer [StatusMarke] — bestimmt ihre Farbe.
+/// Bedeutung einer [StatusMarke] oder [HinweisBox] — bestimmt ihre Farbe.
 enum StatusArt { ok, warnung, fehler, info, neutral }
+
+/// Schrift- und Flächenfarbe zu einer [StatusArt] im aktuellen Theme.
+(Color vorne, Color hinten) _statusFarben(BuildContext context, StatusArt art) {
+  final theme = Theme.of(context);
+  final f = AppFarben.von(context);
+  return switch (art) {
+    StatusArt.ok => (f.ok, f.okFlaeche),
+    StatusArt.warnung => (f.warnung, f.warnungFlaeche),
+    StatusArt.fehler => (f.fehler, f.fehlerFlaeche),
+    StatusArt.info => (f.info, f.infoFlaeche),
+    StatusArt.neutral => (
+        theme.colorScheme.onSurfaceVariant,
+        theme.colorScheme.surfaceContainerHighest,
+      ),
+  };
+}
 
 /// Kurzer Status als Marke: „erledigt", „überbucht", „fehlt 94,2 kg".
 ///
@@ -185,18 +201,7 @@ class StatusMarke extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final f = AppFarben.von(context);
-    final (vorne, hinten) = switch (art) {
-      StatusArt.ok => (f.ok, f.okFlaeche),
-      StatusArt.warnung => (f.warnung, f.warnungFlaeche),
-      StatusArt.fehler => (f.fehler, f.fehlerFlaeche),
-      StatusArt.info => (f.info, f.infoFlaeche),
-      StatusArt.neutral => (
-          theme.colorScheme.onSurfaceVariant,
-          theme.colorScheme.surfaceContainerHighest,
-        ),
-    };
+    final (vorne, hinten) = _statusFarben(context, art);
     final symbol = icon;
     final zeile = Row(
       mainAxisSize: MainAxisSize.min,
@@ -244,6 +249,64 @@ class StatusMarke extends StatelessWidget {
     return erklaerung == null
         ? marke
         : Tooltip(message: erklaerung, child: marke);
+  }
+}
+
+/// Ein Hinweis mitten im Inhalt: blasse Statusfläche, kräftige Kante links,
+/// davor ein Symbol. Für Erklärungen in Fenstern („Zeiten gibt es an der
+/// Anlage keine …") und für Fehler, die stehen bleiben sollen, bis man sie
+/// behebt.
+///
+/// Bewusst ohne Rundung: Eine Kante auf nur einer Seite lässt sich nicht
+/// runden.
+class HinweisBox extends StatelessWidget {
+  const HinweisBox(
+    this.text, {
+    super.key,
+    this.art = StatusArt.info,
+    this.icon,
+  });
+
+  final String text;
+  final StatusArt art;
+
+  /// Eigenes Symbol — sonst das passende zur [art].
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final (vorne, hinten) = _statusFarben(context, art);
+    final symbol = icon ??
+        switch (art) {
+          StatusArt.ok => Icons.check_circle_outline,
+          StatusArt.warnung => Icons.warning_amber_rounded,
+          StatusArt.fehler => Icons.error_outline,
+          StatusArt.info || StatusArt.neutral => Icons.info_outline,
+        };
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: hinten,
+        border: Border(left: BorderSide(color: vorne, width: 3)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(symbol, size: 16, color: vorne),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodySmall?.copyWith(
+                height: 1.35,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

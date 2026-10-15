@@ -7,6 +7,8 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/produktion_erfassen_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 
@@ -54,9 +56,6 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
       isScrollControlled: true,
       useSafeArea: true,
       constraints: const BoxConstraints(maxWidth: 640),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
       builder: (_) => UncontrolledProviderScope(
         container: ProviderScope.containerOf(context),
         child: ProductionEntryDialog(
@@ -202,7 +201,10 @@ class _ProductionEntryDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
       }
     } finally {
@@ -213,24 +215,30 @@ class _ProductionEntryDialogState
   Future<void> _loeschen() async {
     final bestaetigt = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Produktion löschen?'),
-        content: const Text(
-          'Diese historische Produktion wird entfernt. Beim nächsten '
-          'Excel-Export ist sie nicht mehr enthalten.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
+      builder: (ctx) {
+        final farben = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: const Text('Produktion löschen?'),
+          content: const Text(
+            'Diese historische Produktion wird entfernt. Beim nächsten '
+            'Excel-Export ist sie nicht mehr enthalten.',
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Abbrechen'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: farben.error,
+                foregroundColor: farben.onError,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Löschen'),
+            ),
+          ],
+        );
+      },
     );
     if (bestaetigt != true) return;
 
@@ -253,7 +261,10 @@ class _ProductionEntryDialogState
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
         );
         setState(() => _saving = false);
       }
@@ -264,7 +275,8 @@ class _ProductionEntryDialogState
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final k = _kennzahlen;
     final fertig = _fertig;
 
@@ -280,29 +292,32 @@ class _ProductionEntryDialogState
           ),
           child: ListView(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: colors.onSurface.withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(2),
+              // Kopf wie bei jedem Dialog der App: Titel in Blau, rechts
+              // ein Kreuz. Der graue Anfasser oben stammte aus der Zeit,
+              // als das Fenster ein Bottom-Sheet war.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _istBearbeitung
+                          ? 'Produktion bearbeiten'
+                          : 'Produktion erfassen',
+                      style: theme.dialogTheme.titleTextStyle ??
+                          theme.textTheme.titleMedium,
+                    ),
                   ),
-                ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    tooltip: 'Schließen ohne Speichern',
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                  ),
+                ],
               ),
-              Text(
-                _istBearbeitung
-                    ? 'Produktion bearbeiten'
-                    : 'Produktion erfassen',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 'Aus den erfassten Produktionen rechnet die Planung Ausbeute '
                 'und Leistung (Ø der letzten zehn). Die Werte lassen sich in '
@@ -314,7 +329,7 @@ class _ProductionEntryDialogState
               // Datum
               InkWell(
                 onTap: _datumWaehlen,
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: AppMasse.ecken,
                 child: InputDecorator(
                   decoration: const InputDecoration(
                     labelText: 'Datum',
@@ -403,55 +418,57 @@ class _ProductionEntryDialogState
               _Vorschau(kennzahlen: k),
               if (fertig == null || fertig <= 0) ...[
                 const SizedBox(height: 8),
-                Text(
+                const HinweisBox(
                   'Ohne Fertigware zählt diese Produktion nicht für die '
                   'Ausbeute, ohne Start- und Endzeit nicht für die Leistung.',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colors.onSurfaceVariant,
-                  ),
+                  art: StatusArt.warnung,
                 ),
               ],
               const SizedBox(height: 20),
 
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _speichern,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(
-                    _saving
-                        ? 'Speichern …'
-                        : (_istBearbeitung
-                            ? 'Änderungen speichern'
-                            : 'Produktion speichern'),
+              // Knöpfe unten wie in jedem Dialog der App: rechts Abbrechen
+              // und Speichern, links das Löschen — abgesetzt, damit man es
+              // nicht aus Versehen trifft.
+              Row(
+                children: [
+                  if (_istBearbeitung)
+                    TextButton.icon(
+                      onPressed: _saving ? null : _loeschen,
+                      style: TextButton.styleFrom(
+                        foregroundColor: colors.error,
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      label: const Text('Löschen'),
+                    ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _saving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    child: const Text('Abbrechen'),
                   ),
-                ),
-              ),
-
-              if (_istBearbeitung) ...[
-                const SizedBox(height: 8),
-                Center(
-                  child: TextButton.icon(
-                    onPressed: _saving ? null : _loeschen,
-                    icon: const Icon(Icons.delete_outline, color: Colors.red),
-                    label: const Text(
-                      'Produktion löschen',
-                      style: TextStyle(color: Colors.red),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _saving ? null : _speichern,
+                    // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau,
+                    // ein weißer Kreisel war darauf unsichtbar.
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save, size: 18),
+                    label: Text(
+                      _saving
+                          ? 'Speichern …'
+                          : (_istBearbeitung
+                              ? 'Änderungen speichern'
+                              : 'Produktion speichern'),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ],
           ),
         );
@@ -461,6 +478,10 @@ class _ProductionEntryDialogState
 }
 
 /// Zeigt die live berechneten Kennzahlen (Verlust, Dauer, kg/h).
+///
+/// Eine ruhige graue Fläche wie die Leisten der App: Hier steht, was die
+/// App ausrechnet — keine Bewertung. Vorher war sie grün, und Grün heißt
+/// in der App „erledigt".
 class _Vorschau extends StatelessWidget {
   const _Vorschau({required this.kennzahlen});
 
@@ -468,6 +489,7 @@ class _Vorschau extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final k = kennzahlen;
     final eintraege = <({String label, String wert})>[
       if (k.verlustAnteil != null)
@@ -490,61 +512,58 @@ class _Vorschau extends StatelessWidget {
     ];
 
     if (eintraege.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Text(
-          'Verlust und kg/h erscheinen hier automatisch, sobald Roh-, '
-          'Fertigmenge und Zeiten ausgefüllt sind.',
-          style: TextStyle(
-            fontSize: 12,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
+      return const HinweisBox(
+        'Verlust und kg/h erscheinen hier automatisch, sobald Roh-, '
+        'Fertigmenge und Zeiten ausgefüllt sind.',
       );
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2E7D32).withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: const Color(0xFF2E7D32).withValues(alpha: 0.4),
-        ),
+        color: AppFarben.von(context).leiste,
+        borderRadius: AppMasse.ecken,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
-      child: Wrap(
-        spacing: 24,
-        runSpacing: 10,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final e in eintraege)
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  e.wert,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF2E7D32),
-                  ),
-                ),
-                Text(
-                  e.label,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+          Text(
+            'Berechnet',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 24,
+            runSpacing: 10,
+            children: [
+              for (final e in eintraege)
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      e.wert,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.onSurface,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    Text(
+                      e.label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ],
       ),
     );
