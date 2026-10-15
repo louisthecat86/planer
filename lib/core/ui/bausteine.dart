@@ -40,9 +40,7 @@ class Bereich extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final farben = theme.colorScheme;
-    final zusatz = untertitel;
+    final farben = Theme.of(context).colorScheme;
     // Material statt einer bemalten Box: Hover und Tipp-Welle von Zeilen
     // im Bereich malen auf das nächste Material — unter einer weißen
     // Box wären sie unsichtbar.
@@ -57,52 +55,137 @@ class Bereich extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            constraints: const BoxConstraints(minHeight: AppMasse.kopfHoehe),
-            padding: const EdgeInsets.only(left: 12, right: 6),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: farben.outline)),
-            ),
-            child: Row(
-              children: [
-                if (icon != null) ...[
-                  Icon(icon, size: 16, color: farben.onSurfaceVariant),
-                  const SizedBox(width: 8),
-                ],
-                // Titel und Zusatz in einem Text: Sie teilen sich den Platz
-                // bis zu den Aktionen und stehen auf einer Grundlinie.
-                // Gekürzt wird am Ende — erst der Zusatz, dann der Titel.
-                // (Als zwei Texte in einer Zeile bekäme der Zusatz nur die
-                // Hälfte des Platzes, auch wenn der Titel kurz ist.)
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      text: titel,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: farben.onSurface,
-                      ),
-                      children: [
-                        if (zusatz != null)
-                          TextSpan(
-                            text: '   $zusatz',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: farben.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                ...aktionen,
-              ],
-            ),
+          BereichKopf(
+            titel: titel,
+            icon: icon,
+            untertitel: untertitel,
+            aktionen: aktionen,
           ),
           Padding(padding: innenAbstand, child: child),
         ],
       ),
+    );
+  }
+}
+
+/// Die Kopfzeile eines [Bereich]s: Titel, grauer Zusatz und Aktionen über
+/// einer Linie.
+///
+/// Einzeln für Flächen, die ihren Rahmen selbst zeichnen — etwa lange
+/// Listen, deren Zeilen erst beim Scrollen gebaut werden.
+class BereichKopf extends StatelessWidget {
+  const BereichKopf({
+    super.key,
+    required this.titel,
+    this.icon,
+    this.untertitel,
+    this.aktionen = const <Widget>[],
+  });
+
+  final String titel;
+
+  /// Kleines Symbol vor dem Titel — sparsam einsetzen.
+  final IconData? icon;
+
+  /// Grauer Zusatz hinter dem Titel, etwa eine Anzahl.
+  final String? untertitel;
+
+  /// Knöpfe rechts in der Kopfzeile.
+  final List<Widget> aktionen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farben = theme.colorScheme;
+    final symbol = icon;
+    final zusatz = untertitel;
+    return Container(
+      constraints: const BoxConstraints(minHeight: AppMasse.kopfHoehe),
+      padding: const EdgeInsets.only(left: 12, right: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: farben.outline)),
+      ),
+      child: Row(
+        children: [
+          if (symbol != null) ...[
+            Icon(symbol, size: 16, color: farben.onSurfaceVariant),
+            const SizedBox(width: 8),
+          ],
+          // Titel und Zusatz in einem Text: Sie teilen sich den Platz bis
+          // zu den Aktionen und stehen auf einer Grundlinie. Gekürzt wird
+          // am Ende — erst der Zusatz, dann der Titel. (Als zwei Texte in
+          // einer Zeile bekäme der Zusatz nur die Hälfte des Platzes, auch
+          // wenn der Titel kurz ist.)
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                text: titel,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: farben.onSurface,
+                ),
+                children: [
+                  if (zusatz != null)
+                    TextSpan(
+                      text: '   $zusatz',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: farben.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          ...aktionen,
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Kennzahl: der Wert groß, darunter grau, was er zählt — etwa im
+/// Kopf einer Liste („214 Aufträge", „12 neu"). Mehrere stehen in einem
+/// [Wrap] nebeneinander, ohne eigene Kästen.
+class Kennzahl extends StatelessWidget {
+  const Kennzahl({
+    super.key,
+    required this.wert,
+    required this.label,
+    this.farbe,
+  });
+
+  final String wert;
+  final String label;
+
+  /// Farbe des Werts — nur, wo etwas zu tun ist. Sonst die normale
+  /// Textfarbe.
+  final Color? farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          wert,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            // Ziffern gleich breit, damit Zahlen ruhig stehen.
+            fontFeatures: const [FontFeature.tabularFigures()],
+            color: farbe ?? theme.colorScheme.onSurface,
+          ),
+        ),
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }

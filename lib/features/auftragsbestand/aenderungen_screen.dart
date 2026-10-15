@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_vergleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
 import 'auftragsbestand_screen.dart' show auftragsbestandProvider;
@@ -203,8 +205,15 @@ class _AenderungenState
           ansicht.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Fehler: $e')),
-            data: (a) =>
-                a.ohneBericht ? const _OhneBericht() : _inhalt(context, a),
+            data: (a) => a.ohneBericht
+                ? const Center(
+                    child: LeerHinweis(
+                      'Noch kein Auftragsbestand eingelesen — es gibt nichts '
+                      'zu vergleichen.',
+                      icon: Icons.local_shipping_outlined,
+                    ),
+                  )
+                : _inhalt(context, a),
           ),
           if (_passtAn) const _Schleier(),
         ],
@@ -213,6 +222,7 @@ class _AenderungenState
   }
 
   Widget _inhalt(BuildContext context, AenderungsAnsicht ansicht) {
+    final theme = Theme.of(context);
     final v = ansicht.vergleich;
     final konflikte = ansicht.konflikte;
     final eindeutig = [
@@ -221,70 +231,128 @@ class _AenderungenState
     ];
     final eintraege = v.ohneVorher ? const <_Eintrag>[] : _eintraege(v);
 
-    final oben = <Widget>[
-      _Kopf(vergleich: v),
-      if (konflikte.isNotEmpty) ...[
-        _PruefKopf(
-          anzahl: konflikte.length,
-          eindeutig: eindeutig.length,
-          zweifelhaft: v.zweifelhaft,
-          onAlle: _passtAn ? null : () => _uebernehme(eindeutig),
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          // Ohne Änderungsliste darunter endet die Seite hier.
+          padding: EdgeInsets.fromLTRB(14, 12, 14, v.ohneVorher ? 24 : 0),
+          sliver: SliverList.list(
+            children: [
+              _Kopf(vergleich: v),
+              if (konflikte.isNotEmpty) ...[
+                const SizedBox(height: 14),
+                _PruefBereich(
+                  konflikte: konflikte,
+                  eindeutig: eindeutig.length,
+                  zweifelhaft: v.zweifelhaft,
+                  onAlle: _passtAn ? null : () => _uebernehme(eindeutig),
+                  onAnpassen: _passtAn
+                      ? null
+                      : (PlanungsKonflikt k) => _uebernehme([k]),
+                  onVerwerfen: _passtAn
+                      ? null
+                      : (PlanungsKonflikt k) => _uebernehme([k.alsEntfallen]),
+                ),
+              ],
+            ],
+          ),
         ),
-        for (final k in konflikte)
-          _KonfliktKarte(
-            konflikt: k,
-            onAnpassen: _passtAn ? null : () => _uebernehme([k]),
-            onVerwerfen: _passtAn || k.art != PruefArt.verschoben
-                ? null
-                : () => _uebernehme([k.alsEntfallen]),
+        if (!v.ohneVorher)
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+            // Ein Bereich wie die übrigen — nur werden seine Zeilen erst
+            // beim Scrollen gebaut, auch bei Hunderten Änderungen. Fläche
+            // und Rand malen deshalb die Slivers: die weiße Fläche hinter
+            // den Zeilen, den Rand davor, damit graue Kopfzeilen nicht über
+            // ihn malen.
+            sliver: DecoratedSliver(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: AppMasse.ecken,
+              ),
+              sliver: DecoratedSliver(
+                position: DecorationPosition.foreground,
+                decoration: BoxDecoration(
+                  borderRadius: AppMasse.ecken,
+                  border: Border.all(color: theme.colorScheme.outline),
+                ),
+                sliver: SliverMainAxisGroup(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _listenKopf(context, v, eintraege),
+                    ),
+                    if (eintraege.isEmpty)
+                      SliverToBoxAdapter(
+                        child: v.artikel.isEmpty
+                            ? const LeerHinweis(
+                                'Keine Änderungen gegenüber dem vorigen '
+                                'Bericht.',
+                                icon: Icons.check_circle_outline,
+                              )
+                            : const LeerHinweis(
+                                'Keine Änderungen passen zu Suche und '
+                                'Auswahl.',
+                                icon: Icons.filter_alt_off_outlined,
+                              ),
+                      )
+                    else
+                      SliverList.builder(
+                        itemCount: eintraege.length,
+                        itemBuilder: (context, i) {
+                          final e = eintraege[i];
+                          final zeile = e.zeile;
+                          return zeile == null
+                              ? _ArtikelKopf(
+                                  artikel: e.artikel,
+                                  erste: i == 0,
+                                )
+                              : _AenderungsZeile(zeile: zeile);
+                        },
+                      ),
+                  ],
+                ),
+              ),
+            ),
           ),
       ],
-      if (!v.ohneVorher) _filterLeiste(context, v),
-      if (!v.ohneVorher && eintraege.isEmpty)
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Text(
-            v.artikel.isEmpty
-                ? 'Keine Änderungen gegenüber dem vorigen Bericht.'
-                : 'Keine Änderungen passen zu Suche und Auswahl.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-        ),
-    ];
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
-      itemCount: oben.length + eintraege.length,
-      itemBuilder: (context, i) {
-        if (i < oben.length) return oben[i];
-        final e = eintraege[i - oben.length];
-        final zeile = e.zeile;
-        return zeile == null
-            ? _ArtikelKopf(artikel: e.artikel)
-            : _AenderungsZeile(zeile: zeile);
-      },
     );
   }
 
-  Widget _filterLeiste(BuildContext context, BestandsVergleich v) {
+  /// Kopf der Änderungsliste: Titel mit Anzahl, Suche und Auswahl der
+  /// Arten, darunter die Spaltenköpfe.
+  Widget _listenKopf(
+    BuildContext context,
+    BestandsVergleich v,
+    List<_Eintrag> eintraege,
+  ) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Änderungen seit dem vorigen Bericht',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
+    final zeilen = eintraege.where((e) => e.zeile != null).length;
+    final artikel = eintraege.length - zeilen;
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        BereichKopf(
+          titel: 'Änderungen seit dem vorigen Bericht',
+          icon: Icons.difference_outlined,
+          untertitel: zeilen == 0
+              ? null
+              : '$zeilen ${zeilen == 1 ? 'Zeile' : 'Zeilen'} bei $artikel '
+                  '${artikel == 1 ? 'Artikel' : 'Artikeln'}',
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+          child: Wrap(
             spacing: 8,
             runSpacing: 8,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              // Rahmen, Ecken und Dichte des Felds kommen aus dem Theme.
               SizedBox(
                 width: 300,
                 child: TextField(
@@ -292,8 +360,6 @@ class _AenderungenState
                   decoration: const InputDecoration(
                     labelText: 'Suche (Nummer, Bezeichnung, Kunde, Beleg)',
                     prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
-                    isDense: true,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -314,8 +380,40 @@ class _AenderungenState
                   ),
             ],
           ),
-        ],
-      ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: _app(theme).leiste,
+            border: Border(
+              top: BorderSide(color: theme.colorScheme.outline),
+              bottom: BorderSide(color: theme.colorScheme.outline),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: _Spalten.art,
+                child: Text('Änderung', style: stil),
+              ),
+              SizedBox(
+                width: _Spalten.tag,
+                child: Text('Versand', style: stil),
+              ),
+              Expanded(child: Text('Beleg · Kunde', style: stil)),
+              const SizedBox(width: _Spalten.luecke),
+              SizedBox(
+                width: _Spalten.menge,
+                child: Text(
+                  'Menge',
+                  textAlign: TextAlign.right,
+                  style: stil,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -324,8 +422,8 @@ class _AenderungenState
 // Kopf
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Stand und Zeitraum beider Berichte, die Kurzfassung und die Hinweise,
-/// ob der neue Bericht zum bisherigen passt.
+/// Stand und Zeitraum beider Berichte, die Änderungen als Kennzahlen und
+/// die Hinweise, ob der neue Bericht zum bisherigen passt.
 class _Kopf extends StatelessWidget {
   const _Kopf({required this.vergleich});
 
@@ -338,56 +436,86 @@ class _Kopf extends StatelessWidget {
     final grau = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final kurz = v.kurzfassung;
+    // Wie die Kurzfassung beim Einlesen: nur, was für die Planung zählt.
+    final arten = [
+      for (final a in AenderungsArt.values)
+        if (a.wesentlich && v.anzahl(a) > 0) a,
+    ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 2,
-          crossAxisAlignment: WrapCrossAlignment.center,
+    // „Jetzt" und „Vorher" untereinander, die Angaben bündig.
+    Widget bericht(String wann, BestandsStand s) => Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Jetzt: ${_standText(v.neu)}', style: grau),
-            TextButton.icon(
-              onPressed: () => _zeigeErklaerung(context),
-              icon: const Icon(Icons.help_outline, size: 16),
-              label: const Text('So wird verglichen'),
-              style: TextButton.styleFrom(
-                visualDensity: VisualDensity.compact,
+            SizedBox(
+              width: 56,
+              child: Text(
+                wann,
+                style: grau?.copyWith(fontWeight: FontWeight.w600),
               ),
             ),
-          ],
-        ),
-        if (!v.ohneVorher) Text('Vorher: ${_standText(v.vorher)}', style: grau),
-        const SizedBox(height: 8),
-        if (v.ohneVorher)
-          _Hinweis(
-            text: 'Noch kein Vergleich: Bisher ist erst ein Bericht '
-                'eingelesen. Ab dem nächsten Einlesen steht hier, was sich '
-                'seitdem geändert hat. Die Planung wird trotzdem schon gegen '
-                'den Bericht geprüft.',
-            farbe: theme.colorScheme.onSurfaceVariant,
-            icon: Icons.info_outline,
-          )
-        else
-          Text(
-            kurz.isEmpty
-                ? 'Keine wesentlichen Änderungen.'
-                : 'Seit dem vorigen Bericht: $kurz',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
+            Expanded(
+              child: Text(_standText(s), style: theme.textTheme.bodySmall),
             ),
+          ],
+        );
+
+    return Bereich(
+      titel: 'Vergleich',
+      icon: Icons.compare_arrows,
+      aktionen: [
+        TextButton.icon(
+          onPressed: () => _zeigeErklaerung(context),
+          icon: const Icon(Icons.help_outline, size: 16),
+          label: const Text('So wird verglichen'),
+          style: TextButton.styleFrom(
+            visualDensity: VisualDensity.compact,
           ),
-        for (final h in v.hinweise)
-          _Hinweis(
-            text: h.text,
-            farbe: h.ernst
-                ? _bernstein(theme)
-                : theme.colorScheme.onSurfaceVariant,
-            icon: h.ernst ? Icons.warning_amber_rounded : Icons.info_outline,
-          ),
+        ),
       ],
+      innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          bericht('Jetzt', v.neu),
+          if (!v.ohneVorher) ...[
+            const SizedBox(height: 2),
+            bericht('Vorher', v.vorher),
+          ],
+          const SizedBox(height: 10),
+          if (v.ohneVorher)
+            const HinweisBox(
+              'Noch kein Vergleich: Bisher ist erst ein Bericht eingelesen. '
+              'Ab dem nächsten Einlesen steht hier, was sich seitdem '
+              'geändert hat. Die Planung wird trotzdem schon gegen den '
+              'Bericht geprüft.',
+            )
+          else if (arten.isEmpty)
+            Text(
+              'Keine wesentlichen Änderungen seit dem vorigen Bericht.',
+              style: theme.textTheme.bodyMedium,
+            )
+          else
+            Wrap(
+              spacing: 28,
+              runSpacing: 10,
+              children: [
+                for (final a in arten)
+                  Kennzahl(
+                    wert: '${v.anzahl(a)}',
+                    label: a.label,
+                    farbe: _artFarbe(theme, a),
+                  ),
+              ],
+            ),
+          for (final h in v.hinweise) ...[
+            const SizedBox(height: 8),
+            HinweisBox(
+              h.text,
+              art: h.ernst ? StatusArt.warnung : StatusArt.info,
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -456,16 +584,19 @@ Future<void> _zeigeErklaerung(BuildContext context) {
 // Planung prüfen
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Überschrift des Abschnitts „Planung prüfen" mit der Sammelaktion.
-class _PruefKopf extends StatelessWidget {
-  const _PruefKopf({
-    required this.anzahl,
+/// Der Abschnitt „Planung prüfen": warum, die Sammelaktion im Kopf, darunter
+/// je Auftrag Befund, betroffene Planung und Vorschlag.
+class _PruefBereich extends StatelessWidget {
+  const _PruefBereich({
+    required this.konflikte,
     required this.eindeutig,
     required this.zweifelhaft,
     required this.onAlle,
+    required this.onAnpassen,
+    required this.onVerwerfen,
   });
 
-  final int anzahl;
+  final List<PlanungsKonflikt> konflikte;
 
   /// Davon eindeutig — nur die übernimmt die Sammelaktion.
   final int eindeutig;
@@ -473,53 +604,73 @@ class _PruefKopf extends StatelessWidget {
   /// Der Bericht sieht gefiltert oder verrutscht aus: keine Sammelaktion.
   final bool zweifelhaft;
 
+  /// null, solange gerade angepasst wird.
   final VoidCallback? onAlle;
+  final void Function(PlanungsKonflikt k)? onAnpassen;
+
+  /// Nur bei „verschoben": Es ist kein Umzug — der alte Auftrag ist
+  /// entfallen, der am neuen Tag ist ein eigener.
+  final void Function(PlanungsKonflikt k)? onVerwerfen;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 20, bottom: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                'Planung prüfen ($anzahl)',
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  color: theme.colorScheme.error,
-                ),
-              ),
-              FilledButton.tonalIcon(
-                onPressed: zweifelhaft || eindeutig == 0 ? null : onAlle,
-                icon: const Icon(Icons.done_all, size: 18),
-                label: Text('Alle eindeutigen übernehmen ($eindeutig)'),
-              ),
-            ],
+    final n = konflikte.length;
+    final anpassen = onAnpassen;
+    final verwerfen = onVerwerfen;
+
+    return Bereich(
+      titel: 'Planung prüfen',
+      icon: Icons.rule,
+      untertitel: '$n ${n == 1 ? 'Auftrag' : 'Aufträge'}'
+          '${eindeutig == n ? '' : ', davon $eindeutig eindeutig'}',
+      aktionen: [
+        FilledButton.tonalIcon(
+          onPressed: zweifelhaft || eindeutig == 0 ? null : onAlle,
+          icon: const Icon(Icons.done_all, size: 18),
+          label: Text('Alle eindeutigen übernehmen ($eindeutig)'),
+          style: FilledButton.styleFrom(
+            visualDensity: VisualDensity.compact,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'An diesen Aufträgen hängt Planung, die nicht mehr zum Bericht '
-            'passt. Ein verschobener Auftrag stünde am neuen Tag sonst ein '
-            'zweites Mal als offen da; was entfallen oder ausgeliefert ist, '
-            'würde trotzdem produziert.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: 4),
+      ],
+      innenAbstand: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const HinweisBox(
+                  'An diesen Aufträgen hängt Planung, die nicht mehr zum '
+                  'Bericht passt. Ein verschobener Auftrag stünde am neuen '
+                  'Tag sonst ein zweites Mal als offen da; was entfallen '
+                  'oder ausgeliefert ist, würde trotzdem produziert.',
+                  art: StatusArt.fehler,
+                  icon: Icons.rule,
+                ),
+                if (zweifelhaft) ...[
+                  const SizedBox(height: 8),
+                  const HinweisBox(
+                    'Der Bericht sieht gefiltert oder verrutscht aus '
+                    '(Hinweise oben). Vorschläge deshalb nur einzeln '
+                    'übernehmen — oder erst einen vollständigen Bericht '
+                    'einlesen.',
+                    art: StatusArt.warnung,
+                  ),
+                ],
+              ],
             ),
           ),
-          if (zweifelhaft)
-            _Hinweis(
-              text: 'Der Bericht sieht gefiltert oder verrutscht aus '
-                  '(Hinweise oben). Vorschläge deshalb nur einzeln '
-                  'übernehmen — oder erst einen vollständigen Bericht '
-                  'einlesen.',
-              farbe: _bernstein(theme),
-              icon: Icons.warning_amber_rounded,
+          for (final k in konflikte)
+            _KonfliktEintrag(
+              konflikt: k,
+              onAnpassen: anpassen == null ? null : () => anpassen(k),
+              onVerwerfen: verwerfen == null || k.art != PruefArt.verschoben
+                  ? null
+                  : () => verwerfen(k),
             ),
         ],
       ),
@@ -528,9 +679,9 @@ class _PruefKopf extends StatelessWidget {
 }
 
 /// Ein Auftrag, an dem Planung hängt, die nicht mehr passt — mit Befund,
-/// der betroffenen Planung und dem Vorschlag.
-class _KonfliktKarte extends StatelessWidget {
-  const _KonfliktKarte({
+/// der betroffenen Planung und dem Vorschlag samt Knopf.
+class _KonfliktEintrag extends StatelessWidget {
+  const _KonfliktEintrag({
     required this.konflikt,
     required this.onAnpassen,
     this.onVerwerfen,
@@ -550,77 +701,75 @@ class _KonfliktKarte extends StatelessWidget {
     final grau = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
+    final fett = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w600,
+    );
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _Marke(
-                  text: k.art.label,
-                  farbe: _pruefFarbe(theme, k.art),
-                  kraeftig: true,
-                ),
-                if (!k.sicher)
-                  _Marke(text: 'bitte prüfen', farbe: _bernstein(theme)),
-                Text(
-                  k.bezeichnung.isEmpty
-                      ? k.artikelnummer
-                      : '${k.artikelnummer} · ${k.bezeichnung}',
-                  style: theme.textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              [
-                k.beleg,
-                if (k.debitor.isNotEmpty) k.debitor,
-                'Versand ${_tagKurz(k.warenausgang)}',
-              ].join(' · '),
-              style: grau,
-            ),
-            const SizedBox(height: 6),
-            Text(_befund(k)),
-            const SizedBox(height: 6),
-            for (final v in k.verplant)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(
-                      v.istVormerkung
-                          ? Icons.pending_actions
-                          : Icons.view_week_outlined,
-                      size: 16,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(child: Text(_verplanungText(v), style: grau)),
-                  ],
-                ),
+    // Eine Zeile im Bereich, durch eine Linie von der vorigen getrennt —
+    // vorher stand jeder Auftrag auf einer eigenen Karte.
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _pruefMarke(theme, k.art),
+              if (!k.sicher)
+                const StatusMarke('bitte prüfen', art: StatusArt.warnung),
+              Text(
+                k.artikelnummer,
+                style: fett?.copyWith(fontFeatures: _ziffern),
               ),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: Text(
-                    _vorschlag(k),
-                    style: theme.textTheme.bodySmall,
+              if (k.bezeichnung.isNotEmpty) Text(k.bezeichnung, style: fett),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            [
+              k.beleg,
+              if (k.debitor.isNotEmpty) k.debitor,
+              'Versand ${_tagKurz(k.warenausgang)}',
+            ].join(' · '),
+            style: grau,
+          ),
+          const SizedBox(height: 8),
+          Text(_befund(k), style: theme.textTheme.bodyMedium),
+          for (final v in k.verplant)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    v.istVormerkung
+                        ? Icons.pending_actions
+                        : Icons.view_week_outlined,
+                    size: 16,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(_verplanungText(v), style: grau)),
+                ],
+              ),
+            ),
+          const SizedBox(height: 10),
+          // Vorschlag und Knopf als eine Einheit — der Knopf tut genau, was
+          // links steht.
+          HinweisBox(
+            _vorschlag(k),
+            icon: Icons.lightbulb_outline,
+            aktion: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 if (k.art == PruefArt.verschoben) ...[
                   Tooltip(
                     message: 'Der alte Auftrag ist entfallen, der am neuen '
@@ -633,14 +782,16 @@ class _KonfliktKarte extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                 ],
-                FilledButton.tonal(
+                // Gefüllt, nicht getönt: Die getönte Fläche wäre auf dem
+                // Blau des Hinweises kaum zu sehen.
+                FilledButton(
                   onPressed: onAnpassen,
                   child: Text(_aktion(k)),
                 ),
               ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -793,11 +944,26 @@ String _verplanungText(Verplanung v) {
 // Änderungsliste
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Kopf eines Artikels in der Änderungsliste: Nummer, Bezeichnung, Lager.
+/// Spaltenbreiten der Änderungsliste — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double art = 180;
+  static const double tag = 170;
+  static const double menge = 210;
+
+  /// Abstand vor der Menge.
+  static const double luecke = 12;
+}
+
+/// Kopf eines Artikels in der Änderungsliste: Nummer, Bezeichnung, Lager —
+/// grau hinterlegt wie eine Gruppenzeile in Navision.
 class _ArtikelKopf extends StatelessWidget {
-  const _ArtikelKopf({required this.artikel});
+  const _ArtikelKopf({required this.artikel, required this.erste});
 
   final ArtikelAenderung artikel;
+
+  /// Erster Artikel der Liste: ohne Linie darüber — dort steht schon die
+  /// der Spaltenköpfe.
+  final bool erste;
 
   @override
   Widget build(BuildContext context) {
@@ -805,6 +971,9 @@ class _ArtikelKopf extends StatelessWidget {
     final a = artikel;
     final grau = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
+    );
+    final fett = theme.textTheme.bodyMedium?.copyWith(
+      fontWeight: FontWeight.w700,
     );
     final zusatz = a.bezeichnung2;
     final vorher = a.lagerVorherKg;
@@ -819,10 +988,12 @@ class _ArtikelKopf extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(top: 12),
-      padding: const EdgeInsets.only(top: 10, bottom: 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
       decoration: BoxDecoration(
-        border: Border(top: BorderSide(color: theme.dividerColor)),
+        color: _app(theme).leiste,
+        border: erste
+            ? null
+            : Border(top: BorderSide(color: theme.colorScheme.outline)),
       ),
       child: Wrap(
         spacing: 10,
@@ -830,29 +1001,22 @@ class _ArtikelKopf extends StatelessWidget {
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           Text(
-            a.bezeichnung.isEmpty
-                ? a.artikelnummer
-                : '${a.artikelnummer} · ${a.bezeichnung}',
-            style: theme.textTheme.titleSmall?.copyWith(
-              fontWeight: FontWeight.w700,
-            ),
+            a.artikelnummer,
+            style: fett?.copyWith(fontFeatures: _ziffern),
           ),
+          if (a.bezeichnung.isNotEmpty) Text(a.bezeichnung, style: fett),
           if (zusatz != null && zusatz.isNotEmpty) Text(zusatz, style: grau),
           if (lager != null) Text(lager, style: grau),
           if (a.neuImBericht)
-            _Marke(text: 'neu im Bericht', farbe: _gruen(theme)),
-          if (a.nichtMehrImBericht)
-            _Marke(
-              text: 'nicht mehr im Bericht',
-              farbe: theme.colorScheme.onSurfaceVariant,
-            ),
+            const StatusMarke('neu im Bericht', art: StatusArt.ok),
+          if (a.nichtMehrImBericht) const StatusMarke('nicht mehr im Bericht'),
         ],
       ),
     );
   }
 }
 
-/// Eine geänderte Auftragszeile.
+/// Eine geänderte Auftragszeile — dieselben Spalten wie der Kopf.
 class _AenderungsZeile extends StatelessWidget {
   const _AenderungsZeile({required this.zeile});
 
@@ -883,32 +1047,59 @@ class _AenderungsZeile extends StatelessWidget {
         '${_kg(z.kgVorher)} kg',
     };
     final weg = z.warenausgang == null;
+    final stil = theme.textTheme.bodyMedium;
+    final zahlen = stil?.copyWith(fontFeatures: _ziffern);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+    return Container(
+      constraints: const BoxConstraints(minHeight: 34),
+      padding: const EdgeInsets.fromLTRB(12, 3, 12, 3),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: theme.colorScheme.outlineVariant),
+        ),
+      ),
       child: Row(
         children: [
           SizedBox(
-            width: 190,
+            width: _Spalten.art,
             child: Align(
               alignment: Alignment.centerLeft,
-              child: _Marke(text: z.art.label, farbe: _artFarbe(theme, z.art)),
+              heightFactor: 1,
+              // Wird es mit großer Schrift zu eng, wird die Marke kleiner,
+              // statt über den Rand zu laufen.
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
+                child: _artMarke(theme, z.art),
+              ),
             ),
           ),
-          SizedBox(width: 170, child: Text(tag)),
+          SizedBox(
+            width: _Spalten.tag,
+            child: Text(tag, maxLines: 1, style: zahlen),
+          ),
           Expanded(
             child: Text(
               [z.beleg, if (z.debitor.isNotEmpty) z.debitor].join(' · '),
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: stil,
             ),
           ),
-          const SizedBox(width: 12),
-          Text(
-            menge,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              decoration: weg ? TextDecoration.lineThrough : null,
-              color: weg ? theme.colorScheme.onSurfaceVariant : null,
+          const SizedBox(width: _Spalten.luecke),
+          SizedBox(
+            width: _Spalten.menge,
+            child: Text(
+              menge,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              // Was nicht mehr im Bericht steht, durchgestrichen.
+              style: zahlen?.copyWith(
+                fontWeight: FontWeight.w600,
+                decoration: weg ? TextDecoration.lineThrough : null,
+                color: weg ? theme.colorScheme.onSurfaceVariant : null,
+              ),
             ),
           ),
         ],
@@ -938,128 +1129,84 @@ String _artErklaerung(AenderungsArt art) => switch (art) {
 // Bausteine
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Grün für „neu" und „mehr", passend zu hellem und dunklem Modus.
-Color _gruen(ThemeData theme) => theme.brightness == Brightness.dark
-    ? Colors.green.shade400
-    : Colors.green.shade700;
+/// Die Statusfarben der App — dieselben wie im Board und in den Marken,
+/// jeweils passend zu hellem und dunklem Modus.
+AppFarben _app(ThemeData theme) =>
+    theme.extension<AppFarben>() ?? AppFarben.hell;
 
-/// Bernstein für „weniger" und Warnungen.
-Color _bernstein(ThemeData theme) => theme.brightness == Brightness.dark
-    ? const Color(0xFFFBBF24)
-    : const Color(0xFFB45309);
-
-/// Lila für „verschoben" — wie im Auftragsbestand.
+/// Lila für „verschoben" — wie im Auftragsbestand. Diesen Zustand gibt es
+/// nur hier, deshalb steht Lila nicht bei den Statusfarben der App.
 Color _lila(ThemeData theme) => theme.brightness == Brightness.dark
     ? const Color(0xFFC084FC)
     : const Color(0xFF7E22CE);
 
-Color _artFarbe(ThemeData theme, AenderungsArt art) => switch (art) {
-      AenderungsArt.neu || AenderungsArt.mehr => _gruen(theme),
-      AenderungsArt.weniger => _bernstein(theme),
+/// Ziffern gleich breit, damit Nummern und Mengen untereinander stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
+
+/// Farbe einer Änderungsart als Wert einer Kennzahl — null: normale
+/// Textfarbe.
+Color? _artFarbe(ThemeData theme, AenderungsArt a) => switch (a) {
+      AenderungsArt.neu || AenderungsArt.mehr => _app(theme).ok,
+      AenderungsArt.weniger => _app(theme).warnung,
       AenderungsArt.verschoben => _lila(theme),
-      AenderungsArt.entfallen => theme.colorScheme.error,
+      AenderungsArt.entfallen => _app(theme).fehler,
       AenderungsArt.erstmals ||
       AenderungsArt.ausgeliefert ||
       AenderungsArt.ausserhalb =>
-        theme.colorScheme.onSurfaceVariant,
+        null,
     };
 
-Color _pruefFarbe(ThemeData theme, PruefArt art) => switch (art) {
-      PruefArt.weniger => _bernstein(theme),
-      PruefArt.verschoben => _lila(theme),
-      PruefArt.ausgeliefert => theme.colorScheme.onSurfaceVariant,
-      PruefArt.entfallen => theme.colorScheme.error,
+/// Die Marke einer Änderungsart: grün mehr, orange weniger, rot entfallen,
+/// lila verschoben, grau, was für die Planung nichts ändert.
+Widget _artMarke(ThemeData theme, AenderungsArt a) => switch (a) {
+      AenderungsArt.verschoben => _Marke(text: a.label, farbe: _lila(theme)),
+      AenderungsArt.neu || AenderungsArt.mehr =>
+        StatusMarke(a.label, art: StatusArt.ok),
+      AenderungsArt.weniger => StatusMarke(a.label, art: StatusArt.warnung),
+      AenderungsArt.entfallen => StatusMarke(a.label, art: StatusArt.fehler),
+      AenderungsArt.erstmals ||
+      AenderungsArt.ausgeliefert ||
+      AenderungsArt.ausserhalb =>
+        StatusMarke(a.label),
     };
 
-/// Kleine Beschriftung mit Rahmen.
+/// Die Marke eines Befunds in „Planung prüfen" — in denselben Farben.
+Widget _pruefMarke(ThemeData theme, PruefArt p) => switch (p) {
+      PruefArt.verschoben => _Marke(text: p.label, farbe: _lila(theme)),
+      PruefArt.weniger => StatusMarke(p.label, art: StatusArt.warnung),
+      PruefArt.entfallen => StatusMarke(p.label, art: StatusArt.fehler),
+      PruefArt.ausgeliefert => StatusMarke(p.label),
+    };
+
+/// Marke in einer Farbe, die die [StatusMarke] nicht kennt — hier das Lila
+/// für „verschoben". Sieht aus wie eine [StatusMarke]: blasse Fläche,
+/// Schrift in der Farbe, kein Rand.
 class _Marke extends StatelessWidget {
-  const _Marke({
-    required this.text,
-    required this.farbe,
-    this.kraeftig = false,
-  });
+  const _Marke({required this.text, required this.farbe});
 
   final String text;
   final Color farbe;
-  final bool kraeftig;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: farbe.withValues(alpha: kraeftig ? 0.14 : 0.06),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: farbe.withValues(alpha: 0.45)),
+        // Deckend gemischt statt durchscheinend: So sieht die Marke auf
+        // weißen und grauen Flächen gleich aus.
+        color: Color.alphaBlend(
+          farbe.withValues(alpha: 0.12),
+          Theme.of(context).colorScheme.surface,
+        ),
+        borderRadius: AppMasse.eckenKlein,
       ),
       child: Text(
         text,
+        maxLines: 1,
         style: TextStyle(
-          fontSize: 12,
-          fontWeight: kraeftig ? FontWeight.w700 : FontWeight.w500,
+          fontSize: 11.5,
+          fontWeight: FontWeight.w600,
           color: farbe,
-        ),
-      ),
-    );
-  }
-}
-
-/// Hinweis mit Symbol, farbig umrandet.
-class _Hinweis extends StatelessWidget {
-  const _Hinweis({
-    required this.text,
-    required this.farbe,
-    required this.icon,
-  });
-
-  final String text;
-  final Color farbe;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-      decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: farbe.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 18, color: farbe),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(color: farbe),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OhneBericht extends StatelessWidget {
-  const _OhneBericht();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Text(
-          'Noch kein Auftragsbestand eingelesen — es gibt nichts zu '
-          'vergleichen.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
         ),
       ),
     );
