@@ -117,31 +117,37 @@ class _KennzahlenCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Dieselbe Kennzahl wie auf den übrigen Seiten, nur größer:
+          // Hier stehen wenige Zahlen allein in ihrem Bereich.
           Wrap(
             spacing: 32,
             runSpacing: 14,
             children: [
-              _Kennzahl(
-                value: '${rows.length}',
+              Kennzahl(
+                wert: '${rows.length}',
                 label: 'Produktionen',
+                gross: true,
               ),
               if (ausbeute != null) ...[
-                _Kennzahl(
-                  value: fmtProzent(ausbeute.faktor),
+                Kennzahl(
+                  wert: fmtProzent(ausbeute.faktor),
                   label: 'Ø Ausbeute',
+                  gross: true,
                 ),
                 // Der Verlust in Orange: die Zahl, auf die man schaut.
-                _Kennzahl(
-                  value: fmtProzent(1 - ausbeute.faktor),
+                Kennzahl(
+                  wert: fmtProzent(1 - ausbeute.faktor),
                   label: 'Ø Garverlust',
-                  valueColor: f.warnung,
+                  farbe: f.warnung,
+                  gross: true,
                 ),
               ],
               if (leistung != null)
-                _Kennzahl(
-                  value: '${fmtKg(leistung.kgProStunde.roundToDouble())} '
+                Kennzahl(
+                  wert: '${fmtKg(leistung.kgProStunde.roundToDouble())} '
                       'kg/h',
                   label: 'Ø Leistung roh',
+                  gross: true,
                 ),
             ],
           ),
@@ -161,44 +167,6 @@ class _KennzahlenCard extends StatelessWidget {
           ],
         ],
       ),
-    );
-  }
-}
-
-class _Kennzahl extends StatelessWidget {
-  const _Kennzahl({
-    required this.value,
-    required this.label,
-    this.valueColor,
-  });
-
-  final String value;
-  final String label;
-  final Color? valueColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: valueColor ?? theme.colorScheme.onSurface,
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }

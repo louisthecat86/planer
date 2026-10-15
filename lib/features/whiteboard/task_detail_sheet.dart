@@ -7,13 +7,16 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import '../datenblatt/datenblatt.dart';
 import 'whiteboard_provider.dart';
 
-/// Öffnet einen Bottom-Sheet-Dialog mit allen Details zum Task.
+/// Öffnet das Fenster mit allen Details zum Task — mittig, wie jedes
+/// Bearbeitungsfenster der App.
 ///
 /// Gibt `true` zurück, wenn der Task geändert wurde (→ Board refreshen).
 Future<bool> showTaskDetailSheet(
@@ -25,9 +28,6 @@ Future<bool> showTaskDetailSheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
     builder: (_) => UncontrolledProviderScope(
       container: ProviderScope.containerOf(context),
       child: _TaskDetailSheet(wbTask: wbTask),
@@ -415,7 +415,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: AppFarben.von(context).fehler,
+          ),
         );
       }
     } finally {
@@ -457,7 +460,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
             child: const Text('Nur dieser Schritt'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(ctx).pop('ganze'),
             child: const Text('Ganze Produktion'),
           ),
@@ -491,7 +497,10 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+          SnackBar(
+            content: Text('Fehler: $e'),
+            backgroundColor: AppFarben.von(context).fehler,
+          ),
         );
         setState(() => _isSaving = false);
       }
@@ -552,7 +561,8 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   @override
   Widget build(BuildContext context) {
     final abt = widget.wbTask.abteilungEnum;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final modell = _modell;
     final dauer = modell?.dauerFuer(_aktuelleMenge);
     // Weicht die angezeigte Dauer von der hochgerechneten ab, steht sie
@@ -572,77 +582,45 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           ),
           child: ListView(
             controller: scrollController,
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
             children: [
-              // Drag-Handle
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.25),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-
-              // Kopf — Abteilungs-Farbband mit Kurzcode (einheitliche Kartensprache)
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: abt.farbe.withValues(alpha: 0.10),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: abt.farbe,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        abt.kurzcode,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13,
-                          letterSpacing: 0.5,
+              // Kopf wie bei jedem Fenster der App: Abteilungskürzel,
+              // Artikel als Titel in Blau, rechts ein Kreuz. Vorher saßen
+              // hier der Anfasser aus der Bottom-Sheet-Zeit und ein
+              // eingefärbtes Band.
+              Row(
+                children: [
+                  AbteilungsMarke(abteilung: abt, skala: 1.2),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.wbTask.produktName,
+                          style: theme.dialogTheme.titleTextStyle ??
+                              theme.textTheme.titleMedium,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.wbTask.produktName,
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${widget.wbTask.artikelnummer} · '
+                          '${abt.anzeigeName}',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: colors.onSurfaceVariant,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${widget.wbTask.artikelnummer} · ${abt.anzeigeName}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    tooltip: 'Schließen ohne Speichern',
+                    onPressed: _isSaving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                  ),
+                ],
               ),
 
               const SizedBox(height: 20),
@@ -705,72 +683,71 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
               ],
 
               // Grundlage der Dauer: Leistungsdaten oder die letzten
-              // Produktionen (Info-Box)
+              // Produktionen
               if (modell != null && dauer != null) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 _GrundlageBox(modell: modell, dauer: dauer),
               ],
 
               const SizedBox(height: 16),
 
-              // Mehrtägige Prozesse (z.B. Spießen): Auftrag auf
-              // aufeinanderfolgende Tage aufteilen.
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _isSaving ? null : _verteileAufTageDialog,
-                  icon: const Icon(Icons.date_range, size: 18),
-                  label: const Text('Auf mehrere Tage verteilen'),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              // Datenblatt der ganzen Produktion (alle Abteilungen der
-              // Kette) — zum Mitgeben in die Produktion.
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _datenblatt,
-                  icon: const Icon(Icons.print_outlined, size: 18),
-                  label: const Text('Datenblatt drucken'),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Speichern-Button
-              SizedBox(
-                width: double.infinity,
-                height: 48,
-                child: FilledButton.icon(
-                  onPressed: _isSaving || !_isDirty ? null : _save,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.save),
-                  label: Text(_isSaving ? 'Speichern …' : 'Speichern'),
-                ),
-              ),
-
-              const SizedBox(height: 8),
-
-              const SizedBox(height: 8),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _isSaving ? null : _loeschen,
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  label: const Text(
-                    'Aus Planung löschen',
-                    style: TextStyle(color: Colors.red),
+              // Weitere Aktionen: mehrtägige Prozesse (z.B. Spießen) auf
+              // aufeinanderfolgende Tage aufteilen; das Datenblatt der
+              // ganzen Produktion zum Mitgeben in die Produktion.
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _isSaving ? null : _verteileAufTageDialog,
+                    icon: const Icon(Icons.date_range, size: 18),
+                    label: const Text('Auf mehrere Tage verteilen …'),
                   ),
-                ),
+                  OutlinedButton.icon(
+                    onPressed: _datenblatt,
+                    icon: const Icon(Icons.print_outlined, size: 18),
+                    label: const Text('Datenblatt drucken'),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 20),
+
+              // Knöpfe unten wie in jedem Fenster der App: rechts
+              // Abbrechen und Speichern, links das Löschen — abgesetzt,
+              // damit man es nicht aus Versehen trifft.
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: _isSaving ? null : _loeschen,
+                    style: TextButton.styleFrom(
+                      foregroundColor: colors.error,
+                    ),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Aus Planung löschen …'),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: _isSaving
+                        ? null
+                        : () => Navigator.of(context).pop(false),
+                    child: const Text('Abbrechen'),
+                  ),
+                  const SizedBox(width: 8),
+                  FilledButton.icon(
+                    onPressed: _isSaving || !_isDirty ? null : _save,
+                    // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau,
+                    // ein weißer Kreisel wäre darauf unsichtbar.
+                    icon: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save, size: 18),
+                    label: Text(_isSaving ? 'Speichern …' : 'Speichern'),
+                  ),
+                ],
               ),
             ],
           ),
@@ -805,7 +782,9 @@ class _GrundlageBox extends StatelessWidget {
     final leistung = modell.leistungsdaten;
 
     final zeilen = <Widget>[];
-    String? hinweis;
+    // Was an der Grundlage fehlt: blau zur Info, orange, wenn die Dauer
+    // nur ein Platzhalter ist.
+    HinweisBox? hinweis;
     switch (dauer.quelle) {
       case DauerQuelle.historie:
       case DauerQuelle.historieErsatz:
@@ -823,8 +802,10 @@ class _GrundlageBox extends StatelessWidget {
           ]);
         }
         if (dauer.quelle == DauerQuelle.historieErsatz) {
-          hinweis = 'Für diese Abteilung sind keine Leistungsdaten '
-              'hinterlegt. Genauer wird es mit Leistungsdaten im Artikel.';
+          hinweis = const HinweisBox(
+            'Für diese Abteilung sind keine Leistungsdaten hinterlegt. '
+            'Genauer wird es mit Leistungsdaten im Artikel.',
+          );
         }
       case DauerQuelle.leistungsdaten:
         if (leistung != null) {
@@ -836,23 +817,28 @@ class _GrundlageBox extends StatelessWidget {
           ]);
         }
       case DauerQuelle.platzhalter:
-        hinweis = 'Weder Leistungsdaten noch eine Produktion mit Zeit '
-            'erfasst — die Dauer ist ein Platzhalter. Leistungsdaten '
-            'pflegst du im Artikel.';
+        hinweis = const HinweisBox(
+          'Weder Leistungsdaten noch eine Produktion mit Zeit erfasst — die '
+          'Dauer ist ein Platzhalter. Leistungsdaten pflegst du im Artikel.',
+          art: StatusArt.warnung,
+        );
     }
 
+    // Eine ruhige graue Fläche wie die Leisten der App: Hier steht, womit
+    // gerechnet wird — keine Bewertung.
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(12),
+        color: AppFarben.von(context).leiste,
+        borderRadius: AppMasse.ecken,
+        border: Border.all(color: colors.outline),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
             children: [
-              Icon(Icons.insights, size: 16, color: colors.primary),
+              Icon(Icons.insights, size: 16, color: colors.onSurfaceVariant),
               const SizedBox(width: 6),
               Text(
                 'Grundlage der Dauer',
@@ -869,14 +855,7 @@ class _GrundlageBox extends StatelessWidget {
           if (hinweis != null)
             Padding(
               padding: EdgeInsets.only(top: zeilen.isEmpty ? 0 : 4),
-              child: Text(
-                hinweis,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontStyle: FontStyle.italic,
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
+              child: hinweis,
             ),
         ],
       ),
@@ -892,7 +871,11 @@ class _GrundlageBox extends StatelessWidget {
           Text(label, style: const TextStyle(fontSize: 12)),
           Text(
             value,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
@@ -915,47 +898,15 @@ class _NeuHochgerechnet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
-      decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.25),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Neu hochgerechnet: ${Zeit.lang(minuten)}',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                if (grundlage != null)
-                  Text(
-                    grundlage!,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: onUebernehmen,
-            child: const Text('Übernehmen'),
-          ),
-        ],
+    final zusatz = grundlage;
+    return HinweisBox(
+      zusatz == null ? Zeit.lang(minuten) : '${Zeit.lang(minuten)} · $zusatz',
+      titel: 'Neu hochgerechnet',
+      icon: Icons.auto_fix_high,
+      gross: true,
+      aktion: TextButton(
+        onPressed: onUebernehmen,
+        child: const Text('Übernehmen'),
       ),
     );
   }
@@ -973,15 +924,15 @@ class _DauerAnzeige extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final zusatz = hinweis;
+    // Grau hinterlegt wie ein Feld, das man nicht ändern kann.
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: theme.colorScheme.outline.withValues(alpha: 0.25),
-        ),
+        color: AppFarben.von(context).leiste,
+        borderRadius: AppMasse.ecken,
+        border: Border.all(color: theme.colorScheme.outline),
       ),
       child: Row(
         children: [
@@ -1002,9 +953,9 @@ class _DauerAnzeige extends StatelessWidget {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                if (hinweis != null)
+                if (zusatz != null)
                   Text(
-                    hinweis!,
+                    zusatz,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant
                           .withValues(alpha: 0.7),
@@ -1028,7 +979,8 @@ class _DauerAnzeige extends StatelessWidget {
               return Text(
                 minuten == null ? '–' : Zeit.lang(minuten),
                 style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w700,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               );
             },
@@ -1038,6 +990,3 @@ class _DauerAnzeige extends StatelessWidget {
     );
   }
 }
-
-
-

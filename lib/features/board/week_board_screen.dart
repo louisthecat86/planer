@@ -1378,10 +1378,10 @@ class _ZusatzzeitVerwaltungState
                       ? null
                       : Text(z.notiz!.trim()),
                   trailing: IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.delete_outline,
                       size: 18,
-                      color: Colors.red,
+                      color: AppFarben.von(context).fehler,
                     ),
                     tooltip: 'Entfernen',
                     onPressed: () => _loeschen(z),

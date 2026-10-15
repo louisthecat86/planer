@@ -1263,36 +1263,36 @@ class _Kopf extends StatelessWidget {
               spacing: 28,
               runSpacing: 10,
               children: [
-                _Kennzahl(wert: '${zeilen.length}', label: 'Artikel'),
-                _Kennzahl(wert: '${belege.length}', label: 'Aufträge'),
-                _Kennzahl(wert: '${kunden.length}', label: 'Kunden'),
-                _Kennzahl(wert: '${_kg(auftragKg)} kg', label: 'bestellt'),
-                _Kennzahl(
+                Kennzahl(wert: '${zeilen.length}', label: 'Artikel'),
+                Kennzahl(wert: '${belege.length}', label: 'Aufträge'),
+                Kennzahl(wert: '${kunden.length}', label: 'Kunden'),
+                Kennzahl(wert: '${_kg(auftragKg)} kg', label: 'bestellt'),
+                Kennzahl(
                   wert: '${_kg(lagerKg)} kg',
                   label: 'aus dem Lager',
                 ),
-                _Kennzahl(
+                Kennzahl(
                   wert: '${_kg(planungKg)} kg',
                   label: 'aus Produktion',
                 ),
-                _Kennzahl(
+                Kennzahl(
                   wert: '${_kg(offenKg)} kg',
                   label: 'noch einzuplanen',
                   farbe: offenKg >= 0.005 ? f.fehler : null,
                 ),
                 if (vorgemerktKg >= 0.005)
-                  _Kennzahl(
+                  Kennzahl(
                     wert: '${_kg(vorgemerktKg)} kg',
                     label: 'beim Planungsvorschlag',
                     farbe: f.info,
                   ),
                 if (zuSpaetKg >= 0.005)
-                  _Kennzahl(
+                  Kennzahl(
                     wert: '${_kg(zuSpaetKg)} kg',
                     label: 'zu spät eingeplant',
                     farbe: f.warnung,
                   ),
-                _Kennzahl(
+                Kennzahl(
                   wert: '$offene',
                   label: 'Artikel mit Handlungsbedarf',
                   farbe: offene > 0 ? f.fehler : null,
@@ -1376,46 +1376,6 @@ Future<void> _zeigeRechenweg(BuildContext context) {
       ],
     ),
   );
-}
-
-/// Eine Kennzahl im Kopf: der Wert groß, darunter grau, was er zählt.
-class _Kennzahl extends StatelessWidget {
-  const _Kennzahl({
-    required this.wert,
-    required this.label,
-    this.farbe,
-  });
-
-  final String wert;
-  final String label;
-
-  /// Hervorhebung des Werts; ohne Angabe die normale Textfarbe.
-  final Color? farbe;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          wert,
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w700,
-            fontFeatures: _ziffern,
-            color: farbe ?? theme.colorScheme.onSurface,
-          ),
-        ),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// Hinweis über der Liste: Artikel aus dem Bericht, die es in der App

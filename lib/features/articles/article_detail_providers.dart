@@ -12,6 +12,7 @@ export '../../core/constants/parameter_namen.dart'
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/zeit.dart';
 
 // Provider, Konstanten und gemeinsame Helfer der Artikel-Detailansicht.
@@ -242,7 +243,6 @@ Future<String?> wertDialogMitPruefung(
                   decoration: InputDecoration(
                     labelText: 'Wert',
                     suffixText: einheit,
-                    border: const OutlineInputBorder(),
                     errorText: fehlerText,
                   ),
                   onChanged: pruefen,
@@ -250,25 +250,9 @@ Future<String?> wertDialogMitPruefung(
                 ),
                 if (warnText != null) ...[
                   const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        size: 16,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          warnText!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.orange,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                  // Dieselbe Hinweisfläche wie überall in der App — vorher
+                  // ein oranger Text, der auf Weiß kaum zu lesen war.
+                  HinweisBox(warnText!, art: StatusArt.warnung),
                 ],
               ],
             ),

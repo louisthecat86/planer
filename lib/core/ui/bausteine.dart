@@ -154,6 +154,7 @@ class Kennzahl extends StatelessWidget {
     required this.wert,
     required this.label,
     this.farbe,
+    this.gross = false,
   });
 
   final String wert;
@@ -162,6 +163,10 @@ class Kennzahl extends StatelessWidget {
   /// Farbe des Werts — nur, wo etwas zu tun ist. Sonst die normale
   /// Textfarbe.
   final Color? farbe;
+
+  /// Größerer Wert — wenn wenige Kennzahlen allein in einem Bereich
+  /// stehen, etwa die Kennzahlen eines Artikels.
+  final bool gross;
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +178,7 @@ class Kennzahl extends StatelessWidget {
         Text(
           wert,
           style: theme.textTheme.titleMedium?.copyWith(
+            fontSize: gross ? 22 : null,
             fontWeight: FontWeight.w700,
             // Ziffern gleich breit, damit Zahlen ruhig stehen.
             fontFeatures: const [FontFeature.tabularFigures()],
@@ -344,9 +350,11 @@ class HinweisBox extends StatelessWidget {
     super.key,
     this.art = StatusArt.info,
     this.icon,
+    this.titel,
     this.aktion,
     this.onSchliessen,
     this.auswaehlbar = false,
+    this.gross = false,
   });
 
   final String text;
@@ -354,6 +362,10 @@ class HinweisBox extends StatelessWidget {
 
   /// Eigenes Symbol — sonst das passende zur [art].
   final IconData? icon;
+
+  /// Kurze fette Zeile über dem Text in der Statusfarbe („Besonderheit")
+  /// — null: keine.
+  final String? titel;
 
   /// Knopf rechts neben dem Text — null: keiner.
   final Widget? aktion;
@@ -363,6 +375,10 @@ class HinweisBox extends StatelessWidget {
 
   /// Text markier- und kopierbar, etwa für Fehlermeldungen.
   final bool auswaehlbar;
+
+  /// Text in normaler Größe statt klein — für Inhalte, die man lesen soll
+  /// (die Besonderheit eines Artikels), nicht nur für Erklärungen.
+  final bool gross;
 
   @override
   Widget build(BuildContext context) {
@@ -375,10 +391,16 @@ class HinweisBox extends StatelessWidget {
           StatusArt.fehler => Icons.error_outline,
           StatusArt.info || StatusArt.neutral => Icons.info_outline,
         };
-    final stil = theme.textTheme.bodySmall?.copyWith(
+    final grundStil =
+        gross ? theme.textTheme.bodyMedium : theme.textTheme.bodySmall;
+    final stil = grundStil?.copyWith(
       height: 1.35,
       color: theme.colorScheme.onSurface,
     );
+    final inhalt = auswaehlbar
+        ? SelectableText(text, style: stil)
+        : Text(text, style: stil);
+    final kopf = titel;
     final knopf = aktion;
     final schliessen = onSchliessen;
     final mitKnopf = knopf != null || schliessen != null;
@@ -398,9 +420,24 @@ class HinweisBox extends StatelessWidget {
           Icon(symbol, size: 16, color: vorne),
           const SizedBox(width: 8),
           Expanded(
-            child: auswaehlbar
-                ? SelectableText(text, style: stil)
-                : Text(text, style: stil),
+            child: kopf == null
+                ? inhalt
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        kopf,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.4,
+                          color: vorne,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      inhalt,
+                    ],
+                  ),
           ),
           if (knopf != null) ...[
             const SizedBox(width: 8),

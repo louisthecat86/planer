@@ -7,16 +7,6 @@ part of 'article_detail_screen.dart';
 // Wird beim Import gelesen und beim Export zurückgeschrieben.
 // ---------------------------------------------------------------------------
 
-/// Hinweis-Fläche: blasse Statusfarbe mit kräftiger Kante links.
-///
-/// Dieselbe Form für alles, was beim Arbeiten auffallen soll — die
-/// Besonderheit eines Artikels, der Hinweis am Dampftunnel. Bewusst ohne
-/// Rundung: Eine Kante auf nur einer Seite lässt sich nicht runden.
-BoxDecoration _hinweisFlaeche(Color farbe, Color flaeche) => BoxDecoration(
-      color: flaeche,
-      border: Border(left: BorderSide(color: farbe, width: 3)),
-    );
-
 class _BesonderheitenKarte extends StatelessWidget {
   const _BesonderheitenKarte({required this.text, required this.onEdit});
 
@@ -26,12 +16,12 @@ class _BesonderheitenKarte extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final f = AppFarben.von(context);
     final leer = text.isEmpty;
 
     return Bereich(
       titel: 'Besonderheiten',
-      icon: leer ? Icons.info_outline : Icons.push_pin_outlined,
+      // Die Stecknadel steht gefüllt an der Hinweisfläche darunter.
+      icon: Icons.info_outline,
       aktionen: [
         TextButton.icon(
           onPressed: onEdit,
@@ -48,16 +38,14 @@ class _BesonderheitenKarte extends StatelessWidget {
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             )
-          // Gefüllt in der Warnfarbe — dieselbe Fläche wie im Prozess-Tab,
-          // damit man sie dort sofort wiedererkennt.
-          : Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-              decoration: _hinweisFlaeche(f.warnung, f.warnungFlaeche),
-              child: SelectableText(
-                text,
-                style: theme.textTheme.bodyMedium,
-              ),
+          // Gefüllt in der Warnfarbe — dieselbe Hinweisfläche wie im
+          // Prozess-Tab, damit man sie dort sofort wiedererkennt.
+          : HinweisBox(
+              text,
+              art: StatusArt.warnung,
+              icon: Icons.push_pin_outlined,
+              auswaehlbar: true,
+              gross: true,
             ),
     );
   }
@@ -73,42 +61,19 @@ class _BesonderheitBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final f = AppFarben.von(context);
     final text =
         ref.watch(productProvider(productId)).valueOrNull?.beschreibung;
     if (text == null || text.trim().isEmpty) return const SizedBox.shrink();
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
-      decoration: _hinweisFlaeche(f.warnung, f.warnungFlaeche),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.push_pin_outlined, size: 16, color: f.warnung),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Besonderheit',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.4,
-                    color: f.warnung,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                SelectableText(
-                  text.trim(),
-                  style: theme.textTheme.bodyMedium,
-                ),
-              ],
-            ),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      child: HinweisBox(
+        text.trim(),
+        art: StatusArt.warnung,
+        icon: Icons.push_pin_outlined,
+        titel: 'Besonderheit',
+        auswaehlbar: true,
+        gross: true,
       ),
     );
   }
@@ -296,8 +261,6 @@ class _InlineHinweis extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final f = AppFarben.von(context);
     final steps = ref.watch(productStepsProvider(productId)).valueOrNull;
     if (steps == null) return const SizedBox.shrink();
 
@@ -312,9 +275,6 @@ class _InlineHinweis extends ConsumerWidget {
     }
 
     // Blau: alles geregelt, nur zur Info. Orange: hier ist etwas zu tun.
-    final (farbe, flaeche) = hatBratstrasse
-        ? (f.info, f.infoFlaeche)
-        : (f.warnung, f.warnungFlaeche);
     final text = hatBratstrasse
         ? 'Läuft inline hinter der Bratstraße: Menge und Produktionszeit '
             'entsprechen der Bratstraße, eigenes Personal ist hier nicht '
@@ -322,27 +282,12 @@ class _InlineHinweis extends ConsumerWidget {
         : 'Produktion startet am Dampftunnel (keine Bratstraße im Prozess) — '
             'Personal hier eigenständig pflegen.';
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: _hinweisFlaeche(farbe, flaeche),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            hatBratstrasse ? Icons.link : Icons.play_circle_outline,
-            size: 16,
-            color: farbe,
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: theme.textTheme.bodySmall?.copyWith(height: 1.3),
-            ),
-          ),
-        ],
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: HinweisBox(
+        text,
+        art: hatBratstrasse ? StatusArt.info : StatusArt.warnung,
+        icon: hatBratstrasse ? Icons.link : Icons.play_circle_outline,
       ),
     );
   }

@@ -216,10 +216,17 @@ class AppTheme {
         columnSpacing: 18,
       ),
 
+      // Reiter wie in Navision: ein flacher Strich unter dem ganzen Reiter,
+      // ohne Rundung. Der Standard von Material 3 ist ein kurzer, oben
+      // gerundeter Strich nur unter der Beschriftung.
       tabBarTheme: TabBarThemeData(
         labelColor: colorScheme.primary,
         unselectedLabelColor: colorScheme.onSurfaceVariant,
         indicatorColor: colorScheme.primary,
+        indicatorSize: TabBarIndicatorSize.tab,
+        indicator: UnderlineTabIndicator(
+          borderSide: BorderSide(color: colorScheme.primary, width: 3),
+        ),
         dividerColor: linie,
       ),
 
