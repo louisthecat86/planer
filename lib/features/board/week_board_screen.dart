@@ -12,6 +12,8 @@ import '../../core/services/auftragsbestand_deckung.dart'
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
@@ -84,16 +86,39 @@ String _ausbeuteText(Ausbeute a) {
   }
 }
 
-Color _ampelFarbe(CapacityStatus status) {
+/// Farbe der Auslastung — die Statusfarben der App: grün gut gefüllt, rot
+/// überbucht, grau für freie Kapazität.
+Color _ampelFarbe(BuildContext context, CapacityStatus status) {
+  final f = AppFarben.von(context);
   switch (status) {
     case CapacityStatus.frei:
       return const Color(0xFF9E9E9E);
     case CapacityStatus.gut:
-      return const Color(0xFF2E7D32);
+      return f.ok;
     case CapacityStatus.ueberbucht:
-      return const Color(0xFFC62828);
+      return f.fehler;
   }
 }
+
+/// Blasse Fläche hinter dem Statuswort — passend zu [_ampelFarbe].
+Color _ampelFlaeche(BuildContext context, CapacityStatus status) {
+  final f = AppFarben.von(context);
+  switch (status) {
+    case CapacityStatus.frei:
+      return Theme.of(context).colorScheme.surfaceContainerHighest;
+    case CapacityStatus.gut:
+      return f.okFlaeche;
+    case CapacityStatus.ueberbucht:
+      return f.fehlerFlaeche;
+  }
+}
+
+/// Die Auslastung als Art einer [StatusMarke].
+StatusArt _ampelArt(CapacityStatus status) => switch (status) {
+      CapacityStatus.frei => StatusArt.neutral,
+      CapacityStatus.gut => StatusArt.ok,
+      CapacityStatus.ueberbucht => StatusArt.fehler,
+    };
 
 String _ampelWort(CapacityStatus status) {
   switch (status) {
@@ -106,15 +131,44 @@ String _ampelWort(CapacityStatus status) {
   }
 }
 
-/// Grün für Erledigtes — Karten, Tagesaufgaben, Haken.
-const Color _kErledigtFarbe = Color(0xFF43A047);
+/// Grün für Erledigtes — Karten, Tagesaufgaben, Haken. Aus den
+/// Statusfarben der App, damit es im Dunkelmodus mitgeht.
+Color _erledigtFarbe(BuildContext context) => AppFarben.von(context).ok;
 
-/// Hintergrund einer erledigten Karte: ein Hauch Grün über der Fläche,
-/// damit die Schrift in beiden Modi gut lesbar bleibt.
-Color _erledigtHintergrund(ThemeData theme) => Color.alphaBlend(
-      _kErledigtFarbe.withValues(alpha: 0.16),
-      theme.colorScheme.surface,
+/// Fläche einer erledigten Karte oder Aufgabe.
+Color _erledigtFlaeche(BuildContext context) =>
+    AppFarben.von(context).okFlaeche;
+
+/// Rahmen einer erledigten Karte oder Aufgabe.
+Color _erledigtRahmen(BuildContext context) =>
+    AppFarben.von(context).ok.withValues(alpha: 0.45);
+
+/// Fläche einer Zelle im Raster: weiß wie eine Liste, der heutige Tag mit
+/// einem Hauch Blau, beim Ziehen darüber in der Auswahlfarbe. Früher trug
+/// jede Zelle einen Schleier der Abteilungsfarbe — die Farbe steht jetzt
+/// nur noch dort, wo sie etwas sagt: an der Kante der Abteilung.
+Color _zellenFlaeche(
+  BuildContext context, {
+  required bool heute,
+  required bool ziel,
+}) {
+  final colors = Theme.of(context).colorScheme;
+  if (ziel) return AppFarben.von(context).infoFlaeche;
+  if (heute) {
+    return Color.alphaBlend(
+      colors.primary.withValues(alpha: 0.04),
+      colors.surface,
     );
+  }
+  return colors.surface;
+}
+
+/// Linie über der ersten Zeile einer Abteilung — etwas kräftiger als die
+/// Linien zwischen den Anlagen, damit die Gruppen klar getrennt sind.
+Color _abteilungsTrenner(BuildContext context) {
+  final theme = Theme.of(context);
+  return Color.lerp(theme.dividerColor, theme.colorScheme.onSurface, 0.3)!;
+}
 
 /// Hakt eine Karte ab oder nimmt den Haken zurück. Gebündelte Karten
 /// (mehrere Aufträge desselben Artikels an einem Tag) wirken auf alle.
@@ -153,15 +207,16 @@ class _HakenKnopf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final gruen = _erledigtFarbe(context);
     final (symbol, farbe, hinweis) = switch (erledigt) {
       Erledigt.erfasst => (
           Icons.fact_check_rounded,
-          _kErledigtFarbe,
+          gruen,
           'Produktion erfasst — damit erledigt',
         ),
       Erledigt.abgehakt => (
           Icons.check_box_rounded,
-          _kErledigtFarbe,
+          gruen,
           'Erledigt — antippen, um den Haken zu entfernen',
         ),
       null => (
@@ -188,7 +243,7 @@ class _HakenKnopf extends StatelessWidget {
           // Erfasst: kein eigener Tipp — er geht an die Karte und öffnet
           // wie gewohnt die Details.
           onTap: erledigt == Erledigt.erfasst ? null : onTap,
-          borderRadius: BorderRadius.circular(4),
+          borderRadius: AppMasse.ecken,
           child: icon,
         ),
       ),
@@ -460,6 +515,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     }
 
     final istWoche = _modus == _Modus.woche;
+    final geladen = weekAsync.valueOrNull;
 
     return Scaffold(
       appBar: AppBar(
@@ -489,15 +545,16 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
             tooltip: istWoche ? 'Nächste Woche' : 'Nächster Tag',
             onPressed: _vor,
           ),
+          const SizedBox(width: 8),
+          // Oben rechts wie in der Übersicht statt als schwebender Knopf —
+          // der lag über der Freitagsspalte und verdeckte Aufträge.
+          FilledButton.icon(
+            onPressed: geladen == null ? null : () => _planen(geladen),
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Produkt planen'),
+          ),
+          const SizedBox(width: 12),
         ],
-      ),
-      floatingActionButton: weekAsync.maybeWhen(
-        data: (board) => FloatingActionButton.extended(
-          onPressed: () => _planen(board),
-          icon: const Icon(Icons.add),
-          label: const Text('Produkt planen'),
-        ),
-        orElse: () => null,
       ),
       body: Column(
         children: [
@@ -751,9 +808,11 @@ class _HeaderRow extends StatelessWidget {
     final now = DateTime.now();
     final heute = DateTime(now.year, now.month, now.day);
 
+    // Kopfzeile in der Farbe der Leisten; der heutige Tag in Blau mit
+    // einer Linie darunter — wie der aktive Reiter, statt einer Pille.
     return Container(
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: AppFarben.von(context).leiste,
         border: Border(bottom: BorderSide(color: theme.dividerColor)),
       ),
       child: Row(
@@ -761,60 +820,41 @@ class _HeaderRow extends StatelessWidget {
           const SizedBox(width: _kLabelWidth),
           for (var i = 0; i < tage.length; i++)
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: tage[i] == heute
-                    ? Center(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: colors.primary,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                _kDayLabels[i],
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: colors.onPrimary,
-                                ),
-                              ),
-                              Text(
-                                '${tage[i].day}.${tage[i].month}.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color:
-                                      colors.onPrimary.withValues(alpha: 0.85),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const SizedBox(height: 3),
-                          Text(
-                            _kDayLabels[i],
-                            style:
-                                const TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            '${tage[i].day}.${tage[i].month}.',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                        ],
+              child: Container(
+                padding: const EdgeInsets.only(top: 6, bottom: 4),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(
+                      color: tage[i] == heute
+                          ? colors.primary
+                          : Colors.transparent,
+                      width: 3,
+                    ),
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _kDayLabels[i],
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: tage[i] == heute ? colors.primary : null,
                       ),
+                    ),
+                    Text(
+                      '${tage[i].day}.${tage[i].month}.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight:
+                            tage[i] == heute ? FontWeight.w600 : null,
+                        color: tage[i] == heute
+                            ? colors.primary
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
         ],
@@ -846,26 +886,37 @@ class _SpurZeile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _SpurLabel(
-            spur: spur,
-            ersteDerAbteilung: ersteDerAbteilung,
-            onZuklappen: onZuklappen,
-          ),
-          for (final tag in board.tage)
-            Expanded(
-              child: _TagesZelle(
-                board: board,
-                cell: board.cellFor(spur, tag),
-                kompakt: kompakt,
-                onTapTask: onTapTask,
-                onMoveHere: (bt) => onMoveTask(bt, tag, spur),
+    return Container(
+      // Beginn einer Abteilung: eine kräftigere Linie über die ganze
+      // Breite — vorher stand sie nur über der Beschriftung.
+      decoration: ersteDerAbteilung
+          ? BoxDecoration(
+              border: Border(
+                top: BorderSide(color: _abteilungsTrenner(context)),
               ),
+            )
+          : null,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _SpurLabel(
+              spur: spur,
+              ersteDerAbteilung: ersteDerAbteilung,
+              onZuklappen: onZuklappen,
             ),
-        ],
+            for (final tag in board.tage)
+              Expanded(
+                child: _TagesZelle(
+                  board: board,
+                  cell: board.cellFor(spur, tag),
+                  kompakt: kompakt,
+                  onTapTask: onTapTask,
+                  onMoveHere: (bt) => onMoveTask(bt, tag, spur),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -885,25 +936,23 @@ class _SpurLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final farbe = spur.abteilung.farbe;
 
+    // Weiß wie die Zellen. Die Abteilungsfarbe steht nur als Kante links —
+    // der farbige Schleier über der ganzen Beschriftung ist weg.
     return Container(
       width: _kLabelWidth,
       decoration: BoxDecoration(
-        color: farbe.withValues(alpha: spur.istAnlage ? 0.04 : 0.09),
+        color: theme.colorScheme.surface,
         border: Border(
           right: BorderSide(color: theme.dividerColor),
-          // Kräftige Linie am Beginn einer neuen Abteilung — trennt die
-          // Anlagen-Gruppen optisch klar voneinander.
-          top: ersteDerAbteilung
-              ? BorderSide(color: farbe.withValues(alpha: 0.55), width: 2)
-              : BorderSide.none,
           bottom: BorderSide(color: theme.dividerColor),
         ),
       ),
       child: Row(
         children: [
-          Container(width: 4, color: farbe),
+          Container(width: 3, color: farbe),
           Expanded(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -924,12 +973,7 @@ class _SpurLabel extends StatelessWidget {
                       child: Row(
                         children: [
                           if (onZuklappen != null) ...[
-                            Icon(
-                              Icons.expand_more,
-                              size: 15,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.5),
-                            ),
+                            Icon(Icons.expand_more, size: 15, color: grau),
                             const SizedBox(width: 2),
                           ],
                           Flexible(
@@ -940,10 +984,7 @@ class _SpurLabel extends StatelessWidget {
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: spur.istAnlage ? 0.4 : 0,
                                 height: 1.2,
-                                color: spur.istAnlage
-                                    ? theme.colorScheme.onSurface
-                                        .withValues(alpha: 0.55)
-                                    : null,
+                                color: spur.istAnlage ? grau : null,
                               ),
                               overflow: TextOverflow.ellipsis,
                               maxLines: 2,
@@ -963,8 +1004,7 @@ class _SpurLabel extends StatelessWidget {
                         fontWeight: FontWeight.w600,
                         fontStyle: FontStyle.italic,
                         height: 1.2,
-                        color:
-                            theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                        color: grau,
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 2,
@@ -992,8 +1032,7 @@ class _SpurLabel extends StatelessWidget {
                           fontSize: 9.5,
                           height: 1.2,
                           fontStyle: FontStyle.italic,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.5),
+                          color: grau,
                         ),
                         overflow: TextOverflow.ellipsis,
                         maxLines: 2,
@@ -1028,7 +1067,7 @@ class _TagesZelle extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final farbe = _ampelFarbe(cell.status);
+    final farbe = _ampelFarbe(context, cell.status);
     final now = DateTime.now();
     final istHeute = cell.tag == DateTime(now.year, now.month, now.day);
     // Auch reine Nebenzeiten machen die Zelle „belegt" — sonst bliebe
@@ -1058,11 +1097,7 @@ class _TagesZelle extends ConsumerWidget {
           ),
           padding: EdgeInsets.all(kompakt ? 4 : 6),
           decoration: BoxDecoration(
-            color: highlight
-                ? cell.abteilung.farbe.withValues(alpha: 0.12)
-                : istHeute
-                    ? theme.colorScheme.primary.withValues(alpha: 0.04)
-                    : null,
+            color: _zellenFlaeche(context, heute: istHeute, ziel: highlight),
             border: Border(
               right: BorderSide(color: theme.dividerColor),
               bottom: BorderSide(color: theme.dividerColor),
@@ -1121,7 +1156,7 @@ class _TagesZelle extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w600,
-                                  color: cell.abteilung.farbe,
+                                  color: AppFarben.von(context).info,
                                 ),
                               )
                             : const SizedBox.shrink(),
@@ -1199,7 +1234,7 @@ class _ZusatzKnopf extends StatelessWidget {
           : 'Rüst-/Reinigungszeit erfassen',
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: AppMasse.ecken,
         child: Padding(
           padding: const EdgeInsets.all(4),
           child: Row(
@@ -1414,17 +1449,19 @@ class _AuslastungsPille extends StatelessWidget {
               style: TextStyle(
                 fontSize: kompakt ? 10 : 11.5,
                 fontWeight: FontWeight.w700,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.75),
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
             const Spacer(),
+            // Wie eine StatusMarke, nur kleiner: Im Raster zählt jede
+            // Zeile Höhe.
             if (warnung != null)
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
-                  color: farbe.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(5),
+                  color: _ampelFlaeche(context, status),
+                  borderRadius: AppMasse.eckenKlein,
                 ),
                 child: Text(
                   warnung,
@@ -1439,12 +1476,11 @@ class _AuslastungsPille extends StatelessWidget {
         ),
         SizedBox(height: kompakt ? 2 : 3),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: AppMasse.eckenKlein,
           child: LinearProgressIndicator(
             value: auslastung.clamp(0.0, 1.0).toDouble(),
             minHeight: kompakt ? 3 : 4,
-            backgroundColor:
-                theme.colorScheme.onSurface.withValues(alpha: 0.10),
+            backgroundColor: theme.colorScheme.surfaceContainerHighest,
             color: farbe,
           ),
         ),
@@ -1508,47 +1544,31 @@ class _KartenInhalt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final abtColor = task.abteilung.farbe;
     final kette = _kettenFarbe(task.kettenId, theme.brightness);
-    // Erledigt: grün hinterlegt und grün umrandet — so sieht man in der
-    // ganzen Woche auf einen Blick, was schon durch ist.
+    // Erledigt: blassgrün hinterlegt und grün umrandet — so sieht man in
+    // der ganzen Woche auf einen Blick, was schon durch ist.
     final erledigt = task.erledigt != null;
     final hintergrund =
-        erledigt ? _erledigtHintergrund(theme) : theme.colorScheme.surface;
-    final rahmen = erledigt
-        ? _kErledigtFarbe.withValues(alpha: 0.75)
-        : theme.dividerColor;
+        erledigt ? _erledigtFlaeche(context) : theme.colorScheme.surface;
+    final rahmen = erledigt ? _erledigtRahmen(context) : theme.dividerColor;
 
-    // Kompaktvariante: alles in EINER Zeile — Ketten-Kante, Kurzcode-Chip,
-    // Produktname (einzeilig), rechts die Kennzahl und der Haken. So passt
-    // ein ganzer Tag ohne Scrollen ins Bild.
+    // Kompaktvariante: alles in EINER Zeile — Ketten-Kante, Kürzel der
+    // Abteilung, Produktname (einzeilig), rechts die Kennzahl und der
+    // Haken. So passt ein ganzer Tag ohne Scrollen ins Bild.
     if (kompakt) {
       return Container(
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: hintergrund,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: AppMasse.ecken,
           border: Border.all(color: rahmen),
         ),
         child: IntrinsicHeight(
           child: Row(
             children: [
-              Container(width: 4, color: kette),
-              Container(
-                color: abtColor,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
-                alignment: Alignment.center,
-                child: Text(
-                  task.abteilung.kurzcode,
-                  style: const TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-              ),
+              Container(width: 3, color: kette),
+              const SizedBox(width: 4),
+              AbteilungsMarke(abteilung: task.abteilung, skala: 0.85),
               const SizedBox(width: 6),
               Expanded(
                 // Artikelnummer voran: Bezeichnungen ähneln sich stark,
@@ -1603,8 +1623,10 @@ class _KartenInhalt extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: hintergrund,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: AppMasse.ecken,
         border: Border.all(color: rahmen),
+        // Schatten nur, solange die Karte gezogen wird — als Rückmeldung,
+        // dass sie „in der Hand" ist.
         boxShadow: dragging
             ? [
                 BoxShadow(
@@ -1623,29 +1645,14 @@ class _KartenInhalt extends StatelessWidget {
             // mehrere Abteilungen läuft) tragen dieselbe Farbe an der
             // linken Kante — so ist auf einen Blick erkennbar, dass sie
             // zusammengehören.
-            Container(width: 5, color: kette),
+            Container(width: 4, color: kette),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Farbkopf mit Abteilungs-Kurzcode
-                  Container(
-                    color: abtColor,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 3,
-                    ),
-                    child: Text(
-                      task.abteilung.kurzcode,
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ),
+                  // Statt eines farbigen Kopfbalkens das Kürzel als Marke —
+                  // wie in der Übersicht.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(8, 6, 4, 6),
                     child: Row(
@@ -1656,6 +1663,8 @@ class _KartenInhalt extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
+                              AbteilungsMarke(abteilung: task.abteilung),
+                              const SizedBox(height: 5),
                               Text.rich(
                                 TextSpan(
                                   children: [
@@ -1712,7 +1721,7 @@ class _KartenInhalt extends StatelessWidget {
 
 /// Stabile Akzentfarbe je Auftragskette.
 ///
-/// Alle Karten einer Produktion (Kutterabteilung ? Bratstraße ? Verpackung)
+/// Alle Karten einer Produktion (Kutterabteilung → Bratstraße → Verpackung)
 /// teilen sich dieselbe `kettenId` und damit dieselbe Farbe. Die Farbe wird
 /// deterministisch aus der ID abgeleitet — sie bleibt über App-Neustarts
 /// hinweg gleich und ist bewusst von den Abteilungsfarben unterscheidbar.
@@ -1784,25 +1793,25 @@ class _KettenMarker extends StatelessWidget {
     String tooltip,
     VoidCallback onTap,
   ) {
-    final theme = Theme.of(context);
+    // Ein Hinweis, keine Wertung — deshalb in den Hinweisfarben.
+    final f = AppFarben.von(context);
     return Tooltip(
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(5),
+        borderRadius: AppMasse.eckenKlein,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
           decoration: BoxDecoration(
-            color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.7),
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: theme.colorScheme.outlineVariant),
+            color: f.infoFlaeche,
+            borderRadius: AppMasse.eckenKlein,
           ),
           child: Text(
             text,
             style: TextStyle(
               fontSize: 9.5,
               fontWeight: FontWeight.w700,
-              color: theme.colorScheme.onSecondaryContainer,
+              color: f.info,
             ),
           ),
         ),
@@ -1816,17 +1825,14 @@ class _LeerHinweis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      color: colors.surfaceContainerHighest,
-      child: Text(
-        'Noch keine Aufträge in dieser Woche. Tippe unten auf '
-        '„Produkt planen", um aus einem Artikel die Abteilungs-Tasks '
-        'anzulegen.',
-        textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+      color: Theme.of(context).colorScheme.surface,
+      child: const LeerHinweis(
+        'Noch keine Aufträge in dieser Woche. Über „Produkt planen" oben '
+        'rechts legst du aus einem Artikel die Schritte aller Abteilungen '
+        'an.',
+        icon: Icons.view_week_outlined,
       ),
     );
   }
@@ -1897,7 +1903,8 @@ class _DayDeptCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final farbe = _ampelFarbe(lane.status);
+    final colors = Theme.of(context).colorScheme;
+    final farbe = _ampelFarbe(context, lane.status);
     final aufgaben = this.aufgaben;
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1908,15 +1915,8 @@ class _DayDeptCard extends ConsumerWidget {
           children: [
             Row(
               children: [
-                Container(
-                  width: 11,
-                  height: 11,
-                  decoration: BoxDecoration(
-                    color: lane.abteilung.farbe,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
+                AbteilungsMarke(abteilung: lane.abteilung),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     lane.spur.anzeigeName,
@@ -1932,9 +1932,17 @@ class _DayDeptCard extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
-                    color: farbe,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
+                // Wie im Raster: Nur Engpässe bekommen ein Wort.
+                if (lane.status != CapacityStatus.frei) ...[
+                  const SizedBox(width: 8),
+                  StatusMarke(
+                    _ampelWort(lane.status),
+                    art: _ampelArt(lane.status),
+                  ),
+                ],
                 IconButton(
                   icon: const Icon(Icons.more_time, size: 18),
                   tooltip: 'Rüst-/Reinigungszeit hinzufügen',
@@ -1954,12 +1962,11 @@ class _DayDeptCard extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: AppMasse.eckenKlein,
               child: LinearProgressIndicator(
                 value: lane.auslastung.clamp(0.0, 1.0).toDouble(),
-                minHeight: 6,
-                backgroundColor:
-                    Theme.of(context).colorScheme.surfaceContainerHighest,
+                minHeight: 5,
+                backgroundColor: colors.surfaceContainerHighest,
                 color: farbe,
               ),
             ),
@@ -1999,14 +2006,11 @@ class _DayDeptCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
-                  '— keine Aufträge —',
+                  'Keine Aufträge an diesem Tag.',
                   style: TextStyle(
                     fontSize: 12,
                     fontStyle: FontStyle.italic,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurface
-                        .withValues(alpha: 0.45),
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               )
@@ -2205,23 +2209,7 @@ class _DayTaskRow extends StatelessWidget {
           groesse: 20,
         ),
         const SizedBox(width: 6),
-        Container(
-          width: 36,
-          padding: const EdgeInsets.symmetric(vertical: 5),
-          decoration: BoxDecoration(
-            color: task.abteilung.farbe,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            task.abteilung.kurzcode,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: Colors.white,
-            ),
-          ),
-        ),
+        AbteilungsMarke(abteilung: task.abteilung, skala: 1.15),
         const SizedBox(width: 10),
         Expanded(
           child: Column(
@@ -2264,7 +2252,7 @@ class _DayTaskRow extends StatelessWidget {
             children: [
               InkWell(
                 onTap: onUp,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: AppMasse.ecken,
                 child: Icon(
                   Icons.keyboard_arrow_up,
                   size: 22,
@@ -2275,7 +2263,7 @@ class _DayTaskRow extends StatelessWidget {
               ),
               InkWell(
                 onTap: onDown,
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: AppMasse.ecken,
                 child: Icon(
                   Icons.keyboard_arrow_down,
                   size: 22,
@@ -2295,16 +2283,16 @@ class _DayTaskRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Material(
-        color: erledigt ? _erledigtHintergrund(theme) : Colors.transparent,
+        color: erledigt ? _erledigtFlaeche(context) : Colors.transparent,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: AppMasse.ecken,
           side: erledigt
-              ? BorderSide(color: _kErledigtFarbe.withValues(alpha: 0.6))
+              ? BorderSide(color: _erledigtRahmen(context))
               : BorderSide.none,
         ),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: AppMasse.ecken,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 2),
             child: zeile,
@@ -2316,7 +2304,7 @@ class _DayTaskRow extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Produkt-planen-Sheet (zwei Stufen: Auswahl ? Tageszuweisung)
+// Produkt-planen-Sheet (zwei Stufen: Auswahl → Tageszuweisung)
 // ---------------------------------------------------------------------------
 
 enum _PlanStufe { auswahl, tage }
@@ -3346,7 +3334,7 @@ class _SchrittTagKarte extends StatelessWidget {
 
   /// Woher die Dauer stammt — als Hinweis unter der Zeile. null bei
   /// gepflegten Leistungsdaten, da gibt es nichts zu erklären.
-  ({String text, Color farbe})? _herkunft() {
+  ({String text, Color farbe})? _herkunft(AppFarben f) {
     final h = schritt.historie;
     switch (schritt.dauerQuelle) {
       case DauerQuelle.historie:
@@ -3354,19 +3342,19 @@ class _SchrittTagKarte extends StatelessWidget {
         return (
           text: 'Dauer aus ${h.herkunft} '
               '(≈ ${_fmtKg(h.kgProStunde)} kg/h)',
-          farbe: const Color(0xFF2E7D32),
+          farbe: f.ok,
         );
       case DauerQuelle.historieErsatz:
         if (h == null) return null;
         return (
           text: 'Keine Leistungsdaten — Dauer aus ${h.herkunft} '
               '(≈ ${_fmtKg(h.kgProStunde)} kg/h)',
-          farbe: const Color(0xFF2E7D32),
+          farbe: f.ok,
         );
       case DauerQuelle.platzhalter:
         return (
           text: 'Zeit ist Platzhalter — im Artikel pflegen',
-          farbe: Colors.orange.shade700,
+          farbe: f.warnung,
         );
       case DauerQuelle.leistungsdaten:
         return null;
@@ -3378,7 +3366,7 @@ class _SchrittTagKarte extends StatelessWidget {
     final colors = Theme.of(context).colorScheme;
     final abt = schritt.abteilung;
     final farbe = abt?.farbe ?? Colors.grey;
-    final herkunft = _herkunft();
+    final herkunft = _herkunft(AppFarben.von(context));
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -3508,7 +3496,7 @@ class _Legende extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final grau = Theme.of(context).colorScheme.onSurfaceVariant;
 
     Widget punkt(Color c, String text) => Padding(
           padding: const EdgeInsets.only(left: 12),
@@ -3520,17 +3508,11 @@ class _Legende extends StatelessWidget {
                 height: 9,
                 decoration: BoxDecoration(
                   color: c,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: AppMasse.eckenKlein,
                 ),
               ),
               const SizedBox(width: 5),
-              Text(
-                text,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                ),
-              ),
+              Text(text, style: TextStyle(fontSize: 11, color: grau)),
             ],
           ),
         );
@@ -3543,25 +3525,19 @@ class _Legende extends StatelessWidget {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+            color: grau,
           ),
         ),
-        punkt(_ampelFarbe(CapacityStatus.gut), 'gut gefüllt'),
-        punkt(_ampelFarbe(CapacityStatus.ueberbucht), 'überbucht'),
+        punkt(_ampelFarbe(context, CapacityStatus.gut), 'gut gefüllt'),
+        punkt(_ampelFarbe(context, CapacityStatus.ueberbucht), 'überbucht'),
         const SizedBox(width: 14),
-        const Icon(
+        Icon(
           Icons.check_box_rounded,
           size: 13,
-          color: _kErledigtFarbe,
+          color: _erledigtFarbe(context),
         ),
         const SizedBox(width: 4),
-        Text(
-          'erledigt',
-          style: TextStyle(
-            fontSize: 11,
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-          ),
-        ),
+        Text('erledigt', style: TextStyle(fontSize: 11, color: grau)),
       ],
     );
   }
@@ -3599,122 +3575,120 @@ class _ZugeklappteZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final farbe = abteilung.farbe;
     final anlagen = spuren.where((s) => s.istAnlage).length;
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Label mit Aufklapp-Pfeil
-          Container(
-            width: _kLabelWidth,
-            decoration: BoxDecoration(
-              color: farbe.withValues(alpha: 0.09),
-              border: Border(
-                right: BorderSide(color: theme.dividerColor),
-                top: BorderSide(
-                  color: farbe.withValues(alpha: 0.55),
-                  width: 2,
+    // Wie eine aufgeklappte Abteilung: kräftigere Linie oben über die ganze
+    // Breite, weiße Beschriftung, die Farbe nur als Kante.
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: _abteilungsTrenner(context))),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Label mit Aufklapp-Pfeil
+            Container(
+              width: _kLabelWidth,
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                border: Border(
+                  right: BorderSide(color: theme.dividerColor),
+                  bottom: BorderSide(color: theme.dividerColor),
                 ),
-                bottom: BorderSide(color: theme.dividerColor),
               ),
-            ),
-            child: Row(
-              children: [
-                Container(width: 4, color: farbe),
-                Expanded(
-                  child: InkWell(
-                    onTap: onAufklappen,
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: kompakt ? 6 : 10,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.chevron_right,
-                            size: 15,
-                            color: theme.colorScheme.onSurface
-                                .withValues(alpha: 0.5),
-                          ),
-                          const SizedBox(width: 2),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  abteilung.anzeigeName,
-                                  style: const TextStyle(
-                                    fontSize: 12.5,
-                                    fontWeight: FontWeight.w700,
-                                    height: 1.2,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                  maxLines: 2,
-                                ),
-                                if (anlagen > 0)
+              child: Row(
+                children: [
+                  Container(width: 3, color: farbe),
+                  Expanded(
+                    child: InkWell(
+                      onTap: onAufklappen,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: kompakt ? 6 : 10,
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.chevron_right, size: 15, color: grau),
+                            const SizedBox(width: 2),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
                                   Text(
-                                    '$anlagen Anlagen',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontStyle: FontStyle.italic,
-                                      color: theme.colorScheme.onSurface
-                                          .withValues(alpha: 0.5),
+                                    abteilung.anzeigeName,
+                                    style: const TextStyle(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.2,
                                     ),
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 2,
                                   ),
-                              ],
+                                  if (anlagen > 0)
+                                    Text(
+                                      '$anlagen Anlagen',
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontStyle: FontStyle.italic,
+                                        color: grau,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-
-          // Je Tag: Summe über alle Spuren der Abteilung
-          for (final tag in board.tage)
-            Expanded(
-              child: _SummenZelle(
-                tag: tag,
-                belegt: spuren.fold<double>(
-                  0,
-                  (s, spur) => s + board.cellFor(spur, tag).belegtMinuten,
-                ),
-                kapazitaet: spuren.fold<double>(
-                  0,
-                  (s, spur) => s + board.cellFor(spur, tag).kapazitaetMinuten,
-                ),
-                auftraege: spuren.fold<int>(
-                  0,
-                  (s, spur) => s + board.cellFor(spur, tag).tasks.length,
-                ),
-                erledigt: spuren.fold<int>(
-                  0,
-                  (s, spur) =>
-                      s +
-                      board
-                          .cellFor(spur, tag)
-                          .tasks
-                          .where((t) => t.erledigt != null)
-                          .length,
-                ),
-                aufgaben:
-                    aufgaben[(abteilung.dbValue, tag)]?.length ?? 0,
-                aufgabenErledigt: aufgaben[(abteilung.dbValue, tag)]
-                        ?.where((a) => a.erledigt)
-                        .length ??
-                    0,
-                farbe: farbe,
-                kompakt: kompakt,
+                ],
               ),
             ),
-        ],
+
+            // Je Tag: Summe über alle Spuren der Abteilung
+            for (final tag in board.tage)
+              Expanded(
+                child: _SummenZelle(
+                  tag: tag,
+                  belegt: spuren.fold<double>(
+                    0,
+                    (s, spur) => s + board.cellFor(spur, tag).belegtMinuten,
+                  ),
+                  kapazitaet: spuren.fold<double>(
+                    0,
+                    (s, spur) =>
+                        s + board.cellFor(spur, tag).kapazitaetMinuten,
+                  ),
+                  auftraege: spuren.fold<int>(
+                    0,
+                    (s, spur) => s + board.cellFor(spur, tag).tasks.length,
+                  ),
+                  erledigt: spuren.fold<int>(
+                    0,
+                    (s, spur) =>
+                        s +
+                        board
+                            .cellFor(spur, tag)
+                            .tasks
+                            .where((t) => t.erledigt != null)
+                            .length,
+                  ),
+                  aufgaben:
+                      aufgaben[(abteilung.dbValue, tag)]?.length ?? 0,
+                  aufgabenErledigt: aufgaben[(abteilung.dbValue, tag)]
+                          ?.where((a) => a.erledigt)
+                          .length ??
+                      0,
+                  kompakt: kompakt,
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -3730,7 +3704,6 @@ class _SummenZelle extends StatelessWidget {
     required this.erledigt,
     required this.aufgaben,
     required this.aufgabenErledigt,
-    required this.farbe,
     required this.kompakt,
   });
 
@@ -3745,7 +3718,6 @@ class _SummenZelle extends StatelessWidget {
   /// Sonstige Aufgaben der Abteilung an diesem Tag, davon erledigt.
   final int aufgaben;
   final int aufgabenErledigt;
-  final Color farbe;
   final bool kompakt;
 
   @override
@@ -3755,22 +3727,21 @@ class _SummenZelle extends StatelessWidget {
     final istHeute = tag == DateTime(now.year, now.month, now.day);
     final quote = kapazitaet > 0 ? (belegt / kapazitaet) : 0.0;
     final ampel = quote > 1.0
-        ? _ampelFarbe(CapacityStatus.ueberbucht)
+        ? _ampelFarbe(context, CapacityStatus.ueberbucht)
         : (auftraege > 0
-            ? _ampelFarbe(CapacityStatus.gut)
-            : _ampelFarbe(CapacityStatus.frei));
+            ? _ampelFarbe(context, CapacityStatus.gut)
+            : _ampelFarbe(context, CapacityStatus.frei));
     final offeneAufgaben = aufgaben - aufgabenErledigt;
     final aufgabenFarbe = offeneAufgaben == 0
-        ? _kErledigtFarbe
+        ? _erledigtFarbe(context)
         : theme.colorScheme.onSurfaceVariant;
+    final allesErledigt = erledigt == auftraege;
 
     return Container(
       constraints: BoxConstraints(minHeight: kompakt ? 34 : 44),
       padding: EdgeInsets.all(kompakt ? 4 : 6),
       decoration: BoxDecoration(
-        color: istHeute
-            ? theme.colorScheme.primary.withValues(alpha: 0.04)
-            : null,
+        color: _zellenFlaeche(context, heute: istHeute, ziel: false),
         border: Border(
           right: BorderSide(color: theme.dividerColor),
           bottom: BorderSide(color: theme.dividerColor),
@@ -3791,13 +3762,12 @@ class _SummenZelle extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: theme.colorScheme.onSurface
-                              .withValues(alpha: 0.75),
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
                       const Spacer(),
                       // Aufträge, davon erledigt: „2/5". Alles erledigt —
-                      // dann grün wie die Karten.
+                      // dann grün wie die Karten, sonst grau.
                       Tooltip(
                         message: erledigt == 0
                             ? (auftraege == 1
@@ -3810,18 +3780,21 @@ class _SummenZelle extends StatelessWidget {
                             vertical: 1,
                           ),
                           decoration: BoxDecoration(
-                            color: erledigt == auftraege
-                                ? _kErledigtFarbe.withValues(alpha: 0.28)
-                                : farbe.withValues(alpha: 0.22),
-                            borderRadius: BorderRadius.circular(5),
+                            color: allesErledigt
+                                ? _erledigtFlaeche(context)
+                                : theme.colorScheme.surfaceContainerHighest,
+                            borderRadius: AppMasse.eckenKlein,
                           ),
                           child: Text(
                             erledigt == 0
                                 ? '$auftraege'
                                 : '$erledigt/$auftraege',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
+                              color: allesErledigt
+                                  ? _erledigtFarbe(context)
+                                  : theme.colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -3830,12 +3803,12 @@ class _SummenZelle extends StatelessWidget {
                   ),
                   const SizedBox(height: 3),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: AppMasse.eckenKlein,
                     child: LinearProgressIndicator(
                       value: quote.clamp(0.0, 1.0).toDouble(),
                       minHeight: 4,
                       backgroundColor:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.10),
+                          theme.colorScheme.surfaceContainerHighest,
                       color: ampel,
                     ),
                   ),
@@ -4013,13 +3986,16 @@ class _BedarfVorschlaegeState extends ConsumerState<_BedarfVorschlaege> {
                     final farbe = info.ueberfaellig
                         ? theme.colorScheme.error
                         : theme.colorScheme.primary;
+                    final f = AppFarben.von(context);
                     return InkWell(
                       onTap: () =>
                           widget.onWaehlen(aktiv ? null : info),
                       child: Container(
                         decoration: BoxDecoration(
                           color: aktiv
-                              ? farbe.withValues(alpha: 0.12)
+                              ? (info.ueberfaellig
+                                  ? f.fehlerFlaeche
+                                  : f.infoFlaeche)
                               : null,
                           border: Border(
                             bottom: BorderSide(color: theme.dividerColor),
@@ -4118,30 +4094,25 @@ class _RohwareHinweis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final f = AppFarben.von(context);
+    // Ein Hinweis in den Hinweisfarben der App: blasse Fläche, kein Rand.
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: theme.colorScheme.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: theme.colorScheme.primary.withValues(alpha: 0.25),
-        ),
+        color: f.infoFlaeche,
+        borderRadius: AppMasse.ecken,
       ),
       child: Row(
         children: [
-          Icon(
-            Icons.sync_alt,
-            size: 16,
-            color: theme.colorScheme.primary,
-          ),
+          Icon(Icons.sync_alt, size: 16, color: f.info),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               text,
               style: theme.textTheme.bodySmall?.copyWith(
                 fontWeight: FontWeight.w600,
-                color: theme.colorScheme.primary,
+                color: f.info,
               ),
             ),
           ),

@@ -21,9 +21,6 @@ enum _AufgabeAktion { speichern, loeschen, verschieben }
 
 typedef _AufgabeErgebnis = ({_AufgabeAktion aktion, String inhalt});
 
-/// Orange für liegen gebliebene Aufgaben.
-const Color _kUeberfaelligFarbe = Color(0xFFEF6C00);
-
 /// „Mi 7.10." — kurz genug für einen Knopf.
 String _fmtTagKurz(DateTime d) =>
     '${_kWkShort[d.weekday - 1]} ${d.day}.${d.month}.';
@@ -186,7 +183,7 @@ class _AufgabenZeile extends StatelessWidget {
           Container(
             width: _kLabelWidth,
             decoration: BoxDecoration(
-              color: farbe.withValues(alpha: 0.04),
+              color: theme.colorScheme.surface,
               border: Border(
                 right: BorderSide(color: theme.dividerColor),
                 bottom: BorderSide(color: theme.dividerColor),
@@ -194,7 +191,7 @@ class _AufgabenZeile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(width: 4, color: farbe),
+                Container(width: 3, color: farbe),
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(
@@ -219,8 +216,7 @@ class _AufgabenZeile extends StatelessWidget {
                               fontWeight: FontWeight.w600,
                               fontStyle: FontStyle.italic,
                               height: 1.2,
-                              color: theme.colorScheme.onSurface
-                                  .withValues(alpha: 0.7),
+                              color: theme.colorScheme.onSurfaceVariant,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -291,11 +287,7 @@ class _AufgabenZelle extends StatelessWidget {
               ? const EdgeInsets.symmetric(horizontal: 3, vertical: 1)
               : const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: highlight
-                ? abteilung.farbe.withValues(alpha: 0.12)
-                : istHeute
-                    ? theme.colorScheme.primary.withValues(alpha: 0.04)
-                    : null,
+            color: _zellenFlaeche(context, heute: istHeute, ziel: highlight),
             border: Border(
               right: BorderSide(color: theme.dividerColor),
               bottom: BorderSide(color: theme.dividerColor),
@@ -327,7 +319,7 @@ class _AufgabenZelle extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: abteilung.farbe,
+                            color: AppFarben.von(context).info,
                           ),
                         ),
                       ),
@@ -338,7 +330,7 @@ class _AufgabenZelle extends StatelessWidget {
                 message: 'Aufgabe für ${abteilung.anzeigeName} eintragen',
                 child: InkWell(
                   onTap: () => _aufgabeAnlegen(context, abteilung, tag),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: AppMasse.ecken,
                   child: Padding(
                     padding: const EdgeInsets.all(2),
                     child: Icon(
@@ -428,10 +420,11 @@ class _AufgabeInhalt extends StatelessWidget {
     final theme = Theme.of(context);
     final erledigt = aufgabe.erledigt;
     final ueberfaellig = _ueberfaellig(aufgabe);
+    // Liegen geblieben ist eine Warnung — in der Warnfarbe der App.
     final rahmen = erledigt
-        ? _kErledigtFarbe.withValues(alpha: 0.75)
+        ? _erledigtRahmen(context)
         : ueberfaellig
-            ? _kUeberfaelligFarbe
+            ? AppFarben.von(context).warnung
             : theme.dividerColor;
     // Der ganze Text beim Darüberfahren — im Raster wird er gekürzt. Bei
     // Liegengebliebenem steht dabei, seit wann.
@@ -445,10 +438,9 @@ class _AufgabeInhalt extends StatelessWidget {
     // Material statt Container: Auf der eingefärbten Fläche wäre die
     // Tipp-Welle sonst unsichtbar.
     return Material(
-      color:
-          erledigt ? _erledigtHintergrund(theme) : theme.colorScheme.surface,
+      color: erledigt ? _erledigtFlaeche(context) : theme.colorScheme.surface,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: AppMasse.ecken,
         side: BorderSide(color: rahmen, width: ueberfaellig ? 1.5 : 1),
       ),
       clipBehavior: Clip.antiAlias,
@@ -540,7 +532,7 @@ class _AufgabenAbschnitt extends StatelessWidget {
                 fontSize: 11.5,
                 fontWeight: FontWeight.w600,
                 color: offen == 0
-                    ? _kErledigtFarbe
+                    ? _erledigtFarbe(context)
                     : theme.colorScheme.onSurfaceVariant,
               ),
             ),
