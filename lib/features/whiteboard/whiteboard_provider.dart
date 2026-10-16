@@ -289,7 +289,10 @@ class Ausbeute {
 /// aus Roh- und Fertigware. null, wenn er sich nicht ergibt oder nicht
 /// plausibel ist — negativer oder voller Verlust ist ein Erfassungsfehler
 /// und würde den Schnitt verzerren.
-double? _verlust(ProductionHistoryData h) {
+///
+/// Öffentlich, weil auch die Statistik nach genau dieser Regel zählt: Was
+/// die Planung als Ausbeute nimmt, soll die Statistik nicht anders sehen.
+double? verlustAnteilVon(ProductionHistoryData h) {
   var v = h.verlustAnteil;
   final roh = h.kgRohware;
   final fertig = h.kgFertigware;
@@ -308,7 +311,7 @@ double? _verlust(ProductionHistoryData h) {
   var summe = 0.0;
   var anzahl = 0;
   for (final h in neuesteZuerst) {
-    final v = _verlust(h);
+    final v = verlustAnteilVon(h);
     if (v == null) continue;
     summe += v;
     anzahl++;

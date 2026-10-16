@@ -125,6 +125,12 @@ const List<(String?, List<_Ziel>)> _gruppen = [
         Icons.history_outlined,
         ['/history'],
       ),
+      _Ziel(
+        'statistik',
+        'Statistik',
+        Icons.insights_outlined,
+        ['/statistik'],
+      ),
     ],
   ),
   (

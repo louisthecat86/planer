@@ -1014,6 +1014,122 @@ Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
 }
 
 // ---------------------------------------------------------------------------
+// Statistik: die Belegung über einen längeren Zeitraum
+// ---------------------------------------------------------------------------
+
+/// Die Belegung EINER Spur an EINEM Werktag — das, was im Board in einer
+/// Zelle steht, als Zahlen.
+class SpurTagBelegung {
+  const SpurTagBelegung({
+    required this.spur,
+    required this.tag,
+    required this.produktionsMinuten,
+    this.zusatzMinuten = const {},
+  });
+
+  final BoardSpur spur;
+
+  /// Der Werktag, 00:00 Uhr.
+  final DateTime tag;
+
+  /// Geplante Produktionszeit der Aufträge in dieser Zelle.
+  final double produktionsMinuten;
+
+  /// Nebenzeiten je Art: `ruesten`, `reinigen`, `sonstiges`.
+  final Map<String, double> zusatzMinuten;
+
+  double get zusatzSumme =>
+      zusatzMinuten.values.fold(0.0, (summe, m) => summe + m);
+
+  double get belegtMinuten => produktionsMinuten + zusatzSumme;
+
+  double get kapazitaetMinuten => spur.kapazitaetMinuten;
+
+  /// Mehr belegt als Kapazität — dieselbe Regel wie die rote Ampel im Board.
+  bool get ueberbucht => belegtMinuten > kapazitaetMinuten;
+}
+
+/// Die Belegung aller Spuren an allen Werktagen (Mo–Fr) ab [von] bis vor
+/// [bisExkl], Woche für Woche so, wie das Board sie zeigt: dieselben
+/// Spuren — die Sammelspur einer Abteilung nur in Wochen, in denen sie
+/// gebraucht wird —, dieselben gebündelten Aufträge, dieselben
+/// Nebenzeiten. Nebenzeiten an einer Spur, die es in der Woche nicht gibt,
+/// zeigt auch das Board nicht; sie fehlen hier ebenso.
+///
+/// Die Kapazität ist die heutige: Frühere Kapazitäten speichert die App
+/// nicht. Wer eine Anlage hinzunimmt, sieht die vergangenen Wochen also mit
+/// der neuen Kapazität.
+///
+/// Bewusst über dieselben Helfer wie das Board ([_ladeBoardTasks],
+/// [_baueSpuren]) — eine zweite Rechnung liefe irgendwann auseinander.
+Future<List<SpurTagBelegung>> belegungImZeitraum(
+  AppDatabase db, {
+  required DateTime von,
+  required DateTime bisExkl,
+}) async {
+  final start = _montag(von);
+  final ende = tagOhneZeit(bisExkl);
+  if (!start.isBefore(ende)) return const [];
+
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  final tasks = await _ladeBoardTasks(
+    db,
+    start,
+    ende,
+    anlagenSpuren: _anlagenSpuren(planungsAnlagen),
+  );
+  final abteilungskapazitaeten = await ladeAbteilungskapazitaeten(db);
+  final zusatzProZelle = await _ladeZusatzzeiten(
+    db,
+    vonTag: start,
+    bisTag: tagPlus(ende, -1),
+  );
+
+  // Aufträge je Woche (für die Sammelspuren) und Minuten je Zelle.
+  final tasksJeWoche = <DateTime, List<BoardTask>>{};
+  final minutenJeZelle = <String, double>{};
+  for (final t in tasks) {
+    (tasksJeWoche[_montag(t.datum)] ??= []).add(t);
+    final key = '${t.spurId}|${_tagKey(t.datum)}';
+    minutenJeZelle[key] = (minutenJeZelle[key] ?? 0) + t.dauerMinuten;
+  }
+
+  final ergebnis = <SpurTagBelegung>[];
+  for (var montag = start; montag.isBefore(ende); montag = tagPlus(montag, 7)) {
+    final spuren = _baueSpuren(
+      planungsAnlagen,
+      _abteilungenOhneAnlagenSpur(tasksJeWoche[montag] ?? const []),
+      abteilungskapazitaeten: abteilungskapazitaeten,
+    );
+    for (var i = 0; i < 5; i++) {
+      final tag = tagPlus(montag, i);
+      if (!tag.isBefore(ende)) break;
+      for (final spur in spuren) {
+        final key = '${spur.id}|${_tagKey(tag)}';
+        final zusatz = <String, double>{};
+        for (final z in zusatzProZelle[key] ?? const <Zusatzzeit>[]) {
+          // Unbekannte Arten zählen wie im Board als „Sonstiges".
+          final art = switch (z.art) {
+            'ruesten' || 'reinigen' => z.art,
+            _ => 'sonstiges',
+          };
+          zusatz[art] = (zusatz[art] ?? 0) + z.minuten;
+        }
+        ergebnis.add(
+          SpurTagBelegung(
+            spur: spur,
+            tag: tag,
+            produktionsMinuten: minutenJeZelle[key] ?? 0,
+            zusatzMinuten: zusatz,
+          ),
+        );
+      }
+    }
+  }
+  return ergebnis;
+}
+
+// ---------------------------------------------------------------------------
 // Archiv: das Board einfrieren und wieder aufbauen
 // ---------------------------------------------------------------------------
 

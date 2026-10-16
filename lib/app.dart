@@ -29,6 +29,7 @@ import 'features/settings/settings_screen.dart';
 import 'features/shell/app_rahmen.dart';
 import 'features/shell/home_screen.dart';
 import 'features/planung/planungsvorschlag_screen.dart';
+import 'features/statistik/statistik_screen.dart';
 
 /// GoRouter-Provider.
 ///
@@ -182,6 +183,14 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: ArchivWochenplanScreen(
                 snapshotId: state.pathParameters['snapshotId']!,
               ),
+            ),
+          ),
+          // Statistik: Auslastung, Zeit, Ausbeute und Produktmix.
+          GoRoute(
+            path: '/statistik',
+            name: 'statistik',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: StatistikScreen(),
             ),
           ),
           // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
