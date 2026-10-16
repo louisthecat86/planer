@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:produktion_planer/core/constants/abteilungen.dart';
 import 'package:produktion_planer/core/services/erledigt_service.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
+import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/articles/artikel_luecken.dart';
 import 'package:produktion_planer/features/board/board_providers.dart';
 import 'package:produktion_planer/features/statistik/statistik_daten.dart';
@@ -282,6 +283,12 @@ void main() {
         matching: find.text(name),
       );
 
+  /// Der Kopf des Bereichs mit genau diesem Titel. Nicht über den Text:
+  /// Wörter wie „Produktmix" stehen auch in Erklärungen anderer Bereiche.
+  Finder bereich(String titel) => find.byWidgetPredicate(
+        (w) => w is BereichKopf && w.titel == titel,
+      );
+
   // So hoch, dass die ganze Seite gebaut wird — sonst prüfte der Test die
   // unteren Bereiche nicht.
   const breit = Size(1400, 5000);
@@ -291,13 +298,18 @@ void main() {
       (tester) async {
     await zeige(tester, beispiel(), groesse: breit);
 
-    expect(find.textContaining('Auslastung und Engpässe'), findsOneWidget);
-    expect(find.textContaining('Wohin die Zeit geht'), findsOneWidget);
-    expect(find.textContaining('Planerfüllung'), findsOneWidget);
-    expect(find.textContaining('Ausbeute und Verlust'), findsOneWidget);
+    for (final titel in const [
+      'Auslastung und Engpässe',
+      'Wohin die Zeit geht',
+      'Planerfüllung',
+      'Ausbeute und Verlust',
+      'Leistung',
+      'Produktmix',
+      'Stammdaten-Pflege',
+    ]) {
+      expect(bereich(titel), findsOneWidget, reason: titel);
+    }
     expect(find.text('Die meiste Produktionszeit'), findsOneWidget);
-    expect(find.textContaining('Produktmix'), findsOneWidget);
-    expect(find.textContaining('Stammdaten-Pflege'), findsOneWidget);
 
     expect(zeile('Bratstraße'), findsWidgets);
     // Einmal in der Auslastung, einmal in der Planerfüllung.
@@ -346,12 +358,12 @@ void main() {
       groesse: schmal,
       theme: AppTheme.dark(),
     );
-    expect(find.textContaining('Produktmix'), findsOneWidget);
-    expect(find.textContaining('Stammdaten-Pflege'), findsOneWidget);
+    expect(bereich('Produktmix'), findsOneWidget);
+    expect(bereich('Stammdaten-Pflege'), findsOneWidget);
 
     await tester.tap(find.text('4 Wochen'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Auslastung und Engpässe'), findsOneWidget);
+    expect(bereich('Auslastung und Engpässe'), findsOneWidget);
   });
 
   testWidgets('Lücken und Artikel führen dorthin, wo man sie pflegt',
