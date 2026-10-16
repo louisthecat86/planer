@@ -167,13 +167,17 @@ class StatistikSpanne {
   String get rasterText =>
       raster == StatistikRaster.woche ? 'je Woche' : 'je Monat';
 
-  /// Lässt bei „Alles" die leeren Abschnitte am Anfang weg: Dort beginnt
-  /// der Zeitraum mit den ältesten Daten überhaupt, und die Planung setzt
-  /// oft viel später ein als die eingelesene Historie.
-  List<T> ohneLeerenAnfang<T>(List<T> punkte, bool Function(T) hatDaten) {
-    if (zeitraum != StatistikZeitraum.alles) return punkte;
-    final erster = punkte.indexWhere(hatDaten);
-    return erster < 0 ? <T>[] : punkte.sublist(erster);
+  /// Der Zeitraum für den Verlauf eines Teils: bei „Alles" erst ab der
+  /// Woche von [erster] — mit eigenem Raster —, sonst unverändert.
+  ///
+  /// „Alles" beginnt mit den ältesten Daten überhaupt, meist der
+  /// eingelesenen Historie. Die Planung setzt oft viel später ein; ihr
+  /// Verlauf stünde sonst in Monaten, von denen nur der letzte Daten hat.
+  StatistikSpanne abDatenbeginn(DateTime? erster) {
+    if (zeitraum != StatistikZeitraum.alles || erster == null) return this;
+    final start = _montagVon(erster);
+    if (!start.isAfter(von) || !start.isBefore(bisExkl)) return this;
+    return StatistikSpanne(zeitraum: zeitraum, von: start, bisExkl: bisExkl);
   }
 }
 
@@ -278,6 +282,7 @@ class AuslastungsAuswertung {
   const AuslastungsAuswertung({
     required this.zeilen,
     required this.verlauf,
+    required this.verlaufSpanne,
     required this.planungstage,
     required this.geplanteWochen,
     required this.ueberbuchteTage,
@@ -286,6 +291,12 @@ class AuslastungsAuswertung {
   /// In der Reihenfolge des Boards.
   final List<AuslastungsZeile> zeilen;
   final List<AuslastungsPunkt> verlauf;
+
+  /// Zeitraum und Raster des Verlaufs — bei „Alles" ab der ersten Planung.
+  final StatistikSpanne verlaufSpanne;
+
+  /// Abschnitte des Verlaufs mit Daten — ein Verlauf braucht zwei.
+  int get verlaufPunkte => verlauf.where((p) => p.hatDaten).length;
 
   /// Werktage, an denen irgendwo etwas geplant war — nur sie zählen.
   final int planungstage;
@@ -350,6 +361,11 @@ AuslastungsAuswertung werteAuslastungAus(
 }) {
   final tage = planungstage(belegung);
   final mitAnlagen = _abteilungenMitAnlagen(belegung);
+  DateTime? ersterTag;
+  for (final t in tage) {
+    if (ersterTag == null || t.isBefore(ersterTag)) ersterTag = t;
+  }
+  final verlaufSpanne = spanne.abDatenbeginn(ersterTag);
 
   final zeilen = <String, (BoardSpur, _Summen)>{};
   final jeAbschnitt = <DateTime, _Summen>{};
@@ -359,7 +375,9 @@ AuslastungsAuswertung werteAuslastungAus(
     if (abteilung != null && b.spur.abteilung != abteilung) continue;
     final key = abteilung == null ? b.spur.abteilung.dbValue : b.spur.id;
     zeilen.putIfAbsent(key, () => (b.spur, _Summen())).$2.addiere(b);
-    jeAbschnitt.putIfAbsent(spanne.abschnittVon(b.tag), _Summen.new).addiere(b);
+    jeAbschnitt
+        .putIfAbsent(verlaufSpanne.abschnittVon(b.tag), _Summen.new)
+        .addiere(b);
     if (b.ueberbucht) ueberbucht.add(b.tag);
   }
 
@@ -370,7 +388,7 @@ AuslastungsAuswertung werteAuslastungAus(
     });
 
   final verlauf = [
-    for (final a in spanne.abschnitte)
+    for (final a in verlaufSpanne.abschnitte)
       AuslastungsPunkt(
         abschnitt: a,
         belegtMinuten: jeAbschnitt[a]?.belegt ?? 0,
@@ -397,7 +415,8 @@ AuslastungsAuswertung werteAuslastungAus(
           ueberbuchteTage: summen.ueberbucht.length,
         ),
     ],
-    verlauf: spanne.ohneLeerenAnfang(verlauf, (p) => p.hatDaten),
+    verlauf: verlauf,
+    verlaufSpanne: verlaufSpanne,
     planungstage: tage.length,
     geplanteWochen: {for (final t in tage) _montagVon(t)}.length,
     ueberbuchteTage: ueberbucht.length,
@@ -630,6 +649,7 @@ class AusbeuteAuswertung {
     required this.mittlererVerlust,
     required this.verlustKg,
     required this.verlauf,
+    required this.verlaufSpanne,
     required this.spannen,
   });
 
@@ -655,6 +675,13 @@ class AusbeuteAuswertung {
 
   final List<VerlustPunkt> verlauf;
 
+  /// Zeitraum und Raster des Verlaufs — bei „Alles" ab der ersten
+  /// Produktion.
+  final StatistikSpanne verlaufSpanne;
+
+  /// Abschnitte des Verlaufs mit Daten — ein Verlauf braucht zwei.
+  int get verlaufPunkte => verlauf.where((p) => p.hatDaten).length;
+
   /// Die Artikel mit der größten Spanne, größte zuerst.
   final List<AusbeuteSpanne> spannen;
 
@@ -679,13 +706,14 @@ AusbeuteAuswertung werteAusbeuteAus(
   Abteilung? abteilung,
 }) {
   var anzahl = 0;
-  var gueltig = 0;
   var unplausibel = 0;
   var ohneAusbeute = 0;
   var verlustSumme = 0.0;
   var verlustKg = 0.0;
-  final jeAbschnitt = <DateTime, _VerlustSumme>{};
   final jeArtikel = <String, List<double>>{};
+  // Die gültigen Produktionen: Tag, Verlustanteil, Verlust in kg.
+  final gueltige = <(DateTime, double, double)>[];
+  DateTime? ersterTag;
 
   for (final p in produktionen) {
     if (!_imFilter(p, artikel, spanne, abteilung)) continue;
@@ -699,7 +727,6 @@ AusbeuteAuswertung werteAusbeuteAus(
       }
       continue;
     }
-    gueltig++;
     verlustSumme += v;
     final roh = p.kgRohware;
     final fertig = p.kgFertigware;
@@ -707,16 +734,26 @@ AusbeuteAuswertung werteAusbeuteAus(
         ? roh - fertig
         : 0.0;
     verlustKg += kg;
-    final summe =
-        jeAbschnitt.putIfAbsent(spanne.abschnittVon(p.datum), _VerlustSumme.new);
+    gueltige.add((p.datum, v, kg));
+    if (ersterTag == null || p.datum.isBefore(ersterTag)) ersterTag = p.datum;
+    (jeArtikel[p.productId] ??= []).add(1 - v);
+  }
+  final gueltig = gueltige.length;
+
+  final verlaufSpanne = spanne.abDatenbeginn(ersterTag);
+  final jeAbschnitt = <DateTime, _VerlustSumme>{};
+  for (final (tag, v, kg) in gueltige) {
+    final summe = jeAbschnitt.putIfAbsent(
+      verlaufSpanne.abschnittVon(tag),
+      _VerlustSumme.new,
+    );
     summe.anzahl++;
     summe.summe += v;
     summe.kg += kg;
-    (jeArtikel[p.productId] ??= []).add(1 - v);
   }
 
   final verlauf = [
-    for (final a in spanne.abschnitte)
+    for (final a in verlaufSpanne.abschnitte)
       VerlustPunkt(
         abschnitt: a,
         anzahl: jeAbschnitt[a]?.anzahl ?? 0,
@@ -762,7 +799,8 @@ AusbeuteAuswertung werteAusbeuteAus(
     ohneAusbeute: ohneAusbeute,
     mittlererVerlust: gueltig > 0 ? verlustSumme / gueltig : null,
     verlustKg: verlustKg,
-    verlauf: spanne.ohneLeerenAnfang(verlauf, (p) => p.hatDaten),
+    verlauf: verlauf,
+    verlaufSpanne: verlaufSpanne,
     spannen: spannen.take(kSpannenAnzahl).toList(),
   );
 }
@@ -777,13 +815,15 @@ const int kKreisStueckeMax = 6;
 /// So viele Artikel zeigt die Liste der größten.
 const int kTopArtikelAnzahl = 10;
 
-/// Ein Stück des Kreises: eine Produktgruppe oder „Übrige".
+/// Ein Stück des Kreises: eine Produktgruppe, „Übrige" oder die Artikel
+/// ohne Produktgruppe.
 class MixGruppe {
   const MixGruppe({
     required this.name,
     required this.kg,
     required this.produktionen,
     this.uebrige = false,
+    this.ohneGruppe = false,
   });
 
   final String name;
@@ -792,6 +832,9 @@ class MixGruppe {
 
   /// Zusammengefasste kleinere Gruppen.
   final bool uebrige;
+
+  /// Artikel, für die noch keine Produktgruppe gepflegt ist.
+  final bool ohneGruppe;
 }
 
 class MixArtikel {
@@ -820,18 +863,18 @@ class ProduktmixAuswertung {
   final int produktionen;
   final int artikelAnzahl;
 
-  /// Höchstens [kKreisStueckeMax] Stücke, größte zuerst, „Übrige" zuletzt.
+  /// Höchstens [kKreisStueckeMax] Stücke: die Produktgruppen, größte
+  /// zuerst, dann „Übrige", ganz hinten die Artikel ohne Produktgruppe.
   final List<MixGruppe> gruppen;
 
   /// Die größten Artikel, größter zuerst.
   final List<MixArtikel> topArtikel;
-}
 
-/// Name einer Produktgruppe für die Statistik.
-String _gruppenName(String? dbValue) =>
-    dbValue == null || dbValue.trim().isEmpty
-        ? 'Ohne Produktgruppe'
-        : produktgruppeLabel(dbValue);
+  /// Rohware von Artikeln ohne Produktgruppe.
+  double get kgOhneGruppe => gruppen
+      .where((g) => g.ohneGruppe)
+      .fold(0.0, (summe, g) => summe + g.kg);
+}
 
 /// Wie sich die eingesetzte Rohware auf Produktgruppen und Artikel
 /// verteilt. Mit [abteilung] nur Artikel mit einem Schritt dort.
@@ -852,7 +895,8 @@ ProduktmixAuswertung werteProduktmixAus(
     if (!_imFilter(p, artikel, spanne, abteilung)) continue;
     final kg = p.kgRohware;
     if (kg == null || kg <= 0) continue;
-    final gruppe = _gruppenName(artikel[p.productId]?.produktgruppe);
+    // Schlüssel ist der dbValue der Gruppe, leer ohne Gruppe.
+    final gruppe = (artikel[p.productId]?.produktgruppe ?? '').trim();
     final g = jeGruppe[gruppe] ?? (0.0, 0);
     jeGruppe[gruppe] = (g.$1 + kg, g.$2 + 1);
     final a = jeArtikel[p.productId] ?? (0.0, 0);
@@ -861,20 +905,30 @@ ProduktmixAuswertung werteProduktmixAus(
     anzahl++;
   }
 
-  final gruppen = [
-    for (final MapEntry(key: name, value: (kg, n)) in jeGruppe.entries)
-      MixGruppe(name: name, kg: kg, produktionen: n),
+  // Die gepflegten Gruppen nach Menge. Artikel ohne Gruppe stehen immer
+  // als eigenes Stück am Ende — sie sind keine Gruppe, sondern eine Lücke
+  // in den Stammdaten, und sollen nicht in „Übrige" verschwinden.
+  final gepflegt = [
+    for (final MapEntry(key: gruppe, value: (kg, n)) in jeGruppe.entries)
+      if (gruppe.isNotEmpty)
+        MixGruppe(
+          name: produktgruppeLabel(gruppe),
+          kg: kg,
+          produktionen: n,
+        ),
   ]..sort((a, b) {
       final k = b.kg.compareTo(a.kg);
       return k != 0 ? k : a.name.compareTo(b.name);
     });
-  final List<MixGruppe> stuecke;
-  if (gruppen.length <= kKreisStueckeMax) {
-    stuecke = gruppen;
+  final ohne = jeGruppe[''];
+  final platz = kKreisStueckeMax - (ohne == null ? 0 : 1);
+  final List<MixGruppe> sichtbar;
+  if (gepflegt.length <= platz) {
+    sichtbar = gepflegt;
   } else {
-    final rest = gruppen.sublist(kKreisStueckeMax - 1);
-    stuecke = [
-      ...gruppen.take(kKreisStueckeMax - 1),
+    final rest = gepflegt.sublist(platz - 1);
+    sichtbar = [
+      ...gepflegt.take(platz - 1),
       MixGruppe(
         name: 'Übrige (${rest.length} Gruppen)',
         kg: rest.fold(0.0, (summe, g) => summe + g.kg),
@@ -883,6 +937,16 @@ ProduktmixAuswertung werteProduktmixAus(
       ),
     ];
   }
+  final stuecke = [
+    ...sichtbar,
+    if (ohne != null)
+      MixGruppe(
+        name: 'Ohne Produktgruppe',
+        kg: ohne.$1,
+        produktionen: ohne.$2,
+        ohneGruppe: true,
+      ),
+  ];
 
   final top = [
     for (final MapEntry(key: id, value: (kg, n)) in jeArtikel.entries)

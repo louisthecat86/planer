@@ -52,8 +52,19 @@ Color reihenFarbe(BuildContext context, int i) {
   return reihe[math.min(math.max(i, 0), reihe.length - 1)];
 }
 
-/// Grau für „Übrige" und für Auslastung unter 75 % — wie im Board.
-const Color restFarbe = Color(0xFF9E9E9E);
+/// Grau für Auslastung unter 75 % — wie „frei" im Board — und für Artikel
+/// ohne Produktgruppe. Etwas dunkler als im Board: Als Balken auf heller
+/// Fläche braucht es mehr Kontrast als ein kleines Feld.
+Color grauFarbe(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF9A9A9A)
+        : const Color(0xFF858585);
+
+/// Helles Grau für „Übrige" — vom dunkleren [grauFarbe] zu unterscheiden.
+Color hellgrauFarbe(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF5E5E5E)
+        : const Color(0xFFC4C4C4);
 
 TextStyle _achsenStil(BuildContext context) => TextStyle(
       fontSize: 11,
@@ -241,14 +252,9 @@ class _StatistikKreisState extends State<StatistikKreis> {
                     ),
                   ),
                   SizedBox(
-                    width: 48,
+                    width: 56,
                     child: Text(
-                      summe > 0
-                          ? Format.prozent(
-                              stuecke[i].wert / summe,
-                              nachkomma: 0,
-                            )
-                          : '—',
+                      summe > 0 ? Format.prozent(stuecke[i].wert / summe) : '—',
                       maxLines: 1,
                       textAlign: TextAlign.right,
                       style: const TextStyle(
@@ -579,7 +585,7 @@ class SegmentBalken extends StatelessWidget {
                 bottom: 2,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: farben.outlineVariant,
+                    color: farben.surfaceContainerHighest,
                     borderRadius: AppMasse.eckenKlein,
                   ),
                 ),
@@ -651,7 +657,7 @@ class SpannenBalken extends StatelessWidget {
                 height: 8,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: farben.primary.withValues(alpha: 0.35),
+                    color: farben.primary.withValues(alpha: 0.45),
                     borderRadius: AppMasse.eckenKlein,
                   ),
                 ),
@@ -679,6 +685,11 @@ class SpannenBalken extends StatelessWidget {
 
 /// Eine Zeile einer Tabelle mit Balken: vorne eine Marke, dann Name und
 /// Werte in einer Zeile, darunter der Balken.
+///
+/// Mit [namensBreite] steht alles in EINER Zeile — Name, Balken, Werte —,
+/// wie in einer Tabelle mit Balkenspalte. Das passt für kurze Namen
+/// (Abteilungen, Anlagen). Bleibt dem Balken dann zu wenig Platz, steht er
+/// doch wieder unter dem Namen.
 class BalkenZeile extends StatelessWidget {
   const BalkenZeile({
     super.key,
@@ -690,6 +701,7 @@ class BalkenZeile extends StatelessWidget {
     this.hinweis,
     this.onTap,
     this.letzte = false,
+    this.namensBreite,
   });
 
   final String name;
@@ -702,7 +714,7 @@ class BalkenZeile extends StatelessWidget {
   /// Vorne, etwa die Abteilungsmarke.
   final Widget? vorne;
 
-  /// Kleine graue Zeile unter dem Namen.
+  /// Kleine graue Zeile unter dem Namen — nur zweizeilig.
   final String? unterzeile;
 
   /// Erklärung beim Darüberfahren.
@@ -713,14 +725,100 @@ class BalkenZeile extends StatelessWidget {
   /// Letzte Zeile: ohne Linie darunter.
   final bool letzte;
 
+  /// Breite der Namensspalte für die einzeilige Form — null: zweizeilig.
+  final double? namensBreite;
+
+  /// So schmal darf der Balken in der einzeiligen Form höchstens werden.
+  static const double _balkenMindestens = 140;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final grau = theme.colorScheme.onSurfaceVariant;
+    final breite = namensBreite;
+    if (breite == null) return _rahmen(context, _zweizeilig(context));
+    return LayoutBuilder(
+      builder: (context, c) {
+        var belegt = 8.0 + breite + 24 + (vorne == null ? 0 : 40);
+        for (final w in werte) {
+          belegt += w is ZeilenWert ? w.breite : 40;
+        }
+        final passt = c.maxWidth - belegt >= _balkenMindestens;
+        return _rahmen(
+          context,
+          passt ? _einzeilig(breite) : _zweizeilig(context),
+        );
+      },
+    );
+  }
+
+  Text _name() => Text(
+        name,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+      );
+
+  Widget _einzeilig(double breite) {
+    final vorn = vorne;
+    return Row(
+      children: [
+        if (vorn != null) ...[
+          vorn,
+          const SizedBox(width: 10),
+        ],
+        SizedBox(width: breite, child: _name()),
+        const SizedBox(width: 12),
+        Expanded(child: balken),
+        const SizedBox(width: 12),
+        ...werte,
+      ],
+    );
+  }
+
+  Widget _zweizeilig(BuildContext context) {
+    final grau = Theme.of(context).colorScheme.onSurfaceVariant;
     final vorn = vorne;
     final zusatz = unterzeile;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (vorn != null) ...[
+          vorn,
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(child: _name()),
+                  ...werte,
+                ],
+              ),
+              if (zusatz != null)
+                Text(
+                  zusatz,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: grau),
+                ),
+              const SizedBox(height: 4),
+              balken,
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Linie darunter, Antippen und Erklärung — für beide Formen gleich.
+  Widget _rahmen(BuildContext context, Widget inhalt) {
+    final theme = Theme.of(context);
     Widget zeile = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 7),
+      padding: EdgeInsets.symmetric(
+        horizontal: 4,
+        vertical: namensBreite == null ? 7 : 6,
+      ),
       decoration: BoxDecoration(
         border: letzte
             ? null
@@ -728,47 +826,7 @@ class BalkenZeile extends StatelessWidget {
                 bottom: BorderSide(color: theme.colorScheme.outlineVariant),
               ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (vorn != null) ...[
-            vorn,
-            const SizedBox(width: 10),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    ...werte,
-                  ],
-                ),
-                if (zusatz != null)
-                  Text(
-                    zusatz,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 11, color: grau),
-                  ),
-                const SizedBox(height: 4),
-                balken,
-              ],
-            ),
-          ),
-        ],
-      ),
+      child: inhalt,
     );
     final tippen = onTap;
     if (tippen != null) {

@@ -230,7 +230,6 @@ class _Inhalt extends StatelessWidget {
             spanne,
             abteilung: abteilung,
           ),
-          spanne: spanne,
           abteilung: abteilung,
           onAbteilung: onAbteilung,
         ),
@@ -246,7 +245,6 @@ class _Inhalt extends StatelessWidget {
             spanne,
             abteilung: abteilung,
           ),
-          spanne: spanne,
           abteilung: abteilung,
         ),
         const SizedBox(height: 12),
@@ -305,17 +303,72 @@ class _Fussnote extends StatelessWidget {
   }
 }
 
+/// Ab dieser Breite stehen Tabelle und Verlauf eines Bereichs nebeneinander
+/// — auf breiten Bildschirmen stünden die Werte sonst weit weg vom Namen.
+const double _zweiSpaltenAb = 1300;
+
+/// Breite der Namensspalte in den einzeiligen Tabellen.
+const double _namensBreite = 150;
+
+/// Erst ab so viel Nebenzeit zeigt der Bereich „Wohin die Zeit geht" einen
+/// Kreis — einer, der fast nur aus Produktion besteht, sagt nichts.
+const double _kreisAbNebenzeit = 0.02;
+
+/// Zwei Spalten nebeneinander — auf schmaleren Fenstern untereinander.
+class _ZweiSpalten extends StatelessWidget {
+  const _ZweiSpalten({required this.links, required this.rechts});
+
+  final Widget links;
+  final Widget rechts;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, c) {
+        if (c.maxWidth >= _zweiSpaltenAb) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: links),
+              const SizedBox(width: 32),
+              Expanded(child: rechts),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            links,
+            const SizedBox(height: 18),
+            rechts,
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// Ampelfarbe wie im Board.
 Color _ampel(BuildContext context, CapacityStatus status) {
   final f = AppFarben.von(context);
   return switch (status) {
-    CapacityStatus.frei => restFarbe,
+    CapacityStatus.frei => grauFarbe(context),
     CapacityStatus.gut => f.ok,
     CapacityStatus.ueberbucht => f.fehler,
   };
 }
 
+/// Auslastung in ganzen Prozent — „< 1 %" statt „0 %", wenn doch etwas
+/// geplant ist.
+String _auslastungText(double anteil) => anteil > 0 && anteil < 0.005
+    ? '< 1 %'
+    : Format.prozent(anteil, nachkomma: 0);
+
 String _tage(int n) => n == 1 ? '1 Tag' : '$n Tage';
+
+/// „Wochen" bzw. „Monaten" — für den Hinweis ohne Verlauf.
+String _abschnitteText(StatistikSpanne spanne) =>
+    spanne.raster == StatistikRaster.woche ? 'Wochen' : 'Monaten';
 
 /// Die feste Folge der Zeitarten — Farbe gehört zur Art, nicht zum Rang.
 const List<(String, String)> _zeitArten = [
@@ -339,13 +392,11 @@ double _zeitWert(ZeitAnteile a, String art) => switch (art) {
 class _AuslastungBereich extends StatelessWidget {
   const _AuslastungBereich({
     required this.auswertung,
-    required this.spanne,
     required this.abteilung,
     required this.onAbteilung,
   });
 
   final AuslastungsAuswertung auswertung;
-  final StatistikSpanne spanne;
   final Abteilung? abteilung;
   final ValueChanged<Abteilung?> onAbteilung;
 
@@ -368,9 +419,80 @@ class _AuslastungBereich extends StatelessWidget {
 
     final engpass = a.engpass;
     final wochen = a.geplanteWochen;
+    final vs = a.verlaufSpanne;
     // Gemeinsamer Maßstab aller Zeilen — mindestens bis 120 %, damit die
     // 100-%-Marke nicht am Rand klebt.
     final skala = a.zeilen.fold(1.2, (m, z) => math.max(m, z.auslastung));
+    // Die Spalte mit den überbuchten Tagen nur, wenn es welche gibt.
+    final mitUeberbucht = a.zeilen.any((z) => z.ueberbuchteTage > 0);
+
+    final tabelle = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Zwischentitel(
+          gewaehlt == null
+              ? 'Je Abteilung · Ø pro Woche'
+              : '${gewaehlt.anzeigeName} je Anlage · Ø pro Woche',
+        ),
+        for (var i = 0; i < a.zeilen.length; i++)
+          _AuslastungsZeile(
+            zeile: a.zeilen[i],
+            wochen: wochen,
+            planungstage: a.planungstage,
+            skala: skala,
+            mitUeberbucht: mitUeberbucht,
+            letzte: i == a.zeilen.length - 1,
+            // Ohne Filter führt eine Abteilung zu ihren Anlagen.
+            onTap: gewaehlt == null
+                ? () => onAbteilung(a.zeilen[i].abteilung)
+                : null,
+          ),
+        const SizedBox(height: 8),
+        FarbLegende(
+          eintraege: [
+            (grauFarbe(context), 'unter 75 %'),
+            (f.ok, 'gut gefüllt'),
+            (f.fehler, 'überbucht'),
+          ],
+          linie: '100 %',
+        ),
+      ],
+    );
+
+    final verlauf = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Zwischentitel(
+          'Ø Auslastung ${vs.rasterText} · '
+          '${gewaehlt?.anzeigeName ?? 'alle Abteilungen zusammen'}',
+        ),
+        if (a.verlaufPunkte >= 2)
+          StatistikSaeulen(
+            saeulen: [
+              for (final p in a.verlauf)
+                Saeule(
+                  label: vs.kurzname(p.abschnitt),
+                  wert: p.hatDaten ? p.auslastung * 100 : null,
+                  farbe: _ampel(context, p.status),
+                  hinweis: '${vs.langname(p.abschnitt)}\n'
+                      'Ø Auslastung ${_auslastungText(p.auslastung)}\n'
+                      '${Zeit.kurz(p.belegtMinuten)} von '
+                      '${Zeit.kurz(p.kapazitaetMinuten)}\n'
+                      '${p.ueberbuchteTage} von ${p.tage} '
+                      '${p.tage == 1 ? 'Tag' : 'Tagen'} überbucht',
+                ),
+            ],
+            achsenText: (wert) => '${Format.zahl(wert)} %',
+            linie: 100,
+            linienFarbe: f.fehler,
+          )
+        else
+          _Fussnote(
+            'Ein Verlauf braucht Planung in mindestens zwei '
+            '${_abschnitteText(vs)}.',
+          ),
+      ],
+    );
 
     return Bereich(
       titel: 'Auslastung und Engpässe',
@@ -383,7 +505,7 @@ class _AuslastungBereich extends StatelessWidget {
             runSpacing: 10,
             children: [
               Kennzahl(
-                wert: Format.prozent(a.auslastung, nachkomma: 0),
+                wert: _auslastungText(a.auslastung),
                 label: 'Ø Auslastung',
                 gross: true,
               ),
@@ -396,8 +518,7 @@ class _AuslastungBereich extends StatelessWidget {
               if (engpass != null)
                 Kennzahl(
                   wert: engpass.name,
-                  label: 'Engpass · Ø '
-                      '${Format.prozent(engpass.auslastung, nachkomma: 0)}',
+                  label: 'Engpass · Ø ${_auslastungText(engpass.auslastung)}',
                   gross: true,
                 ),
               Kennzahl(
@@ -408,60 +529,8 @@ class _AuslastungBereich extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 16),
-          _Zwischentitel(
-            gewaehlt == null
-                ? 'Je Abteilung · Ø pro Woche'
-                : '${gewaehlt.anzeigeName} je Anlage · Ø pro Woche',
-          ),
-          for (var i = 0; i < a.zeilen.length; i++)
-            _AuslastungsZeile(
-              zeile: a.zeilen[i],
-              wochen: wochen,
-              planungstage: a.planungstage,
-              skala: skala,
-              letzte: i == a.zeilen.length - 1,
-              // Ohne Filter führt eine Abteilung zu ihren Anlagen.
-              onTap: gewaehlt == null
-                  ? () => onAbteilung(a.zeilen[i].abteilung)
-                  : null,
-            ),
-          const SizedBox(height: 8),
-          FarbLegende(
-            eintraege: [
-              (restFarbe, 'unter 75 %'),
-              (f.ok, 'gut gefüllt'),
-              (f.fehler, 'überbucht'),
-            ],
-            linie: '100 %',
-          ),
-          if (a.verlauf.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            _Zwischentitel(
-              'Ø Auslastung ${spanne.rasterText} · '
-              '${gewaehlt?.anzeigeName ?? 'alle Abteilungen zusammen'}',
-            ),
-            StatistikSaeulen(
-              saeulen: [
-                for (final p in a.verlauf)
-                  Saeule(
-                    label: spanne.kurzname(p.abschnitt),
-                    wert: p.hatDaten ? p.auslastung * 100 : null,
-                    farbe: _ampel(context, p.status),
-                    hinweis: '${spanne.langname(p.abschnitt)}\n'
-                        'Ø Auslastung '
-                        '${Format.prozent(p.auslastung, nachkomma: 0)}\n'
-                        '${Zeit.kurz(p.belegtMinuten)} von '
-                        '${Zeit.kurz(p.kapazitaetMinuten)}\n'
-                        '${p.ueberbuchteTage} von ${p.tage} '
-                        '${p.tage == 1 ? 'Tag' : 'Tagen'} überbucht',
-                  ),
-              ],
-              achsenText: (wert) => '${Format.zahl(wert)} %',
-              linie: 100,
-              linienFarbe: f.fehler,
-            ),
-          ],
-          const SizedBox(height: 10),
+          _ZweiSpalten(links: tabelle, rechts: verlauf),
+          const SizedBox(height: 12),
           const _Fussnote(
             'Gezählt werden Werktage, an denen im Board etwas geplant war — '
             'Feiertage und Wochen ohne Planung bleiben außen vor. Frühere '
@@ -481,6 +550,7 @@ class _AuslastungsZeile extends StatelessWidget {
     required this.wochen,
     required this.planungstage,
     required this.skala,
+    required this.mitUeberbucht,
     required this.letzte,
     this.onTap,
   });
@@ -489,21 +559,26 @@ class _AuslastungsZeile extends StatelessWidget {
   final int wochen;
   final int planungstage;
   final double skala;
+
+  /// Ob die Spalte mit den überbuchten Tagen steht.
+  final bool mitUeberbucht;
   final bool letzte;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final f = AppFarben.von(context);
-    final farbe = _ampel(context, zeile.status);
+    final status = zeile.status;
+    final farbe = _ampel(context, status);
     final jeWoche = wochen > 0 ? zeile.belegtMinuten / wochen : 0.0;
     final kapazitaet = wochen > 0 ? zeile.kapazitaetMinuten / wochen : 0.0;
-    final prozent = Format.prozent(zeile.auslastung, nachkomma: 0);
+    final prozent = _auslastungText(zeile.auslastung);
     final ueberbucht = zeile.ueberbuchteTage;
 
     return BalkenZeile(
       vorne: AbteilungsMarke(abteilung: zeile.abteilung),
       name: zeile.name,
+      namensBreite: _namensBreite,
       letzte: letzte,
       onTap: onTap,
       hinweis: '${zeile.name}\n'
@@ -515,14 +590,23 @@ class _AuslastungsZeile extends StatelessWidget {
       werte: [
         ZeilenWert(
           '${Zeit.kurzOhneEinheit(jeWoche)} / ${Zeit.kurz(kapazitaet)}',
-          breite: 120,
+          breite: 112,
         ),
-        ZeilenWert(prozent, breite: 52, farbe: farbe, fett: true),
         ZeilenWert(
-          ueberbucht > 0 ? '${_tage(ueberbucht)} überbucht' : '',
-          breite: 128,
-          farbe: f.fehler,
+          prozent,
+          breite: 52,
+          // Grau ist als Schrift zu blass — die Ampel zeigt der Balken.
+          farbe: status == CapacityStatus.frei
+              ? Theme.of(context).colorScheme.onSurface
+              : farbe,
+          fett: true,
         ),
+        if (mitUeberbucht)
+          ZeilenWert(
+            ueberbucht > 0 ? _tage(ueberbucht) : '',
+            breite: 64,
+            farbe: f.fehler,
+          ),
       ],
       balken: SegmentBalken(
         segmente: [(zeile.auslastung, farbe)],
@@ -556,16 +640,50 @@ class _ZeitBereich extends StatelessWidget {
       );
     }
 
-    final stuecke = [
-      for (var i = 0; i < _zeitArten.length; i++)
-        if (_zeitWert(g, _zeitArten[i].$1) > 0)
-          KreisStueck(
-            name: _zeitArten[i].$2,
-            wert: _zeitWert(g, _zeitArten[i].$1),
-            farbe: reihenFarbe(context, i),
-            wertText: Zeit.kurz(_zeitWert(g, _zeitArten[i].$1)),
-          ),
-    ];
+    final anteilNeben = g.neben / g.summe;
+    final Widget gesamt;
+    if (anteilNeben >= _kreisAbNebenzeit) {
+      gesamt = StatistikKreis(
+        stuecke: [
+          for (var i = 0; i < _zeitArten.length; i++)
+            if (_zeitWert(g, _zeitArten[i].$1) > 0)
+              KreisStueck(
+                name: _zeitArten[i].$2,
+                wert: _zeitWert(g, _zeitArten[i].$1),
+                farbe: reihenFarbe(context, i),
+                wertText: Zeit.kurz(_zeitWert(g, _zeitArten[i].$1)),
+              ),
+        ],
+        summeText: Zeit.kurz(g.summe),
+        summeLabel: 'belegt',
+      );
+    } else if (g.neben <= 0) {
+      gesamt = const HinweisBox(
+        'Im Zeitraum sind keine Rüst-, Reinigungs- oder sonstigen '
+        'Nebenzeiten eingetragen. Trägst du sie im Wochenboard über das '
+        'Uhr-Symbol in der Tageszelle ein, zeigt hier ein Kreis, wie viel '
+        'Kapazität sie kosten.',
+        titel: 'Noch keine Nebenzeiten',
+      );
+    } else {
+      gesamt = HinweisBox(
+        'Nebenzeiten sind kaum eingetragen: ${Zeit.kurz(g.neben)}, '
+        '${Format.prozent(anteilNeben)} der belegten Zeit. Trägst du '
+        'Rüst- und Reinigungszeiten im Wochenboard über das Uhr-Symbol in '
+        'der Tageszelle ein, zeigt hier ein Kreis, wie viel Kapazität sie '
+        'kosten.',
+        titel: 'Kaum Nebenzeiten',
+      );
+    }
+
+    final links = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Gesamt'),
+        gesamt,
+      ],
+    );
+    final tabelle = _ZeitTabelle(zeilen: auswertung.jeSpur);
 
     return Bereich(
       titel: 'Wohin die Zeit geht',
@@ -588,60 +706,35 @@ class _ZeitBereich extends StatelessWidget {
                 gross: true,
               ),
               Kennzahl(
-                wert: Format.prozent(g.neben / g.summe),
+                wert: Format.prozent(anteilNeben),
                 label: 'Anteil Nebenzeiten',
                 gross: true,
               ),
             ],
           ),
           const SizedBox(height: 16),
-          if (g.neben <= 0)
-            const HinweisBox(
-              'Im Zeitraum sind keine Rüst-, Reinigungs- oder sonstigen '
-              'Nebenzeiten eingetragen. Trägst du sie im Wochenboard über '
-              'das Uhr-Symbol in der Tageszelle ein, zeigt dieser Bereich, '
-              'wie viel Kapazität sie kosten — je Anlage.',
-              titel: 'Noch keine Nebenzeiten',
-            )
-          else
-            LayoutBuilder(
-              builder: (context, c) {
-                final kreis = StatistikKreis(
-                  stuecke: stuecke,
-                  summeText: Zeit.kurz(g.summe),
-                  summeLabel: 'belegt',
-                );
-                final tabelle = _ZeitTabelle(zeilen: auswertung.jeSpur);
-                if (c.maxWidth >= 900) {
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        width: 420,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const _Zwischentitel('Gesamt'),
-                            kreis,
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 28),
-                      Expanded(child: tabelle),
-                    ],
-                  );
-                }
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          LayoutBuilder(
+            builder: (context, c) {
+              if (c.maxWidth >= 900) {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const _Zwischentitel('Gesamt'),
-                    kreis,
-                    const SizedBox(height: 16),
-                    tabelle,
+                    SizedBox(width: 420, child: links),
+                    const SizedBox(width: 32),
+                    Expanded(child: tabelle),
                   ],
                 );
-              },
-            ),
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  links,
+                  const SizedBox(height: 16),
+                  tabelle,
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -691,6 +784,7 @@ class _ZeitTabelle extends StatelessWidget {
     return BalkenZeile(
       vorne: AbteilungsMarke(abteilung: zeile.spur.abteilung),
       name: zeile.name,
+      namensBreite: _namensBreite,
       letzte: letzte,
       hinweis: [
         '${zeile.spur.abteilung.anzeigeName} · ${zeile.name}',
@@ -698,11 +792,9 @@ class _ZeitTabelle extends StatelessWidget {
           if (_zeitWert(a, art) > 0) '$name: ${Zeit.kurz(_zeitWert(a, art))}',
       ].join('\n'),
       werte: [
-        ZeilenWert(Zeit.kurz(a.summe), breite: 84),
+        ZeilenWert(Zeit.kurz(a.summe), breite: 76),
         ZeilenWert(
-          a.neben > 0
-              ? '${Format.prozent(anteilNeben, nachkomma: 0)} Neben'
-              : '',
+          a.neben > 0 ? '${Format.prozent(anteilNeben)} Neben' : '',
           breite: 92,
         ),
       ],
@@ -724,12 +816,10 @@ class _ZeitTabelle extends StatelessWidget {
 class _AusbeuteBereich extends StatelessWidget {
   const _AusbeuteBereich({
     required this.auswertung,
-    required this.spanne,
     required this.abteilung,
   });
 
   final AusbeuteAuswertung auswertung;
-  final StatistikSpanne spanne;
   final Abteilung? abteilung;
 
   @override
@@ -777,6 +867,54 @@ class _AusbeuteBereich extends StatelessWidget {
         '${a.unplausibel} mit einer Ausbeute ab 100 % oder von 0 %',
       if (a.ohneAusbeute > 0) '${a.ohneAusbeute} ohne Fertigware',
     ];
+    final vs = a.verlaufSpanne;
+
+    final verlauf = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Zwischentitel('Ø Verlust ${vs.rasterText}'),
+        if (a.verlaufPunkte >= 2)
+          StatistikSaeulen(
+            saeulen: [
+              for (final p in a.verlauf)
+                Saeule(
+                  label: vs.kurzname(p.abschnitt),
+                  wert: switch (p.mittlererVerlust) {
+                    final v? => v * 100,
+                    _ => null,
+                  },
+                  farbe: theme.colorScheme.primary,
+                  hinweis: '${vs.langname(p.abschnitt)}\n'
+                      'Ø Verlust '
+                      '${Format.prozent(p.mittlererVerlust ?? 0.0)}\n'
+                      '${Format.kg(p.verlustKg)} Verlust aus '
+                      '${p.anzahl} '
+                      '${p.anzahl == 1 ? 'Produktion' : 'Produktionen'}',
+                ),
+            ],
+            achsenText: (wert) => '${Format.zahl(wert)} %',
+          )
+        else
+          _Fussnote(
+            'Ein Verlauf braucht Produktionen mit Ausbeute in mindestens '
+            'zwei ${_abschnitteText(vs)}.',
+          ),
+      ],
+    );
+
+    final spannen = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Größte Schwankung je Artikel'),
+        if (a.spannen.isEmpty)
+          const _Fussnote(
+            'Ab $kSpanneAbProduktionen Produktionen eines Artikels im '
+            'Zeitraum zeigt sich hier, wie weit seine Ausbeute schwankt.',
+          )
+        else
+          _SpannenTabelle(spannen: a.spannen),
+      ],
+    );
 
     return Bereich(
       titel: 'Ausbeute und Verlust',
@@ -814,40 +952,9 @@ class _AusbeuteBereich extends StatelessWidget {
               '${nichtGezaehlt.join(', ')} — wie in der Planung.',
             ),
           ],
-          if (a.verlauf.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            _Zwischentitel('Ø Verlust ${spanne.rasterText}'),
-            StatistikSaeulen(
-              saeulen: [
-                for (final p in a.verlauf)
-                  Saeule(
-                    label: spanne.kurzname(p.abschnitt),
-                    wert: switch (p.mittlererVerlust) {
-                      final v? => v * 100,
-                      _ => null,
-                    },
-                    farbe: theme.colorScheme.primary,
-                    hinweis: '${spanne.langname(p.abschnitt)}\n'
-                        'Ø Verlust '
-                        '${Format.prozent(p.mittlererVerlust ?? 0.0)}\n'
-                        '${Format.kg(p.verlustKg)} Verlust aus '
-                        '${p.anzahl} '
-                        '${p.anzahl == 1 ? 'Produktion' : 'Produktionen'}',
-                  ),
-              ],
-              achsenText: (wert) => '${Format.zahl(wert)} %',
-            ),
-          ],
-          const SizedBox(height: 18),
-          const _Zwischentitel('Größte Schwankung je Artikel'),
-          if (a.spannen.isEmpty)
-            const _Fussnote(
-              'Ab $kSpanneAbProduktionen Produktionen eines Artikels im '
-              'Zeitraum zeigt sich hier, wie weit seine Ausbeute schwankt.',
-            )
-          else
-            _SpannenTabelle(spannen: a.spannen),
-          const SizedBox(height: 10),
+          const SizedBox(height: 16),
+          _ZweiSpalten(links: verlauf, rechts: spannen),
+          const SizedBox(height: 12),
           const _Fussnote(
             'Die Planung rechnet je Artikel mit dem Ø der letzten '
             'Produktionen. Wo die Ausbeute stark schwankt, liegt sie damit '
@@ -867,7 +974,8 @@ class _SpannenTabelle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final grau = Theme.of(context).colorScheme.onSurfaceVariant;
+    final farben = Theme.of(context).colorScheme;
+    final grau = farben.onSurfaceVariant;
     // Gemeinsame Achse aller Zeilen, auf 5 % gerundet.
     var unten = spannen.first.min;
     var oben = spannen.first.max;
@@ -901,7 +1009,7 @@ class _SpannenTabelle extends StatelessWidget {
                 'Ø ${prozent(spannen[i].mittel)} %',
                 breite: 76,
                 fett: true,
-                farbe: Theme.of(context).colorScheme.onSurface,
+                farbe: farben.onSurface,
               ),
               ZeilenWert(
                 '${prozent(spannen[i].min)}–${prozent(spannen[i].max)} %',
@@ -950,6 +1058,9 @@ class _SpannenTabelle extends StatelessWidget {
 // Teil 5: Produktmix
 // ---------------------------------------------------------------------------
 
+/// Ab diesem Anteil ohne Produktgruppe erklärt der Bereich, was fehlt.
+const double _ohneGruppeHinweisAb = 0.2;
+
 class _MixBereich extends StatelessWidget {
   const _MixBereich({required this.auswertung, required this.abteilung});
 
@@ -975,16 +1086,48 @@ class _MixBereich extends StatelessWidget {
       );
     }
 
+    // Echte Gruppen in den Reihenfarben, „Übrige" hellgrau und Artikel
+    // ohne Gruppe grau — sie sind eine Lücke, keine Gruppe.
     var farbIndex = 0;
     final stuecke = [
       for (final g in m.gruppen)
         KreisStueck(
           name: g.name,
           wert: g.kg,
-          farbe: g.uebrige ? restFarbe : reihenFarbe(context, farbIndex++),
+          farbe: g.ohneGruppe
+              ? grauFarbe(context)
+              : (g.uebrige
+                  ? hellgrauFarbe(context)
+                  : reihenFarbe(context, farbIndex++)),
           wertText: Format.kg(g.kg),
         ),
     ];
+    final anteilOhne = m.kgOhneGruppe / m.kgGesamt;
+
+    final gruppen = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Nach Produktgruppe'),
+        if (stuecke.length >= 2)
+          StatistikKreis(
+            stuecke: stuecke,
+            summeText: Format.kg(m.kgGesamt),
+            summeLabel: 'Rohware',
+          )
+        else
+          _Fussnote('Alles in einer Gruppe: ${stuecke.first.name}.'),
+        if (anteilOhne >= _ohneGruppeHinweisAb) ...[
+          const SizedBox(height: 10),
+          _Fussnote(
+            '${Format.prozent(anteilOhne, nachkomma: 0)} der Rohware '
+            'stammen von Artikeln ohne Produktgruppe. Die Gruppe wird in '
+            'den Stammdaten des Artikels gepflegt — dann zeigt der Kreis, '
+            'was die Produktion trägt.',
+          ),
+        ],
+      ],
+    );
+    final artikel = _TopArtikel(artikel: m.topArtikel, kgGesamt: m.kgGesamt);
 
     return Bereich(
       titel: 'Produktmix',
@@ -1016,30 +1159,12 @@ class _MixBereich extends StatelessWidget {
           const SizedBox(height: 16),
           LayoutBuilder(
             builder: (context, c) {
-              final gruppen = Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _Zwischentitel('Nach Produktgruppe'),
-                  if (stuecke.length >= 2)
-                    StatistikKreis(
-                      stuecke: stuecke,
-                      summeText: Format.kg(m.kgGesamt),
-                      summeLabel: 'Rohware',
-                    )
-                  else
-                    _Fussnote('Alles in einer Gruppe: ${stuecke.first.name}.'),
-                ],
-              );
-              final artikel = _TopArtikel(
-                artikel: m.topArtikel,
-                kgGesamt: m.kgGesamt,
-              );
               if (c.maxWidth >= 900) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(width: 420, child: gruppen),
-                    const SizedBox(width: 28),
+                    const SizedBox(width: 32),
                     Expanded(child: artikel),
                   ],
                 );
@@ -1091,10 +1216,8 @@ class _TopArtikel extends StatelessWidget {
             werte: [
               ZeilenWert(Format.kg(artikel[i].kg), breite: 92),
               ZeilenWert(
-                kgGesamt > 0
-                    ? Format.prozent(artikel[i].kg / kgGesamt, nachkomma: 0)
-                    : '',
-                breite: 48,
+                kgGesamt > 0 ? Format.prozent(artikel[i].kg / kgGesamt) : '',
+                breite: 56,
               ),
             ],
             balken: SegmentBalken(

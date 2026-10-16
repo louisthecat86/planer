@@ -77,17 +77,26 @@ void main() {
       expect(s.wochen, 4);
     });
 
-    test('nur bei „Alles" fallen leere Abschnitte am Anfang weg', () {
-      final quartal = StatistikSpanne.fuer(StatistikZeitraum.quartal, heute);
+    test('„Alles": der Verlauf beginnt mit den ersten Daten — mit eigenem '
+        'Raster', () {
       final alles = StatistikSpanne.fuer(
         StatistikZeitraum.alles,
         heute,
-        fruehestes: DateTime(2026, 9, 1),
+        fruehestes: DateTime(2025, 7, 28),
       );
-      final punkte = [0, 0, 3, 0, 5];
-      expect(quartal.ohneLeerenAnfang(punkte, (p) => p > 0), punkte);
-      expect(alles.ohneLeerenAnfang(punkte, (p) => p > 0), [3, 0, 5]);
-      expect(alles.ohneLeerenAnfang([0, 0], (p) => p > 0), isEmpty);
+      expect(alles.raster, StatistikRaster.monat);
+
+      final ab = alles.abDatenbeginn(DateTime(2026, 9, 30));
+      expect(ab.von, DateTime(2026, 9, 28));
+      expect(ab.bisExkl, alles.bisExkl);
+      expect(ab.raster, StatistikRaster.woche);
+      expect(ab.abschnitte.length, 3);
+
+      // Feste Zeiträume und „Alles" ohne Daten bleiben, wie sie sind.
+      final quartal = StatistikSpanne.fuer(StatistikZeitraum.quartal, heute);
+      expect(identical(quartal.abDatenbeginn(DateTime(2026, 9, 30)), quartal),
+          isTrue,);
+      expect(identical(alles.abDatenbeginn(null), alles), isTrue);
     });
   });
 
@@ -197,8 +206,21 @@ void main() {
       expect(a.planungstage, 2);
     });
 
+    test('„Alles": Verlauf je Woche ab der ersten Planung', () {
+      final alles = StatistikSpanne.fuer(
+        StatistikZeitraum.alles,
+        heute,
+        fruehestes: DateTime(2025, 7, 28),
+      );
+      final a = werteAuslastungAus(belegung, alles);
+      expect(a.verlaufSpanne.raster, StatistikRaster.woche);
+      expect([for (final p in a.verlauf) p.abschnitt], [montag]);
+      expect(a.verlaufPunkte, 1, reason: 'zu wenig für einen Verlauf');
+    });
+
     test('Verlauf je Woche: nur die Woche mit Planung hat Daten', () {
       final a = werteAuslastungAus(belegung, spanne);
+      expect(identical(a.verlaufSpanne, spanne), isTrue);
       expect(a.verlauf.length, 4);
       expect([for (final p in a.verlauf) p.hatDaten], [false, false, false, true]);
       final p = a.verlauf.last;
@@ -399,30 +421,64 @@ void main() {
       expect(m.kgGesamt, 2850);
       expect(m.produktionen, 8);
       expect(m.artikelAnzahl, 8);
-      expect(m.gruppen.length, 6);
+      // Die Artikel ohne Gruppe bekommen immer ein eigenes Stück am Ende —
+      // für die gepflegten Gruppen bleiben fünf, davon eins „Übrige".
       expect(
-        [for (final g in m.gruppen.take(5)) g.name],
+        [for (final g in m.gruppen) g.name],
         [
           'Brühwurst',
           'Rohwurst',
           'Kochpökelware',
           'Aufschnitt',
-          'Braten',
+          'Übrige (3 Gruppen)',
+          'Ohne Produktgruppe',
         ],
       );
-      expect(m.gruppen.last.uebrige, isTrue);
-      expect(m.gruppen.last.kg, 350);
-      expect(m.gruppen.last.name, 'Übrige (3 Gruppen)');
+      expect(m.gruppen[4].uebrige, isTrue);
+      expect(m.gruppen[4].kg, 600);
+      expect(m.gruppen.last.ohneGruppe, isTrue);
+      expect(m.gruppen.last.kg, 50);
+      expect(m.kgOhneGruppe, 50);
       expect([for (final a in m.topArtikel) a.kg].first, 700);
       expect(m.topArtikel.length, 8);
     });
 
-    test('Artikel ohne Produktgruppe bekommen ein eigenes Stück', () {
+    test('sechs gepflegte Gruppen passen ohne „Übrige"', () {
+      const gruppen = [
+        'bruehwurst',
+        'rohwurst',
+        'kochpoekelware',
+        'aufschnitt',
+        'braten',
+        'sous_vide',
+      ];
+      final sechs = {
+        for (var i = 0; i < gruppen.length; i++)
+          'g$i': StatistikArtikel(
+            id: 'g$i',
+            artikelnummer: '30$i',
+            bezeichnung: 'Artikel $i',
+            produktgruppe: gruppen[i],
+          ),
+      };
+      final m = werteProduktmixAus(
+        [for (var i = 0; i < 6; i++) p('g$i', montag, roh: 100.0 + i)],
+        sechs,
+        spanne,
+      );
+      expect(m.gruppen.length, 6);
+      expect(m.gruppen.any((g) => g.uebrige || g.ohneGruppe), isFalse);
+      expect(m.gruppen.first.name, 'Sous Vide gegarte Produkte');
+    });
+
+    test('Artikel ohne Produktgruppe stehen am Ende', () {
       final m = werteProduktmixAus(produktionen, artikel, spanne);
       expect(
-        {for (final g in m.gruppen) g.name: g.kg},
-        {'Brühwurst': 500.0, 'Ohne Produktgruppe': 130.0},
+        [for (final g in m.gruppen) (g.name, g.kg)],
+        [('Brühwurst', 500.0), ('Ohne Produktgruppe', 130.0)],
       );
+      expect(m.gruppen.last.ohneGruppe, isTrue);
+      expect(m.kgOhneGruppe, 130);
       expect(m.topArtikel.first.artikel.id, 'a1');
     });
   });
