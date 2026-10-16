@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/theme/app_stil.dart';
@@ -9,16 +10,18 @@ import '../../core/ui/bausteine.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart' show CapacityStatus;
+import '../whiteboard/whiteboard_provider.dart' show kLetzteProduktionen;
 import 'statistik_daten.dart';
 import 'statistik_diagramme.dart';
 
 /// Statistik: was sich aus der Planung und den erfassten Produktionen
-/// lernen lässt — wo es eng wird, wohin die Zeit geht, wie die Ausbeute
-/// schwankt und was die Produktion trägt.
+/// lernen lässt — wo es eng wird, wohin die Zeit geht, wie viel der Plan
+/// erledigt wurde, wie die Ausbeute schwankt, was die Produktion schafft
+/// und trägt und wo die Stammdaten Lücken haben.
 ///
 /// Oben wählt man den Zeitraum und optional eine Abteilung; jeder Teil ist
 /// ein eigener Bereich. Fehlen Daten, sagt der Bereich, was zu erfassen
-/// wäre.
+/// wäre. Artikel und Lücken führen per Klick dorthin, wo man sie pflegt.
 class StatistikScreen extends ConsumerStatefulWidget {
   const StatistikScreen({super.key});
 
@@ -238,8 +241,29 @@ class _Inhalt extends StatelessWidget {
           auswertung: werteZeitAus(daten.belegung, abteilung: abteilung),
         ),
         const SizedBox(height: 12),
+        _ErfuellungBereich(
+          auswertung: werteErfuellungAus(
+            daten.karten,
+            spanne,
+            heute: daten.stand,
+            abteilung: abteilung,
+          ),
+          abteilung: abteilung,
+          onAbteilung: onAbteilung,
+        ),
+        const SizedBox(height: 12),
         _AusbeuteBereich(
           auswertung: werteAusbeuteAus(
+            daten.produktionen,
+            daten.artikel,
+            spanne,
+            abteilung: abteilung,
+          ),
+          abteilung: abteilung,
+        ),
+        const SizedBox(height: 12),
+        _LeistungBereich(
+          auswertung: werteLeistungAus(
             daten.produktionen,
             daten.artikel,
             spanne,
@@ -257,9 +281,54 @@ class _Inhalt extends StatelessWidget {
           ),
           abteilung: abteilung,
         ),
+        const SizedBox(height: 12),
+        _PflegeBereich(
+          auswertung: wertePflegeAus(daten.artikel, daten.aktiveArtikel),
+        ),
       ],
     );
   }
+}
+
+/// Öffnet die Seite [name] — und lädt die Statistik neu, wenn man
+/// zurückkommt: Dort lassen sich Stammdaten pflegen, und die ändern die
+/// Zahlen.
+Future<void> _oeffne(
+  BuildContext context,
+  String name, {
+  Map<String, String> pathParameters = const {},
+  Map<String, dynamic> queryParameters = const {},
+}) async {
+  // Vor dem Warten holen, damit nach der Rückkehr kein Kontext mehr nötig
+  // ist. Verlässt man die Seite über die Leiste statt zurück, endet das
+  // Warten nicht — die Statistik lädt beim nächsten Öffnen ohnehin neu.
+  final container = ProviderScope.containerOf(context, listen: false);
+  await context.pushNamed(
+    name,
+    pathParameters: pathParameters,
+    queryParameters: queryParameters,
+  );
+  container.invalidate(statistikProvider);
+}
+
+/// Öffnet die Stammdaten von [artikel].
+Future<void> _oeffneArtikel(BuildContext context, StatistikArtikel artikel) =>
+    _oeffne(
+      context,
+      'articleDetail',
+      pathParameters: {'productId': artikel.id},
+    );
+
+/// „4711 · Rinderbratwurst" — Nummer und Bezeichnung, wie in den Listen.
+String _artikelName(StatistikArtikel a) =>
+    '${a.artikelnummer} · ${a.bezeichnung}';
+
+/// Ein Anteil in ganzen Prozent — ohne „0 %" für etwas und ohne „100 %"
+/// für nicht alles.
+String _ganzeProzent(double anteil) {
+  if (anteil > 0 && anteil < 0.005) return '< 1 %';
+  if (anteil < 1 && anteil >= 0.995) return '> 99 %';
+  return Format.prozent(anteil, nachkomma: 0);
 }
 
 /// Kleine Überschrift innerhalb eines Bereichs.
@@ -810,6 +879,216 @@ class _ZeitTabelle extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Teil 6: Planerfüllung
+// ---------------------------------------------------------------------------
+
+/// Die Teile der Planerfüllung in fester Folge: das Grün von „erledigt" im
+/// Board, blasser für nur abgehakt, der offene Rest fast wie die leere
+/// Spur. Die Abstufung über die Helligkeit bleibt auch bei
+/// Farbsehschwäche lesbar.
+List<(Color, String)> _erfuellungsFarben(BuildContext context) {
+  final ok = AppFarben.von(context).ok;
+  return [
+    (ok, 'erfasst'),
+    (blasseFarbe(context, ok, deckkraft: 0.6), 'nur abgehakt'),
+    (restFarbe(context), 'offen'),
+  ];
+}
+
+/// Die Teile als Segmente, zusammen [ganz] — leer ohne Karten.
+List<(double, Color)> _erfuellungsSegmente(
+  ErfuellungsZahlen z,
+  List<(Color, String)> farben, {
+  double ganz = 1,
+}) {
+  if (z.karten == 0) return const [];
+  return [
+    (z.erfasst / z.karten * ganz, farben[0].$1),
+    (z.abgehakt / z.karten * ganz, farben[1].$1),
+    (z.offen / z.karten * ganz, farben[2].$1),
+  ];
+}
+
+/// „Erledigt 92 %: 46 von 50 Karten" und darunter die Teile.
+String _erfuellungsText(ErfuellungsZahlen z) =>
+    'Erledigt ${_ganzeProzent(z.anteilErledigt)}: ${z.erledigt} von '
+    '${z.karten} ${z.karten == 1 ? 'Karte' : 'Karten'}\n'
+    'erfasst ${z.erfasst} · nur abgehakt ${z.abgehakt} · offen ${z.offen}';
+
+class _ErfuellungBereich extends StatelessWidget {
+  const _ErfuellungBereich({
+    required this.auswertung,
+    required this.abteilung,
+    required this.onAbteilung,
+  });
+
+  final ErfuellungsAuswertung auswertung;
+  final Abteilung? abteilung;
+  final ValueChanged<Abteilung?> onAbteilung;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = AppFarben.von(context);
+    final e = auswertung;
+    final g = e.gesamt;
+    final gewaehlt = abteilung;
+    final untertitel = gewaehlt == null
+        ? 'Karten im Board bis gestern'
+        : 'Karten im Board bis gestern · ${gewaehlt.anzeigeName}';
+
+    if (e.leer) {
+      return Bereich(
+        titel: 'Planerfüllung',
+        untertitel: untertitel,
+        child: const LeerHinweis(
+          'Im Zeitraum war bis gestern nichts geplant.',
+          icon: Icons.event_busy_outlined,
+        ),
+      );
+    }
+
+    final farben = _erfuellungsFarben(context);
+    final vs = e.verlaufSpanne;
+
+    final tabelle = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Je Abteilung'),
+        for (var i = 0; i < e.jeAbteilung.length; i++)
+          _ErfuellungsZeile(
+            zeile: e.jeAbteilung[i],
+            farben: farben,
+            letzte: i == e.jeAbteilung.length - 1,
+            // Ohne Filter führt eine Abteilung zu ihren Zahlen.
+            onTap: gewaehlt == null
+                ? () => onAbteilung(e.jeAbteilung[i].abteilung)
+                : null,
+          ),
+        const SizedBox(height: 8),
+        FarbLegende(eintraege: farben),
+      ],
+    );
+
+    final verlauf = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Zwischentitel(
+          'Erledigt ${vs.rasterText} · '
+          '${gewaehlt?.anzeigeName ?? 'alle Abteilungen zusammen'}',
+        ),
+        if (e.verlaufPunkte >= 2)
+          StatistikSaeulen(
+            saeulen: [
+              for (final p in e.verlauf)
+                Saeule(
+                  label: vs.kurzname(p.abschnitt),
+                  wert: p.hatDaten ? 100 : null,
+                  farbe: farben.last.$1,
+                  segmente: _erfuellungsSegmente(p.zahlen, farben, ganz: 100),
+                  hinweis: '${vs.langname(p.abschnitt)}\n'
+                      '${_erfuellungsText(p.zahlen)}',
+                ),
+            ],
+            achsenText: (wert) => '${Format.zahl(wert)} %',
+            festesMax: 100,
+          )
+        else
+          _Fussnote(
+            'Ein Verlauf braucht Karten in mindestens zwei '
+            '${_abschnitteText(vs)}.',
+          ),
+      ],
+    );
+
+    return Bereich(
+      titel: 'Planerfüllung',
+      untertitel: untertitel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 32,
+            runSpacing: 10,
+            children: [
+              Kennzahl(
+                wert: _ganzeProzent(g.anteilErledigt),
+                label: 'erledigt · ${g.erledigt} von ${g.karten} '
+                    '${g.karten == 1 ? 'Karte' : 'Karten'}',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: _ganzeProzent(g.anteilErfasst),
+                label: 'mit erfasster Produktion',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: '${g.offen}',
+                label: g.offen == 1 ? 'Karte offen' : 'Karten offen',
+                farbe: g.offen > 0 ? f.warnung : null,
+                gross: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ZweiSpalten(links: tabelle, rechts: verlauf),
+          const SizedBox(height: 12),
+          const _Fussnote(
+            'Gezählt werden die Karten im Board bis gestern — heute läuft '
+            'noch. Erfasst: Die Produktion ist in der Produktionserfassung '
+            'eingetragen; das macht ihre ganze Kette erledigt. Nur '
+            'abgehakt: im Board von Hand erledigt — dann fehlen der '
+            'Statistik Ausbeute und Zeit. Offen: weder noch, vielleicht '
+            'produziert und nicht eingetragen.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErfuellungsZeile extends StatelessWidget {
+  const _ErfuellungsZeile({
+    required this.zeile,
+    required this.farben,
+    required this.letzte,
+    this.onTap,
+  });
+
+  final ErfuellungsZeile zeile;
+  final List<(Color, String)> farben;
+  final bool letzte;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = zeile.zahlen;
+    final name = zeile.abteilung.anzeigeName;
+    return BalkenZeile(
+      vorne: AbteilungsMarke(abteilung: zeile.abteilung),
+      name: name,
+      namensBreite: _namensBreite,
+      letzte: letzte,
+      onTap: onTap,
+      hinweis: '$name\n${_erfuellungsText(z)}'
+          '${onTap != null ? '\nAntippen: nur diese Abteilung' : ''}',
+      werte: [
+        ZeilenWert('${z.erledigt} von ${z.karten}', breite: 92),
+        ZeilenWert(
+          _ganzeProzent(z.anteilErledigt),
+          breite: 52,
+          farbe: Theme.of(context).colorScheme.onSurface,
+          fett: true,
+        ),
+      ],
+      balken: SegmentBalken(
+        segmente: _erfuellungsSegmente(z, farben),
+        max: 1,
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Teil 3: Ausbeute und Verlust
 // ---------------------------------------------------------------------------
 
@@ -994,16 +1273,16 @@ class _SpannenTabelle extends StatelessWidget {
       children: [
         for (var i = 0; i < spannen.length; i++)
           BalkenZeile(
-            name: '${spannen[i].artikel.artikelnummer} · '
-                '${spannen[i].artikel.bezeichnung}',
+            name: _artikelName(spannen[i].artikel),
             letzte: i == spannen.length - 1,
-            hinweis: '${spannen[i].artikel.artikelnummer} · '
-                '${spannen[i].artikel.bezeichnung}\n'
+            onTap: () => _oeffneArtikel(context, spannen[i].artikel),
+            hinweis: '${_artikelName(spannen[i].artikel)}\n'
                 'Ausbeute: schlechteste ${prozent(spannen[i].min)} %, '
                 'Ø ${prozent(spannen[i].mittel)} %, '
                 'beste ${prozent(spannen[i].max)} %\n'
                 'Spanne ${prozent(spannen[i].spanne)} Prozentpunkte aus '
-                '${spannen[i].anzahl} Produktionen',
+                '${spannen[i].anzahl} Produktionen\n'
+                'Antippen: Artikel öffnen',
             werte: [
               ZeilenWert(
                 'Ø ${prozent(spannen[i].mittel)} %',
@@ -1050,6 +1329,323 @@ class _SpannenTabelle extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Teil 4: Leistung
+// ---------------------------------------------------------------------------
+
+/// „1.240 kg/h"
+String _kgh(double kgProStunde) => '${Format.zahl(kgProStunde)} kg/h';
+
+/// „+38 %" bzw. „−12 %" — immer mit Vorzeichen.
+String _abweichungText(double anteil) {
+  final text = Format.prozent(anteil.abs(), nachkomma: 0);
+  return anteil < 0 ? '−$text' : '+$text';
+}
+
+class _LeistungBereich extends StatelessWidget {
+  const _LeistungBereich({required this.auswertung, required this.abteilung});
+
+  final LeistungsAuswertung auswertung;
+  final Abteilung? abteilung;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = auswertung;
+    final gewaehlt = abteilung;
+    final untertitel = gewaehlt == null
+        ? 'erfasste Produktionen mit Zeit'
+        : 'erfasste Produktionen · Artikel mit Schritt in '
+            '${gewaehlt.anzeigeName}';
+    final kgh = l.kgProStunde;
+
+    if (l.produktionen == 0) {
+      return Bereich(
+        titel: 'Leistung',
+        untertitel: untertitel,
+        child: const LeerHinweis(
+          'Im Zeitraum ist keine Produktion mit Rohware erfasst. Mit Start '
+          'und Ende eingetragen, zeigt sich hier, wie viel je Stunde '
+          'geschafft wird.',
+          icon: Icons.speed,
+        ),
+      );
+    }
+    if (kgh == null) {
+      final welche = l.produktionen == 1
+          ? 'der erfassten Produktion'
+          : 'den ${l.produktionen} erfassten Produktionen';
+      return Bereich(
+        titel: 'Leistung',
+        untertitel: untertitel,
+        child: HinweisBox(
+          'Bei $welche fehlt die Produktionszeit — ohne sie lässt sich '
+          'keine Leistung rechnen. Trag Start und Ende in der '
+          'Produktionserfassung ein.',
+          titel: 'Keine Produktionszeit',
+        ),
+      );
+    }
+
+    final zeit = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Die meiste Produktionszeit'),
+        _ZeitverbraucherTabelle(artikel: l.zeitverbraucher),
+      ],
+    );
+
+    final abweichung = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _Zwischentitel(
+          l.verglichen == 0
+              ? 'Abweichung von den Leistungsdaten'
+              : 'Abweichung von den Leistungsdaten · ${l.abweichend} von '
+                  '${l.verglichen} Artikeln',
+        ),
+        if (l.abweichungen.isNotEmpty) ...[
+          _AbweichungsTabelle(artikel: l.abweichungen),
+          if (l.abweichend > l.abweichungen.length) ...[
+            const SizedBox(height: 6),
+            _Fussnote(
+              'Gezeigt sind die ${l.abweichungen.length} Artikel mit der '
+              'größten Abweichung.',
+            ),
+          ],
+        ] else if (l.verglichen == 0)
+          const _Fussnote(
+            'Ab $kLeistungVergleichAb Produktionen mit Zeit vergleicht die '
+            'Statistik einen Artikel mit den Leistungsdaten seiner '
+            'Bratstraße. Im Zeitraum hat das noch kein Artikel.',
+          )
+        else
+          _Fussnote(
+            l.verglichen == 1
+                ? 'Der vergleichbare Artikel liegt weniger als '
+                    '${Format.prozent(kLeistungAbweichungAb, nachkomma: 0)} '
+                    'neben seinen Leistungsdaten.'
+                : 'Alle ${l.verglichen} vergleichbaren Artikel liegen '
+                    'weniger als '
+                    '${Format.prozent(kLeistungAbweichungAb, nachkomma: 0)} '
+                    'neben ihren Leistungsdaten.',
+          ),
+      ],
+    );
+
+    return Bereich(
+      titel: 'Leistung',
+      untertitel: untertitel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 32,
+            runSpacing: 10,
+            children: [
+              Kennzahl(
+                wert: _kgh(kgh),
+                label: 'Ø Rohware je Stunde',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: Zeit.kurz(l.minuten),
+                label: 'Produktionszeit',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: '${l.mitZeit}',
+                label: l.mitZeit == 1
+                    ? 'Produktion mit Zeit'
+                    : 'Produktionen mit Zeit',
+                gross: true,
+              ),
+            ],
+          ),
+          if (l.ohneZeit > 0) ...[
+            const SizedBox(height: 8),
+            _Fussnote(
+              'Von ${l.produktionen} Produktionen nicht gezählt: '
+              '${l.ohneZeit} ohne Produktionszeit.',
+            ),
+          ],
+          const SizedBox(height: 16),
+          _ZweiSpalten(links: zeit, rechts: abweichung),
+          const SizedBox(height: 12),
+          const _Fussnote(
+            'Leistung heißt hier: Rohware je Stunde Produktionszeit, wie '
+            'sie bei der Erfassung eingetragen wird. An der Bratstraße '
+            'rechnet die Planung mit dem Ø der letzten '
+            '$kLetzteProduktionen Produktionen — hinterlegte '
+            'Leistungsdaten gelten dort nur, solange keine erfasst sind. '
+            'Weichen sie stark ab, lohnt es, sie im Artikel nachzuziehen.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ZeitverbraucherTabelle extends StatelessWidget {
+  const _ZeitverbraucherTabelle({required this.artikel});
+
+  final List<ArtikelLeistung> artikel;
+
+  @override
+  Widget build(BuildContext context) {
+    final farbe = Theme.of(context).colorScheme.primary;
+    final groesste = artikel.isEmpty ? 0.0 : artikel.first.minuten;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < artikel.length; i++)
+          BalkenZeile(
+            name: _artikelName(artikel[i].artikel),
+            letzte: i == artikel.length - 1,
+            onTap: () => _oeffneArtikel(context, artikel[i].artikel),
+            hinweis: _hinweis(artikel[i]),
+            werte: [
+              ZeilenWert(Zeit.kurz(artikel[i].minuten), breite: 80),
+              ZeilenWert('Ø ${_kgh(artikel[i].kgProStunde)}', breite: 104),
+              ZeilenWert('${artikel[i].anzahl}×', breite: 40),
+            ],
+            balken: SegmentBalken(
+              segmente: [(artikel[i].minuten, farbe)],
+              max: groesste,
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _hinweis(ArtikelLeistung a) {
+    final hinterlegt = a.hinterlegt;
+    return [
+      _artikelName(a.artikel),
+      '${Zeit.kurz(a.minuten)} für ${Format.kg(a.kg)} Rohware aus '
+          '${a.anzahl} ${a.anzahl == 1 ? 'Produktion' : 'Produktionen'}',
+      if (a.anzahl > 1)
+        'Ø ${_kgh(a.kgProStunde)} · langsamste ${_kgh(a.langsamste)}, '
+            'schnellste ${_kgh(a.schnellste)}'
+      else
+        'Ø ${_kgh(a.kgProStunde)}',
+      if (hinterlegt != null)
+        'Hinterlegt für die Bratstraße: ${_kgh(hinterlegt)}',
+      'Antippen: Artikel öffnen',
+    ].join('\n');
+  }
+}
+
+class _AbweichungsTabelle extends StatelessWidget {
+  const _AbweichungsTabelle({required this.artikel});
+
+  /// Nur Artikel mit Leistungsdaten — ohne sie gibt es keine Abweichung.
+  final List<ArtikelLeistung> artikel;
+
+  @override
+  Widget build(BuildContext context) {
+    final farben = Theme.of(context).colorScheme;
+    final grau = farben.onSurfaceVariant;
+    final langsamer = reihenFarbe(context, 1);
+    final schneller = reihenFarbe(context, 0);
+    // Gemeinsame Achse, auf 25 % gerundet: mindestens ±50 %, höchstens
+    // ±100 % — was darüber liegt, endet am Rand.
+    var groesste = 0.0;
+    for (final a in artikel) {
+      groesste = math.max(groesste, (a.abweichung ?? 0.0).abs());
+    }
+    final grenze = math.min(math.max((groesste * 4).ceil() / 4, 0.5), 1.0);
+    final grenzeText = Format.prozent(grenze, nachkomma: 0);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < artikel.length; i++)
+          _zeile(
+            context,
+            artikel[i],
+            grenze: grenze,
+            langsamer: langsamer,
+            schneller: schneller,
+            letzte: i == artikel.length - 1,
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+          child: Row(
+            children: [
+              Text(
+                '−$grenzeText',
+                style: TextStyle(fontSize: 11, color: grau),
+              ),
+              Expanded(
+                child: Text(
+                  'Strich: hinterlegte Leistung',
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 11, color: grau),
+                ),
+              ),
+              Text(
+                '+$grenzeText',
+                style: TextStyle(fontSize: 11, color: grau),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        FarbLegende(
+          eintraege: [
+            (langsamer, 'langsamer als hinterlegt'),
+            (schneller, 'schneller als hinterlegt'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _zeile(
+    BuildContext context,
+    ArtikelLeistung a, {
+    required double grenze,
+    required Color langsamer,
+    required Color schneller,
+    required bool letzte,
+  }) {
+    final d = a.abweichung ?? 0.0;
+    final hinterlegt = a.hinterlegt ?? 0.0;
+    return BalkenZeile(
+      name: _artikelName(a.artikel),
+      letzte: letzte,
+      onTap: () => _oeffneArtikel(context, a.artikel),
+      hinweis: '${_artikelName(a.artikel)}\n'
+          'Gemessen Ø ${_kgh(a.kgProStunde)} aus ${a.anzahl} Produktionen\n'
+          'Hinterlegt für die Bratstraße: ${_kgh(hinterlegt)}\n'
+          '${d < 0 ? 'Langsamer' : 'Schneller'} als hinterlegt: '
+          '${_abweichungText(d)}\n'
+          'Antippen: Artikel öffnen',
+      werte: [
+        ZeilenWert(
+          '${Format.zahl(a.kgProStunde)} statt '
+          '${Format.zahl(hinterlegt)} kg/h',
+          breite: 150,
+        ),
+        ZeilenWert(
+          _abweichungText(d),
+          breite: 52,
+          farbe: Theme.of(context).colorScheme.onSurface,
+          fett: true,
+        ),
+      ],
+      balken: AbweichungsBalken(
+        wert: d,
+        grenze: grenze,
+        farbeWeniger: langsamer,
+        farbeMehr: schneller,
+      ),
     );
   }
 }
@@ -1205,14 +1801,14 @@ class _TopArtikel extends StatelessWidget {
         ),
         for (var i = 0; i < artikel.length; i++)
           BalkenZeile(
-            name: '${artikel[i].artikel.artikelnummer} · '
-                '${artikel[i].artikel.bezeichnung}',
+            name: _artikelName(artikel[i].artikel),
             letzte: i == artikel.length - 1,
-            hinweis: '${artikel[i].artikel.artikelnummer} · '
-                '${artikel[i].artikel.bezeichnung}\n'
+            onTap: () => _oeffneArtikel(context, artikel[i].artikel),
+            hinweis: '${_artikelName(artikel[i].artikel)}\n'
                 '${Format.kg(artikel[i].kg)} Rohware aus '
                 '${artikel[i].produktionen} '
-                '${artikel[i].produktionen == 1 ? 'Produktion' : 'Produktionen'}',
+                '${artikel[i].produktionen == 1 ? 'Produktion' : 'Produktionen'}\n'
+                'Antippen: Artikel öffnen',
             werte: [
               ZeilenWert(Format.kg(artikel[i].kg), breite: 92),
               ZeilenWert(
@@ -1226,6 +1822,212 @@ class _TopArtikel extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Teil 7: Stammdaten-Pflege
+// ---------------------------------------------------------------------------
+
+/// Breite der Namensspalte der Lücken — „Ohne Prozessschritte" passt.
+const double _lueckenNamensBreite = 170;
+
+class _PflegeBereich extends StatelessWidget {
+  const _PflegeBereich({required this.auswertung});
+
+  final PflegeAuswertung auswertung;
+
+  static const String _titel = 'Stammdaten-Pflege';
+  static const String _untertitel = 'alle Artikel · gleich welche Abteilung';
+
+  @override
+  Widget build(BuildContext context) {
+    final p = auswertung;
+    if (p.artikel == 0) {
+      return const Bereich(
+        titel: _titel,
+        untertitel: _untertitel,
+        child: LeerHinweis(
+          'Es sind noch keine Artikel angelegt.',
+          icon: Icons.inventory_2_outlined,
+        ),
+      );
+    }
+
+    final farbe = Theme.of(context).colorScheme.primary;
+    final blass = blasseFarbe(context, farbe);
+
+    final Widget tabelle;
+    if (p.vollstaendig == p.artikel) {
+      tabelle = HinweisBox(
+        p.artikel == 1
+            ? 'Dem Artikel fehlt nichts, womit die Planung rechnet.'
+            : 'Allen ${p.artikel} Artikeln fehlt nichts, womit die Planung '
+                'rechnet.',
+        art: StatusArt.ok,
+        titel: 'Vollständig gepflegt',
+      );
+    } else {
+      tabelle = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const _Zwischentitel('Artikel mit Lücken'),
+          for (var i = 0; i < p.zeilen.length; i++)
+            _PflegeZeile(
+              zeile: p.zeilen[i],
+              artikel: p.artikel,
+              farbe: farbe,
+              blass: blass,
+              letzte: i == p.zeilen.length - 1,
+            ),
+          const SizedBox(height: 8),
+          FarbLegende(
+            eintraege: [
+              (farbe, 'aktiv: im Zeitraum produziert oder geplant'),
+              (blass, 'übrige'),
+            ],
+          ),
+        ],
+      );
+    }
+
+    final bedeutung = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _Zwischentitel('Was fehlt — und was daraus folgt'),
+        for (final z in p.zeilen) _Bedeutung(zeile: z),
+      ],
+    );
+
+    return Bereich(
+      titel: _titel,
+      untertitel: _untertitel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 32,
+            runSpacing: 10,
+            children: [
+              Kennzahl(
+                wert: '${p.artikel}',
+                label: 'Artikel',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: '${p.vollstaendig}',
+                label: 'vollständig gepflegt · '
+                    '${_ganzeProzent(p.anteilVollstaendig)}',
+                gross: true,
+              ),
+              Kennzahl(
+                wert: '${p.aktiv}',
+                label: 'aktiv: im Zeitraum produziert oder geplant',
+                gross: true,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _ZweiSpalten(links: tabelle, rechts: bedeutung),
+          const SizedBox(height: 12),
+          const _Fussnote(
+            'Gezählt wie in der Artikelliste: Antippen öffnet sie mit genau '
+            'diesen Artikeln. Am meisten bringt die Pflege bei den aktiven '
+            '— mit ihnen rechnet die Planung gerade.',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PflegeZeile extends StatelessWidget {
+  const _PflegeZeile({
+    required this.zeile,
+    required this.artikel,
+    required this.farbe,
+    required this.blass,
+    required this.letzte,
+  });
+
+  final PflegeZeile zeile;
+
+  /// Alle Artikel — die volle Länge des Balkens.
+  final int artikel;
+  final Color farbe;
+  final Color blass;
+  final bool letzte;
+
+  @override
+  Widget build(BuildContext context) {
+    final z = zeile;
+    final l = z.luecke;
+    final leer = z.anzahl == 0;
+    return BalkenZeile(
+      name: l.titel,
+      namensBreite: _lueckenNamensBreite,
+      letzte: letzte,
+      // Eine leere Liste zu öffnen, hilft niemandem.
+      onTap: leer
+          ? null
+          : () => _oeffne(
+                context,
+                'articles',
+                queryParameters: {'luecke': l.name},
+              ),
+      hinweis: '${l.titel}: ${z.anzahl} von $artikel '
+          '${artikel == 1 ? 'Artikel' : 'Artikeln'}, davon ${z.aktiv} im '
+          'Zeitraum produziert oder geplant\n'
+          '${l.folge}'
+          '${leer ? '' : '\nAntippen: diese Artikel in der Artikelliste'}',
+      werte: [
+        ZeilenWert(
+          '${z.anzahl}',
+          breite: 48,
+          farbe: Theme.of(context).colorScheme.onSurface,
+          fett: true,
+        ),
+        ZeilenWert(z.aktiv > 0 ? '${z.aktiv} aktiv' : '', breite: 72),
+      ],
+      balken: SegmentBalken(
+        segmente: [
+          (z.aktiv.toDouble(), farbe),
+          ((z.anzahl - z.aktiv).toDouble(), blass),
+        ],
+        max: artikel.toDouble(),
+      ),
+    );
+  }
+}
+
+/// Eine Lücke, ausgeschrieben: was fehlt und was die Planung dann tut.
+class _Bedeutung extends StatelessWidget {
+  const _Bedeutung({required this.zeile});
+
+  final PflegeZeile zeile;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = zeile.luecke;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: '${l.titel}: ',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            TextSpan(text: l.folge),
+          ],
+        ),
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          height: 1.35,
+        ),
+      ),
     );
   }
 }

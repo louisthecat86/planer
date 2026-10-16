@@ -454,7 +454,7 @@ HistorienLeistung? leistungAusProduktionen(
   for (final h in neuesteZuerst) {
     final kg = h.kgRohware;
     if (kg == null || !kg.isFinite || kg <= 0) continue;
-    final minuten = _produktionsMinuten(h, kg);
+    final minuten = produktionsMinutenVon(h, kg);
     if (minuten == null) continue;
     summeKg += kg;
     summeMinuten += minuten;
@@ -478,8 +478,12 @@ Future<HistorienLeistung?> historienLeistung(
   return leistungAusProduktionen(await _ladeProduktionen(db, productId));
 }
 
-/// Produktionszeit einer erfassten Produktion in Minuten, oder null.
-double? _produktionsMinuten(ProductionHistoryData h, double kg) {
+/// Produktionszeit einer erfassten Produktion mit [kg] Rohware in
+/// Minuten, oder null.
+///
+/// Öffentlich, weil Statistik und Artikelliste nach genau dieser Regel
+/// zählen: Was die Planung als Zeit nimmt, sollen sie nicht anders sehen.
+double? produktionsMinutenVon(ProductionHistoryData h, double kg) {
   final erfasst = h.produktionszeitMinuten;
   if (erfasst != null && erfasst.isFinite && erfasst > 0) return erfasst;
   final ausUhrzeit = ProduktionErfassenService.produktionszeitMinuten(

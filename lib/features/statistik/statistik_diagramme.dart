@@ -14,9 +14,9 @@ import '../../core/utils/format.dart';
 // lesbar, und jeder Wert steht ohne Darüberfahren da.
 //
 // Farbe trägt nur, was sie tragen muss: Reihen in einer festen, auf
-// Farbsehschwäche geprüften Folge; Ampelfarben nur für die Auslastung,
-// wie im Board; eine einzelne Reihe in der Akzentfarbe. Jede Farbe steht
-// neben einem Namen — nie allein.
+// Farbsehschwäche geprüften Folge; Ampel- und Erledigt-Farben nur dort,
+// wo sie dasselbe heißen wie im Board; eine einzelne Reihe in der
+// Akzentfarbe. Jede Farbe steht neben einem Namen — nie allein.
 
 // ---------------------------------------------------------------------------
 // Farben
@@ -65,6 +65,26 @@ Color hellgrauFarbe(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
         ? const Color(0xFF5E5E5E)
         : const Color(0xFFC4C4C4);
+
+/// Grau für den offenen Rest eines Ganzen — kaum anders als die leere
+/// Spur eines Balkens, damit das Erledigte heraussticht.
+Color restFarbe(BuildContext context) =>
+    Theme.of(context).brightness == Brightness.dark
+        ? const Color(0xFF3F3F40)
+        : const Color(0xFFDDDDDD);
+
+/// [farbe] blasser — als deckende Farbe auf dem Grund gemischt, nicht
+/// durchscheinend: Übereinander gemalt (Säulen mit Stapel) schiene sonst
+/// die Farbe darunter durch.
+Color blasseFarbe(
+  BuildContext context,
+  Color farbe, {
+  double deckkraft = 0.45,
+}) =>
+    Color.alphaBlend(
+      farbe.withValues(alpha: deckkraft),
+      Theme.of(context).colorScheme.surface,
+    );
 
 TextStyle _achsenStil(BuildContext context) => TextStyle(
       fontSize: 11,
@@ -308,6 +328,7 @@ class Saeule {
     required this.wert,
     required this.farbe,
     required this.hinweis,
+    this.segmente = const [],
   });
 
   /// Beschriftung unter der Säule, etwa „KW 42".
@@ -320,6 +341,10 @@ class Saeule {
 
   /// Text beim Darüberfahren.
   final String hinweis;
+
+  /// Gestapelte Teile von unten nach oben, zusammen [wert] — leer: die
+  /// ganze Säule in [farbe].
+  final List<(double, Color)> segmente;
 }
 
 /// Eine „runde" Teilung für eine Achse bis [spanne]: 1, 2, 2,5 oder 5 mal
@@ -344,7 +369,8 @@ double achsenMax(double hoechster, double schritt) {
   return oben;
 }
 
-/// Säulen über die Zeit — eine Reihe, eine Säule je Woche oder Monat.
+/// Säulen über die Zeit — eine Reihe, eine Säule je Woche oder Monat;
+/// mit [Saeule.segmente] gestapelt.
 class StatistikSaeulen extends StatelessWidget {
   const StatistikSaeulen({
     super.key,
@@ -352,6 +378,7 @@ class StatistikSaeulen extends StatelessWidget {
     required this.achsenText,
     this.linie,
     this.linienFarbe,
+    this.festesMax,
     this.hoehe = 200,
   });
 
@@ -364,6 +391,10 @@ class StatistikSaeulen extends StatelessWidget {
   final double? linie;
   final Color? linienFarbe;
 
+  /// Festes oberes Ende der Achse, etwa 100 für Anteile in Prozent — null:
+  /// nach der höchsten Säule.
+  final double? festesMax;
+
   final double hoehe;
 
   @override
@@ -372,14 +403,15 @@ class StatistikSaeulen extends StatelessWidget {
     final farben = theme.colorScheme;
     final achse = _achsenStil(context);
     final bezug = linie;
+    final fest = festesMax;
 
     var hoechster = bezug ?? 0.0;
     for (final s in saeulen) {
       final w = s.wert;
       if (w != null && w > hoechster) hoechster = w;
     }
-    final schritt = achsenSchritt(hoechster);
-    final yMax = achsenMax(hoechster, schritt);
+    final schritt = achsenSchritt(fest ?? hoechster);
+    final yMax = fest ?? achsenMax(hoechster, schritt);
 
     return SizedBox(
       height: hoehe,
@@ -410,6 +442,7 @@ class StatistikSaeulen extends StatelessWidget {
                           color: saeulen[i].farbe,
                           width: breite,
                           borderRadius: _saeulenEcken,
+                          rodStackItems: _stapel(saeulen[i], farben.surface),
                         ),
                       ],
                     ),
@@ -516,6 +549,27 @@ class StatistikSaeulen extends StatelessWidget {
 const BorderRadius _saeulenEcken = BorderRadius.vertical(
   top: Radius.circular(2),
 );
+
+/// Die Teile einer gestapelten Säule — getrennt durch eine feine Fuge in
+/// der Grundfarbe.
+List<BarChartRodStackItem> _stapel(Saeule saeule, Color fuge) {
+  if (saeule.wert == null || saeule.segmente.isEmpty) return const [];
+  final teile = <BarChartRodStackItem>[];
+  var unten = 0.0;
+  for (final (wert, farbe) in saeule.segmente) {
+    if (!(wert > 0)) continue;
+    teile.add(
+      BarChartRodStackItem(
+        unten,
+        unten + wert,
+        farbe,
+        borderSide: BorderSide(color: fuge),
+      ),
+    );
+    unten += wert;
+  }
+  return teile;
+}
 
 // ---------------------------------------------------------------------------
 // Balken in Tabellenzeilen
@@ -674,6 +728,79 @@ class SpannenBalken extends StatelessWidget {
                     border: Border.all(color: farben.surface, width: 2),
                   ),
                 ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Abweichung von einem Bezugswert in der Mitte: ein Balken nach links
+/// (weniger) oder nach rechts (mehr), auf einer Achse von −[grenze] bis
+/// +[grenze]. Was darüber hinausgeht, endet am Rand — den genauen Wert
+/// nennt die Zeile.
+class AbweichungsBalken extends StatelessWidget {
+  const AbweichungsBalken({
+    super.key,
+    required this.wert,
+    required this.grenze,
+    required this.farbeWeniger,
+    required this.farbeMehr,
+  });
+
+  /// Etwa −0,25 für ein Viertel weniger.
+  final double wert;
+  final double grenze;
+  final Color farbeWeniger;
+  final Color farbeMehr;
+
+  @override
+  Widget build(BuildContext context) {
+    final farben = Theme.of(context).colorScheme;
+    return LayoutBuilder(
+      builder: (context, c) {
+        final breite = c.maxWidth;
+        final mitte = breite / 2;
+        final anteil = grenze > 0
+            ? math.min(math.max(wert / grenze, -1.0), 1.0)
+            : 0.0;
+        final laenge = anteil.abs() * mitte;
+        return SizedBox(
+          height: 12,
+          width: breite,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 2,
+                height: 8,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: farben.surfaceContainerHighest,
+                    borderRadius: AppMasse.eckenKlein,
+                  ),
+                ),
+              ),
+              if (laenge > 0)
+                Positioned(
+                  left: anteil < 0 ? mitte - laenge : mitte,
+                  width: laenge,
+                  top: 2,
+                  height: 8,
+                  child: ColoredBox(
+                    color: anteil < 0 ? farbeWeniger : farbeMehr,
+                  ),
+                ),
+              // Der Bezugswert.
+              Positioned(
+                left: mitte - 1,
+                width: 2,
+                top: 0,
+                bottom: 0,
+                child: ColoredBox(color: farben.onSurface),
               ),
             ],
           ),

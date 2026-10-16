@@ -12,6 +12,7 @@ import 'core/theme/app_theme.dart';
 import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
+import 'features/articles/artikel_luecken.dart';
 import 'features/auftragsbestand/aenderungen_screen.dart';
 import 'features/auftragsbestand/auftragsbestand_screen.dart';
 import 'features/backup/backup_management_screen.dart';
@@ -71,12 +72,23 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
           // Artikel-Stammdaten (Abläufe, Zeiten, Mengen, Maschinen).
+          // „?luecke=ohneAusbeute" öffnet die Liste gleich gefiltert — so
+          // springt die Statistik zu den Artikeln, denen etwas fehlt.
           GoRoute(
             path: '/articles',
             name: 'articles',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: ArticleListScreen(),
-            ),
+            pageBuilder: (context, state) {
+              final luecke = ArtikelLuecke.values
+                  .asNameMap()[state.uri.queryParameters['luecke']];
+              return NoTransitionPage(
+                child: ArticleListScreen(
+                  // Neuer Zustand, wenn sich der Filter ändert — sonst
+                  // bliebe der alte stehen.
+                  key: ValueKey(luecke),
+                  luecke: luecke,
+                ),
+              );
+            },
           ),
           GoRoute(
             path: '/article/:productId',

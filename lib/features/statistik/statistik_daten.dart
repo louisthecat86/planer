@@ -5,21 +5,32 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/services/erledigt_service.dart' show Erledigt;
 import '../../core/utils/datum.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
+import '../articles/artikel_luecken.dart';
 import '../board/board_providers.dart'
-    show BoardSpur, CapacityStatus, SpurTagBelegung, belegungImZeitraum;
-import '../whiteboard/whiteboard_provider.dart' show verlustAnteilVon;
+    show
+        BoardSpur,
+        CapacityStatus,
+        SpurTagBelegung,
+        belegungImZeitraum,
+        kartenImZeitraum;
+import '../whiteboard/whiteboard_provider.dart'
+    show leistungsdatenVon, produktionsMinutenVon, verlustAnteilVon;
 
 // Die Zahlen hinter der Statistik-Seite.
 //
-// Zwei Quellen, je nach Frage:
+// Drei Quellen, je nach Frage:
 //  • Auslastung und Zeit stammen aus der Planung im Board — Woche für Woche
 //    so, wie das Board sie zeigt ([belegungImZeitraum]), mit der heutigen
-//    Kapazität.
-//  • Ausbeute, Verlust und Produktmix stammen aus den erfassten
+//    Kapazität. Die Planerfüllung zählt die Karten des Boards
+//    ([kartenImZeitraum]) — erledigt, wie das Board es anzeigt.
+//  • Ausbeute, Verlust, Leistung und Produktmix stammen aus den erfassten
 //    Produktionen — dem, was wirklich herauskam.
+//  • Die Stammdaten-Pflege zählt die Lücken aller Artikel — nach denselben
+//    Regeln wie die Artikelliste ([artikelLuecken]).
 //
 // Die Auswertungen sind reine Funktionen über diesen Daten. Der
 // Abteilungsfilter wirkt erst hier: Ihn umzuschalten lädt nichts neu.
@@ -521,6 +532,8 @@ class StatistikArtikel {
     required this.bezeichnung,
     this.produktgruppe,
     this.abteilungen = const {},
+    this.luecken = const {},
+    this.leistungKgH,
   });
 
   final String id;
@@ -532,6 +545,13 @@ class StatistikArtikel {
 
   /// Abteilungen seiner Prozessschritte (dbValues).
   final Set<String> abteilungen;
+
+  /// Was dem Artikel für die Planung fehlt — wie in der Artikelliste.
+  final Set<ArtikelLuecke> luecken;
+
+  /// Hinterlegte Leistung der Bratstraße in kg Rohware je Stunde — null:
+  /// keine Leistungsdaten.
+  final double? leistungKgH;
 }
 
 /// Eine erfasste Produktion.
@@ -543,6 +563,7 @@ class ErfassteProduktion {
     this.kgFertigware,
     this.verlust,
     this.ausbeuteAngegeben = false,
+    this.minuten,
   });
 
   factory ErfassteProduktion.aus(ProductionHistoryData h) {
@@ -555,6 +576,9 @@ class ErfassteProduktion {
       verlust: verlustAnteilVon(h),
       ausbeuteAngegeben: h.verlustAnteil != null ||
           (roh != null && roh > 0 && h.kgFertigware != null),
+      minuten: roh != null && roh.isFinite && roh > 0
+          ? produktionsMinutenVon(h, roh)
+          : null,
     );
   }
 
@@ -570,6 +594,37 @@ class ErfassteProduktion {
   /// Ob ein Verlust oder Roh- und Fertigware eingetragen sind. Zusammen
   /// mit [verlust] == null heißt das: eingetragen, aber nicht plausibel.
   final bool ausbeuteAngegeben;
+
+  /// Produktionszeit in Minuten nach derselben Regel wie die Planung
+  /// ([produktionsMinutenVon]) — null: keine Zeit erfasst.
+  final double? minuten;
+
+  /// kg Rohware je Stunde — null ohne Rohware oder Zeit.
+  double? get kgProStunde {
+    final kg = kgRohware;
+    final m = minuten;
+    if (kg == null || m == null || m <= 0) return null;
+    return kg / m * 60;
+  }
+}
+
+/// Eine Karte im Board — für die Planerfüllung.
+class PlanKarte {
+  const PlanKarte({
+    required this.productId,
+    required this.abteilung,
+    required this.datum,
+    this.erledigt,
+  });
+
+  final String productId;
+  final Abteilung abteilung;
+
+  /// Tag der Karte, 00:00 Uhr.
+  final DateTime datum;
+
+  /// Erfasst, abgehakt — oder null: offen.
+  final Erledigt? erledigt;
 }
 
 bool _imFilter(
@@ -806,6 +861,201 @@ AusbeuteAuswertung werteAusbeuteAus(
 }
 
 // ---------------------------------------------------------------------------
+// Teil 4: Leistung
+// ---------------------------------------------------------------------------
+
+/// Ab so vielen Produktionen mit Zeit vergleicht die Statistik einen
+/// Artikel mit seinen Leistungsdaten — wie bei der Spanne der Ausbeute.
+const int kLeistungVergleichAb = kSpanneAbProduktionen;
+
+/// Ab so viel Abweichung von den Leistungsdaten gilt ein Artikel als
+/// abweichend: 20 %.
+const double kLeistungAbweichungAb = 0.2;
+
+/// So viele Artikel zeigen die Listen der Leistung.
+const int kLeistungAnzahl = 10;
+
+/// Was ein Artikel im Zeitraum geschafft hat — aus seinen Produktionen mit
+/// Rohware und Zeit.
+class ArtikelLeistung {
+  const ArtikelLeistung({
+    required this.artikel,
+    required this.kg,
+    required this.minuten,
+    required this.langsamste,
+    required this.schnellste,
+    required this.anzahl,
+  });
+
+  final StatistikArtikel artikel;
+
+  /// Rohware und Produktionszeit zusammen.
+  final double kg;
+  final double minuten;
+
+  /// kg/h der langsamsten und der schnellsten Produktion.
+  final double langsamste;
+  final double schnellste;
+
+  /// Produktionen mit Zeit.
+  final int anzahl;
+
+  /// Ø kg Rohware je Stunde: alle Rohware durch alle Zeit — so mittelt
+  /// auch die Planung.
+  double get kgProStunde => minuten > 0 ? kg / minuten * 60 : 0;
+
+  /// Hinterlegte Leistung der Bratstraße — null: keine.
+  double? get hinterlegt => artikel.leistungKgH;
+
+  /// Abweichung der gemessenen von der hinterlegten Leistung: +0,25 heißt
+  /// ein Viertel schneller, −0,25 ein Viertel langsamer. null ohne
+  /// Leistungsdaten.
+  double? get abweichung {
+    final h = hinterlegt;
+    if (h == null || !(h > 0)) return null;
+    return kgProStunde / h - 1;
+  }
+
+  /// Ob genug Produktionen da sind, um mit den Leistungsdaten zu
+  /// vergleichen — und es Leistungsdaten gibt.
+  bool get vergleichbar => anzahl >= kLeistungVergleichAb && abweichung != null;
+}
+
+class LeistungsAuswertung {
+  const LeistungsAuswertung({
+    required this.produktionen,
+    required this.mitZeit,
+    required this.kg,
+    required this.minuten,
+    required this.zeitverbraucher,
+    required this.abweichungen,
+    required this.verglichen,
+    required this.abweichend,
+  });
+
+  /// Erfasste Produktionen mit Rohware im Zeitraum (und im Filter).
+  final int produktionen;
+
+  /// Davon mit Produktionszeit — nur sie zählen.
+  final int mitZeit;
+
+  /// Rohware und Produktionszeit der Produktionen mit Zeit.
+  final double kg;
+  final double minuten;
+
+  /// Die Artikel mit der meisten Produktionszeit, meiste zuerst.
+  final List<ArtikelLeistung> zeitverbraucher;
+
+  /// Die Artikel, die am stärksten von ihren Leistungsdaten abweichen —
+  /// stärkste zuerst, höchstens [kLeistungAnzahl].
+  final List<ArtikelLeistung> abweichungen;
+
+  /// Artikel, die sich mit ihren Leistungsdaten vergleichen lassen.
+  final int verglichen;
+
+  /// Davon um [kLeistungAbweichungAb] oder mehr daneben.
+  final int abweichend;
+
+  /// Produktionen mit Rohware, aber ohne Zeit.
+  int get ohneZeit => produktionen - mitZeit;
+
+  /// Ø kg Rohware je Stunde über alle Produktionen mit Zeit — null ohne.
+  double? get kgProStunde => minuten > 0 ? kg / minuten * 60 : null;
+}
+
+/// Wie viel Rohware je Stunde die erfassten Produktionen geschafft haben —
+/// und wo das von den hinterlegten Leistungsdaten abweicht. Mit
+/// [abteilung] nur Artikel, die einen Schritt in dieser Abteilung haben.
+///
+/// Zeit und Rohware nach denselben Regeln wie die Planung
+/// ([produktionsMinutenVon]).
+LeistungsAuswertung werteLeistungAus(
+  List<ErfassteProduktion> produktionen,
+  Map<String, StatistikArtikel> artikel,
+  StatistikSpanne spanne, {
+  Abteilung? abteilung,
+}) {
+  var anzahl = 0;
+  var mitZeit = 0;
+  var kgSumme = 0.0;
+  var minutenSumme = 0.0;
+  // Je Artikel: Rohware und Minuten jeder Produktion mit Zeit.
+  final jeArtikel = <String, List<(double, double)>>{};
+  for (final p in produktionen) {
+    if (!_imFilter(p, artikel, spanne, abteilung)) continue;
+    final kg = p.kgRohware;
+    if (kg == null || !kg.isFinite || kg <= 0) continue;
+    anzahl++;
+    final minuten = p.minuten;
+    if (minuten == null || !minuten.isFinite || minuten <= 0) continue;
+    mitZeit++;
+    kgSumme += kg;
+    minutenSumme += minuten;
+    (jeArtikel[p.productId] ??= []).add((kg, minuten));
+  }
+
+  final alle = <ArtikelLeistung>[];
+  for (final MapEntry(key: id, value: werte) in jeArtikel.entries) {
+    final a = artikel[id];
+    if (a == null) continue;
+    var kg = 0.0;
+    var minuten = 0.0;
+    var langsamste = double.infinity;
+    var schnellste = 0.0;
+    for (final (k, m) in werte) {
+      kg += k;
+      minuten += m;
+      final kgh = k / m * 60;
+      if (kgh < langsamste) langsamste = kgh;
+      if (kgh > schnellste) schnellste = kgh;
+    }
+    alle.add(
+      ArtikelLeistung(
+        artikel: a,
+        kg: kg,
+        minuten: minuten,
+        langsamste: langsamste,
+        schnellste: schnellste,
+        anzahl: werte.length,
+      ),
+    );
+  }
+
+  int nachNummer(ArtikelLeistung a, ArtikelLeistung b) =>
+      a.artikel.artikelnummer.compareTo(b.artikel.artikelnummer);
+
+  final zeitverbraucher = [...alle]..sort((a, b) {
+      final m = b.minuten.compareTo(a.minuten);
+      return m != 0 ? m : nachNummer(a, b);
+    });
+
+  final vergleichbar = [
+    for (final a in alle)
+      if (a.vergleichbar) (a, (a.abweichung ?? 0.0).abs()),
+  ];
+  final abweichend = [
+    for (final (a, d) in vergleichbar)
+      if (d >= kLeistungAbweichungAb) (a, d),
+  ]..sort((x, y) {
+      final d = y.$2.compareTo(x.$2);
+      return d != 0 ? d : nachNummer(x.$1, y.$1);
+    });
+
+  return LeistungsAuswertung(
+    produktionen: anzahl,
+    mitZeit: mitZeit,
+    kg: kgSumme,
+    minuten: minutenSumme,
+    zeitverbraucher: zeitverbraucher.take(kLeistungAnzahl).toList(),
+    abweichungen: [
+      for (final (a, _) in abweichend.take(kLeistungAnzahl)) a,
+    ],
+    verglichen: vergleichbar.length,
+    abweichend: abweichend.length,
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Teil 5: Produktmix
 // ---------------------------------------------------------------------------
 
@@ -969,6 +1219,216 @@ ProduktmixAuswertung werteProduktmixAus(
 }
 
 // ---------------------------------------------------------------------------
+// Teil 6: Planerfüllung
+// ---------------------------------------------------------------------------
+
+/// Wie viele Karten erledigt sind — und auf welchem Weg.
+class ErfuellungsZahlen {
+  const ErfuellungsZahlen({
+    this.erfasst = 0,
+    this.abgehakt = 0,
+    this.offen = 0,
+  });
+
+  /// Die Produktion ist erfasst.
+  final int erfasst;
+
+  /// Von Hand abgehakt, aber nicht erfasst.
+  final int abgehakt;
+
+  /// Weder erfasst noch abgehakt.
+  final int offen;
+
+  int get karten => erfasst + abgehakt + offen;
+  int get erledigt => erfasst + abgehakt;
+
+  double get anteilErledigt => karten > 0 ? erledigt / karten : 0;
+  double get anteilErfasst => karten > 0 ? erfasst / karten : 0;
+
+  ErfuellungsZahlen plus(Erledigt? stand) => ErfuellungsZahlen(
+        erfasst: erfasst + (stand == Erledigt.erfasst ? 1 : 0),
+        abgehakt: abgehakt + (stand == Erledigt.abgehakt ? 1 : 0),
+        offen: offen + (stand == null ? 1 : 0),
+      );
+}
+
+/// Die Planerfüllung einer Abteilung.
+class ErfuellungsZeile {
+  const ErfuellungsZeile({required this.abteilung, required this.zahlen});
+
+  final Abteilung abteilung;
+  final ErfuellungsZahlen zahlen;
+}
+
+/// Die Planerfüllung in einem Abschnitt des Verlaufs.
+class ErfuellungsPunkt {
+  const ErfuellungsPunkt({required this.abschnitt, required this.zahlen});
+
+  final DateTime abschnitt;
+  final ErfuellungsZahlen zahlen;
+
+  bool get hatDaten => zahlen.karten > 0;
+}
+
+class ErfuellungsAuswertung {
+  const ErfuellungsAuswertung({
+    required this.gesamt,
+    required this.jeAbteilung,
+    required this.verlauf,
+    required this.verlaufSpanne,
+  });
+
+  final ErfuellungsZahlen gesamt;
+
+  /// Abteilungen mit Karten, in Produktionsfolge.
+  final List<ErfuellungsZeile> jeAbteilung;
+
+  /// Nur Abschnitte, die vor heute beginnen — spätere können noch nichts
+  /// erledigt haben.
+  final List<ErfuellungsPunkt> verlauf;
+
+  /// Zeitraum und Raster des Verlaufs — bei „Alles" ab der ersten Karte.
+  final StatistikSpanne verlaufSpanne;
+
+  /// Abschnitte des Verlaufs mit Daten — ein Verlauf braucht zwei.
+  int get verlaufPunkte => verlauf.where((p) => p.hatDaten).length;
+
+  bool get leer => gesamt.karten == 0;
+}
+
+/// Wie viel der Planung erledigt wurde: die Karten im Board bis gestern —
+/// heute läuft noch. Mit [abteilung] nur die Karten dieser Abteilung.
+ErfuellungsAuswertung werteErfuellungAus(
+  List<PlanKarte> karten,
+  StatistikSpanne spanne, {
+  required DateTime heute,
+  Abteilung? abteilung,
+}) {
+  final bis = tagOhneZeit(heute);
+  final gezaehlt = [
+    for (final k in karten)
+      if (spanne.enthaelt(k.datum) &&
+          k.datum.isBefore(bis) &&
+          (abteilung == null || k.abteilung == abteilung))
+        k,
+  ];
+  DateTime? ersterTag;
+  for (final k in gezaehlt) {
+    if (ersterTag == null || k.datum.isBefore(ersterTag)) ersterTag = k.datum;
+  }
+  final verlaufSpanne = spanne.abDatenbeginn(ersterTag);
+
+  var gesamt = const ErfuellungsZahlen();
+  final jeAbteilung = <Abteilung, ErfuellungsZahlen>{};
+  final jeAbschnitt = <DateTime, ErfuellungsZahlen>{};
+  for (final k in gezaehlt) {
+    gesamt = gesamt.plus(k.erledigt);
+    jeAbteilung[k.abteilung] =
+        (jeAbteilung[k.abteilung] ?? const ErfuellungsZahlen()).plus(k.erledigt);
+    final a = verlaufSpanne.abschnittVon(k.datum);
+    jeAbschnitt[a] =
+        (jeAbschnitt[a] ?? const ErfuellungsZahlen()).plus(k.erledigt);
+  }
+
+  final zeilen = [
+    for (final MapEntry(key: a, value: zahlen) in jeAbteilung.entries)
+      ErfuellungsZeile(abteilung: a, zahlen: zahlen),
+  ]..sort((x, y) => x.abteilung.index.compareTo(y.abteilung.index));
+
+  return ErfuellungsAuswertung(
+    gesamt: gesamt,
+    jeAbteilung: zeilen,
+    verlauf: [
+      for (final a in verlaufSpanne.abschnitte)
+        if (a.isBefore(bis))
+          ErfuellungsPunkt(
+            abschnitt: a,
+            zahlen: jeAbschnitt[a] ?? const ErfuellungsZahlen(),
+          ),
+    ],
+    verlaufSpanne: verlaufSpanne,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Teil 7: Stammdaten-Pflege
+// ---------------------------------------------------------------------------
+
+/// Eine Lücke in den Stammdaten und wie viele Artikel sie haben.
+class PflegeZeile {
+  const PflegeZeile({
+    required this.luecke,
+    required this.anzahl,
+    required this.aktiv,
+  });
+
+  final ArtikelLuecke luecke;
+
+  /// Artikel mit dieser Lücke — genau so viele zeigt die Artikelliste mit
+  /// diesem Filter.
+  final int anzahl;
+
+  /// Davon im Zeitraum produziert oder geplant.
+  final int aktiv;
+}
+
+class PflegeAuswertung {
+  const PflegeAuswertung({
+    required this.artikel,
+    required this.vollstaendig,
+    required this.aktiv,
+    required this.zeilen,
+  });
+
+  /// Alle Artikel.
+  final int artikel;
+
+  /// Davon ohne jede Lücke.
+  final int vollstaendig;
+
+  /// Davon im Zeitraum produziert oder geplant.
+  final int aktiv;
+
+  /// Je Lücke eine Zeile, in der Reihenfolge von [ArtikelLuecke].
+  final List<PflegeZeile> zeilen;
+
+  double get anteilVollstaendig => artikel > 0 ? vollstaendig / artikel : 0;
+}
+
+/// Was den Stammdaten aller [artikel] fehlt — und wie viel davon Artikel
+/// betrifft, die im Zeitraum produziert oder geplant wurden ([aktive]).
+///
+/// Bewusst ohne Abteilungsfilter: Die Zahlen sollen die Länge der Liste
+/// sein, die ein Klick in der Artikelliste öffnet.
+PflegeAuswertung wertePflegeAus(
+  Map<String, StatistikArtikel> artikel,
+  Set<String> aktive,
+) {
+  final anzahl = <ArtikelLuecke, int>{};
+  final aktiv = <ArtikelLuecke, int>{};
+  var vollstaendig = 0;
+  var aktivGesamt = 0;
+  for (final a in artikel.values) {
+    final istAktiv = aktive.contains(a.id);
+    if (istAktiv) aktivGesamt++;
+    if (a.luecken.isEmpty) vollstaendig++;
+    for (final l in a.luecken) {
+      anzahl[l] = (anzahl[l] ?? 0) + 1;
+      if (istAktiv) aktiv[l] = (aktiv[l] ?? 0) + 1;
+    }
+  }
+  return PflegeAuswertung(
+    artikel: artikel.length,
+    vollstaendig: vollstaendig,
+    aktiv: aktivGesamt,
+    zeilen: [
+      for (final l in ArtikelLuecke.values)
+        PflegeZeile(luecke: l, anzahl: anzahl[l] ?? 0, aktiv: aktiv[l] ?? 0),
+    ],
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Laden
 // ---------------------------------------------------------------------------
 
@@ -976,32 +1436,35 @@ ProduktmixAuswertung werteProduktmixAus(
 class StatistikDaten {
   const StatistikDaten({
     required this.spanne,
+    required this.stand,
     required this.belegung,
+    required this.karten,
     required this.produktionen,
     required this.artikel,
   });
 
   final StatistikSpanne spanne;
 
+  /// Wann geladen wurde — „heute" für die Planerfüllung.
+  final DateTime stand;
+
   /// Planung: jede Spur an jedem Werktag des Zeitraums.
   final List<SpurTagBelegung> belegung;
+
+  /// Die Karten des Boards im Zeitraum, gebündelt wie dort.
+  final List<PlanKarte> karten;
 
   /// Erfasste Produktionen im Zeitraum.
   final List<ErfassteProduktion> produktionen;
 
-  /// Die Artikel der Produktionen, nach ID.
+  /// Alle Artikel, nach ID.
   final Map<String, StatistikArtikel> artikel;
-}
 
-/// Höchstzahl an IDs in einer `IN (...)`-Abfrage — wie im Board.
-const int _kIdBlock = 400;
-
-Iterable<List<String>> _bloecke(Set<String> ids) sync* {
-  final liste = ids.toList();
-  for (var i = 0; i < liste.length; i += _kIdBlock) {
-    final ende = i + _kIdBlock;
-    yield liste.sublist(i, ende > liste.length ? liste.length : ende);
-  }
+  /// Die Artikel, die im Zeitraum produziert oder geplant wurden.
+  Set<String> get aktiveArtikel => {
+        for (final p in produktionen) p.productId,
+        for (final k in karten) k.productId,
+      };
 }
 
 /// Der früheste Tag mit Planung oder erfasster Produktion — null ohne
@@ -1025,8 +1488,8 @@ Future<DateTime?> _fruehestesDatum(AppDatabase db) async {
   return a.isBefore(p) ? a : p;
 }
 
-/// Lädt Planung und erfasste Produktionen für [zeitraum], von [heute] aus
-/// gesehen (Standard: jetzt).
+/// Lädt Planung, Karten, erfasste Produktionen und Artikel für
+/// [zeitraum], von [heute] aus gesehen (Standard: jetzt).
 Future<StatistikDaten> ladeStatistik(
   AppDatabase db,
   StatistikZeitraum zeitraum, {
@@ -1043,53 +1506,70 @@ Future<StatistikDaten> ladeStatistik(
     von: spanne.von,
     bisExkl: spanne.bisExkl,
   );
+  final karten = await kartenImZeitraum(
+    db,
+    von: spanne.von,
+    bisExkl: spanne.bisExkl,
+  );
 
-  final historie = await (db.select(db.productionHistory)
-        ..where((h) => h.deletedAt.isNull())
-        ..where((h) => h.datum.isBiggerOrEqualValue(spanne.von))
-        ..where((h) => h.datum.isSmallerThanValue(spanne.bisExkl)))
+  // Alle Artikel mit Schritten und ALLEN erfassten Produktionen — wie die
+  // Artikelliste: Ob einem Artikel eine Ausbeute oder eine Zeit fehlt,
+  // hängt nicht am Zeitraum.
+  final produkte = await (db.select(db.products)
+        ..where((p) => p.deletedAt.isNull()))
       .get();
+  final schritte = await (db.select(db.productSteps)
+        ..where((s) => s.deletedAt.isNull())
+        ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+      .get();
+  final historie = await (db.select(db.productionHistory)
+        ..where((h) => h.deletedAt.isNull()))
+      .get();
+  final grundlagen = produktionsGrundlagen(historie);
 
-  final ids = {for (final h in historie) h.productId};
-  final produkte = <Product>[];
-  final schritte = <ProductStep>[];
-  for (final block in _bloecke(ids)) {
-    produkte.addAll(
-      await (db.select(db.products)
-            ..where((p) => p.id.isIn(block))
-            ..where((p) => p.deletedAt.isNull()))
-          .get(),
-    );
-    schritte.addAll(
-      await (db.select(db.productSteps)
-            ..where((s) => s.productId.isIn(block))
-            ..where((s) => s.deletedAt.isNull()))
-          .get(),
-    );
-  }
-  final abteilungenJeArtikel = <String, Set<String>>{};
+  final schritteJeArtikel = <String, List<ProductStep>>{};
   for (final s in schritte) {
-    (abteilungenJeArtikel[s.productId] ??= <String>{}).add(s.abteilung);
+    (schritteJeArtikel[s.productId] ??= []).add(s);
   }
-  final artikel = {
-    for (final p in produkte)
-      p.id: StatistikArtikel(
-        id: p.id,
-        artikelnummer: p.artikelnummer,
-        bezeichnung: p.artikelbezeichnung,
-        produktgruppe: p.produktgruppe,
-        abteilungen: abteilungenJeArtikel[p.id] ?? const {},
-      ),
-  };
+  final artikel = <String, StatistikArtikel>{};
+  for (final p in produkte) {
+    final eigene = schritteJeArtikel[p.id] ?? const <ProductStep>[];
+    artikel[p.id] = StatistikArtikel(
+      id: p.id,
+      artikelnummer: p.artikelnummer,
+      bezeichnung: p.artikelbezeichnung,
+      produktgruppe: p.produktgruppe,
+      abteilungen: {for (final s in eigene) s.abteilung},
+      luecken: artikelLuecken(p, eigene, grundlagen[p.id]),
+      // Gemessen wird die Zeit an der Bratstraße — verglichen wird mit
+      // ihren Leistungsdaten.
+      leistungKgH: leistungsdatenVon([
+        for (final s in eigene)
+          if (s.abteilung == Abteilung.bratstrasse.dbValue) s,
+      ])?.kgProStunde,
+    );
+  }
 
   return StatistikDaten(
     spanne: spanne,
+    stand: jetzt,
     belegung: belegung,
+    karten: [
+      for (final k in karten)
+        PlanKarte(
+          productId: k.productId,
+          abteilung: k.abteilung,
+          datum: k.datum,
+          erledigt: k.erledigt,
+        ),
+    ],
     // Produktionen gelöschter Artikel zeigt die App sonst nirgends mehr —
     // hier zählen sie auch nicht.
     produktionen: [
       for (final h in historie)
-        if (artikel.containsKey(h.productId)) ErfassteProduktion.aus(h),
+        if (artikel.containsKey(h.productId) &&
+            spanne.enthaelt(tagOhneZeit(h.datum)))
+          ErfassteProduktion.aus(h),
     ],
     artikel: artikel,
   );

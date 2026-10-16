@@ -1129,6 +1129,28 @@ Future<List<SpurTagBelegung>> belegungImZeitraum(
   return ergebnis;
 }
 
+/// Die Karten des Boards von [von] bis vor [bisExkl] — gebündelt wie im
+/// Board und mit ihrem Erledigt-Stand, auch an Wochenenden. Für die
+/// Planerfüllung der Statistik: Sie zählt genau die Karten, die man im
+/// Board abhakt.
+Future<List<BoardTask>> kartenImZeitraum(
+  AppDatabase db, {
+  required DateTime von,
+  required DateTime bisExkl,
+}) async {
+  final start = tagOhneZeit(von);
+  final ende = tagOhneZeit(bisExkl);
+  if (!start.isBefore(ende)) return const [];
+  final planungsAnlagen = await _ladePlanungsAnlagen(db);
+  return _ladeBoardTasks(
+    db,
+    start,
+    ende,
+    anlagenSpuren: _anlagenSpuren(planungsAnlagen),
+    fuerAnzeige: true,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Archiv: das Board einfrieren und wieder aufbauen
 // ---------------------------------------------------------------------------

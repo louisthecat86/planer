@@ -4,15 +4,17 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/abteilungen.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/services/erledigt_service.dart';
+import 'package:produktion_planer/features/articles/artikel_luecken.dart';
 import 'package:produktion_planer/features/board/board_providers.dart';
 import 'package:produktion_planer/features/statistik/statistik_daten.dart';
 
 import 'helpers/test_db.dart';
 
 /// Tests für die Statistik: Zeitraum und Abschnitte, Auslastung und
-/// Engpässe, Zeitverteilung, Ausbeute und Produktmix — und dass die
-/// Belegung aus der Datenbank genau die des Boards ist. Alle Daten sind
-/// erfunden.
+/// Engpässe, Zeitverteilung, Planerfüllung, Ausbeute, Leistung,
+/// Produktmix und Stammdaten-Pflege — und dass Belegung und Karten aus der
+/// Datenbank genau die des Boards sind. Alle Daten sind erfunden.
 void main() {
   // Freitag in KW 42/2026.
   final heute = DateTime(2026, 10, 16);
@@ -483,6 +485,266 @@ void main() {
     });
   });
 
+  group('Leistung', () {
+    final spanne = StatistikSpanne.fuer(StatistikZeitraum.quartal, heute);
+
+    // l1 mit hinterlegten 300 kg/h, l2 mit 200 kg/h, l3 ohne.
+    const leistungsArtikel = {
+      'l1': StatistikArtikel(
+        id: 'l1',
+        artikelnummer: '3001',
+        bezeichnung: 'Testbällchen',
+        abteilungen: {'bratstrasse'},
+        leistungKgH: 300,
+      ),
+      'l2': StatistikArtikel(
+        id: 'l2',
+        artikelnummer: '3002',
+        bezeichnung: 'Testsalami',
+        abteilungen: {'wurstkueche'},
+        leistungKgH: 200,
+      ),
+      'l3': StatistikArtikel(
+        id: 'l3',
+        artikelnummer: '3003',
+        bezeichnung: 'Testpastete',
+        abteilungen: {'bratstrasse'},
+      ),
+    };
+
+    ErfassteProduktion z(
+      String id,
+      DateTime datum, {
+      double? roh,
+      double? minuten,
+    }) =>
+        ErfassteProduktion(
+          productId: id,
+          datum: datum,
+          kgRohware: roh,
+          minuten: minuten,
+        );
+
+    final liste = [
+      // l1: 900 kg in 240 min = 225 kg/h — ein Viertel langsamer als
+      // hinterlegt.
+      z('l1', montag, roh: 300, minuten: 60),
+      z('l1', dienstag, roh: 300, minuten: 90),
+      z('l1', mittwoch, roh: 300, minuten: 90),
+      // l2: 600 kg in 165 min ≈ 218 kg/h — nur 9 % daneben.
+      z('l2', montag, roh: 200, minuten: 60),
+      z('l2', dienstag, roh: 200, minuten: 55),
+      z('l2', mittwoch, roh: 200, minuten: 50),
+      // l3: viel Zeit, keine Leistungsdaten — und eine Produktion ohne
+      // Zeit.
+      z('l3', montag, roh: 1000, minuten: 400),
+      z('l3', dienstag, roh: 500),
+      // Ohne Rohware zählt gar nicht, vor dem Zeitraum auch nicht.
+      z('l1', dienstag, minuten: 30),
+      z('l1', DateTime(2026, 6, 1), roh: 300, minuten: 10),
+    ];
+
+    test('Ø kg/h aus Rohware und Zeit, wie die Planung mittelt', () {
+      final l = werteLeistungAus(liste, leistungsArtikel, spanne);
+      expect(l.produktionen, 8);
+      expect(l.mitZeit, 7);
+      expect(l.ohneZeit, 1);
+      expect(l.kg, 2500);
+      expect(l.minuten, 805);
+      expect(l.kgProStunde, closeTo(2500 / 805 * 60, 1e-9));
+
+      expect(
+        [for (final a in l.zeitverbraucher) a.artikel.id],
+        ['l3', 'l1', 'l2'],
+        reason: 'meiste Produktionszeit zuerst',
+      );
+      final l1 = l.zeitverbraucher[1];
+      expect(l1.anzahl, 3);
+      expect(l1.kgProStunde, closeTo(225, 1e-9));
+      expect(l1.langsamste, closeTo(200, 1e-9));
+      expect(l1.schnellste, closeTo(300, 1e-9));
+      expect(l1.abweichung, closeTo(-0.25, 1e-9));
+      expect(l.zeitverbraucher.first.abweichung, isNull);
+    });
+
+    test('abweichend erst ab drei Produktionen und 20 %', () {
+      final l = werteLeistungAus(liste, leistungsArtikel, spanne);
+      expect(l.verglichen, 2, reason: 'l3 hat keine Leistungsdaten');
+      expect(l.abweichend, 1);
+      expect([for (final a in l.abweichungen) a.artikel.id], ['l1']);
+
+      // Mit nur zwei Produktionen vergleicht die Statistik nicht.
+      final zwei = werteLeistungAus(
+        [for (final p in liste) if (p.datum != mittwoch) p],
+        leistungsArtikel,
+        spanne,
+      );
+      expect(zwei.verglichen, 0);
+      expect(zwei.abweichungen, isEmpty);
+    });
+
+    test('mit Abteilung nur Artikel mit einem Schritt dort', () {
+      final l = werteLeistungAus(
+        liste,
+        leistungsArtikel,
+        spanne,
+        abteilung: Abteilung.wurstkueche,
+      );
+      expect(l.produktionen, 3);
+      expect([for (final a in l.zeitverbraucher) a.artikel.id], ['l2']);
+      expect(l.abweichungen, isEmpty);
+      expect(l.verglichen, 1);
+    });
+  });
+
+  group('Planerfüllung', () {
+    final spanne = StatistikSpanne.fuer(StatistikZeitraum.vierWochen, heute);
+    final vorwoche = DateTime(2026, 10, 5);
+
+    final karten = [
+      PlanKarte(
+        productId: 'a1',
+        abteilung: Abteilung.zerlegung,
+        datum: vorwoche,
+        erledigt: Erledigt.erfasst,
+      ),
+      PlanKarte(
+        productId: 'a1',
+        abteilung: Abteilung.bratstrasse,
+        datum: vorwoche,
+        erledigt: Erledigt.erfasst,
+      ),
+      PlanKarte(
+        productId: 'a2',
+        abteilung: Abteilung.zerlegung,
+        datum: DateTime(2026, 10, 6),
+        erledigt: Erledigt.abgehakt,
+      ),
+      PlanKarte(
+        productId: 'a2',
+        abteilung: Abteilung.zerlegung,
+        datum: montag,
+      ),
+      PlanKarte(
+        productId: 'a1',
+        abteilung: Abteilung.verpackung,
+        datum: mittwoch,
+        erledigt: Erledigt.abgehakt,
+      ),
+      // Heute läuft noch.
+      PlanKarte(
+        productId: 'a1',
+        abteilung: Abteilung.zerlegung,
+        datum: heute,
+      ),
+      // Vor dem Zeitraum.
+      PlanKarte(
+        productId: 'a1',
+        abteilung: Abteilung.zerlegung,
+        datum: DateTime(2026, 9, 1),
+        erledigt: Erledigt.erfasst,
+      ),
+    ];
+
+    test('die Karten bis gestern: erfasst, nur abgehakt, offen', () {
+      final e = werteErfuellungAus(karten, spanne, heute: heute);
+      expect(e.gesamt.karten, 5);
+      expect(e.gesamt.erfasst, 2);
+      expect(e.gesamt.abgehakt, 2);
+      expect(e.gesamt.offen, 1);
+      expect(e.gesamt.anteilErledigt, closeTo(0.8, 1e-9));
+      expect(e.gesamt.anteilErfasst, closeTo(0.4, 1e-9));
+
+      expect(
+        [for (final z in e.jeAbteilung) z.abteilung],
+        [Abteilung.zerlegung, Abteilung.bratstrasse, Abteilung.verpackung],
+      );
+      final zahlen = e.jeAbteilung.first.zahlen;
+      expect((zahlen.erfasst, zahlen.abgehakt, zahlen.offen), (1, 1, 1));
+    });
+
+    test('Verlauf je Woche — nur Wochen, die vor heute beginnen', () {
+      final e = werteErfuellungAus(karten, spanne, heute: heute);
+      expect(
+        [for (final p in e.verlauf) p.abschnitt],
+        spanne.abschnitte,
+      );
+      expect(
+        [for (final p in e.verlauf) p.zahlen.karten],
+        [0, 0, 3, 2],
+      );
+      expect(e.verlaufPunkte, 2);
+
+      // Am Montag hat die laufende Woche noch nichts erledigt.
+      final amMontag = werteErfuellungAus(karten, spanne, heute: montag);
+      expect(amMontag.verlauf.length, 3);
+      expect(amMontag.gesamt.karten, 3);
+    });
+
+    test('mit Abteilung nur deren Karten', () {
+      final e = werteErfuellungAus(
+        karten,
+        spanne,
+        heute: heute,
+        abteilung: Abteilung.verpackung,
+      );
+      expect(e.gesamt.karten, 1);
+      expect(e.gesamt.abgehakt, 1);
+      expect(
+        [for (final z in e.jeAbteilung) z.abteilung],
+        [Abteilung.verpackung],
+      );
+
+      final leer = werteErfuellungAus(const [], spanne, heute: heute);
+      expect(leer.leer, isTrue);
+      expect(leer.verlaufPunkte, 0);
+    });
+  });
+
+  group('Stammdaten-Pflege', () {
+    test('je Lücke: Anzahl und davon aktiv', () {
+      const pflegeArtikel = {
+        'x1': StatistikArtikel(
+          id: 'x1',
+          artikelnummer: '4001',
+          bezeichnung: 'Testwürstchen',
+          luecken: {ArtikelLuecke.ohneAusbeute, ArtikelLuecke.zeitPlatzhalter},
+        ),
+        'x2': StatistikArtikel(
+          id: 'x2',
+          artikelnummer: '4002',
+          bezeichnung: 'Testleberkäse',
+          luecken: {ArtikelLuecke.ohneAusbeute},
+        ),
+        'x3': StatistikArtikel(
+          id: 'x3',
+          artikelnummer: '4003',
+          bezeichnung: 'Testsülze',
+        ),
+      };
+      final p = wertePflegeAus(pflegeArtikel, {'x1', 'x3', 'unbekannt'});
+      expect(p.artikel, 3);
+      expect(p.vollstaendig, 1);
+      expect(p.anteilVollstaendig, closeTo(1 / 3, 1e-9));
+      expect(p.aktiv, 2, reason: 'unbekannte IDs zählen nicht');
+      expect(
+        [for (final z in p.zeilen) z.luecke],
+        ArtikelLuecke.values,
+        reason: 'jede Lücke eine Zeile, in fester Folge',
+      );
+      expect(
+        {for (final z in p.zeilen) z.luecke: (z.anzahl, z.aktiv)},
+        {
+          ArtikelLuecke.nichtEingepflegt: (0, 0),
+          ArtikelLuecke.ohneProduktgruppe: (0, 0),
+          ArtikelLuecke.ohneSchritte: (0, 0),
+          ArtikelLuecke.ohneAusbeute: (2, 1),
+          ArtikelLuecke.zeitPlatzhalter: (1, 1),
+        },
+      );
+    });
+  });
+
   group('mit Datenbank', () {
     late AppDatabase db;
 
@@ -507,6 +769,8 @@ void main() {
       required String abteilung,
       required double minuten,
       String? maschineId,
+      String? vorgaenger,
+      String status = 'geplant',
     }) =>
         db.into(db.productionTasks).insert(
               ProductionTasksCompanion.insert(
@@ -518,6 +782,8 @@ void main() {
                 geplanteDauerMinuten: minuten,
                 geplanteMitarbeiter: 2,
                 maschineId: Value(maschineId),
+                parentTaskId: Value(vorgaenger),
+                status: Value(status),
               ),
             );
 
@@ -729,6 +995,211 @@ void main() {
       );
       expect(alles.spanne.von, DateTime(2026, 8, 3));
       expect(alles.produktionen.length, 4);
+    });
+
+    test('kartenImZeitraum: gebündelt wie im Board, mit Erledigt-Stand',
+        () async {
+      // Zwei Aufträge derselben Abteilung am selben Tag: eine Karte.
+      await auftrag(
+        'z1',
+        productId: 'p1',
+        tag: montag,
+        abteilung: 'zerlegung',
+        minuten: 60,
+      );
+      await auftrag(
+        'z2',
+        productId: 'p1',
+        tag: montag,
+        abteilung: 'zerlegung',
+        minuten: 30,
+      );
+      // Die Bratstraße am Dienstag hängt an der Zerlegung vom Montag.
+      await auftrag(
+        'b1',
+        productId: 'p1',
+        tag: dienstag,
+        abteilung: 'bratstrasse',
+        minuten: 120,
+        vorgaenger: 'z1',
+      );
+      await auftrag(
+        'v1',
+        productId: 'p2',
+        tag: mittwoch,
+        abteilung: 'verpackung',
+        minuten: 45,
+        status: 'fertig',
+      );
+      await auftrag(
+        'v2',
+        productId: 'p2',
+        tag: dienstag,
+        abteilung: 'verpackung',
+        minuten: 45,
+      );
+      await auftrag(
+        'x',
+        productId: 'p2',
+        tag: montag,
+        abteilung: 'zerlegung',
+        minuten: 45,
+        status: 'storniert',
+      );
+      // Erfasst am Tag der Wurzel: Das macht die ganze Kette erledigt.
+      await db.into(db.productionHistory).insert(
+            ProductionHistoryCompanion.insert(
+              id: 'h1',
+              productId: 'p1',
+              datum: montag,
+              kgRohware: const Value(200),
+            ),
+          );
+
+      final karten = await kartenImZeitraum(
+        db,
+        von: montag,
+        bisExkl: DateTime(2026, 10, 19),
+      );
+      BoardTask karte(Abteilung abteilung, DateTime tag) => karten.singleWhere(
+            (k) => k.abteilung == abteilung && k.datum == tag,
+          );
+
+      expect(karten.length, 4, reason: 'storniert fehlt, z1 und z2 gebündelt');
+      expect(
+        karte(Abteilung.zerlegung, montag).mitgliederIds.toSet(),
+        {'z1', 'z2'},
+      );
+      expect(karte(Abteilung.zerlegung, montag).erledigt, Erledigt.erfasst);
+      expect(karte(Abteilung.bratstrasse, dienstag).erledigt, Erledigt.erfasst);
+      expect(karte(Abteilung.verpackung, mittwoch).erledigt, Erledigt.abgehakt);
+      expect(karte(Abteilung.verpackung, dienstag).erledigt, isNull);
+
+      // Genau die Karten des Boards.
+      final board = await ladeWochenboard(db, montag);
+      expect(
+        {for (final k in karten) (k.id, k.erledigt)},
+        {
+          for (final zelle in board.cells.values)
+            for (final k in zelle.tasks) (k.id, k.erledigt),
+        },
+      );
+    });
+
+    test('ladeStatistik: Karten, alle Artikel mit Lücken und Leistung',
+        () async {
+      // p1 gepflegt: Gruppe, Zerlegung und Bratstraße mit Leistungsdaten
+      // (120 kg in 30 min = 240 kg/h), Produktionen mit Zeit und Ausbeute.
+      await (db.update(db.products)..where((t) => t.id.equals('p1'))).write(
+        const ProductsCompanion(produktgruppe: Value('bruehwurst')),
+      );
+      await seedSchritt(
+        db,
+        id: 's1',
+        productId: 'p1',
+        reihenfolge: 1,
+        abteilung: 'zerlegung',
+      );
+      await seedSchritt(
+        db,
+        id: 's2',
+        productId: 'p1',
+        reihenfolge: 2,
+        abteilung: 'bratstrasse',
+        basisMengeKg: 120,
+        basisDauerMinuten: 30,
+      );
+      // p2: ohne Gruppe und Schritte, die Produktion ohne Fertigware.
+      // p3: noch nicht eingepflegt und nie produziert.
+      await db.into(db.products).insert(
+            ProductsCompanion.insert(
+              id: 'p3',
+              artikelnummer: '9003',
+              artikelbezeichnung: 'Testartikel aus Navision',
+              istEingepflegt: const Value(false),
+            ),
+          );
+
+      await db.into(db.productionHistory).insert(
+            ProductionHistoryCompanion.insert(
+              id: 'h1',
+              productId: 'p1',
+              datum: dienstag,
+              kgRohware: const Value(200),
+              kgFertigware: const Value(160),
+              produktionszeitMinuten: const Value(50),
+            ),
+          );
+      // Lange vor dem Zeitraum — zählt trotzdem für die Lücken.
+      await db.into(db.productionHistory).insert(
+            ProductionHistoryCompanion.insert(
+              id: 'h2',
+              productId: 'p2',
+              datum: DateTime(2025, 3, 3),
+              kgRohware: const Value(80),
+              startzeit: const Value('06:00'),
+              endzeit: const Value('07:00'),
+            ),
+          );
+      await auftrag(
+        'z1',
+        productId: 'p1',
+        tag: dienstag,
+        abteilung: 'zerlegung',
+        minuten: 60,
+      );
+      await auftrag(
+        'v1',
+        productId: 'p2',
+        tag: mittwoch,
+        abteilung: 'verpackung',
+        minuten: 30,
+        status: 'fertig',
+      );
+
+      final daten = await ladeStatistik(
+        db,
+        StatistikZeitraum.vierWochen,
+        heute: heute,
+      );
+      expect(daten.stand, heute);
+      expect(daten.artikel.keys.toSet(), {'p1', 'p2', 'p3'});
+      expect(daten.artikel['p1']!.luecken, isEmpty);
+      expect(daten.artikel['p2']!.luecken, {
+        ArtikelLuecke.ohneProduktgruppe,
+        ArtikelLuecke.ohneSchritte,
+        ArtikelLuecke.ohneAusbeute,
+      });
+      expect(daten.artikel['p3']!.luecken, {
+        ArtikelLuecke.nichtEingepflegt,
+        ArtikelLuecke.ohneProduktgruppe,
+        ArtikelLuecke.ohneSchritte,
+        ArtikelLuecke.ohneAusbeute,
+      });
+      expect(daten.artikel['p1']!.leistungKgH, closeTo(240, 1e-9));
+      expect(daten.artikel['p2']!.leistungKgH, isNull);
+
+      expect(daten.produktionen.length, 1, reason: 'h2 liegt vor dem Zeitraum');
+      final h1 = daten.produktionen.single;
+      expect(h1.minuten, 50);
+      expect(h1.kgProStunde, closeTo(240, 1e-9));
+
+      expect(
+        {for (final k in daten.karten) (k.productId, k.abteilung, k.erledigt)},
+        {
+          ('p1', Abteilung.zerlegung, Erledigt.erfasst),
+          ('p2', Abteilung.verpackung, Erledigt.abgehakt),
+        },
+      );
+      expect(daten.aktiveArtikel, {'p1', 'p2'});
+
+      final pflege = wertePflegeAus(daten.artikel, daten.aktiveArtikel);
+      expect(pflege.vollstaendig, 1);
+      expect(pflege.aktiv, 2);
+      final ohneAusbeute = pflege.zeilen.firstWhere(
+        (z) => z.luecke == ArtikelLuecke.ohneAusbeute,
+      );
+      expect((ohneAusbeute.anzahl, ohneAusbeute.aktiv), (2, 1));
     });
   });
 }

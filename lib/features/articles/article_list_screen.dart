@@ -13,16 +13,17 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart';
 import 'article_info_editor_dialog.dart';
+import 'artikel_luecken.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
-/// Alle aktiven Produkte mit Schritt-Anzahl.
+/// Alle aktiven Produkte mit Schritt-Anzahl und ihren Lücken.
 ///
-/// Bewusst nur ZWEI Abfragen (Produkte + alle Schritte, im Speicher
-/// gruppiert) statt einer Abfrage pro Artikel — bei ~60 Artikeln macht
-/// das den Aufbau der Liste spürbar flüssiger.
+/// Bewusst nur DREI Abfragen (Produkte, alle Schritte, alle erfassten
+/// Produktionen, im Speicher gruppiert) statt Abfragen pro Artikel — bei
+/// ~60 Artikeln macht das den Aufbau der Liste spürbar flüssiger.
 final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
   final db = ref.watch(databaseProvider);
 
@@ -36,6 +37,13 @@ final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
         ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
       .get();
 
+  // Für die Lücken „Ohne Ausbeute" und „Zeit nur Platzhalter".
+  final grundlagen = produktionsGrundlagen(
+    await (db.select(db.productionHistory)
+          ..where((h) => h.deletedAt.isNull()))
+        .get(),
+  );
+
   final byProduct = <String, List<ProductStep>>{};
   for (final s in steps) {
     byProduct.putIfAbsent(s.productId, () => []).add(s);
@@ -43,14 +51,29 @@ final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
 
   return [
     for (final p in products)
-      _ArticleInfo(product: p, steps: byProduct[p.id] ?? const []),
+      _ArticleInfo(
+        product: p,
+        steps: byProduct[p.id] ?? const [],
+        luecken: artikelLuecken(
+          p,
+          byProduct[p.id] ?? const [],
+          grundlagen[p.id],
+        ),
+      ),
   ];
 });
 
 class _ArticleInfo {
-  const _ArticleInfo({required this.product, required this.steps});
+  const _ArticleInfo({
+    required this.product,
+    required this.steps,
+    required this.luecken,
+  });
   final Product product;
   final List<ProductStep> steps;
+
+  /// Was dem Artikel für die Planung fehlt — siehe [ArtikelLuecke].
+  final Set<ArtikelLuecke> luecken;
 }
 
 // ---------------------------------------------------------------------------
@@ -58,7 +81,10 @@ class _ArticleInfo {
 // ---------------------------------------------------------------------------
 
 class ArticleListScreen extends ConsumerStatefulWidget {
-  const ArticleListScreen({super.key});
+  const ArticleListScreen({super.key, this.luecke});
+
+  /// Öffnet die Liste gleich mit diesem Filter — etwa aus der Statistik.
+  final ArtikelLuecke? luecke;
 
   @override
   ConsumerState<ArticleListScreen> createState() => _ArticleListScreenState();
@@ -73,7 +99,9 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   String _search = '';
   _SortField _sortField = _SortField.bezeichnung;
   bool _sortAsc = true;
-  bool _nurNichtEingepflegt = false;
+
+  /// Nur Artikel mit dieser Lücke — null: alle.
+  late ArtikelLuecke? _luecke = widget.luecke;
 
   @override
   void dispose() {
@@ -99,9 +127,10 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
       }).toList();
     }
 
-    // Pflegestatus-Filter
-    if (_nurNichtEingepflegt) {
-      list = list.where((a) => !a.product.istEingepflegt).toList();
+    // Lücken-Filter — „Nicht eingepflegt" ist eine davon.
+    final luecke = _luecke;
+    if (luecke != null) {
+      list = list.where((a) => a.luecken.contains(luecke)).toList();
     }
 
     // Sortierung
@@ -386,11 +415,13 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
       ),
       onChanged: (v) => setState(() => _search = v),
     );
-    final filter = FilterChip(
-      label: const Text('Nicht eingepflegt'),
-      selected: _nurNichtEingepflegt,
-      visualDensity: VisualDensity.compact,
-      onSelected: (v) => setState(() => _nurNichtEingepflegt = v),
+    final filter = _LueckenFilter(
+      auswahl: _luecke,
+      anzahl: {
+        for (final l in ArtikelLuecke.values)
+          l: all.where((a) => a.luecken.contains(l)).length,
+      },
+      onWahl: (l) => setState(() => _luecke = l),
     );
     final anzahl = Text(
       '${filtered.length} von ${all.length} Artikel',
@@ -589,6 +620,102 @@ class _SortKnopf extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Filter nach Lücken in den Stammdaten — „Nicht eingepflegt" ist eine
+/// davon. Die Auswahl steht als Beschriftung da, im Menü je Lücke die
+/// Anzahl und beim Darüberfahren, was sie für die Planung bedeutet.
+class _LueckenFilter extends StatelessWidget {
+  const _LueckenFilter({
+    required this.auswahl,
+    required this.anzahl,
+    required this.onWahl,
+  });
+
+  final ArtikelLuecke? auswahl;
+  final Map<ArtikelLuecke, int> anzahl;
+  final ValueChanged<ArtikelLuecke?> onWahl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farben = theme.colorScheme;
+    final gewaehlt = auswahl;
+    final aktiv = gewaehlt != null;
+    return PopupMenuButton<String>(
+      tooltip: 'Nach Lücken in den Stammdaten filtern',
+      position: PopupMenuPosition.under,
+      // Ein leerer Wert steht für „alle Artikel": null kann ein Eintrag
+      // nicht liefern — das hieße „Menü ohne Wahl geschlossen".
+      onSelected: (wert) => onWahl(ArtikelLuecke.values.asNameMap()[wert]),
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: '',
+          child: _eintrag('Alle Artikel', gewaehlt: !aktiv),
+        ),
+        const PopupMenuDivider(),
+        for (final l in ArtikelLuecke.values)
+          PopupMenuItem<String>(
+            value: l.name,
+            child: Tooltip(
+              message: l.folge,
+              waitDuration: const Duration(milliseconds: 500),
+              child: _eintrag(
+                '${l.titel} (${anzahl[l] ?? 0})',
+                gewaehlt: gewaehlt == l,
+              ),
+            ),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: aktiv ? farben.primaryContainer : null,
+          border: Border.all(color: aktiv ? farben.primary : farben.outline),
+          borderRadius: AppMasse.ecken,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.filter_list,
+              size: 16,
+              color: aktiv
+                  ? farben.onPrimaryContainer
+                  : farben.onSurfaceVariant,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              gewaehlt?.titel ?? 'Alle Artikel',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: aktiv ? farben.onPrimaryContainer : null,
+              ),
+            ),
+            Icon(
+              Icons.arrow_drop_down,
+              size: 18,
+              color: farben.onSurfaceVariant,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _eintrag(String text, {required bool gewaehlt}) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 20,
+          child: gewaehlt ? const Icon(Icons.check, size: 16) : null,
+        ),
+        const SizedBox(width: 6),
+        Text(text),
+      ],
     );
   }
 }
