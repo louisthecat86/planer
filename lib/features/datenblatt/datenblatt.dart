@@ -469,7 +469,7 @@ Future<Uint8List> baueDatenblattPdf(
   DateTime? gedrucktAm,
 }) {
   final jetzt = gedrucktAm ?? DateTime.now();
-  final doc = pw.Document(title: 'Datenblatt', creator: 'Produktion Planer');
+  final doc = pw.Document(title: 'Datenblatt', creator: 'Produktions Planer');
   final theme = pw.ThemeData.withFont(
     base: pw.Font.helvetica(),
     bold: pw.Font.helveticaBold(),

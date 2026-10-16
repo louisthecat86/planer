@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 
 /// Intro-Screen im Navision-Design.
 ///
-/// Der Schriftzug "Produktion Planer" entwickelt sich aus einem
+/// Der Schriftzug "Produktions Planer" entwickelt sich aus einem
 /// unscharfen Schatten zu einem scharfen, hellen Erscheinungsbild:
 ///   - Start: klein (scale 0.4), stark unscharf (blur 20), fast unsichtbar
 ///   - Ende: voll skaliert (leichter Overshoot), scharf, voll sichtbar
@@ -182,8 +182,8 @@ class _IntroInhalt extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          // Gleiche Schreibweise wie in der Titelleiste und den
-          // Einstellungen — vorher stand hier „Produktions Planer".
+          // Gleiche Schreibweise wie in der Navigationsleiste, im
+          // Fenstertitel und in den Einstellungen.
           'Produktions Planer',
           textAlign: TextAlign.center,
           style: TextStyle(

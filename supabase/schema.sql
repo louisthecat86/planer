@@ -1,5 +1,5 @@
 -- =============================================================================
--- Produktion Planer — Supabase/Postgres Schema
+-- Produktions Planer — Supabase/Postgres Schema
 -- =============================================================================
 --
 -- Dieses Schema spiegelt das lokale drift/SQLite-Schema der App.

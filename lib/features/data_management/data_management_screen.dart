@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../core/providers/backup_provider.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
@@ -110,15 +111,17 @@ class _DataManagementScreenState
   }
 
   /// Lädt alle Daten-Provider neu, deren Inhalt sich durch Import oder
-  /// Backup-Restore geändert haben kann. Ohne dies zeigen Artikelkarte,
-  /// Schritte und Historie weiterhin den alten (gecachten) Stand.
-  void _invalidiereDatenProvider() {
-    ref.invalidate(articlesProvider);
-    ref.invalidate(productProvider);
-    ref.invalidate(productStepsProvider);
-    ref.invalidate(stepParametersProvider);
-    ref.invalidate(machineProvider);
-    ref.invalidate(productionHistoryProvider);
+  /// Backup-Restore geändert haben kann — siehe [invalidiereDatenNachImport].
+  void _invalidiereDatenProvider() => invalidiereDatenNachImport(ref);
+
+  /// Öffnet die Backup-Verwaltung und liest danach die Liste hier neu ein:
+  /// Dort lassen sich Backups anlegen und löschen.
+  Future<void> _backupVerwaltungOeffnen() async {
+    // Die Liste dort frisch laden — der Provider merkt sich sonst den Stand
+    // vom letzten Öffnen, auch wenn hier inzwischen Backups dazukamen.
+    ref.invalidate(refreshableBackupListProvider);
+    await context.pushNamed('backup');
+    if (mounted) await _ladeUebersicht();
   }
 
   // ----------------------------------------------------------------------
@@ -667,6 +670,11 @@ class _DataManagementScreenState
                 titel: 'Vorhandene Backups',
                 untertitel: _backupsGeladen ? '${_backups.length}' : null,
                 aktionen: [
+                  TextButton.icon(
+                    onPressed: _busy ? null : _backupVerwaltungOeffnen,
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('Backup-Verwaltung …'),
+                  ),
                   if (_backups.isNotEmpty)
                     TextButton.icon(
                       onPressed: () =>
@@ -1278,4 +1286,19 @@ class _BackupListenEintrag extends StatelessWidget {
     if (diff.inDays < 7) return 'vor ${diff.inDays} Tag(en)';
     return DateFormat('dd.MM.yyyy').format(when);
   }
+}
+
+/// Lädt alle Daten-Provider neu, deren Inhalt sich durch einen Import oder
+/// ein Wiederherstellen geändert haben kann. Ohne dies zeigen Artikelkarte,
+/// Schritte und Historie weiterhin den alten (gemerkten) Stand.
+///
+/// Öffentlich, weil auch die Backup-Verwaltung wiederherstellt — beide Wege
+/// laden danach dieselben Daten neu.
+void invalidiereDatenNachImport(WidgetRef ref) {
+  ref.invalidate(articlesProvider);
+  ref.invalidate(productProvider);
+  ref.invalidate(productStepsProvider);
+  ref.invalidate(stepParametersProvider);
+  ref.invalidate(machineProvider);
+  ref.invalidate(productionHistoryProvider);
 }

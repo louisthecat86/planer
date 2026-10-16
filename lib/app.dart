@@ -286,7 +286,7 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     // Anzeigemodus kommt jetzt aus den Einstellungen (dauerhaft gespeichert).
     final themeMode = ref.watch(themeModeProvider);
     return MaterialApp.router(
-      title: 'Produktion Planer',
+      title: 'Produktions Planer',
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,

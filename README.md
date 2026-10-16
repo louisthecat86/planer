@@ -1,4 +1,4 @@
-# Produktion Planer
+# Produktions Planer
 
 Offline-first **Produktionsplaner für den Fleischbereich**. Läuft als Desktop-App
 (Windows/Linux/macOS) und als Android-APK (Tablet) aus einer einzigen

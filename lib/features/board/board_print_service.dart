@@ -861,7 +861,7 @@ class BoardPrintService {
   static pw.Document _dokument(String titel, {required bool komprimiert}) {
     return pw.Document(
       title: titel,
-      creator: 'Produktion Planer',
+      creator: 'Produktions Planer',
       compress: komprimiert,
       // Einmal für das ganze Dokument: Jedes Blatt nutzt dieselben
       // Schriften, statt sie je Blatt neu anzulegen.

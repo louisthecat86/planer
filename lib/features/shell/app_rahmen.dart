@@ -301,14 +301,14 @@ class _Kopf extends StatelessWidget {
         ),
       ),
       child: eingeklappt
-          ? Tooltip(message: 'Produktion Planer', child: marke)
+          ? Tooltip(message: 'Produktions Planer', child: marke)
           : Row(
               children: [
                 marke,
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Produktion Planer',
+                    'Produktions Planer',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

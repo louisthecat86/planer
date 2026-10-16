@@ -71,7 +71,7 @@ class SettingsScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               Center(
                 child: Text(
-                  'Produktion Planer · offline',
+                  'Produktions Planer · offline',
                   style: TextStyle(
                     fontSize: 12,
                     color: colors.onSurfaceVariant,
