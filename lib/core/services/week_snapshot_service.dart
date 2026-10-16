@@ -8,6 +8,7 @@ import '../database/database.dart';
 import '../providers/database_provider.dart';
 import '../utils/datum.dart';
 import '../utils/kalenderwoche.dart';
+import 'erledigt_service.dart' show Erledigt;
 
 // Früher hier definiert — jetzt zentral, hier nur weitergereicht.
 export '../utils/kalenderwoche.dart' show isoKalenderwoche;
@@ -101,12 +102,299 @@ class SnapshotZusatzzeit {
       );
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// Der Wochenplan, wie er im Board stand
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Der Wochenplan einer archivierten Woche, so wie er beim Archivieren im
+/// Wochenboard stand: die Spuren (Abteilungen und Anlagen), die Karten, die
+/// sonstigen Aufgaben und die Hinweise auf Vor- und Folgestufen in anderen
+/// Wochen. Daraus entsteht im Archiv die Ansicht „Wochenplan".
+///
+/// Wochen, die archiviert wurden, bevor es den Plan gab, haben keinen. Aus
+/// ihren Aufträgen allein ließe er sich nicht nachbauen: Anlage, Kette und
+/// Haken wurden damals nicht mitgespeichert.
+class ArchivPlan {
+  const ArchivPlan({
+    required this.tage,
+    required this.spuren,
+    required this.karten,
+    this.aufgaben = const [],
+    this.kettenNachbarn = const {},
+  });
+
+  /// Die Tage des Boards (Mo–Fr), 00:00 Uhr.
+  final List<DateTime> tage;
+
+  /// Die Zeilen des Boards in ihrer Reihenfolge.
+  final List<ArchivSpur> spuren;
+
+  /// Die Karten — je Zelle in der Reihenfolge des Boards.
+  final List<ArchivKarte> karten;
+
+  /// Sonstige Aufgaben je Abteilung und Tag, in ihrer Reihenfolge.
+  final List<ArchivAufgabe> aufgaben;
+
+  /// Vor- und Folgestufen außerhalb der Woche, je Kette
+  /// ([ArchivKarte.kettenId]).
+  final Map<String, ArchivKettenNachbar> kettenNachbarn;
+
+  Map<String, dynamic> toJson() => {
+        'tage': [for (final t in tage) t.toIso8601String()],
+        'spuren': [for (final s in spuren) s.toJson()],
+        'karten': [for (final k in karten) k.toJson()],
+        'aufgaben': [for (final a in aufgaben) a.toJson()],
+        'ketten': {
+          for (final e in kettenNachbarn.entries) e.key: e.value.toJson(),
+        },
+      };
+
+  factory ArchivPlan.fromJson(Map<String, dynamic> j) {
+    final rawTage = j['tage'] as List<dynamic>? ?? const [];
+    final rawSpuren = j['spuren'] as List<dynamic>? ?? const [];
+    final rawKarten = j['karten'] as List<dynamic>? ?? const [];
+    final rawAufgaben = j['aufgaben'] as List<dynamic>? ?? const [];
+    final rawKetten = j['ketten'] as Map<String, dynamic>? ?? const {};
+    return ArchivPlan(
+      tage: [for (final t in rawTage) DateTime.parse(t as String)],
+      spuren: [
+        for (final s in rawSpuren)
+          ArchivSpur.fromJson(s as Map<String, dynamic>),
+      ],
+      karten: [
+        for (final k in rawKarten)
+          ArchivKarte.fromJson(k as Map<String, dynamic>),
+      ],
+      aufgaben: [
+        for (final a in rawAufgaben)
+          ArchivAufgabe.fromJson(a as Map<String, dynamic>),
+      ],
+      kettenNachbarn: {
+        for (final e in rawKetten.entries)
+          e.key: ArchivKettenNachbar.fromJson(e.value as Map<String, dynamic>),
+      },
+    );
+  }
+}
+
+/// Eine Zeile des archivierten Boards: die Spur einer Anlage oder die
+/// Sammelspur einer Abteilung.
+class ArchivSpur {
+  const ArchivSpur({
+    required this.abteilung,
+    required this.kapazitaetMinuten,
+    this.maschineId,
+    this.maschineName,
+    this.eignungHinweis,
+  });
+
+  /// dbValue der Abteilung.
+  final String abteilung;
+
+  /// null = Sammelspur der Abteilung.
+  final String? maschineId;
+  final String? maschineName;
+  final String? eignungHinweis;
+
+  /// Tageskapazität der Spur in Minuten, wie sie beim Archivieren galt.
+  final double kapazitaetMinuten;
+
+  /// Kennung wie im Board: „<abteilung>|<maschineId>".
+  String get id => '$abteilung|${maschineId ?? ''}';
+
+  Map<String, dynamic> toJson() => {
+        'abteilung': abteilung,
+        if (maschineId != null) 'maschineId': maschineId,
+        if (maschineName != null) 'maschineName': maschineName,
+        if (eignungHinweis != null) 'eignung': eignungHinweis,
+        'kapazitaet': kapazitaetMinuten,
+      };
+
+  factory ArchivSpur.fromJson(Map<String, dynamic> j) => ArchivSpur(
+        abteilung: j['abteilung'] as String,
+        maschineId: j['maschineId'] as String?,
+        maschineName: j['maschineName'] as String?,
+        eignungHinweis: j['eignung'] as String?,
+        kapazitaetMinuten: (j['kapazitaet'] as num?)?.toDouble() ?? 0,
+      );
+}
+
+/// Eine Karte des archivierten Boards — gebündelt wie im Board: gleicher
+/// Artikel in derselben Spur am selben Tag ist eine Karte.
+class ArchivKarte {
+  const ArchivKarte({
+    required this.spurId,
+    required this.abteilung,
+    required this.datum,
+    required this.productId,
+    required this.productName,
+    required this.dauerMinuten,
+    required this.mengeKg,
+    required this.kettenId,
+    this.artikelnummer = '',
+    this.startZeit,
+    this.sortierung = 0,
+    this.status = 'geplant',
+    this.erledigt,
+    this.auftraege = 1,
+  });
+
+  /// Spur, in der die Karte stand ([ArchivSpur.id]).
+  final String spurId;
+
+  /// dbValue der Abteilung.
+  final String abteilung;
+
+  /// Tag, 00:00 Uhr.
+  final DateTime datum;
+  final String productId;
+  final String productName;
+  final String artikelnummer;
+  final String? startZeit;
+  final double dauerMinuten;
+  final double mengeKg;
+  final int sortierung;
+
+  /// 'geplant' | 'in_arbeit' | 'fertig'.
+  final String status;
+
+  /// Kennung der Auftragskette — alle Karten einer Produktion tragen
+  /// dieselbe und damit dieselbe Farbe.
+  final String kettenId;
+
+  /// Erledigt-Stand beim Archivieren — null: offen.
+  final Erledigt? erledigt;
+
+  /// Wie viele Aufträge die Karte bündelt.
+  final int auftraege;
+
+  Map<String, dynamic> toJson() => {
+        'spurId': spurId,
+        'abteilung': abteilung,
+        'datum': datum.toIso8601String(),
+        'productId': productId,
+        'productName': productName,
+        if (artikelnummer.isNotEmpty) 'artikelnummer': artikelnummer,
+        if (startZeit != null) 'startZeit': startZeit,
+        'dauerMinuten': dauerMinuten,
+        'mengeKg': mengeKg,
+        'sortierung': sortierung,
+        'status': status,
+        'kettenId': kettenId,
+        if (erledigt != null) 'erledigt': erledigt?.name,
+        'auftraege': auftraege,
+      };
+
+  factory ArchivKarte.fromJson(Map<String, dynamic> j) => ArchivKarte(
+        spurId: j['spurId'] as String? ?? '',
+        abteilung: j['abteilung'] as String,
+        datum: DateTime.parse(j['datum'] as String),
+        productId: j['productId'] as String? ?? '',
+        productName: j['productName'] as String? ?? 'Unbekannt',
+        artikelnummer: j['artikelnummer'] as String? ?? '',
+        startZeit: j['startZeit'] as String?,
+        dauerMinuten: (j['dauerMinuten'] as num?)?.toDouble() ?? 0,
+        mengeKg: (j['mengeKg'] as num?)?.toDouble() ?? 0,
+        sortierung: (j['sortierung'] as num?)?.toInt() ?? 0,
+        status: j['status'] as String? ?? 'geplant',
+        kettenId: j['kettenId'] as String? ?? '',
+        erledigt: Erledigt.values.asNameMap()[j['erledigt'] as String?],
+        auftraege: (j['auftraege'] as num?)?.toInt() ?? 1,
+      );
+}
+
+/// Eine sonstige Aufgabe des archivierten Boards.
+class ArchivAufgabe {
+  const ArchivAufgabe({
+    required this.abteilung,
+    required this.datum,
+    required this.inhalt,
+    this.erledigt = false,
+  });
+
+  /// dbValue der Abteilung.
+  final String abteilung;
+
+  /// Tag, 00:00 Uhr.
+  final DateTime datum;
+  final String inhalt;
+  final bool erledigt;
+
+  Map<String, dynamic> toJson() => {
+        'abteilung': abteilung,
+        'datum': datum.toIso8601String(),
+        'inhalt': inhalt,
+        'erledigt': erledigt,
+      };
+
+  factory ArchivAufgabe.fromJson(Map<String, dynamic> j) => ArchivAufgabe(
+        abteilung: j['abteilung'] as String,
+        datum: DateTime.parse(j['datum'] as String),
+        inhalt: j['inhalt'] as String? ?? '',
+        erledigt: j['erledigt'] as bool? ?? false,
+      );
+}
+
+/// Vor- und Folgestufe einer Kette außerhalb der archivierten Woche.
+class ArchivKettenNachbar {
+  const ArchivKettenNachbar({this.vorher, this.nachher});
+
+  final ArchivKettenSchritt? vorher;
+  final ArchivKettenSchritt? nachher;
+
+  Map<String, dynamic> toJson() => {
+        if (vorher != null) 'vorher': vorher?.toJson(),
+        if (nachher != null) 'nachher': nachher?.toJson(),
+      };
+
+  factory ArchivKettenNachbar.fromJson(Map<String, dynamic> j) {
+    final v = j['vorher'] as Map<String, dynamic>?;
+    final n = j['nachher'] as Map<String, dynamic>?;
+    return ArchivKettenNachbar(
+      vorher: v == null ? null : ArchivKettenSchritt.fromJson(v),
+      nachher: n == null ? null : ArchivKettenSchritt.fromJson(n),
+    );
+  }
+}
+
+/// Ein Schritt einer Kette in einer anderen Woche.
+class ArchivKettenSchritt {
+  const ArchivKettenSchritt({
+    required this.abteilung,
+    required this.datum,
+    required this.kw,
+  });
+
+  /// dbValue der Abteilung.
+  final String abteilung;
+
+  /// Tag, 00:00 Uhr.
+  final DateTime datum;
+
+  /// ISO-Kalenderwoche des Schritts.
+  final int kw;
+
+  Map<String, dynamic> toJson() => {
+        'abteilung': abteilung,
+        'datum': datum.toIso8601String(),
+        'kw': kw,
+      };
+
+  factory ArchivKettenSchritt.fromJson(Map<String, dynamic> j) =>
+      ArchivKettenSchritt(
+        abteilung: j['abteilung'] as String,
+        datum: DateTime.parse(j['datum'] as String),
+        kw: (j['kw'] as num?)?.toInt() ?? 0,
+      );
+}
+
 /// Die dekodierten Inhalte eines Wochen-Snapshots inkl. einfacher Kennzahlen.
 class WochenSnapshotDaten {
   const WochenSnapshotDaten({
     required this.tasks,
     required this.kapazitaeten,
     this.zusatzzeiten = const [],
+    this.plan,
   });
 
   final List<SnapshotTask> tasks;
@@ -116,16 +404,25 @@ class WochenSnapshotDaten {
   final Map<String, double> kapazitaeten;
   final List<SnapshotZusatzzeit> zusatzzeiten;
 
-  Map<String, dynamic> toJson() => {
-        'tasks': [for (final t in tasks) t.toJson()],
-        'kapazitaeten': kapazitaeten,
-        'zusatzzeiten': [for (final z in zusatzzeiten) z.toJson()],
-      };
+  /// Der Wochenplan, wie er im Board stand — null bei Wochen, die vor
+  /// Einführung des Plans archiviert wurden.
+  final ArchivPlan? plan;
+
+  Map<String, dynamic> toJson() {
+    final p = plan;
+    return {
+      'tasks': [for (final t in tasks) t.toJson()],
+      'kapazitaeten': kapazitaeten,
+      'zusatzzeiten': [for (final z in zusatzzeiten) z.toJson()],
+      if (p != null) 'plan': p.toJson(),
+    };
+  }
 
   factory WochenSnapshotDaten.fromJson(Map<String, dynamic> j) {
     final rawTasks = (j['tasks'] as List<dynamic>? ?? const []);
     final rawKap = (j['kapazitaeten'] as Map<String, dynamic>? ?? const {});
     final rawZusatz = (j['zusatzzeiten'] as List<dynamic>? ?? const []);
+    final rawPlan = j['plan'] as Map<String, dynamic>?;
     return WochenSnapshotDaten(
       tasks: [
         for (final t in rawTasks)
@@ -138,6 +435,7 @@ class WochenSnapshotDaten {
         for (final z in rawZusatz)
           SnapshotZusatzzeit.fromJson(z as Map<String, dynamic>),
       ],
+      plan: rawPlan == null ? null : ArchivPlan.fromJson(rawPlan),
     );
   }
 
@@ -198,11 +496,15 @@ class WochenSnapshotDaten {
 /// ein. [kapazitaeten] sind die aktuell gültigen Tageskapazitäten je Abteilung
 /// (dbValue → Minuten) — sie werden mitgespeichert, damit die Auslastung später
 /// stabil bleibt.
+///
+/// [plan] ist der Wochenplan, wie ihn das Board gerade zeigt — daraus
+/// entsteht im Archiv die Ansicht „Wochenplan".
 Future<void> erstelleWochenSnapshot({
   required AppDatabase db,
   required DateTime wochenStart,
   required Map<String, double> kapazitaeten,
   String? titel,
+  ArchivPlan? plan,
 }) async {
   final start = montagDerWoche(wochenStart);
   final endeExkl = tagPlus(start, 7);
@@ -256,6 +558,7 @@ Future<void> erstelleWochenSnapshot({
     tasks: tasks,
     kapazitaeten: kapazitaeten,
     zusatzzeiten: zusatzzeiten,
+    plan: plan,
   );
 
   await db.into(db.weekSnapshots).insert(

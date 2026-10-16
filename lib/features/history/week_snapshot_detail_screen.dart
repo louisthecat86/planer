@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
@@ -90,6 +91,18 @@ class _WeekSnapshotDetailScreenState
     final snap = _snap;
     final daten = _daten;
 
+    // Den Wochenplan gibt es nur für Wochen, die archiviert wurden, seit
+    // das Archiv ihn mitspeichert — sonst ist der Knopf gesperrt und sagt
+    // beim Darüberfahren, warum.
+    final hatPlan = daten?.plan != null;
+    final schmal = MediaQuery.sizeOf(context).width < 720;
+    void zeigePlan() => context.pushNamed(
+          'wochenHistoriePlan',
+          pathParameters: {'snapshotId': widget.snapshotId},
+        );
+    const ohnePlan = 'Diese Woche wurde archiviert, bevor das Archiv den '
+        'Wochenplan mitgespeichert hat.';
+
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -97,6 +110,28 @@ class _WeekSnapshotDetailScreenState
               ? 'Auswertung'
               : 'Auswertung KW ${snap.kw} · ${snap.jahr}',
         ),
+        actions: [
+          if (snap != null && daten != null) ...[
+            if (schmal)
+              IconButton(
+                onPressed: hatPlan ? zeigePlan : null,
+                icon: const Icon(Icons.calendar_view_week),
+                tooltip: hatPlan ? 'Wochenplan' : ohnePlan,
+              )
+            else
+              Tooltip(
+                message: hatPlan
+                    ? 'Die Woche so ansehen, wie sie im Wochenboard stand'
+                    : ohnePlan,
+                child: FilledButton.icon(
+                  onPressed: hatPlan ? zeigePlan : null,
+                  icon: const Icon(Icons.calendar_view_week, size: 18),
+                  label: const Text('Wochenplan'),
+                ),
+              ),
+            const SizedBox(width: 12),
+          ],
+        ],
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

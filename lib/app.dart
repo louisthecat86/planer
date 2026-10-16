@@ -173,6 +173,17 @@ final routerProvider = Provider<GoRouter>((ref) {
               ),
             ),
           ),
+          // Der eingefrorene Wochenplan einer archivierten Woche — wie im
+          // Board, nur zum Ansehen.
+          GoRoute(
+            path: '/history/:snapshotId/plan',
+            name: 'wochenHistoriePlan',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: ArchivWochenplanScreen(
+                snapshotId: state.pathParameters['snapshotId']!,
+              ),
+            ),
+          ),
           // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
           // Maschinen-Katalog: Anlagen + Parameter-Steckbriefe pflegen.
           GoRoute(

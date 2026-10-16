@@ -6,6 +6,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
@@ -95,10 +96,21 @@ class _WeekSnapshotArchiveScreenState
         wochenStart: tagDerWoche,
       );
 
+      // Den Plan so einfrieren, wie ihn das Wochenboard gerade zeigt — mit
+      // Anlagen, Ketten, Haken und den sonstigen Aufgaben. Daraus entsteht
+      // im Archiv die Ansicht „Wochenplan".
+      final board = await ladeWochenboard(db, tagDerWoche);
+      final aufgaben = await TagesaufgabenService.fuerZeitraum(
+        db,
+        von: board.wochenStart,
+        bisExkl: tagPlus(board.wochenStart, 7),
+      );
+
       await erstelleWochenSnapshot(
         db: db,
         wochenStart: tagDerWoche,
         kapazitaeten: kapazitaeten,
+        plan: archivPlanAusBoard(board, aufgaben),
       );
       ref.read(autoBackupTriggerProvider).fireDebounced(
             reason: 'Woche archiviert',
@@ -109,6 +121,21 @@ class _WeekSnapshotArchiveScreenState
         final kw = isoKalenderwoche(montagDerWoche(tagDerWoche));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('KW $kw archiviert.')),
+        );
+      }
+    } catch (e) {
+      // Vorher lief ein Fehler hier ins Leere — die Woche fehlte dann
+      // einfach im Archiv, ohne dass jemand es merkte.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 8),
+            backgroundColor: AppFarben.von(context).fehler,
+            content: Text(
+              'Archivieren fehlgeschlagen — es wurde nichts gespeichert. '
+              '($e)',
+            ),
+          ),
         );
       }
     } finally {
@@ -445,15 +472,36 @@ class _SnapshotKarte extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              FilledButton.tonalIcon(
-                onPressed: () => context.pushNamed(
-                  'wochenHistorieDetail',
-                  pathParameters: {'snapshotId': snap.id},
+              // In einem Wrap: Bei schmalem Fenster rutscht der zweite
+              // Knopf in die nächste Zeile, statt über den Rand zu laufen.
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () => context.pushNamed(
+                        'wochenHistorieDetail',
+                        pathParameters: {'snapshotId': snap.id},
+                      ),
+                      icon: const Icon(Icons.insights, size: 18),
+                      label: const Text('Auswertung öffnen'),
+                    ),
+                    // Den Wochenplan gibt es nur für Wochen, die archiviert
+                    // wurden, seit das Archiv ihn mitspeichert.
+                    if (daten.plan != null)
+                      OutlinedButton.icon(
+                        onPressed: () => context.pushNamed(
+                          'wochenHistoriePlan',
+                          pathParameters: {'snapshotId': snap.id},
+                        ),
+                        icon: const Icon(Icons.calendar_view_week, size: 18),
+                        label: const Text('Wochenplan'),
+                      ),
+                  ],
                 ),
-                icon: const Icon(Icons.insights, size: 18),
-                label: const Text('Auswertung öffnen'),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               TextButton.icon(
                 onPressed: onDelete,
                 style: TextButton.styleFrom(foregroundColor: colors.error),

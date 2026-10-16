@@ -12,6 +12,8 @@ import '../../core/services/auftragsbestand_deckung.dart'
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
+import '../../core/services/week_snapshot_service.dart'
+    show ArchivAufgabe, dekodiereSnapshot, weekSnapshotProvider;
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart';
@@ -25,6 +27,7 @@ import '../../core/utils/kalenderwoche.dart';
 import 'board_providers.dart';
 
 part 'board_aufgaben.dart';
+part 'board_archiv.dart';
 
 // Breiter als früher (148): Namen wie „Schneideabteilung" oder
 // „Verpackung Tef1 / Multivac Tef1" brachen sonst mitten im Wort um.
@@ -1751,15 +1754,20 @@ Color _kettenFarbe(String kettenId, Brightness helligkeit) {
 /// in einer anderen Woche hat (wochenübergreifende Produktion). Antippen
 /// springt in die betreffende Woche.
 class _KettenMarker extends StatelessWidget {
-  const _KettenMarker({required this.nachbar, required this.onSprung});
+  const _KettenMarker({required this.nachbar, this.onSprung});
 
   final KettenNachbar nachbar;
-  final void Function(DateTime) onSprung;
+
+  /// Sprung in die Woche des Schritts — null: nur anzeigen, etwa im
+  /// archivierten Wochenplan.
+  final void Function(DateTime)? onSprung;
 
   @override
   Widget build(BuildContext context) {
     final v = nachbar.vorher;
     final n = nachbar.nachher;
+    final sprung = onSprung;
+    final zusatz = sprung == null ? '' : ' — antippen zum Springen';
     return Padding(
       padding: const EdgeInsets.only(top: 2),
       child: Wrap(
@@ -1771,16 +1779,16 @@ class _KettenMarker extends StatelessWidget {
               context,
               '← Vorstufe · KW${v.kw}',
               'Vorstufe: ${v.abteilung.anzeigeName} in KW${v.kw} '
-                  '(${v.datum.day}.${v.datum.month}.) — antippen zum Springen',
-              () => onSprung(v.datum),
+                  '(${v.datum.day}.${v.datum.month}.)$zusatz',
+              sprung == null ? null : () => sprung(v.datum),
             ),
           if (n != null)
             _chip(
               context,
               'Folgestufe · KW${n.kw} →',
               'Folgestufe: ${n.abteilung.anzeigeName} in KW${n.kw} '
-                  '(${n.datum.day}.${n.datum.month}.) — antippen zum Springen',
-              () => onSprung(n.datum),
+                  '(${n.datum.day}.${n.datum.month}.)$zusatz',
+              sprung == null ? null : () => sprung(n.datum),
             ),
         ],
       ),
@@ -1791,7 +1799,7 @@ class _KettenMarker extends StatelessWidget {
     BuildContext context,
     String text,
     String tooltip,
-    VoidCallback onTap,
+    VoidCallback? onTap,
   ) {
     // Ein Hinweis, keine Wertung — deshalb in den Hinweisfarben.
     final f = AppFarben.von(context);

@@ -6,6 +6,15 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
+import '../../core/services/week_snapshot_service.dart'
+    show
+        ArchivAufgabe,
+        ArchivKarte,
+        ArchivKettenNachbar,
+        ArchivKettenSchritt,
+        ArchivPlan,
+        ArchivSpur,
+        SnapshotZusatzzeit;
 import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
 
@@ -374,9 +383,20 @@ Future<Map<String, List<Zusatzzeit>>> _ladeZusatzzeiten(
 /// erwünscht: So sieht man immer den aktuellen Stand und nicht das, was
 /// beim ersten Besuch galt.
 final weekBoardProvider = FutureProvider.autoDispose
-    .family<WeekBoard, DateTime>((ref, anyDayInWeek) async {
+    .family<WeekBoard, DateTime>((ref, anyDayInWeek) {
   final db = ref.watch(databaseProvider);
+  return ladeWochenboard(db, anyDayInWeek);
+});
 
+/// Lädt das Wochenboard für die Woche, in die [anyDayInWeek] fällt — genau
+/// so, wie das Board es zeigt.
+///
+/// Ohne Provider, damit auch das Archivieren es nutzen kann: Es friert
+/// diesen Stand als Wochenplan ein ([archivPlanAusBoard]).
+Future<WeekBoard> ladeWochenboard(
+  AppDatabase db,
+  DateTime anyDayInWeek,
+) async {
   final wochenStart = _montag(anyDayInWeek);
   // Über die Tageszahl, nicht per Duration — sonst verrutscht das Ende der
   // Woche am Wochenende der Zeitumstellung um eine Stunde.
@@ -450,7 +470,7 @@ final weekBoardProvider = FutureProvider.autoDispose
     cells: cells,
     kettenNachbarn: kettenNachbarn,
   );
-});
+}
 
 /// Tagesübersicht für [datum] — eine Spur pro Abteilung, Tasks nach Startzeit
 /// sortiert. Funktioniert für jeden Wochentag (nicht auf Mo–Fr beschränkt).
@@ -993,11 +1013,212 @@ Future<List<Machine>> _ladePlanungsAnlagen(AppDatabase db) async {
       .get();
 }
 
+// ---------------------------------------------------------------------------
+// Archiv: das Board einfrieren und wieder aufbauen
+// ---------------------------------------------------------------------------
 
+/// Friert [board] mit den sonstigen [aufgaben] der Woche als [ArchivPlan]
+/// ein — so, wie das Board es gerade zeigt: dieselben Spuren, dieselben
+/// gebündelten Karten in derselben Reihenfolge, Ketten und Haken.
+ArchivPlan archivPlanAusBoard(
+  WeekBoard board,
+  Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
+) {
+  final karten = <ArchivKarte>[];
+  for (final spur in board.spuren) {
+    for (final tag in board.tage) {
+      for (final t in board.cellFor(spur, tag).tasks) {
+        karten.add(
+          ArchivKarte(
+            spurId: spur.id,
+            abteilung: t.abteilung.dbValue,
+            datum: DateTime(tag.year, tag.month, tag.day),
+            productId: t.productId,
+            productName: t.productName,
+            artikelnummer: t.artikelnummer,
+            startZeit: t.startZeit,
+            dauerMinuten: t.dauerMinuten,
+            mengeKg: t.mengeKg,
+            sortierung: t.sortierung,
+            status: t.status,
+            kettenId: t.kettenId,
+            erledigt: t.erledigt,
+            auftraege: t.mitgliederIds.length,
+          ),
+        );
+      }
+    }
+  }
 
+  // Nur die Aufgaben der gezeigten Tage — das Board zeigt Mo–Fr.
+  final tage = {for (final t in board.tage) tagOhneZeit(t)};
+  final archivAufgaben = <ArchivAufgabe>[
+    for (final liste in aufgaben.values)
+      for (final a in liste)
+        if (tage.contains(tagOhneZeit(a.datum)))
+          ArchivAufgabe(
+            abteilung: a.abteilung,
+            datum: tagOhneZeit(a.datum),
+            inhalt: a.inhalt,
+            erledigt: a.erledigt,
+          ),
+  ];
 
+  // Kettenmarker nur für die Ketten, deren Karten im Plan stehen.
+  final ketten = {for (final k in karten) k.kettenId};
+  final nachbarn = <String, ArchivKettenNachbar>{};
+  for (final e in board.kettenNachbarn.entries) {
+    if (!ketten.contains(e.key) || !e.value.hatNachbarn) continue;
+    nachbarn[e.key] = ArchivKettenNachbar(
+      vorher: _alsArchivSchritt(e.value.vorher),
+      nachher: _alsArchivSchritt(e.value.nachher),
+    );
+  }
 
+  return ArchivPlan(
+    tage: [for (final t in board.tage) tagOhneZeit(t)],
+    spuren: [
+      for (final s in board.spuren)
+        ArchivSpur(
+          abteilung: s.abteilung.dbValue,
+          maschineId: s.maschineId,
+          maschineName: s.maschineName,
+          eignungHinweis: s.eignungHinweis,
+          kapazitaetMinuten: s.kapazitaetMinuten,
+        ),
+    ],
+    karten: karten,
+    aufgaben: archivAufgaben,
+    kettenNachbarn: nachbarn,
+  );
+}
 
+ArchivKettenSchritt? _alsArchivSchritt(KettenSchritt? s) => s == null
+    ? null
+    : ArchivKettenSchritt(
+        abteilung: s.abteilung.dbValue,
+        datum: s.datum,
+        kw: s.kw,
+      );
 
+/// Baut aus einem archivierten [plan] wieder ein [WeekBoard] — für die
+/// Ansicht „Wochenplan" im Archiv.
+///
+/// Die Nebenzeiten kommen aus dem Snapshot selbst ([zusatzzeiten]); sie
+/// zählen wie im Board in die Auslastung. [stand] ist der Zeitpunkt des
+/// Archivierens. Spuren und Karten einer Abteilung, die es nicht mehr
+/// gibt, fallen weg, statt die Ansicht zu verhindern.
+WeekBoard wochenboardAusArchiv(
+  ArchivPlan plan, {
+  required DateTime stand,
+  List<SnapshotZusatzzeit> zusatzzeiten = const [],
+}) {
+  Abteilung? abteilung(String dbValue) {
+    try {
+      return Abteilung.fromDbValue(dbValue);
+    } catch (_) {
+      return null;
+    }
+  }
 
+  KettenSchritt? schritt(ArchivKettenSchritt? s) {
+    if (s == null) return null;
+    final abt = abteilung(s.abteilung);
+    if (abt == null) return null;
+    return KettenSchritt(abteilung: abt, datum: s.datum, kw: s.kw);
+  }
 
+  final spuren = <BoardSpur>[];
+  for (final s in plan.spuren) {
+    final abt = abteilung(s.abteilung);
+    if (abt == null) continue;
+    spuren.add(
+      BoardSpur(
+        abteilung: abt,
+        kapazitaetMinuten: s.kapazitaetMinuten,
+        maschineId: s.maschineId,
+        maschineName: s.maschineName,
+        eignungHinweis: s.eignungHinweis,
+      ),
+    );
+  }
+  final tage = [for (final t in plan.tage) tagOhneZeit(t)];
+
+  // Schlüssel wie [_cellKey]: „<spurId>|<Tag>".
+  final tasksProZelle = <String, List<BoardTask>>{};
+  for (var i = 0; i < plan.karten.length; i++) {
+    final k = plan.karten[i];
+    final abt = abteilung(k.abteilung);
+    if (abt == null) continue;
+    final tag = tagOhneZeit(k.datum);
+    final id = 'archiv-$i';
+    (tasksProZelle['${k.spurId}|${tag.toIso8601String()}'] ??= []).add(
+      BoardTask(
+        id: id,
+        productId: k.productId,
+        productName: k.productName,
+        artikelnummer: k.artikelnummer,
+        abteilung: abt,
+        datum: tag,
+        startZeit: k.startZeit,
+        dauerMinuten: k.dauerMinuten,
+        mengeKg: k.mengeKg,
+        sortierung: k.sortierung,
+        status: k.status,
+        mitgliederIds: [id],
+        erledigt: k.erledigt,
+        kettenId: k.kettenId.isEmpty ? null : k.kettenId,
+        spurId: k.spurId,
+      ),
+    );
+  }
+
+  final zusatzProZelle = <String, List<Zusatzzeit>>{};
+  for (var i = 0; i < zusatzzeiten.length; i++) {
+    final z = zusatzzeiten[i];
+    final tag = tagOhneZeit(z.datum);
+    (zusatzProZelle['${z.spurId}|${tag.toIso8601String()}'] ??= []).add(
+      Zusatzzeit(
+        id: 'archiv-$i',
+        datum: tag,
+        spurId: z.spurId,
+        art: z.art,
+        minuten: z.minuten,
+        notiz: z.notiz,
+        createdAt: stand,
+        updatedAt: stand,
+      ),
+    );
+  }
+
+  final cells = <String, BoardCell>{};
+  for (final spur in spuren) {
+    for (final tag in tage) {
+      final key = _cellKey(spur, tag);
+      cells[key] = BoardCell(
+        spur: spur,
+        tag: tag,
+        tasks: tasksProZelle[key] ?? const [],
+        zusatzzeiten: zusatzProZelle[key] ?? const [],
+        kapazitaetMinuten: spur.kapazitaetMinuten,
+      );
+    }
+  }
+
+  final nachbarn = <String, KettenNachbar>{};
+  for (final e in plan.kettenNachbarn.entries) {
+    final n = KettenNachbar(
+      vorher: schritt(e.value.vorher),
+      nachher: schritt(e.value.nachher),
+    );
+    if (n.hatNachbarn) nachbarn[e.key] = n;
+  }
+
+  return WeekBoard(
+    wochenStart: _montag(tage.isEmpty ? stand : tage.first),
+    tage: tage,
+    spuren: spuren,
+    cells: cells,
+    kettenNachbarn: nachbarn,
+  );
+}
