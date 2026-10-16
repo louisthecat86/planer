@@ -12,6 +12,8 @@ import '../../core/services/artikel_anlage_service.dart';
 import '../../core/services/artikelstamm_abgleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_import_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
 import '../auftragsbestand/auftragsbestand_screen.dart'
     show auftragsbestandProvider;
@@ -334,21 +336,30 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
   Widget build(BuildContext context) {
     final abgleich = _abgleich;
     final fortschritt = _fortschritt;
+    // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Navision-Artikel'),
         actions: [
-          TextButton.icon(
-            onPressed: _beschaeftigt ? null : _einlesen,
-            icon: const Icon(Icons.upload_file, size: 18),
-            label: Text(
-              abgleich == null
-                  ? 'Artikelübersicht einlesen'
-                  : 'Neu einlesen',
-            ),
-          ),
-          const SizedBox(width: 8),
+          // Vor dem ersten Einlesen trägt der Einstieg den Knopf — oben
+          // stünde sonst derselbe noch einmal.
+          if (abgleich != null) ...[
+            if (schmal)
+              IconButton(
+                onPressed: _beschaeftigt ? null : _einlesen,
+                icon: const Icon(Icons.upload_file),
+                tooltip: 'Neu einlesen',
+              )
+            else
+              OutlinedButton.icon(
+                onPressed: _beschaeftigt ? null : _einlesen,
+                icon: const Icon(Icons.upload_file, size: 18),
+                label: const Text('Neu einlesen …'),
+              ),
+            const SizedBox(width: 12),
+          ],
         ],
       ),
       body: Stack(
@@ -368,24 +379,30 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 
   Widget _inhalt(BuildContext context, ArtikelstammAbgleich a) {
     final theme = Theme.of(context);
+    final farben = theme.colorScheme;
     final grau = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
+      color: farben.onSurfaceVariant,
     );
+    final meldung = _fehler;
 
     final Widget liste;
     final Widget filter;
+    final Widget spaltenKopf;
     switch (_ansicht) {
       case _Ansicht.neu:
         final sichtbar = _neuGefiltert(a);
         filter = _neuFilter(context, a, sichtbar);
+        spaltenKopf =
+            const _SpaltenKopf(mitte: 'Beschreibung', rechts: 'Hinweise');
         liste = sichtbar.isEmpty
-            ? _LeereListe(
-                text: a.neu.isEmpty
-                    ? 'Alle Artikel der Datei gibt es in der App.'
-                    : 'Keine neuen Artikel passen zu den Filtern.',
+            ? Center(
+                child: LeerHinweis(
+                  a.neu.isEmpty
+                      ? 'Alle Artikel der Datei gibt es in der App.'
+                      : 'Keine neuen Artikel passen zu den Filtern.',
+                ),
               )
             : ListView.builder(
-                padding: const EdgeInsets.only(bottom: 16),
                 itemCount: sichtbar.length,
                 itemBuilder: (context, i) {
                   final n = sichtbar[i];
@@ -409,17 +426,20 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         final alle = ergaenzen ? a.ergaenzen : a.abweichend;
         final sichtbar = _vorschlaegeGefiltert(alle);
         filter = _allergenFilter(context, sichtbar, ergaenzen: ergaenzen);
+        spaltenKopf =
+            const _SpaltenKopf(mitte: 'Artikel', rechts: 'Allergene');
         liste = sichtbar.isEmpty
-            ? _LeereListe(
-                text: alle.isEmpty
-                    ? (ergaenzen
-                        ? 'Kein Artikel der App ohne Allergene, für den der '
-                            'Suchbegriff welche nennt.'
-                        : 'Keine Abweichungen zwischen App und Navision.')
-                    : 'Keine Artikel passen zur Suche.',
+            ? Center(
+                child: LeerHinweis(
+                  alle.isEmpty
+                      ? (ergaenzen
+                          ? 'Kein Artikel der App ohne Allergene, für den '
+                              'der Suchbegriff welche nennt.'
+                          : 'Keine Abweichungen zwischen App und Navision.')
+                      : 'Keine Artikel passen zur Suche.',
+                ),
               )
             : ListView.builder(
-                padding: const EdgeInsets.only(bottom: 16),
                 itemCount: sichtbar.length,
                 itemBuilder: (context, i) {
                   final v = sichtbar[i];
@@ -442,14 +462,30 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     final allergenWahl = _allergenGewaehlt.length;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (_fehler != null)
-          _Meldung(
-            text: _fehler!,
-            onSchliessen: () => setState(() => _fehler = null),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (meldung != null) ...[
+                HinweisBox(
+                  meldung,
+                  art: StatusArt.fehler,
+                  auswaehlbar: true,
+                  onSchliessen: () => setState(() => _fehler = null),
+                ),
+                const SizedBox(height: 10),
+              ],
+              _Kopf(abgleich: a, dateiname: _dateiname),
+              if (a.warnungen.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _Hinweise(warnungen: a.warnungen),
+              ],
+            ],
           ),
-        _Kopf(abgleich: a, dateiname: _dateiname),
-        if (a.warnungen.isNotEmpty) _Hinweise(warnungen: a.warnungen),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
           child: Wrap(
@@ -467,7 +503,10 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                   ),
                   ButtonSegment(
                     value: _Ansicht.ergaenzen,
-                    icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                    icon: const Icon(
+                      Icons.playlist_add_check_rounded,
+                      size: 18,
+                    ),
                     label: Text('Allergene fehlen (${a.ergaenzen.length})'),
                   ),
                   ButtonSegment(
@@ -486,8 +525,6 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Suche (Nummer, Bezeichnung, Suchbegriff)',
                     prefixIcon: Icon(Icons.search, size: 18),
-                    border: OutlineInputBorder(),
-                    isDense: true,
                   ),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -496,13 +533,35 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           ),
         ),
         filter,
-        const Divider(height: 1),
-        Expanded(child: liste),
+        // Die Liste als weiße Fläche mit Spaltenkopf — wie die Listen in
+        // Navision. Vorher liefen die Zeilen ohne Rahmen über die Seite.
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+            child: Material(
+              color: farben.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppMasse.ecken,
+                side: BorderSide(color: farben.outline),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  spaltenKopf,
+                  Expanded(child: liste),
+                ],
+              ),
+            ),
+          ),
+        ),
+        // Die Knopfzeile unten auf der Fläche der Leisten: was gewählt ist,
+        // und rechts der Knopf zum Übernehmen.
         Container(
           padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
           decoration: BoxDecoration(
-            color: theme.colorScheme.surfaceContainerHigh,
-            border: Border(top: BorderSide(color: theme.dividerColor)),
+            color: AppFarben.von(context).leiste,
+            border: Border(top: BorderSide(color: farben.outline)),
           ),
           child: Row(
             children: [
@@ -574,8 +633,6 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                 isExpanded: true,
                 decoration: const InputDecoration(
                   labelText: 'Produktgruppe (Navision)',
-                  border: OutlineInputBorder(),
-                  isDense: true,
                 ),
                 // Farbe ausdrücklich — ohne sie erbt der Text im hellen
                 // Modus Weiß.
@@ -689,15 +746,12 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 String _allergenText(Set<String> werte) =>
     merkmaleLabel(merkmaleZuText(werte, kAllergene), kAllergene);
 
-/// Blau wie „vorgemerkt" im Auftragsbestand.
-Color _blau(ThemeData theme) => theme.brightness == Brightness.dark
-    ? const Color(0xFF60A5FA)
-    : const Color(0xFF1D4ED8);
-
-/// Bernstein — dunkel genug für hellen Grund.
-Color _bernstein(ThemeData theme) => theme.brightness == Brightness.dark
-    ? const Color(0xFFFBBF24)
-    : const Color(0xFFB45309);
+/// Spaltenbreiten der Abgleich-Listen — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double auswahl = 40;
+  static const double nummer = 96;
+  static const double marken = 300;
+}
 
 /// Vor dem ersten Einlesen: was hier passiert, und der Knopf.
 class _Einstieg extends StatelessWidget {
@@ -710,6 +764,7 @@ class _Einstieg extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final text = theme.textTheme.bodyMedium?.copyWith(height: 1.4);
+    final meldung = fehler;
 
     Widget punkt(String t) => Padding(
           padding: const EdgeInsets.only(top: 8),
@@ -729,67 +784,55 @@ class _Einstieg extends StatelessWidget {
           ),
         );
 
+    // Ein Bereich mit Kopfzeile wie überall — vorher eine Karte mit
+    // eigenem, größerem Titel.
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 580),
-          child: Card(
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.swap_horiz_rounded,
-                        color: theme.colorScheme.primary,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Artikelstamm aus Navision abgleichen',
-                        style: theme.textTheme.titleMedium
-                            ?.copyWith(fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Die Artikelübersicht aus Navision (als Excel '
-                    'exportiert) wird mit den Artikeln der App verglichen:',
-                    style: text,
-                  ),
-                  punkt(
-                    'Neue Artikel anlegen — vorausgewählt sind die, die im '
-                    'Auftragsbestand stehen.',
-                  ),
-                  punkt(
-                    'Allergene aus dem Suchbegriff vorschlagen, etwa „EI" '
-                    '→ Eier, „LAKTOSE" → Milch, „SENFSAAT" → Senf. '
-                    'Übernommen wird nur, was du auswählst.',
-                  ),
-                  punkt(
-                    'Bestand und offene Aufträge kommen nicht von hier, '
-                    'sondern aus dem Auftragsbestand — je Auftrag und '
-                    'Versandtag.',
-                  ),
-                  if (fehler != null) ...[
-                    const SizedBox(height: 14),
-                    Text(
-                      fehler!,
-                      style: text?.copyWith(color: theme.colorScheme.error),
-                    ),
-                  ],
-                  const SizedBox(height: 18),
-                  FilledButton.icon(
-                    onPressed: onEinlesen,
-                    icon: const Icon(Icons.upload_file, size: 18),
-                    label: const Text('Artikelübersicht einlesen'),
+          child: Bereich(
+            titel: 'Artikelstamm aus Navision abgleichen',
+            icon: Icons.swap_horiz_rounded,
+            innenAbstand: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Die Artikelübersicht aus Navision (als Excel '
+                  'exportiert) wird mit den Artikeln der App verglichen:',
+                  style: text,
+                ),
+                punkt(
+                  'Neue Artikel anlegen — vorausgewählt sind die, die im '
+                  'Auftragsbestand stehen.',
+                ),
+                punkt(
+                  'Allergene aus dem Suchbegriff vorschlagen, etwa „EI" '
+                  '→ Eier, „LAKTOSE" → Milch, „SENFSAAT" → Senf. '
+                  'Übernommen wird nur, was du auswählst.',
+                ),
+                punkt(
+                  'Bestand und offene Aufträge kommen nicht von hier, '
+                  'sondern aus dem Auftragsbestand — je Auftrag und '
+                  'Versandtag.',
+                ),
+                if (meldung != null) ...[
+                  const SizedBox(height: 14),
+                  HinweisBox(
+                    meldung,
+                    art: StatusArt.fehler,
+                    auswaehlbar: true,
                   ),
                 ],
-              ),
+                const SizedBox(height: 18),
+                FilledButton.icon(
+                  onPressed: onEinlesen,
+                  icon: const Icon(Icons.upload_file, size: 18),
+                  label: const Text('Artikelübersicht einlesen …'),
+                ),
+              ],
             ),
           ),
         ),
@@ -807,73 +850,31 @@ class _Kopf extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final f = AppFarben.von(context);
     final a = abgleich;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    // Farbe nur, wo etwas zu prüfen ist.
+    return Bereich(
+      titel: 'Abgleich',
+      untertitel: dateiname,
+      child: Wrap(
+        spacing: 28,
+        runSpacing: 8,
         children: [
-          if (dateiname != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                dateiname!,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ),
-          Wrap(
-            spacing: 26,
-            runSpacing: 8,
-            children: [
-              _Kennzahl(wert: '${a.gelesen}', label: 'Artikel gelesen'),
-              _Kennzahl(wert: '${a.neu.length}', label: 'neu'),
-              _Kennzahl(
-                wert: '${a.ergaenzen.length}',
-                label: 'Allergene fehlen',
-              ),
-              _Kennzahl(
-                wert: '${a.abweichend.length}',
-                label: 'Abweichungen',
-              ),
-              _Kennzahl(wert: '${a.unveraendert}', label: 'unverändert'),
-            ],
+          Kennzahl(wert: '${a.gelesen}', label: 'Artikel gelesen'),
+          Kennzahl(wert: '${a.neu.length}', label: 'neu'),
+          Kennzahl(
+            wert: '${a.ergaenzen.length}',
+            label: 'Allergene fehlen',
+            farbe: a.ergaenzen.isEmpty ? null : f.warnung,
           ),
+          Kennzahl(
+            wert: '${a.abweichend.length}',
+            label: 'Abweichungen',
+            farbe: a.abweichend.isEmpty ? null : f.warnung,
+          ),
+          Kennzahl(wert: '${a.unveraendert}', label: 'unverändert'),
         ],
       ),
-    );
-  }
-}
-
-class _Kennzahl extends StatelessWidget {
-  const _Kennzahl({required this.wert, required this.label});
-
-  final String wert;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          wert,
-          style: theme.textTheme.titleMedium
-              ?.copyWith(fontWeight: FontWeight.w700),
-        ),
-        Text(
-          label,
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -886,111 +887,89 @@ class _Hinweise extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final farbe = _bernstein(theme);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-      color: farbe.withValues(alpha: 0.10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.warning_amber_rounded, size: 18, color: farbe),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              [
-                ...warnungen.take(4),
-                if (warnungen.length > 4)
-                  '… und ${warnungen.length - 4} weitere',
-              ].join('\n'),
-              style: theme.textTheme.bodySmall?.copyWith(height: 1.35),
-            ),
-          ),
-        ],
-      ),
+    return HinweisBox(
+      [
+        ...warnungen.take(4),
+        if (warnungen.length > 4) '… und ${warnungen.length - 4} weitere',
+      ].join('\n'),
+      art: StatusArt.warnung,
     );
   }
 }
 
-/// Fehler über der Liste, zum Wegklicken.
-class _Meldung extends StatelessWidget {
-  const _Meldung({required this.text, required this.onSchliessen});
+/// Spaltenköpfe einer Abgleich-Liste auf der Fläche der Leisten.
+class _SpaltenKopf extends StatelessWidget {
+  const _SpaltenKopf({required this.mitte, required this.rechts});
 
-  final String text;
-  final VoidCallback onSchliessen;
+  final String mitte;
+  final String rechts;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 6, 6, 6),
-      color: theme.colorScheme.errorContainer,
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(color: theme.colorScheme.onErrorContainer),
-            ),
-          ),
-          IconButton(
-            onPressed: onSchliessen,
-            icon: const Icon(Icons.close, size: 18),
-            tooltip: 'Schließen',
-          ),
-        ],
-      ),
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: theme.colorScheme.onSurfaceVariant,
     );
-  }
-}
-
-class _LeereListe extends StatelessWidget {
-  const _LeereListe({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(6, 8, 14, 8),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(
+          bottom: BorderSide(color: theme.colorScheme.outline),
         ),
       ),
+      child: Row(
+        children: [
+          const SizedBox(width: _Spalten.auswahl),
+          SizedBox(
+            width: _Spalten.nummer,
+            child: Text('Nummer', style: stil),
+          ),
+          Expanded(child: Text(mitte, style: stil)),
+          const SizedBox(width: 12),
+          Text(rechts, style: stil),
+        ],
+      ),
     );
   }
 }
 
-/// Kleine Beschriftung mit Rahmen.
+/// Kleine Marke im Stil der [StatusMarke], aber mit Umbruch: Eine Liste
+/// von Allergenen kann länger sein als die Spalte.
 class _Marke extends StatelessWidget {
-  const _Marke({required this.text, required this.farbe});
+  const _Marke({required this.text, this.art = StatusArt.neutral});
 
   final String text;
-  final Color farbe;
+  final StatusArt art;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = AppFarben.von(context);
+    final (vorne, hinten) = switch (art) {
+      StatusArt.ok => (f.ok, f.okFlaeche),
+      StatusArt.warnung => (f.warnung, f.warnungFlaeche),
+      StatusArt.fehler => (f.fehler, f.fehlerFlaeche),
+      StatusArt.info => (f.info, f.infoFlaeche),
+      StatusArt.neutral => (
+          theme.colorScheme.onSurfaceVariant,
+          theme.colorScheme.surfaceContainerHighest,
+        ),
+    };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: farbe.withValues(alpha: 0.45)),
+        color: hinten,
+        borderRadius: AppMasse.eckenKlein,
       ),
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 12,
+          fontSize: 11.5,
           fontWeight: FontWeight.w600,
-          color: farbe,
+          color: vorne,
         ),
       ),
     );
@@ -1026,92 +1005,102 @@ class _NeuZeile extends StatelessWidget {
       if ((z.basiseinheit ?? '').isNotEmpty) 'Einheit ${z.basiseinheit}',
     ].join(' · ');
 
-    return InkWell(
-      onTap: () => onChanged(!gewaehlt),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 4, 14, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: gewaehlt,
-              onChanged: (v) => onChanged(v ?? false),
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!gewaehlt),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(6, 2, 14, 6),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
             ),
-            SizedBox(
-              width: 96,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  z.nummer,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: _Spalten.auswahl,
+                child: Checkbox(
+                  value: gewaehlt,
+                  onChanged: (v) => onChanged(v ?? false),
                 ),
               ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      z.beschreibung.isEmpty
-                          ? '(ohne Beschreibung)'
-                          : z.beschreibung,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    if ((z.beschreibung2 ?? '').isNotEmpty)
-                      Text(z.beschreibung2!, style: grau),
-                    Text(angaben, style: grau),
-                  ],
+              SizedBox(
+                width: _Spalten.nummer,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    z.nummer,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 300),
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    if (artikel.imAuftragsbestand)
-                      _Marke(
-                        text: 'im Auftragsbestand',
-                        farbe: _blau(theme),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        z.beschreibung.isEmpty
+                            ? '(ohne Beschreibung)'
+                            : z.beschreibung,
+                        style: theme.textTheme.bodyMedium,
                       ),
-                    if (artikel.geloescht)
-                      _Marke(
-                        text: 'früher gelöscht — wird wieder aktiviert',
-                        farbe: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    if (artikel.allergene.isEmpty)
-                      _Marke(
-                        text: 'keine Allergene im Suchbegriff',
-                        farbe: theme.colorScheme.onSurfaceVariant,
-                      )
-                    else
-                      Tooltip(
-                        message: mitAllergenen
-                            ? 'Wird beim Anlegen als Allergenangabe '
-                                'gespeichert.'
-                            : 'Wird nicht gespeichert — „Allergen-Vorschläge '
-                                'mitnehmen" ist aus.',
-                        child: _Marke(
-                          text: 'Allergene: '
-                              '${_allergenText(artikel.allergene)}',
-                          farbe: mitAllergenen
-                              ? _bernstein(theme)
-                              : theme.colorScheme.onSurfaceVariant,
+                      if ((z.beschreibung2 ?? '').isNotEmpty)
+                        Text(z.beschreibung2!, style: grau),
+                      Text(angaben, style: grau),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _Spalten.marken),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 9),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    alignment: WrapAlignment.end,
+                    children: [
+                      if (artikel.imAuftragsbestand)
+                        // Blau wie „vorgemerkt" im Auftragsbestand.
+                        const _Marke(
+                          text: 'im Auftragsbestand',
+                          art: StatusArt.info,
                         ),
-                      ),
-                  ],
+                      if (artikel.geloescht)
+                        const _Marke(
+                          text: 'früher gelöscht — wird wieder aktiviert',
+                        ),
+                      if (artikel.allergene.isEmpty)
+                        const _Marke(text: 'keine Allergene im Suchbegriff')
+                      else
+                        Tooltip(
+                          message: mitAllergenen
+                              ? 'Wird beim Anlegen als Allergenangabe '
+                                  'gespeichert.'
+                              : 'Wird nicht gespeichert — „Allergen-'
+                                  'Vorschläge mitnehmen" ist aus.',
+                          child: _Marke(
+                            text: 'Allergene: '
+                                '${_allergenText(artikel.allergene)}',
+                            art: mitAllergenen
+                                ? StatusArt.warnung
+                                : StatusArt.neutral,
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1146,71 +1135,84 @@ class _AllergenZeile extends StatelessWidget {
         ? 'nicht gepflegt'
         : _allergenText(v.bisher);
 
-    return InkWell(
-      onTap: () => onChanged(!gewaehlt),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(6, 4, 14, 6),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Checkbox(
-              value: gewaehlt,
-              onChanged: (x) => onChanged(x ?? false),
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => onChanged(!gewaehlt),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(6, 2, 14, 6),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
             ),
-            SizedBox(
-              width: 96,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Text(
-                  p.artikelnummer,
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: _Spalten.auswahl,
+                child: Checkbox(
+                  value: gewaehlt,
+                  onChanged: (x) => onChanged(x ?? false),
                 ),
               ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      p.artikelbezeichnung,
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    Text(navision, style: grau),
-                  ],
+              SizedBox(
+                width: _Spalten.nummer,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Text(
+                    p.artikelnummer,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 320),
-              child: Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      'App: $bisher',
-                      textAlign: TextAlign.right,
-                      style: v.widerspruch
-                          ? grau?.copyWith(
-                              color: theme.colorScheme.error,
-                              fontWeight: FontWeight.w700,
-                            )
-                          : grau,
-                    ),
-                    const SizedBox(height: 3),
-                    _Marke(
-                      text: '+ ${_allergenText(v.neu)}',
-                      farbe: _bernstein(theme),
-                    ),
-                  ],
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p.artikelbezeichnung,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      Text(navision, style: grau),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(width: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: _Spalten.marken),
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 9),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        'App: $bisher',
+                        textAlign: TextAlign.right,
+                        style: v.widerspruch
+                            ? grau?.copyWith(
+                                color: AppFarben.von(context).fehler,
+                                fontWeight: FontWeight.w700,
+                              )
+                            : grau,
+                      ),
+                      const SizedBox(height: 3),
+                      _Marke(
+                        text: '+ ${_allergenText(v.neu)}',
+                        art: StatusArt.warnung,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1302,7 +1304,14 @@ class _Fortschritt extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 360),
-            child: Card(
+            // Kantig mit dünnem Rand wie jedes Fenster der App — vorher
+            // eine Karte.
+            child: Material(
+              color: theme.colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: AppMasse.ecken,
+                side: BorderSide(color: theme.colorScheme.outline),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -1311,8 +1320,8 @@ class _Fortschritt extends StatelessWidget {
                   children: [
                     Text(
                       'Artikelübersicht einlesen',
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: theme.dialogTheme.titleTextStyle ??
+                          theme.textTheme.titleMedium,
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 18),
@@ -1320,8 +1329,8 @@ class _Fortschritt extends StatelessWidget {
                     // Datei meldet keine Zwischenstände.
                     LinearProgressIndicator(
                       value: stand.anteil,
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
+                      minHeight: 6,
+                      borderRadius: AppMasse.eckenKlein,
                     ),
                     const SizedBox(height: 14),
                     Text(

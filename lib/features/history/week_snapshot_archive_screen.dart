@@ -7,6 +7,8 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
@@ -129,7 +131,10 @@ class _WeekSnapshotArchiveScreenState
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Löschen'),
           ),
@@ -149,34 +154,58 @@ class _WeekSnapshotArchiveScreenState
   @override
   Widget build(BuildContext context) {
     final snapsAsync = ref.watch(weekSnapshotsProvider);
+    // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
+    // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein weißer
+    // Kreisel wäre darauf unsichtbar.
+    const kreisel = SizedBox(
+      width: 16,
+      height: 16,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Wochen-Historie'),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _busy ? null : _archiviere,
-        icon: _busy
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : const Icon(Icons.archive_outlined),
-        label: const Text('Woche archivieren'),
+        actions: [
+          // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
+          // vorher ein schwebender Knopf, der unten die letzte Woche
+          // verdeckte.
+          if (schmal)
+            IconButton(
+              onPressed: _busy ? null : _archiviere,
+              icon: _busy ? kreisel : const Icon(Icons.archive_outlined),
+              tooltip: 'Woche archivieren',
+            )
+          else
+            FilledButton.icon(
+              onPressed: _busy ? null : _archiviere,
+              icon: _busy
+                  ? kreisel
+                  : const Icon(Icons.archive_outlined, size: 18),
+              label: const Text('Woche archivieren …'),
+            ),
+          const SizedBox(width: 12),
+        ],
       ),
       body: snapsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            HinweisBox(
+              'Fehler: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
+          ],
+        ),
         data: (snaps) {
           return Column(
             children: [
               // Umschalter: Kalender oder Liste
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
                 child: Align(
                   alignment: Alignment.centerLeft,
                   child: SegmentedButton<bool>(
@@ -206,10 +235,17 @@ class _WeekSnapshotArchiveScreenState
                 child: _kalender
                     ? _buildKalender(context, snaps)
                     : (snaps.isEmpty
-                        ? const _LeerHinweis()
+                        ? const Center(
+                            child: LeerHinweis(
+                              'Noch keine archivierten Wochen. Mit „Woche '
+                              'archivieren" oben rechts frierst du den '
+                              'aktuellen Plan einer Woche ein.',
+                              icon: Icons.history,
+                            ),
+                          )
                         : ListView.builder(
                             padding:
-                                const EdgeInsets.fromLTRB(12, 8, 12, 96),
+                                const EdgeInsets.fromLTRB(14, 10, 14, 24),
                             itemCount: snaps.length,
                             itemBuilder: (context, i) => _SnapshotKarte(
                               snap: snaps[i],
@@ -229,6 +265,7 @@ class _WeekSnapshotArchiveScreenState
   /// sich per Klick archivieren.
   Widget _buildKalender(BuildContext context, List<WeekSnapshot> snaps) {
     final theme = Theme.of(context);
+    final farben = theme.colorScheme;
     final snapVonMontag = <String, WeekSnapshot>{
       for (final s in snaps) _tagKey(s.wochenStart): s,
     };
@@ -245,67 +282,110 @@ class _WeekSnapshotArchiveScreenState
       montag = tagPlus(montag, 7);
     }
 
+    // Der Monat als eine Fläche mit Rand: oben der Monat zum Blättern auf
+    // der Fläche der Leisten, darunter die Wochen als Zeilen — wie eine
+    // Tabelle in Navision. Vorher stand jede Woche auf einer eigenen,
+    // runden Kachel.
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 4, 12, 96),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
       children: [
-        // Monats-Navigation: < Monat Jahr >
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Vorheriger Monat',
-              onPressed: () => setState(
-                () => _monat = DateTime(_monat.year, _monat.month - 1),
-              ),
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Expanded(
-              child: Text(
-                '${_monatsName(_monat.month)} ${_monat.year}',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+        Material(
+          color: farben.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppMasse.ecken,
+            side: BorderSide(color: farben.outline),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: AppFarben.von(context).leiste,
+                  border: Border(bottom: BorderSide(color: farben.outline)),
+                ),
+                child: Column(
+                  children: [
+                    // Monats-Navigation: < Monat Jahr >
+                    Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Vorheriger Monat',
+                          onPressed: () => setState(
+                            () => _monat =
+                                DateTime(_monat.year, _monat.month - 1),
+                          ),
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: Text(
+                            '${_monatsName(_monat.month)} ${_monat.year}',
+                            textAlign: TextAlign.center,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: 'Nächster Monat',
+                          onPressed: () => setState(
+                            () => _monat =
+                                DateTime(_monat.year, _monat.month + 1),
+                          ),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                    // Wochentagskopf
+                    Padding(
+                      // Bündig mit den Tagen der Wochen: Rand, KW-Marke
+                      // und Abstand der Zeilen abzüglich des Rands hier.
+                      padding: const EdgeInsets.fromLTRB(48, 0, 4, 6),
+                      child: Row(
+                        children: [
+                          for (final t in const [
+                            'Mo',
+                            'Di',
+                            'Mi',
+                            'Do',
+                            'Fr',
+                            'Sa',
+                            'So',
+                          ])
+                            Expanded(
+                              child: Text(
+                                t,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: farben.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Nächster Monat',
-              onPressed: () => setState(
-                () => _monat = DateTime(_monat.year, _monat.month + 1),
-              ),
-              icon: const Icon(Icons.chevron_right),
-            ),
-          ],
-        ),
-        // Wochentagskopf
-        Padding(
-          padding: const EdgeInsets.only(left: 46, top: 2, bottom: 4),
-          child: Row(
-            children: [
-              for (final t in const ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'])
-                Expanded(
-                  child: Text(
-                    t,
-                    textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+              for (final (i, w) in wochen.indexed)
+                _KalenderWoche(
+                  montag: w,
+                  anzeigeMonat: _monat.month,
+                  snapshot: snapVonMontag[_tagKey(w)],
+                  letzte: i == wochen.length - 1,
+                  onOeffnen: (s) => context.pushNamed(
+                    'wochenHistorieDetail',
+                    pathParameters: {'snapshotId': s.id},
                   ),
+                  onArchivieren:
+                      _busy ? null : () => _archiviereWocheMitFrage(w),
                 ),
             ],
           ),
         ),
-        for (final w in wochen)
-          _KalenderWoche(
-            montag: w,
-            anzeigeMonat: _monat.month,
-            snapshot: snapVonMontag[_tagKey(w)],
-            onOeffnen: (s) => context.pushNamed(
-              'wochenHistorieDetail',
-              pathParameters: {'snapshotId': s.id},
-            ),
-            onArchivieren:
-                _busy ? null : () => _archiviereWocheMitFrage(w),
-          ),
       ],
     );
   }
@@ -334,12 +414,17 @@ class _SnapshotKarte extends StatelessWidget {
     final daten = dekodiereSnapshot(snap);
     final ende = tagPlus(snap.wochenStart, 6);
     final stunden = Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten);
+    final notiz = snap.notiz?.trim() ?? '';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
       child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        // Aufgeklappt ohne eigene Linien — den Rand zieht die Karte.
+        shape: const Border(),
+        collapsedShape: const Border(),
         title: Text(
           'KW ${snap.kw} · ${snap.jahr}',
           style: const TextStyle(fontWeight: FontWeight.w700),
@@ -353,22 +438,11 @@ class _SnapshotKarte extends StatelessWidget {
           for (final abt in Abteilung.values)
             if ((daten.belegtMinutenJeAbteilung[abt.dbValue] ?? 0) > 0)
               _AbteilungsZeile(abteilung: abt, daten: daten),
-          if (snap.notiz != null && snap.notiz!.isNotEmpty) ...[
+          if (notiz.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: colors.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                snap.notiz!,
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
+            HinweisBox(notiz, art: StatusArt.neutral, icon: Icons.notes),
           ],
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Row(
             children: [
               FilledButton.tonalIcon(
@@ -382,15 +456,9 @@ class _SnapshotKarte extends StatelessWidget {
               const Spacer(),
               TextButton.icon(
                 onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: Colors.red,
-                  size: 18,
-                ),
-                label: const Text(
-                  'Löschen',
-                  style: TextStyle(color: Colors.red),
-                ),
+                style: TextButton.styleFrom(foregroundColor: colors.error),
+                icon: const Icon(Icons.delete_outline, size: 18),
+                label: const Text('Löschen …'),
               ),
             ],
           ),
@@ -411,6 +479,7 @@ class _AbteilungsZeile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final f = AppFarben.von(context);
     final belegt = daten.belegtMinutenJeAbteilung[abteilung.dbValue] ?? 0;
     final kg = daten.kgJeAbteilung[abteilung.dbValue] ?? 0;
     final anzahl = daten.auftraegeJeAbteilung[abteilung.dbValue] ?? 0;
@@ -420,25 +489,18 @@ class _AbteilungsZeile extends StatelessWidget {
     final wochenKap = tagesKap * 5;
     final auslastung = wochenKap > 0 ? belegt / wochenKap : 0.0;
     final prozent = (auslastung * 100).round();
+    // Rot überbucht, grün gut gefüllt, sonst grau — wie die Auslastung auf
+    // der Übersicht.
     final farbe = auslastung > 1.0
-        ? const Color(0xFFC62828)
-        : (auslastung >= 0.75
-            ? const Color(0xFF2E7D32)
-            : colors.onSurfaceVariant);
+        ? f.fehler
+        : (auslastung >= 0.75 ? f.ok : colors.onSurfaceVariant);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: abteilung.farbe,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: 8),
+          AbteilungsMarke(abteilung: abteilung),
+          const SizedBox(width: 10),
           Expanded(
             child: Text(
               abteilung.anzeigeName,
@@ -448,18 +510,23 @@ class _AbteilungsZeile extends StatelessWidget {
           Text(
             '${Zeit.kurz(belegt)} · '
             '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge',
-            style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
+            style: TextStyle(
+              fontSize: 12,
+              color: colors.onSurfaceVariant,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
           ),
           const SizedBox(width: 8),
           SizedBox(
-            width: 44,
+            width: 48,
             child: Text(
-              '$prozent%',
+              '$prozent %',
               textAlign: TextAlign.right,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
                 color: farbe,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ),
@@ -469,14 +536,15 @@ class _AbteilungsZeile extends StatelessWidget {
   }
 }
 
-/// Eine Wochenzeile im Kalender: KW-Badge, sieben Tageszellen und eine
-/// Statuszeile. Archiviert = hervorgehoben und öffnet die Auswertung; leer =
-/// antippen archiviert die Woche.
+/// Eine Wochenzeile im Kalender: KW-Marke, sieben Tageszellen und eine
+/// Statuszeile. Archiviert = blau hinterlegt und öffnet die Auswertung;
+/// leer = antippen archiviert die Woche.
 class _KalenderWoche extends StatelessWidget {
   const _KalenderWoche({
     required this.montag,
     required this.anzeigeMonat,
     required this.snapshot,
+    required this.letzte,
     required this.onOeffnen,
     required this.onArchivieren,
   });
@@ -484,6 +552,9 @@ class _KalenderWoche extends StatelessWidget {
   final DateTime montag;
   final int anzeigeMonat;
   final WeekSnapshot? snapshot;
+
+  /// Letzte Woche des Monats: ohne Linie darunter — dort schließt der Rand.
+  final bool letzte;
   final void Function(WeekSnapshot) onOeffnen;
   final VoidCallback? onArchivieren;
 
@@ -491,6 +562,7 @@ class _KalenderWoche extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final f = AppFarben.von(context);
     final kw = isoKalenderwoche(montag);
     final snap = snapshot;
     final hatSnap = snap != null;
@@ -498,112 +570,111 @@ class _KalenderWoche extends StatelessWidget {
     final daten = hatSnap ? dekodiereSnapshot(snap) : null;
     final tage = [for (var i = 0; i < 7; i++) tagPlus(montag, i)];
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Material(
-        color: hatSnap
-            ? colors.primaryContainer.withValues(alpha: 0.35)
-            : colors.surfaceContainerHighest.withValues(alpha: 0.20),
-        borderRadius: BorderRadius.circular(10),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: hatSnap ? () => onOeffnen(snap) : onArchivieren,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 6, 8, 6),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 40,
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  decoration: BoxDecoration(
-                    color: hatSnap
-                        ? colors.primary
-                        : colors.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    children: [
-                      Text(
-                        'KW',
-                        style: TextStyle(
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                          color: hatSnap
-                              ? colors.onPrimary
-                              : colors.onSurfaceVariant,
-                        ),
-                      ),
-                      Text(
-                        '$kw',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color:
-                              hatSnap ? colors.onPrimary : colors.onSurface,
-                        ),
-                      ),
-                    ],
-                  ),
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: hatSnap ? f.infoFlaeche : Colors.transparent,
+      child: InkWell(
+        onTap: hatSnap ? () => onOeffnen(snap) : onArchivieren,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
+          decoration: BoxDecoration(
+            border: letzte
+                ? null
+                : Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 40,
+                padding: const EdgeInsets.symmetric(vertical: 5),
+                decoration: BoxDecoration(
+                  color: hatSnap ? colors.primary : f.leiste,
+                  borderRadius: AppMasse.eckenKlein,
+                  border: hatSnap ? null : Border.all(color: colors.outline),
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                child: Column(
+                  children: [
+                    Text(
+                      'KW',
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        color: hatSnap
+                            ? colors.onPrimary
+                            : colors.onSurfaceVariant,
+                      ),
+                    ),
+                    Text(
+                      '$kw',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: hatSnap ? colors.onPrimary : colors.onSurface,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        for (final tag in tage)
+                          Expanded(
+                            child: _KalenderTag(
+                              tag: tag,
+                              imMonat: tag.month == anzeigeMonat,
+                              istHeute: tag.year == heute.year &&
+                                  tag.month == heute.month &&
+                                  tag.day == heute.day,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    if (hatSnap)
                       Row(
                         children: [
-                          for (final tag in tage)
-                            Expanded(
-                              child: _KalenderTag(
-                                tag: tag,
-                                imMonat: tag.month == anzeigeMonat,
-                                istHeute: tag.year == heute.year &&
-                                    tag.month == heute.month &&
-                                    tag.day == heute.day,
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      if (hatSnap)
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.check_circle,
-                              size: 13,
-                              color: colors.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                'archiviert · ${daten!.anzahlAuftraege} '
-                                'Aufträge · '
-                                '${Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten)} h '
-                                '· antippen zum Öffnen',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: colors.primary,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                        )
-                      else if (onArchivieren != null)
-                        Text(
-                          'antippen, um diese Woche zu archivieren',
-                          style: theme.textTheme.labelSmall?.copyWith(
-                            color: colors.onSurfaceVariant,
-                            fontStyle: FontStyle.italic,
+                          Icon(
+                            Icons.check_circle,
+                            size: 13,
+                            color: colors.primary,
                           ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              'archiviert · ${daten!.anzahlAuftraege} '
+                              'Aufträge · '
+                              '${Zeit.kurzOhneEinheit(daten.gesamtBelegtMinuten)} h '
+                              '· antippen zum Öffnen',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: colors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    else if (onArchivieren != null)
+                      Text(
+                        'antippen, um diese Woche zu archivieren',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontStyle: FontStyle.italic,
                         ),
-                    ],
-                  ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -611,7 +682,8 @@ class _KalenderWoche extends StatelessWidget {
   }
 }
 
-/// Eine einzelne Tageszelle im Kalender.
+/// Eine einzelne Tageszelle im Kalender. Heute trägt einen blauen Rahmen —
+/// der ist auf weißen wie auf blau hinterlegten Wochen zu sehen.
 class _KalenderTag extends StatelessWidget {
   const _KalenderTag({
     required this.tag,
@@ -628,18 +700,19 @@ class _KalenderTag extends StatelessWidget {
     final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 1),
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       decoration: istHeute
           ? BoxDecoration(
-              color: theme.colorScheme.primary.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: theme.colorScheme.primary),
+              borderRadius: AppMasse.eckenKlein,
             )
           : null,
       child: Text(
         '${tag.day}',
         textAlign: TextAlign.center,
         style: theme.textTheme.bodySmall?.copyWith(
-          fontWeight: istHeute ? FontWeight.w800 : FontWeight.w500,
+          fontWeight: istHeute ? FontWeight.w700 : FontWeight.w500,
+          fontFeatures: const [FontFeature.tabularFigures()],
           color: imMonat
               ? theme.colorScheme.onSurface
               : theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.45),
@@ -648,34 +721,3 @@ class _KalenderTag extends StatelessWidget {
     );
   }
 }
-
-class _LeerHinweis extends StatelessWidget {
-  const _LeerHinweis();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.history, size: 48, color: colors.onSurfaceVariant),
-            const SizedBox(height: 12),
-            Text(
-              'Noch keine archivierten Wochen.\n\n'
-              'Tippe unten auf „Woche archivieren", um den aktuellen '
-              'Plan einer Woche einzufrieren.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: colors.onSurfaceVariant),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-

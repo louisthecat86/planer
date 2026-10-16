@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,8 @@ import '../../core/services/backup_service.dart';
 import '../../core/services/stammdaten_export_service.dart';
 import '../../core/services/stammdaten_import_service.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../articles/article_detail_providers.dart';
 import '../articles/article_list_screen.dart';
 
@@ -24,7 +27,7 @@ import '../articles/article_list_screen.dart';
 /// - Backup erstellen / wiederherstellen
 /// - Speicherort der DB / Backups anzeigen
 ///
-/// Wird über das Datei-Icon in der AppBar aufgerufen.
+/// Erreichbar über die Einstellungen („Import / Export").
 class DataManagementScreen extends ConsumerStatefulWidget {
   const DataManagementScreen({super.key});
 
@@ -38,7 +41,7 @@ class _DataManagementScreenState
   // -- Allgemeine Status ----------------------------------------------
   bool _busy = false;
   String? _statusMessage;
-  Color _statusColor = Colors.green;
+  bool _statusFehler = false;
 
   // -- Import-Detailmeldungen (Fehler + Hinweise des letzten Imports) --
   List<String> _importFehler = [];
@@ -57,6 +60,9 @@ class _DataManagementScreenState
   // -- Backup-Liste ---------------------------------------------------
   List<BackupInfo> _backups = [];
   bool _backupsGeladen = false;
+
+  /// Liste der Backups aufgeklappt — im Alltag zugeklappt.
+  bool _backupsOffen = false;
 
   @override
   void initState() {
@@ -83,18 +89,18 @@ class _DataManagementScreenState
       if (mounted) {
         setState(() {
           _statusMessage = 'Fehler beim Laden: $e';
-          _statusColor = Colors.red;
+          _statusFehler = true;
         });
       }
     }
   }
 
-  void _setBusy(bool busy, {String? msg, Color color = Colors.green}) {
+  void _setBusy(bool busy, {String? msg, bool fehler = false}) {
     if (!mounted) return;
     setState(() {
       _busy = busy;
       _statusMessage = msg;
-      _statusColor = color;
+      _statusFehler = fehler;
       // Beim Start einer neuen Aktion alte Import-Details ausblenden.
       if (busy) {
         _importFehler = [];
@@ -139,7 +145,7 @@ class _DataManagementScreenState
         _setBusy(
           false,
           msg: 'Die Datei ließ sich nicht lesen.',
-          color: Colors.red,
+          fehler: true,
         );
         return;
       }
@@ -162,7 +168,7 @@ class _DataManagementScreenState
       if (mounted) setState(() => _importFortschritt = null);
 
       if (result.hatFehler) {
-        _setBusy(false, msg: result.fehler.first, color: Colors.red);
+        _setBusy(false, msg: result.fehler.first, fehler: true);
         if (mounted) setState(() => _importFehler = result.fehler);
         return;
       }
@@ -197,7 +203,7 @@ class _DataManagementScreenState
       Future.delayed(const Duration(seconds: 5), _ladeUebersicht);
     } catch (e) {
       if (mounted) setState(() => _importFortschritt = null);
-      _setBusy(false, msg: 'Import-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Import-Fehler: $e', fehler: true);
     }
   }
 
@@ -217,8 +223,11 @@ class _DataManagementScreenState
       await _ladeUebersicht();
       _setBusy(false, msg: 'Backups werden ab jetzt hier abgelegt: $ordner');
     } catch (e) {
-      _setBusy(false, msg: 'Ordner konnte nicht gesetzt werden: $e',
-          color: Colors.red,);
+      _setBusy(
+        false,
+        msg: 'Ordner konnte nicht gesetzt werden: $e',
+        fehler: true,
+      );
     }
   }
 
@@ -242,8 +251,11 @@ class _DataManagementScreenState
       }
       _setBusy(false, msg: 'Maschinen-Katalog gespeichert: $pfad');
     } catch (e) {
-      _setBusy(false, msg: 'Katalog-Export fehlgeschlagen: $e',
-          color: Colors.red,);
+      _setBusy(
+        false,
+        msg: 'Katalog-Export fehlgeschlagen: $e',
+        fehler: true,
+      );
     }
   }
 
@@ -265,8 +277,11 @@ class _DataManagementScreenState
       }
     }
     if (bytes == null) {
-      _setBusy(false, msg: 'Die Datei ließ sich nicht lesen.',
-          color: Colors.red,);
+      _setBusy(
+        false,
+        msg: 'Die Datei ließ sich nicht lesen.',
+        fehler: true,
+      );
       return;
     }
 
@@ -297,8 +312,11 @@ class _DataManagementScreenState
             '(${res.parameterNeu} neu$parameterWeg)',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Katalog-Import fehlgeschlagen: $e',
-          color: Colors.red,);
+      _setBusy(
+        false,
+        msg: 'Katalog-Import fehlgeschlagen: $e',
+        fehler: true,
+      );
     }
   }
 
@@ -335,14 +353,13 @@ class _DataManagementScreenState
         false,
         msg: 'Excel erstellt · ${result.artikel} Artikel · '
             '${result.anlagen} Anlagen',
-        color: Colors.green,
       );
 
       if (mounted && result.warnungen.isNotEmpty) {
         setState(() => _importWarnungen = result.warnungen);
       }
     } catch (e) {
-      _setBusy(false, msg: 'Export-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Export-Fehler: $e', fehler: true);
     }
   }
 
@@ -363,7 +380,7 @@ class _DataManagementScreenState
         msg: 'Backup gespeichert: ${pfad.split(Platform.pathSeparator).last}',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Backup-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Backup-Fehler: $e', fehler: true);
     }
   }
 
@@ -382,7 +399,7 @@ class _DataManagementScreenState
         msg: 'Backup gespeichert: ${pfad.split(Platform.pathSeparator).last}',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Backup-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Backup-Fehler: $e', fehler: true);
     }
   }
 
@@ -418,7 +435,7 @@ class _DataManagementScreenState
         msg: 'Backup vom ${info.formattedTimestamp} wiederhergestellt',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Restore-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Restore-Fehler: $e', fehler: true);
     }
   }
 
@@ -450,7 +467,7 @@ class _DataManagementScreenState
 
       _setBusy(false, msg: 'Backup wiederhergestellt');
     } catch (e) {
-      _setBusy(false, msg: 'Restore-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Restore-Fehler: $e', fehler: true);
     }
   }
 
@@ -469,7 +486,7 @@ class _DataManagementScreenState
       await _ladeUebersicht();
       _setBusy(false, msg: 'Backup gelöscht');
     } catch (e) {
-      _setBusy(false, msg: 'Lösch-Fehler: $e', color: Colors.red);
+      _setBusy(false, msg: 'Lösch-Fehler: $e', fehler: true);
     }
   }
 
@@ -495,7 +512,10 @@ class _DataManagementScreenState
           ),
           FilledButton(
             style: destructive
-                ? FilledButton.styleFrom(backgroundColor: Colors.red)
+                ? FilledButton.styleFrom(
+                    backgroundColor: Theme.of(ctx).colorScheme.error,
+                    foregroundColor: Theme.of(ctx).colorScheme.onError,
+                  )
                 : null,
             onPressed: () => Navigator.of(ctx).pop(true),
             child: Text(confirmText),
@@ -523,207 +543,276 @@ class _DataManagementScreenState
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final fortschritt = _importFortschritt;
+    final meldung = _statusMessage;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Daten verwalten'),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          // -- Status-Banner --------------------------------------------
-          if (_busy || _statusMessage != null)
-            _StatusBanner(
-              busy: _busy,
-              message: _statusMessage,
-              color: _statusColor,
-            ),
-          // Fortschritt des Stammdaten-Imports. `anteil == null` heißt:
-          // Der Abschnitt liefert keine Zwischenstände (das Öffnen der
-          // Datei), dann zeigt Flutter automatisch den laufenden Balken.
-          if (_importFortschritt != null) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              value: _importFortschritt!.anteil,
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(3),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              _importFortschritt!.beschriftung,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (_busy || _statusMessage != null) const SizedBox(height: 20),
-
-          // -- Import-Detailmeldungen (aufklappbar) ---------------------
-          if (_importFehler.isNotEmpty || _importWarnungen.isNotEmpty) ...[
-            _ImportDetails(
-              fehler: _importFehler,
-              warnungen: _importWarnungen,
-            ),
-            const SizedBox(height: 20),
-          ],
-
-          // -- Kategorien: je Bereich eine Kachel mit Import/Export ----
-          _KategorieGrid(
+      body: LayoutBuilder(
+        builder: (context, c) {
+          // Nicht über die ganze Breite: Erklärung und Knöpfe einer Zeile
+          // lägen sonst weit auseinander.
+          final seite = math.max(14.0, (c.maxWidth - 1100) / 2);
+          return ListView(
+            padding: EdgeInsets.fromLTRB(seite, 12, seite, 24),
             children: [
-              _KategorieKachel(
-                icon: Icons.inventory_2,
-                titel: 'Artikel & Prozesse',
-                beschreibung: 'Artikel, Prozesse, Anlagen und Historie als '
-                    'Excel-Mappe — in Excel bearbeiten und wieder einlesen.',
-                onExport: _busy ? null : _excelExport,
-                onImport: _busy ? null : _excelImport,
-              ),
-              _KategorieKachel(
-                icon: Icons.precision_manufacturing,
-                titel: 'Maschinen-Katalog',
-                beschreibung:
-                    'Anlagen, Abteilung, Kapazität und Parameter-Steckbriefe '
-                    'als Excel. Der Import gleicht über den Anlagen-Namen ab.',
-                onExport: _busy ? null : _katalogExport,
-                onImport: _busy ? null : _katalogImport,
-              ),
-              _KategorieKachel(
-                icon: Icons.swap_horiz_rounded,
-                titel: 'Navision-Artikel',
-                beschreibung: 'Artikelübersicht aus Navision einlesen: neue '
-                    'Artikel anlegen, Allergene aus dem Suchbegriff '
-                    'übernehmen.',
-                exportLabel: null,
-                importLabel: 'Abgleichen …',
-                onExport: null,
-                onImport:
-                    _busy ? null : () => context.pushNamed('navisionImport'),
-              ),
-              _KategorieKachel(
-                icon: Icons.cloud_upload,
-                titel: 'Komplett-Backup',
-                beschreibung:
-                    'Der gesamte Datenstand als JSON. Beim Wiederherstellen '
-                    'werden alle aktuellen Daten überschrieben.',
-                exportLabel: 'Backup speichern',
-                importLabel: 'Wiederherstellen',
-                onExport: _busy ? null : _backupErstellenManuell,
-                onImport: _busy ? null : _backupAusDateiWaehlen,
-                zusatzIcon: Icons.bolt,
-                zusatzTooltip: 'Schnell-Backup in den Backup-Ordner',
-                onZusatz: _busy ? null : _backupErstellenAuto,
-              ),
-            ],
-          ),
-          const SizedBox(height: 20),
-
-          // -- Vorhandene Backups ---------------------------------------
-          _Sektion(
-            icon: Icons.restore,
-            titel: 'Vorhandene Backups',
-            beschreibung:
-                'Früher gesicherte Stände — zum Wiederherstellen oder '
-                'Löschen ausklappen.',
-            children: [
-              if (!_backupsGeladen)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Center(child: CircularProgressIndicator()),
-                )
-              else if (_backups.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    'Keine Backups vorhanden.',
-                    style: TextStyle(
-                      fontStyle: FontStyle.italic,
-                      color: Colors.grey,
-                    ),
-                  ),
-                )
-              else ...[
-                // Einklappbar: die Backup-Liste ist im Alltag Beiwerk und
-                // soll die Übersicht nicht füllen. Standardmäßig zugeklappt;
-                // die Kopfzeile zeigt weiterhin die Anzahl.
-                Theme(
-                  data: Theme.of(context)
-                      .copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    tilePadding: EdgeInsets.zero,
-                    childrenPadding: const EdgeInsets.only(top: 4),
-                    initiallyExpanded: false,
-                    leading: const Icon(Icons.inventory_2_outlined, size: 20),
-                    title: Text(
-                      'Vorhandene Backups (${_backups.length})',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    subtitle: Text(
-                      'Zum Wiederherstellen oder Löschen ausklappen',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                    children: [
-                      ..._backups.map(
-                        (b) => _BackupListenEintrag(
-                          info: b,
-                          onRestore:
-                              _busy ? null : () => _backupWiederherstellen(b),
-                          onDelete: _busy ? null : () => _backupLoeschen(b),
-                        ),
-                      ),
-                    ],
-                  ),
+              // -- Status: was gerade läuft oder wie es ausging ----------
+              if (_busy) ...[
+                HinweisBox(
+                  meldung ?? 'Bitte warten …',
+                  icon: Icons.hourglass_top,
                 ),
+                // Der Balken direkt unter dem Hinweis zeigt, dass etwas
+                // läuft. Beim Stammdaten-Import zeigt er den Fortschritt;
+                // `anteil == null` heißt: Der Abschnitt liefert keine
+                // Zwischenstände (das Öffnen der Datei), dann läuft er
+                // durch — wie bei allen anderen Aktionen.
+                LinearProgressIndicator(
+                  value: fortschritt?.anteil,
+                  minHeight: 3,
+                ),
+                if (fortschritt != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    fortschritt.beschriftung,
+                    style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                  ),
+                ],
+                const SizedBox(height: 12),
+              ] else if (meldung != null) ...[
+                HinweisBox(
+                  meldung,
+                  art: _statusFehler ? StatusArt.fehler : StatusArt.ok,
+                  auswaehlbar: true,
+                  onSchliessen: () => setState(() => _statusMessage = null),
+                ),
+                const SizedBox(height: 12),
               ],
-            ],
-          ),
-          const SizedBox(height: 20),
 
-          const SizedBox(height: 4),
-          _Sektion(
-            icon: Icons.folder,
-            titel: 'Speicherort',
-            beschreibung:
-                'Hier liegen deine SQLite-Datenbank und alle automatischen '
-                'Backups. Die Pfade kannst du in den Datei-Explorer kopieren.',
-            children: [
-              _PfadZeile(
-                label: 'Datenbank-Ordner',
-                pfad: _datenbankPfad,
-                onCopy: _datenbankPfad != null
-                    ? () => _kopiereInZwischenablage(_datenbankPfad!)
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              _PfadZeile(
-                label: _eigenerOrdner == null
-                    ? 'Backup-Ordner (Standard)'
-                    : 'Backup-Ordner (selbst gewählt)',
-                pfad: _backupPfad,
-                onCopy: _backupPfad != null
-                    ? () => _kopiereInZwischenablage(_backupPfad!)
-                    : null,
+              // -- Import-Detailmeldungen (aufklappbar) -----------------
+              if (_importFehler.isNotEmpty || _importWarnungen.isNotEmpty) ...[
+                _ImportDetails(
+                  fehler: _importFehler,
+                  warnungen: _importWarnungen,
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // -- Je Datenbereich eine Zeile mit Export und Import ------
+              // Eine Tabelle statt Kacheln: Die Knöpfe stehen rechts
+              // untereinander, gleich lange Zeilen, nichts springt.
+              Bereich(
+                titel: 'Import und Export',
+                innenAbstand: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _KategorieZeile(
+                      icon: Icons.inventory_2_outlined,
+                      titel: 'Artikel & Prozesse',
+                      beschreibung: 'Artikel, Prozesse, Anlagen und Historie '
+                          'als Excel-Mappe — in Excel bearbeiten und wieder '
+                          'einlesen.',
+                      onExport: _busy ? null : _excelExport,
+                      onImport: _busy ? null : _excelImport,
+                    ),
+                    _KategorieZeile(
+                      icon: Icons.precision_manufacturing_outlined,
+                      titel: 'Maschinen-Katalog',
+                      beschreibung: 'Anlagen, Abteilung, Kapazität und '
+                          'Parameter-Steckbriefe als Excel. Der Import '
+                          'gleicht über den Anlagen-Namen ab.',
+                      onExport: _busy ? null : _katalogExport,
+                      onImport: _busy ? null : _katalogImport,
+                    ),
+                    _KategorieZeile(
+                      icon: Icons.swap_horiz_rounded,
+                      titel: 'Navision-Artikel',
+                      beschreibung: 'Artikelübersicht aus Navision einlesen: '
+                          'neue Artikel anlegen, Allergene aus dem '
+                          'Suchbegriff übernehmen.',
+                      exportLabel: null,
+                      importLabel: 'Abgleichen …',
+                      onExport: null,
+                      onImport: _busy
+                          ? null
+                          : () => context.pushNamed('navisionImport'),
+                    ),
+                    _KategorieZeile(
+                      icon: Icons.cloud_upload_outlined,
+                      titel: 'Komplett-Backup',
+                      beschreibung: 'Der gesamte Datenstand als JSON. Beim '
+                          'Wiederherstellen werden alle aktuellen Daten '
+                          'überschrieben.',
+                      exportLabel: 'Backup speichern',
+                      importLabel: 'Wiederherstellen',
+                      onExport: _busy ? null : _backupErstellenManuell,
+                      onImport: _busy ? null : _backupAusDateiWaehlen,
+                      zusatzIcon: Icons.bolt,
+                      zusatzTooltip: 'Schnell-Backup in den Backup-Ordner',
+                      onZusatz: _busy ? null : _backupErstellenAuto,
+                      letzte: true,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 12),
-              _KachelReihe(
-                children: [
-                  _ActionKachel(
-                    icon: Icons.drive_folder_upload,
-                    label: 'Backup-Ordner wählen …',
-                    hinweis: 'z.B. Netzlaufwerk oder USB-Stick',
-                    onPressed: _busy ? null : _backupOrdnerWaehlen,
-                  ),
-                  if (_eigenerOrdner != null)
-                    _ActionKachel(
-                      icon: Icons.settings_backup_restore,
-                      label: 'Standard-Ordner',
-                      hinweis: 'Eigene Wahl zurücksetzen',
-                      onPressed: _busy ? null : _backupOrdnerZuruecksetzen,
+
+              // -- Vorhandene Backups -----------------------------------
+              Bereich(
+                titel: 'Vorhandene Backups',
+                untertitel: _backupsGeladen ? '${_backups.length}' : null,
+                aktionen: [
+                  if (_backups.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _backupsOffen = !_backupsOffen),
+                      icon: Icon(
+                        _backupsOffen ? Icons.expand_less : Icons.expand_more,
+                        size: 18,
+                      ),
+                      label: Text(_backupsOffen ? 'Ausblenden' : 'Anzeigen'),
                     ),
                 ],
+                innenAbstand: EdgeInsets.zero,
+                child: _backupInhalt(context),
+              ),
+              const SizedBox(height: 12),
+
+              // -- Speicherort ------------------------------------------
+              Bereich(
+                titel: 'Speicherort',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Hier liegen deine SQLite-Datenbank und alle '
+                      'automatischen Backups. Die Pfade kannst du in den '
+                      'Datei-Explorer kopieren.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                    ),
+                    const SizedBox(height: 8),
+                    // Die Pfade als kleine Tabelle mit Rand.
+                    Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: theme.colorScheme.outlineVariant,
+                        ),
+                        borderRadius: AppMasse.ecken,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _PfadZeile(
+                            label: 'Datenbank-Ordner',
+                            pfad: _datenbankPfad,
+                            onCopy: _datenbankPfad != null
+                                ? () =>
+                                    _kopiereInZwischenablage(_datenbankPfad!)
+                                : null,
+                            letzte: false,
+                          ),
+                          _PfadZeile(
+                            label: _eigenerOrdner == null
+                                ? 'Backup-Ordner (Standard)'
+                                : 'Backup-Ordner (selbst gewählt)',
+                            pfad: _backupPfad,
+                            onCopy: _backupPfad != null
+                                ? () => _kopiereInZwischenablage(_backupPfad!)
+                                : null,
+                            letzte: true,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : _backupOrdnerWaehlen,
+                          icon: const Icon(Icons.drive_folder_upload, size: 18),
+                          label: const Text('Backup-Ordner wählen …'),
+                        ),
+                        if (_eigenerOrdner != null)
+                          TextButton.icon(
+                            onPressed:
+                                _busy ? null : _backupOrdnerZuruecksetzen,
+                            icon: const Icon(
+                              Icons.settings_backup_restore,
+                              size: 18,
+                            ),
+                            label: const Text('Standard-Ordner wieder nutzen'),
+                          ),
+                        Text(
+                          'z.B. Netzlaufwerk oder USB-Stick',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: grau,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
+    );
+  }
+
+  /// Inhalt des Bereichs „Vorhandene Backups": zugeklappt nur das neueste,
+  /// aufgeklappt alle als Tabelle.
+  Widget _backupInhalt(BuildContext context) {
+    final theme = Theme.of(context);
+    if (!_backupsGeladen) {
+      return const Padding(
+        padding: EdgeInsets.all(16),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_backups.isEmpty) {
+      return const LeerHinweis(
+        'Keine Backups vorhanden.',
+        icon: Icons.backup_outlined,
+      );
+    }
+    if (!_backupsOffen) {
+      // Zugeklappt: Die Liste ist im Alltag Beiwerk und soll die Übersicht
+      // nicht füllen — nur das neueste Backup als Zeile.
+      final neuestes = _backups.first;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+        child: Text(
+          'Neuestes Backup: ${neuestes.formattedTimestamp} '
+          '(${neuestes.isAuto ? 'automatisch' : 'von Hand'}) — zum '
+          'Wiederherstellen oder Löschen „Anzeigen".',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      );
+    }
+    final letztes = _backups.last;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final b in _backups)
+          _BackupListenEintrag(
+            info: b,
+            letzte: identical(b, letztes),
+            onRestore: _busy ? null : () => _backupWiederherstellen(b),
+            onDelete: _busy ? null : () => _backupLoeschen(b),
+          ),
+      ],
     );
   }
 }
@@ -732,7 +821,9 @@ class _DataManagementScreenState
 // Import-Detailmeldungen (aufklappbare Liste der Fehler + Hinweise)
 // --------------------------------------------------------------------------
 
-class _ImportDetails extends StatelessWidget {
+/// Fehler und Hinweise des letzten Imports als Bereich — oben rechts die
+/// Anzahl als Marken in der Statusfarbe und ein Knopf zum Zuklappen.
+class _ImportDetails extends StatefulWidget {
   const _ImportDetails({
     required this.fehler,
     required this.warnungen,
@@ -742,73 +833,79 @@ class _ImportDetails extends StatelessWidget {
   final List<String> warnungen;
 
   @override
+  State<_ImportDetails> createState() => _ImportDetailsState();
+}
+
+class _ImportDetailsState extends State<_ImportDetails> {
+  bool _offen = true;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hatFehler = fehler.isNotEmpty;
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: hatFehler
-              ? Colors.red.withValues(alpha: 0.4)
-              : Colors.orange.withValues(alpha: 0.4),
-        ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: ExpansionTile(
-        initiallyExpanded: true,
-        leading: Icon(
-          hatFehler ? Icons.error_outline : Icons.info_outline,
-          color: hatFehler ? Colors.red : Colors.orange.shade800,
-        ),
-        title: Text(
-          'Import-Details',
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        subtitle: Text(
-          '${fehler.length} Fehler · ${warnungen.length} Hinweise',
-          style: theme.textTheme.bodySmall,
-        ),
-        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        children: [
-          if (hatFehler) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Fehler',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: Colors.red,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            ...fehler.map(
-              (m) => _MeldungsZeile(text: m, farbe: Colors.red),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (warnungen.isNotEmpty) ...[
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Hinweise',
-                style: theme.textTheme.labelLarge?.copyWith(
-                  color: Colors.orange.shade800,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            ...warnungen.map(
-              (m) => _MeldungsZeile(text: m, farbe: Colors.orange.shade800),
-            ),
-          ],
+    final f = AppFarben.von(context);
+    final fehler = widget.fehler;
+    final warnungen = widget.warnungen;
+
+    return Bereich(
+      titel: 'Import-Details',
+      aktionen: [
+        if (fehler.isNotEmpty) ...[
+          StatusMarke('${fehler.length} Fehler', art: StatusArt.fehler),
+          const SizedBox(width: 6),
         ],
-      ),
+        if (warnungen.isNotEmpty) ...[
+          StatusMarke(
+            warnungen.length == 1
+                ? '1 Hinweis'
+                : '${warnungen.length} Hinweise',
+            art: StatusArt.warnung,
+          ),
+          const SizedBox(width: 2),
+        ],
+        IconButton(
+          icon: Icon(_offen ? Icons.expand_less : Icons.expand_more, size: 20),
+          tooltip: _offen ? 'Zuklappen' : 'Aufklappen',
+          visualDensity: VisualDensity.compact,
+          onPressed: () => setState(() => _offen = !_offen),
+        ),
+      ],
+      child: !_offen
+          ? Text(
+              'Aufklappen, um die Meldungen zu sehen.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            )
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (fehler.isNotEmpty) ...[
+                  Text(
+                    'Fehler',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: f.fehler,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final m in fehler)
+                    _MeldungsZeile(text: m, farbe: f.fehler),
+                  if (warnungen.isNotEmpty) const SizedBox(height: 12),
+                ],
+                if (warnungen.isNotEmpty) ...[
+                  Text(
+                    'Hinweise',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: f.warnung,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  for (final m in warnungen)
+                    _MeldungsZeile(text: m, farbe: f.warnung),
+                ],
+              ],
+            ),
     );
   }
 }
@@ -855,101 +952,17 @@ class _MeldungsZeile extends StatelessWidget {
 }
 
 // --------------------------------------------------------------------------
-// Sektions-Karte
+// Ein Datenbereich als Tabellenzeile
 // --------------------------------------------------------------------------
 
-class _Sektion extends StatelessWidget {
-  const _Sektion({
-    required this.icon,
-    required this.titel,
-    required this.beschreibung,
-    required this.children,
-  });
-
-  final IconData icon;
-  final String titel;
-  final String beschreibung;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.dividerColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
-                Text(
-                  titel,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              beschreibung,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// --------------------------------------------------------------------------
-// Aktion-Button
-// --------------------------------------------------------------------------
-
-/// Raster der Kategorie-Kacheln (1–3 Spalten je nach Breite).
-class _KategorieGrid extends StatelessWidget {
-  const _KategorieGrid({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final spalten = c.maxWidth >= 900 ? 3 : (c.maxWidth >= 560 ? 2 : 1);
-        const abstand = 12.0;
-        final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
-        return Wrap(
-          spacing: abstand,
-          runSpacing: abstand,
-          children: [
-            for (final k in children) SizedBox(width: breite, child: k),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Eine Datenkategorie als Kachel: Titel, kurze Erklärung und unten zwei
-/// kleine Knöpfe für Export und Import. Dadurch steht je Bereich EINE
-/// Kachel statt drei bildschirmbreiter Abschnitte.
+/// Ein Datenbereich als Zeile: Symbol, Titel und kurze Erklärung, rechts
+/// die Knöpfe für Export und Import. In schmalen Fenstern rutschen die
+/// Knöpfe unter die Erklärung.
 ///
 /// Ohne [exportLabel] gibt es nur den Import-Knopf — für Bereiche, die nur
 /// eingelesen werden.
-class _KategorieKachel extends StatelessWidget {
-  const _KategorieKachel({
+class _KategorieZeile extends StatelessWidget {
+  const _KategorieZeile({
     required this.icon,
     required this.titel,
     required this.beschreibung,
@@ -960,6 +973,7 @@ class _KategorieKachel extends StatelessWidget {
     this.zusatzIcon,
     this.zusatzTooltip,
     this.onZusatz,
+    this.letzte = false,
   });
 
   final IconData icon;
@@ -975,218 +989,102 @@ class _KategorieKachel extends StatelessWidget {
   final String? zusatzTooltip;
   final VoidCallback? onZusatz;
 
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(
-                    icon,
-                    size: 20,
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    titel,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ),
-                if (zusatzIcon != null)
-                  IconButton(
-                    icon: Icon(zusatzIcon, size: 19),
-                    tooltip: zusatzTooltip,
-                    visualDensity: VisualDensity.compact,
-                    onPressed: onZusatz,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              beschreibung,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                height: 1.3,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (exportLabel != null) ...[
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: onExport,
-                      icon: const Icon(Icons.file_upload_outlined, size: 17),
-                      label: Text(
-                        exportLabel!,
-                        style: const TextStyle(fontSize: 12.5),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                Expanded(
-                  child: FilledButton.tonalIcon(
-                    onPressed: onImport,
-                    icon: const Icon(Icons.file_download_outlined, size: 17),
-                    label: Text(
-                      importLabel,
-                      style: const TextStyle(fontSize: 12.5),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 6),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
+    final colors = theme.colorScheme;
+    final exportText = exportLabel;
+    final zusatz = zusatzIcon;
+
+    final kopf = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 20, color: colors.primary),
         ),
-      ),
-    );
-  }
-}
-
-/// Responsives Kachel-Raster: 1–3 Spalten je nach Breite. Ersetzt die
-/// früheren bildschirmbreiten Knöpfe — die wirkten bei fünf Abschnitten
-/// untereinander sehr unruhig.
-class _KachelReihe extends StatelessWidget {
-  const _KachelReihe({required this.children});
-
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final spalten = c.maxWidth >= 780 ? 3 : (c.maxWidth >= 460 ? 2 : 1);
-        const abstand = 10.0;
-        final anzahl = children.length < spalten ? children.length : spalten;
-        final breite = anzahl <= 1
-            ? c.maxWidth
-            : (c.maxWidth - abstand * (anzahl - 1)) / anzahl;
-        return Wrap(
-          spacing: abstand,
-          runSpacing: abstand,
-          children: [
-            for (final k in children) SizedBox(width: breite, child: k),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Eine Aktions-Kachel: Icon, Titel, kurze Erklärung darunter.
-class _ActionKachel extends StatelessWidget {
-  const _ActionKachel({
-    required this.icon,
-    required this.label,
-    required this.onPressed,
-    this.hinweis,
-  });
-
-  final IconData icon;
-  final String label;
-  final String? hinweis;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final aktiv = onPressed != null;
-    final farbe = aktiv
-        ? theme.colorScheme.primary
-        : theme.colorScheme.onSurface.withValues(alpha: 0.35);
-
-    return Card(
-      margin: EdgeInsets.zero,
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      color: theme.colorScheme.surfaceContainerHighest
-          .withValues(alpha: aktiv ? 0.55 : 0.25),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: theme.colorScheme.outlineVariant),
-      ),
-      child: InkWell(
-        onTap: onPressed,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-          child: Row(
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: farbe.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(10),
+              Text(
+                titel,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
                 ),
-                child: Icon(icon, size: 20, color: farbe),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13.5,
-                        color: aktiv ? null : farbe,
-                      ),
-                    ),
-                    if (hinweis != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        hinweis!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          height: 1.25,
-                        ),
-                      ),
-                    ],
-                  ],
+              const SizedBox(height: 2),
+              Text(
+                beschreibung,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                  height: 1.3,
                 ),
               ),
             ],
           ),
         ),
+      ],
+    );
+
+    final knoepfe = Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        if (zusatz != null)
+          IconButton(
+            icon: Icon(zusatz, size: 19),
+            tooltip: zusatzTooltip,
+            visualDensity: VisualDensity.compact,
+            onPressed: onZusatz,
+          ),
+        if (exportText != null)
+          OutlinedButton.icon(
+            onPressed: onExport,
+            icon: const Icon(Icons.file_upload_outlined, size: 17),
+            label: Text(exportText),
+          ),
+        FilledButton.tonalIcon(
+          onPressed: onImport,
+          icon: const Icon(Icons.file_download_outlined, size: 17),
+          label: Text(importLabel),
+        ),
+      ],
+    );
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        border: letzte
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          if (c.maxWidth < 640) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                kopf,
+                const SizedBox(height: 8),
+                Align(alignment: Alignment.centerRight, child: knoepfe),
+              ],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: kopf),
+              const SizedBox(width: 16),
+              knoepfe,
+            ],
+          );
+        },
       ),
     );
   }
@@ -1196,57 +1094,60 @@ class _ActionKachel extends StatelessWidget {
 // Pfad-Zeile mit Kopier-Button
 // --------------------------------------------------------------------------
 
+/// Ein Speicherort als Tabellenzeile: Bezeichnung, Pfad zum Markieren und
+/// ein Knopf zum Kopieren.
 class _PfadZeile extends StatelessWidget {
   const _PfadZeile({
     required this.label,
     required this.pfad,
     required this.onCopy,
+    required this.letzte,
   });
 
   final String label;
   final String? pfad;
   final VoidCallback? onCopy;
 
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(10, 2, 2, 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(8),
+        color: AppFarben.von(context).leiste,
+        border: letzte
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+          SizedBox(
+            width: 190,
+            child: Text(
+              label,
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
               ),
-              IconButton(
-                icon: const Icon(Icons.copy, size: 16),
-                tooltip: 'Pfad kopieren',
-                onPressed: onCopy,
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Text(
-            pfad ?? '…',
-            style: theme.textTheme.bodySmall?.copyWith(
-              fontFamily: 'monospace',
-              fontSize: 11,
             ),
+          ),
+          Expanded(
+            child: SelectableText(
+              pfad ?? '…',
+              style: theme.textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 16),
+            tooltip: 'Pfad kopieren',
+            onPressed: onCopy,
+            visualDensity: VisualDensity.compact,
           ),
         ],
       ),
@@ -1258,36 +1159,48 @@ class _PfadZeile extends StatelessWidget {
 // Einzelner Backup-Listen-Eintrag
 // --------------------------------------------------------------------------
 
+/// Ein Backup als Tabellenzeile: Zeitpunkt, Größe, Art und Version, rechts
+/// Wiederherstellen und Löschen.
 class _BackupListenEintrag extends StatelessWidget {
   const _BackupListenEintrag({
     required this.info,
+    required this.letzte,
     required this.onRestore,
     required this.onDelete,
   });
 
   final BackupInfo info;
+
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
   final VoidCallback? onRestore;
   final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final f = AppFarben.von(context);
     final relativeZeit = _formatRelativeTime(info.timestamp);
+    final versionsHinweis = info.versionsHinweis;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
       decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest
-            .withValues(alpha: 0.4),
-        borderRadius: BorderRadius.circular(8),
+        border: letzte
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
       ),
       child: Row(
         children: [
-          Icon(
-            info.isAuto ? Icons.auto_awesome : Icons.save,
-            size: 18,
-            color: theme.colorScheme.primary,
+          Tooltip(
+            message:
+                info.isAuto ? 'Automatisch gesichert' : 'Von Hand gesichert',
+            child: Icon(
+              info.isAuto ? Icons.auto_awesome : Icons.save_outlined,
+              size: 18,
+              color: colors.onSurfaceVariant,
+            ),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -1296,8 +1209,10 @@ class _BackupListenEintrag extends StatelessWidget {
               children: [
                 Text(
                   info.formattedTimestamp,
-                  style: theme.textTheme.bodyMedium?.copyWith(
+                  style: const TextStyle(
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    fontFeatures: [FontFeature.tabularFigures()],
                   ),
                 ),
                 Text(
@@ -1305,31 +1220,30 @@ class _BackupListenEintrag extends StatelessWidget {
                   '${info.isAuto ? "Auto" : "Manuell"} · '
                   'Version ${info.version}',
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color:
-                        theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
                 // Ältere Formate enthalten Bedarf, Historie und
                 // Wochen-Snapshots nicht. Das sieht man einem Backup sonst
                 // erst an, wenn es eingespielt ist und die Listen leer sind.
-                if (info.versionsHinweis != null)
+                if (versionsHinweis != null)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Icon(
-                          Icons.info_outline,
+                          Icons.warning_amber_rounded,
                           size: 13,
-                          color: theme.colorScheme.tertiary,
+                          color: f.warnung,
                         ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
-                            info.versionsHinweis!,
+                            versionsHinweis,
                             style: theme.textTheme.bodySmall?.copyWith(
                               fontSize: 11,
-                              color: theme.colorScheme.tertiary,
+                              color: f.warnung,
                             ),
                           ),
                         ),
@@ -1363,61 +1277,5 @@ class _BackupListenEintrag extends StatelessWidget {
     if (diff.inDays < 1) return 'vor ${diff.inHours} Std';
     if (diff.inDays < 7) return 'vor ${diff.inDays} Tag(en)';
     return DateFormat('dd.MM.yyyy').format(when);
-  }
-}
-
-// --------------------------------------------------------------------------
-// Status-Banner (oben auf dem Screen während Aktionen)
-// --------------------------------------------------------------------------
-
-class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({
-    required this.busy,
-    required this.message,
-    required this.color,
-  });
-
-  final bool busy;
-  final String? message;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        children: [
-          if (busy)
-            const SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            )
-          else
-            Icon(
-              color == Colors.red ? Icons.error_outline : Icons.check_circle,
-              color: color,
-              size: 20,
-            ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              message ?? '',
-              style: TextStyle(
-                color: color == Colors.red
-                    ? Colors.red.shade800
-                    : Colors.green.shade800,
-                fontSize: 13,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

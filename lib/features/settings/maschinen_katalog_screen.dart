@@ -8,6 +8,8 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import 'maschinen_seed.dart';
@@ -59,8 +61,9 @@ class MaschinenKatalogScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final katalog = ref.watch(maschinenKatalogProvider);
+    // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
 
     return Scaffold(
       appBar: AppBar(
@@ -79,81 +82,89 @@ class MaschinenKatalogScreen extends ConsumerWidget {
             tooltip: 'Standard-Maschinen ergänzen',
             onPressed: () => _seedDialog(context, ref),
           ),
+          const SizedBox(width: 4),
+          // Die Hauptaktion oben rechts wie auf den übrigen Seiten — vorher
+          // ein schwebender Knopf, der unten die letzte Maschine verdeckte.
+          if (schmal)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Neue Maschine',
+              onPressed: () => _oeffneEditor(context, ref, null),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _oeffneEditor(context, ref, null),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Neue Maschine'),
+            ),
+          const SizedBox(width: 12),
         ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _oeffneEditor(context, ref, null),
-        icon: const Icon(Icons.add),
-        label: const Text('Neue Maschine'),
       ),
       body: katalog.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            HinweisBox(
+              'Fehler: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
+          ],
+        ),
         data: (map) {
           if (map.isEmpty) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Text(
-                  'Noch keine Maschinen angelegt.\n\n'
-                  'Lege mit „Neue Maschine" die erste Anlage an oder '
-                  'importiere den Anlagen-Katalog aus der Excel.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurfaceVariant,
-                    height: 1.4,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: LeerHinweis(
+                  'Noch keine Maschinen angelegt. Lege mit „Neue Maschine" '
+                  'oben rechts die erste Anlage an, ergänze den '
+                  'Standard-Maschinenpark oder importiere den '
+                  'Anlagen-Katalog aus der Excel.',
+                  icon: Icons.precision_manufacturing_outlined,
+                  aktion: OutlinedButton.icon(
+                    onPressed: () => _seedDialog(context, ref),
+                    icon: const Icon(Icons.playlist_add, size: 18),
+                    label: const Text('Standard-Maschinen ergänzen …'),
                   ),
                 ),
               ),
             );
           }
+          final anzahl = map.values.fold<int>(0, (s, l) => s + l.length);
+          final letzte = map.values.last.last;
+          // Alle Anlagen in einer Tabelle, je Abteilung eine Zwischenzeile
+          // — vorher eine Karte je Maschine unter blauen Überschriften.
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
             children: [
-              for (final entry in map.entries) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-                  child: Text(
-                    entry.key.anzeigeName,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                ),
-                for (final m in entry.value)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    child: ListTile(
-                      dense: true,
-                      title: Text(
-                        m.name,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
+              Bereich(
+                titel: 'Maschinen',
+                untertitel: anzahl == 1 ? '1 Maschine' : '$anzahl Maschinen',
+                innenAbstand: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final entry in map.entries) ...[
+                      _AbteilungsZwischenzeile(
+                        abteilung: entry.key,
+                        anzahl: entry.value.length,
                       ),
-                      subtitle: _untertitel(m),
-                      trailing: const Icon(Icons.chevron_right, size: 18),
-                      onTap: () => _oeffneEditor(context, ref, m),
-                    ),
-                  ),
-              ],
+                      for (final m in entry.value)
+                        _MaschinenZeile(
+                          maschine: m,
+                          letzte: identical(m, letzte),
+                          onTap: () => _oeffneEditor(context, ref, m),
+                        ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           );
         },
       ),
-    );
-  }
-
-  Widget? _untertitel(Machine m) {
-    final teile = <String>[
-      if (m.istPlanungsressource)
-        'Eigene Planungsspur · ${Zeit.kurz(m.kapazitaetMinutenProTag.toDouble())}/Tag',
-      if ((m.eignungHinweis ?? '').trim().isNotEmpty) m.eignungHinweis!.trim(),
-    ];
-    if (teile.isEmpty) return null;
-    return Text(
-      teile.join('   ·   '),
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
     );
   }
 
@@ -281,17 +292,147 @@ class MaschinenKatalogScreen extends ConsumerWidget {
     WidgetRef ref,
     Machine? maschine,
   ) async {
+    // Ohne Anfasser: Das Fenster hat einen eigenen Kopf mit Titel und
+    // Kreuz wie jedes Fenster der App.
     final geaendert = await showSheetOhneAnimation<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      showDragHandle: true,
       constraints: const BoxConstraints(maxWidth: 640),
       builder: (_) => _MaschineEditorSheet(maschine: maschine),
     );
     if (geaendert == true) {
       ref.invalidate(maschinenKatalogProvider);
     }
+  }
+}
+
+/// Zwischenzeile einer Abteilung in der Maschinentabelle: Kürzel, Name und
+/// Anzahl auf der Fläche der Leisten.
+class _AbteilungsZwischenzeile extends StatelessWidget {
+  const _AbteilungsZwischenzeile({
+    required this.abteilung,
+    required this.anzahl,
+  });
+
+  final Abteilung abteilung;
+  final int anzahl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 5, 12, 5),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          AbteilungsMarke(abteilung: abteilung),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              abteilung.anzeigeName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          Text(
+            anzahl == 1 ? '1 Maschine' : '$anzahl Maschinen',
+            style: TextStyle(fontSize: 11.5, color: colors.onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Maschine als Tabellenzeile: Name, Hinweis zur Eignung und rechts
+/// die eigene Planungsspur als Marke. Antippen öffnet den Editor.
+class _MaschinenZeile extends StatelessWidget {
+  const _MaschinenZeile({
+    required this.maschine,
+    required this.letzte,
+    required this.onTap,
+  });
+
+  final Machine maschine;
+
+  /// Letzte Zeile der Tabelle: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final m = maschine;
+    final eignung = (m.eignungHinweis ?? '').trim();
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 7, 6, 7),
+          decoration: BoxDecoration(
+            border: letzte
+                ? null
+                : Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: Text(
+                  m.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 3,
+                child: Text(
+                  eignung,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              if (m.istPlanungsressource) ...[
+                const SizedBox(width: 8),
+                StatusMarke(
+                  'Planungsspur · '
+                  '${Zeit.kurz(m.kapazitaetMinutenProTag.toDouble())}/Tag',
+                  art: StatusArt.info,
+                  hinweis: 'Erscheint mit eigener Kapazität im Wochenplan',
+                ),
+              ],
+              const SizedBox(width: 4),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: colors.onSurfaceVariant,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -405,6 +546,10 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     ref
         .read(autoBackupTriggerProvider)
         .fireDebounced(reason: 'Maschine gespeichert');
+    // Die Liste hinter dem Fenster gleich auffrischen. Vorher kam eine neue
+    // oder umbenannte Maschine erst nach einem Neustart in die Liste: Das
+    // Fenster meldete eine Änderung nur beim Löschen zurück.
+    ref.invalidate(maschinenKatalogProvider);
     if (mounted) {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -451,7 +596,10 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
             child: const Text('Abbrechen'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Theme.of(dialogContext).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('Löschen'),
           ),
@@ -610,53 +758,77 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final id = _maschineId;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        0,
-        16,
-        16 + MediaQuery.of(context).viewInsets.bottom,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
       child: ListView(
         shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         children: [
-          Text(
-            widget.maschine == null && id == null
-                ? 'Neue Maschine'
-                : 'Maschine bearbeiten',
-            style: theme.textTheme.titleLarge
-                ?.copyWith(fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 16),
-
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(
-              labelText: 'Name',
-              hintText: 'z.B. Verbufa 3, Räucherkammer 2',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _abteilung,
-            decoration: const InputDecoration(
-              labelText: 'Abteilung',
-              border: OutlineInputBorder(),
-            ),
-            items: [
-              for (final a in Abteilung.values)
-                DropdownMenuItem(
-                  value: a.dbValue,
-                  child: Text(a.anzeigeName),
+          // Kopf wie bei jedem Fenster der App: Titel in Blau, rechts ein
+          // Kreuz. Vorher saß hier der Anfasser aus der Bottom-Sheet-Zeit.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.maschine == null && id == null
+                      ? 'Neue Maschine'
+                      : 'Maschine bearbeiten',
+                  style: theme.dialogTheme.titleTextStyle ??
+                      theme.textTheme.titleMedium,
                 ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Schließen',
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              ),
             ],
-            onChanged: (v) =>
-                setState(() => _abteilung = v ?? _abteilung),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
+
+          // Name und Abteilung nebeneinander — das Fenster ist breit genug.
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  controller: _name,
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'z.B. Verbufa 3, Räucherkammer 2',
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                flex: 2,
+                child: DropdownButtonFormField<String>(
+                  initialValue: _abteilung,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Abteilung'),
+                  items: [
+                    for (final a in Abteilung.values)
+                      DropdownMenuItem(
+                        value: a.dbValue,
+                        child: Text(
+                          a.anzeigeName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) =>
+                      setState(() => _abteilung = v ?? _abteilung),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Eigene Planungsspur'),
@@ -667,196 +839,277 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
             onChanged: (v) => setState(() => _planungsressource = v),
           ),
           if (_planungsressource) ...[
-            const SizedBox(height: 4),
-            TextField(
-              controller: _kapazitaetStunden,
-              decoration: const InputDecoration(
-                labelText: 'Tageskapazität',
-                suffixText: 'h',
-                border: OutlineInputBorder(),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 200,
+                child: TextField(
+                  controller: _kapazitaetStunden,
+                  decoration: const InputDecoration(
+                    labelText: 'Tageskapazität',
+                    suffixText: 'h',
+                  ),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                ),
               ),
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
             ),
+            const SizedBox(height: 12),
           ],
-          const SizedBox(height: 12),
           TextField(
             controller: _eignung,
             decoration: const InputDecoration(
               labelText: 'Eignungs-Hinweis (optional)',
               hintText: 'z.B. nur Aufschnitt / Ausweichanlage für …',
-              border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 46,
-            child: FilledButton.icon(
-              onPressed: _busy ? null : _speichereStamm,
-              icon: const Icon(Icons.save),
-              label: Text(_busy ? 'Speichern …' : 'Maschine speichern'),
-            ),
-          ),
 
-          // Löschen nur für bereits gespeicherte Maschinen anbieten.
-          if (widget.maschine != null) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              height: 46,
-              child: OutlinedButton.icon(
-                onPressed: _busy ? null : _loescheMaschine,
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                label: const Text(
-                  'Maschine löschen',
-                  style: TextStyle(color: Colors.red),
+          // Knöpfe der Stammdaten wie in jedem Fenster der App: rechts
+          // Speichern, links das Löschen — abgesetzt, damit man es nicht
+          // aus Versehen trifft. Nach dem Speichern bleibt das Fenster
+          // offen, damit es mit dem Steckbrief weitergehen kann.
+          Row(
+            children: [
+              // Löschen nur für bereits gespeicherte Maschinen anbieten.
+              if (widget.maschine != null)
+                TextButton.icon(
+                  onPressed: _busy ? null : _loescheMaschine,
+                  style: TextButton.styleFrom(foregroundColor: colors.error),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Maschine löschen …'),
+                ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _busy ? null : _speichereStamm,
+                // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein
+                // weißer Kreisel wäre darauf unsichtbar.
+                icon: _busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save, size: 18),
+                label: Text(_busy ? 'Speichern …' : 'Maschine speichern'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          _steckbrief(context, id),
+        ],
+      ),
+    );
+  }
+
+  /// Der Parameter-Steckbrief als Tabelle mit Kopfzeile: je Parameter eine
+  /// Zeile mit Anfasser zum Umsortieren, Name, Einheit und Knöpfen.
+  /// Vorher eine Karte je Parameter unter einer Überschrift in Großbuchstaben.
+  Widget _steckbrief(BuildContext context, String? id) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+
+    Widget rahmen({String? untertitel, required List<Widget> inhalt}) {
+      return Bereich(
+        titel: 'Parameter-Steckbrief',
+        untertitel: untertitel,
+        aktionen: [
+          TextButton.icon(
+            onPressed: id == null ? null : _parameterHinzufuegen,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Parameter hinzufügen'),
+          ),
+        ],
+        innenAbstand: EdgeInsets.zero,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: colors.outlineVariant),
                 ),
               ),
+              child: Text(
+                'Diese Felder erscheinen in der Artikelmaske, sobald die '
+                'Maschine einem Prozessschritt zugeordnet ist. Die Werte '
+                'trägst du pro Artikel ein.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            ...inhalt,
+          ],
+        ),
+      );
+    }
+
+    if (id == null) {
+      return rahmen(
+        inhalt: const [
+          Padding(
+            padding: EdgeInsets.all(12),
+            child: HinweisBox(
+              'Zuerst die Maschine speichern — danach lassen sich hier '
+              'Parameter anlegen.',
+            ),
+          ),
+        ],
+      );
+    }
+
+    return Consumer(
+      builder: (context, ref, _) {
+        final defs = ref.watch(maschinenParameterDefsProvider(id));
+        return defs.when(
+          loading: () => rahmen(inhalt: const [LinearProgressIndicator()]),
+          error: (e, _) => rahmen(
+            inhalt: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: HinweisBox(
+                  'Fehler: $e',
+                  art: StatusArt.fehler,
+                  auswaehlbar: true,
+                ),
+              ),
+            ],
+          ),
+          data: (liste) => rahmen(
+            untertitel: '${liste.length}',
+            inhalt: [
+              if (liste.isEmpty)
+                const LeerHinweis('Noch keine Parameter angelegt.')
+              else
+                // Reihenfolge per Drag & Drop — die Pfeiltasten entfallen
+                // dadurch. Bewusst mit Draggable/DragTarget statt
+                // ReorderableListView: dasselbe Muster wie im
+                // Prozess-Diagramm, und unabhängig davon, wie die
+                // Flutter-Version die Reorder-Callbacks gerade nennt.
+                for (var i = 0; i < liste.length; i++)
+                  DragTarget<int>(
+                    onWillAcceptWithDetails: (d) => d.data != i,
+                    onAcceptWithDetails: (d) =>
+                        _parameterNeuOrdnen(liste, d.data, i),
+                    builder: (context, kandidaten, abgelehnt) =>
+                        _ParameterZeile(
+                      def: liste[i],
+                      index: i,
+                      letzte: i == liste.length - 1,
+                      istZiel: kandidaten.isNotEmpty,
+                      onBearbeiten: () =>
+                          _parameterBearbeiten(liste[i], liste),
+                      onEntfernen: () => _parameterEntfernen(liste[i]),
+                    ),
+                  ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Ein Parameter des Steckbriefs als Tabellenzeile: Anfasser zum
+/// Umsortieren, Name, Einheit, Bearbeiten und Entfernen.
+class _ParameterZeile extends StatelessWidget {
+  const _ParameterZeile({
+    required this.def,
+    required this.index,
+    required this.letzte,
+    required this.istZiel,
+    required this.onBearbeiten,
+    required this.onEntfernen,
+  });
+
+  final MachineParameterDef def;
+
+  /// Position in der Liste — die Daten beim Ziehen.
+  final int index;
+
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+
+  /// Gerade Ablageziel beim Ziehen: blau hinterlegt und umrandet.
+  final bool istZiel;
+  final VoidCallback onBearbeiten;
+  final VoidCallback onEntfernen;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final einheit = (def.einheit ?? '').trim();
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(4, 1, 4, 1),
+      decoration: istZiel
+          ? BoxDecoration(
+              color: AppFarben.von(context).infoFlaeche,
+              border: Border.all(color: colors.primary, width: 1.5),
+            )
+          : BoxDecoration(
+              border: letzte
+                  ? null
+                  : Border(bottom: BorderSide(color: colors.outlineVariant)),
+            ),
+      child: Row(
+        children: [
+          Draggable<int>(
+            data: index,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            feedback: Material(
+              color: Colors.transparent,
+              child: Chip(label: Text(def.parameterName)),
+            ),
+            child: Tooltip(
+              message: 'Ziehen zum Umsortieren',
+              child: MouseRegion(
+                cursor: SystemMouseCursors.grab,
+                child: Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: Icon(
+                    Icons.drag_indicator,
+                    size: 20,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: Text(
+              def.parameterName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (einheit.isNotEmpty) ...[
+            const SizedBox(width: 8),
+            Text(
+              einheit,
+              style: TextStyle(fontSize: 12, color: colors.onSurfaceVariant),
             ),
           ],
-
-          const SizedBox(height: 24),
-          Text(
-            'PARAMETER-STECKBRIEF',
-            style: theme.textTheme.labelMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.8,
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          const SizedBox(width: 4),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            tooltip: 'Bearbeiten',
+            visualDensity: VisualDensity.compact,
+            onPressed: onBearbeiten,
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Diese Felder erscheinen in der Artikelmaske, sobald die '
-            'Maschine einem Prozessschritt zugeordnet ist. Die Werte '
-            'trägst du pro Artikel ein.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          IconButton(
+            icon: Icon(Icons.delete_outline, size: 18, color: colors.error),
+            tooltip: 'Entfernen',
+            visualDensity: VisualDensity.compact,
+            onPressed: onEntfernen,
           ),
-          const SizedBox(height: 8),
-
-          if (id == null)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                'Zuerst die Maschine speichern — danach lassen sich hier '
-                'Parameter anlegen.',
-                style: TextStyle(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            )
-          else
-            Consumer(
-              builder: (context, ref, _) {
-                final defs =
-                    ref.watch(maschinenParameterDefsProvider(id));
-                return defs.when(
-                  loading: () => const LinearProgressIndicator(),
-                  error: (e, _) => Text('Fehler: $e'),
-                  data: (liste) => Column(
-                    children: [
-                      // Reihenfolge per Drag & Drop — die Pfeiltasten
-                      // entfallen dadurch. Bewusst mit Draggable/DragTarget
-                      // statt ReorderableListView: dasselbe Muster wie im
-                      // Prozess-Diagramm, und unabhängig davon, wie die
-                      // Flutter-Version die Reorder-Callbacks gerade nennt.
-                      for (var i = 0; i < liste.length; i++)
-                        DragTarget<int>(
-                          onWillAcceptWithDetails: (d) => d.data != i,
-                          onAcceptWithDetails: (d) =>
-                              _parameterNeuOrdnen(liste, d.data, i),
-                          builder: (context, kandidaten, abgelehnt) {
-                            final def = liste[i];
-                            final istZiel = kandidaten.isNotEmpty;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 120),
-                              margin: const EdgeInsets.only(bottom: 6),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: istZiel
-                                      ? theme.colorScheme.primary
-                                      : Colors.transparent,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Card(
-                                margin: EdgeInsets.zero,
-                                child: ListTile(
-                                  dense: true,
-                                  leading: Draggable<int>(
-                                    data: i,
-                                    dragAnchorStrategy:
-                                        pointerDragAnchorStrategy,
-                                    feedback: Material(
-                                      color: Colors.transparent,
-                                      child: Chip(
-                                        label: Text(def.parameterName),
-                                      ),
-                                    ),
-                                    child: Tooltip(
-                                      message: 'Ziehen zum Umsortieren',
-                                      child: Icon(
-                                        Icons.drag_indicator,
-                                        size: 20,
-                                        color: theme
-                                            .colorScheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    def.parameterName,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  subtitle: (def.einheit ?? '').isEmpty
-                                      ? null
-                                      : Text(def.einheit!),
-                                  trailing: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, size: 18),
-                                        tooltip: 'Bearbeiten',
-                                        onPressed: () =>
-                                            _parameterBearbeiten(def, liste),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete_outline,
-                                          size: 18,
-                                          color: Colors.red,
-                                        ),
-                                        tooltip: 'Entfernen',
-                                        onPressed: () =>
-                                            _parameterEntfernen(def),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton.icon(
-                          onPressed: _parameterHinzufuegen,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('Parameter hinzufügen'),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          const SizedBox(height: 12),
         ],
       ),
     );
@@ -911,7 +1164,6 @@ class _ParameterDialogState extends State<_ParameterDialog> {
             decoration: const InputDecoration(
               labelText: 'Name',
               hintText: 'z.B. Takte, Temperatur, Portionsgröße',
-              border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _ok(),
           ),
@@ -921,7 +1173,6 @@ class _ParameterDialogState extends State<_ParameterDialog> {
             decoration: const InputDecoration(
               labelText: 'Einheit (optional)',
               hintText: 'z.B. °C, Takte/min, g',
-              border: OutlineInputBorder(),
             ),
             onSubmitted: (_) => _ok(),
           ),
@@ -932,11 +1183,11 @@ class _ParameterDialogState extends State<_ParameterDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Abbrechen'),
         ),
-        FilledButton(onPressed: _ok, child: const Text('Hinzufügen')),
+        FilledButton(
+          onPressed: _ok,
+          child: Text(widget.name == null ? 'Hinzufügen' : 'Übernehmen'),
+        ),
       ],
     );
   }
 }
-
-
-

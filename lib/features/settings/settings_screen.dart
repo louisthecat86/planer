@@ -1,13 +1,16 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/providers/theme_mode_provider.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/providers/ui_scale_provider.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../board/board_providers.dart';
 
@@ -22,61 +25,149 @@ class SettingsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Einstellungen')),
-      body: ListView(
-        padding: const EdgeInsets.all(12),
-        children: [
-          _KachelGrid(
-            kacheln: [
-              _Kachel(
-                icon: Icons.palette_rounded,
-                color: const Color(0xFF5E35B1),
-                title: 'Ansicht',
-                subtitle: 'Hell/Dunkel und Anzeigegröße der App',
-                onTap: () => _zeigeAnsichtSheet(context),
+      body: LayoutBuilder(
+        builder: (context, c) {
+          // Nicht über die ganze Breite: Titel und Pfeil einer Zeile lägen
+          // sonst weit auseinander.
+          final seite = math.max(14.0, (c.maxWidth - 900) / 2);
+          return ListView(
+            padding: EdgeInsets.fromLTRB(seite, 12, seite, 24),
+            children: [
+              // Die Einstellungen als Liste in einem Bereich — wie die
+              // Einrichtung in Navision. Vorher Kacheln mit bunten,
+              // runden Symbolflächen.
+              Bereich(
+                titel: 'Einrichtung',
+                innenAbstand: EdgeInsets.zero,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _EinstellungsZeile(
+                      icon: Icons.palette_outlined,
+                      titel: 'Ansicht',
+                      text: 'Hell/Dunkel und Anzeigegröße der App',
+                      onTap: () => _zeigeAnsichtSheet(context),
+                    ),
+                    _EinstellungsZeile(
+                      icon: Icons.swap_vert_rounded,
+                      titel: 'Import / Export',
+                      text: 'Artikel, Maschinen-Katalog und Backup sichern '
+                          'oder einlesen',
+                      onTap: () => context.pushNamed('data'),
+                    ),
+                    _EinstellungsZeile(
+                      icon: Icons.schedule_rounded,
+                      titel: 'Abteilungskapazität',
+                      text: 'Tagesstunden je Abteilung festlegen und '
+                          'übersteuern',
+                      onTap: () => _zeigeKapazitaetSheet(context),
+                      letzte: true,
+                    ),
+                  ],
+                ),
               ),
-              _Kachel(
-                icon: Icons.swap_vert_rounded,
-                color: const Color(0xFF00838F),
-                title: 'Import / Export',
-                subtitle: 'Artikel, Maschinen-Katalog und Backup sichern '
-                    'oder einlesen',
-                onTap: () => context.pushNamed('data'),
+              const SizedBox(height: 12),
+              const _GefahrenZone(),
+              const SizedBox(height: 24),
+              Center(
+                child: Text(
+                  'Produktion Planer · offline',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
               ),
-              _Kachel(
-                icon: Icons.schedule_rounded,
-                color: const Color(0xFFEF6C00),
-                title: 'Abteilungskapazität',
-                subtitle: 'Tagesstunden je Abteilung festlegen und übersteuern',
-                onTap: () => _zeigeKapazitaetSheet(context),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Ein Punkt der Einstellungen als Zeile: Symbol, Titel, kurze
+/// Beschreibung und rechts ein Pfeil. Antippen öffnet ihn.
+class _EinstellungsZeile extends StatelessWidget {
+  const _EinstellungsZeile({
+    required this.icon,
+    required this.titel,
+    required this.text,
+    required this.onTap,
+    this.letzte = false,
+  });
+
+  final IconData icon;
+  final String titel;
+  final String text;
+  final VoidCallback onTap;
+
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+          decoration: BoxDecoration(
+            border: letzte
+                ? null
+                : Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 20, color: colors.primary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      titel,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      text,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 18,
+                color: colors.onSurfaceVariant,
               ),
             ],
           ),
-          const SizedBox(height: 20),
-          const _Abschnitt('Gefahrenzone'),
-          const SizedBox(height: 6),
-          const _GefahrenZone(),
-          const SizedBox(height: 24),
-          Center(
-            child: Text(
-              'Produktion Planer · offline',
-              style: TextStyle(
-                fontSize: 12,
-                color: colors.onSurfaceVariant,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
 void _zeigeKapazitaetSheet(BuildContext context) {
+  // Ohne Anfasser: Das Fenster hat einen eigenen Kopf mit Titel und Kreuz
+  // wie jedes Fenster der App.
   showSheetOhneAnimation<void>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    showDragHandle: true,
+    constraints: const BoxConstraints(maxWidth: 560),
     builder: (_) => const _AbteilungskapazitaetenSheet(),
   );
 }
@@ -151,68 +242,161 @@ class _AbteilungskapazitaetenSheetState
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    const abteilungen = Abteilung.values;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-        16,
-        0,
-        16,
-        24 + MediaQuery.of(context).viewInsets.bottom,
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      child: _laden
-          ? const SizedBox(
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        children: [
+          // Kopf wie bei jedem Fenster der App: Titel in Blau, rechts ein
+          // Kreuz.
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Abteilungskapazität',
+                  style: theme.dialogTheme.titleTextStyle ??
+                      theme.textTheme.titleMedium,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Schließen ohne Speichern',
+                onPressed:
+                    _speichern ? null : () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Tageskapazität in Stunden. Standard: 10 h.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 14),
+          if (_laden)
+            const SizedBox(
               height: 180,
               child: Center(child: CircularProgressIndicator()),
             )
-          : SingleChildScrollView(
+          else ...[
+            // Je Abteilung eine Zeile mit Kürzel, Name und Stunden — eine
+            // Tabelle mit Rand. Vorher ein Feld unter dem anderen.
+            Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                border: Border.all(color: colors.outline),
+                borderRadius: AppMasse.ecken,
+              ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                Text(
-                  'Abteilungskapazität',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                const Text('Tageskapazität in Stunden. Standard: 10 h.'),
-                const SizedBox(height: 12),
-                for (final a in Abteilung.values)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: TextField(
-                      controller: _stunden[a.dbValue],
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: a.anzeigeName,
-                        suffixText: 'h / Tag',
-                        border: const OutlineInputBorder(),
-                        isDense: true,
-                      ),
+                  for (var i = 0; i < abteilungen.length; i++)
+                    _KapazitaetsZeile(
+                      abteilung: abteilungen[i],
+                      controller: _stunden[abteilungen[i].dbValue]!,
+                      letzte: i == abteilungen.length - 1,
                     ),
-                  ),
-                const SizedBox(height: 4),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Knöpfe unten rechts wie in jedem Fenster der App.
+            Row(
+              children: [
+                const Spacer(),
+                TextButton(
+                  onPressed:
+                      _speichern ? null : () => Navigator.of(context).pop(),
+                  child: const Text('Abbrechen'),
+                ),
+                const SizedBox(width: 8),
                 FilledButton.icon(
                   onPressed: _speichern ? null : _speichere,
+                  // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein
+                  // weißer Kreisel wäre darauf unsichtbar.
                   icon: _speichern
                       ? const SizedBox(
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : const Icon(Icons.save_outlined),
+                      : const Icon(Icons.save, size: 18),
                   label: const Text('Kapazitäten speichern'),
                 ),
-                ],
-              ),
+              ],
             ),
+          ],
+        ],
+      ),
     );
   }
 }
 
-/// Öffnet die Ansicht-Einstellungen (Hell/Dunkel + Größe) als Sheet.
+/// Eine Abteilung in der Kapazitätstabelle: Kürzel, Name und die Stunden je
+/// Tag als Eingabefeld.
+class _KapazitaetsZeile extends StatelessWidget {
+  const _KapazitaetsZeile({
+    required this.abteilung,
+    required this.controller,
+    required this.letzte,
+  });
+
+  final Abteilung abteilung;
+  final TextEditingController controller;
+
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      decoration: BoxDecoration(
+        border: letzte
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          AbteilungsMarke(abteilung: abteilung),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              abteilung.anzeigeName,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 130,
+            child: TextField(
+              controller: controller,
+              textAlign: TextAlign.right,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: const InputDecoration(suffixText: 'h / Tag'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Öffnet die Ansicht-Einstellungen (Hell/Dunkel + Größe) als Fenster.
 ///
 /// Bewusst kein eigener Screen: Es sind zwei Schalter, die man kurz
 /// verstellt — dafür lohnt kein Seitenwechsel.
@@ -222,150 +406,51 @@ void _zeigeAnsichtSheet(BuildContext context) {
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    showDragHandle: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-    ),
-    builder: (ctx) => UncontrolledProviderScope(
-      container: container,
-      child: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(
-          16,
-          0,
-          16,
-          24 + MediaQuery.of(ctx).viewInsets.bottom,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                'Ansicht',
-                style: Theme.of(ctx).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-            ),
-            const _Anzeigemodus(),
-            const SizedBox(height: 8),
-            const _AnzeigeGroesse(),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-/// Kleiner Abschnitts-Titel zwischen den Karten-Gruppen.
-class _Abschnitt extends StatelessWidget {
-  const _Abschnitt(this.titel);
-
-  final String titel;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 4, 4, 8),
-      child: Text(
-        titel.toUpperCase(),
-        style: theme.textTheme.labelMedium?.copyWith(
-          fontWeight: FontWeight.w800,
-          letterSpacing: 0.6,
-          color: theme.colorScheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}
-
-/// Responsives Kachel-Raster (1–3 Spalten je nach Breite).
-class _KachelGrid extends StatelessWidget {
-  const _KachelGrid({required this.kacheln});
-
-  final List<Widget> kacheln;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, c) {
-        final spalten = c.maxWidth >= 720 ? 3 : (c.maxWidth >= 460 ? 2 : 1);
-        const spacing = 10.0;
-        final breite = (c.maxWidth - spacing * (spalten - 1)) / spalten;
-        return Wrap(
-          spacing: spacing,
-          runSpacing: spacing,
-          children: [
-            for (final k in kacheln) SizedBox(width: breite, child: k),
-          ],
-        );
-      },
-    );
-  }
-}
-
-/// Eine Navigations-Kachel (Icon oben, Titel, kurze Beschreibung).
-class _Kachel extends StatelessWidget {
-  const _Kachel({
-    required this.icon,
-    required this.color,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      margin: EdgeInsets.zero,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+    constraints: const BoxConstraints(maxWidth: 560),
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      return UncontrolledProviderScope(
+        container: container,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            0,
+            20,
+            20 + MediaQuery.of(ctx).viewInsets.bottom,
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 26),
+              // Kopf wie bei jedem Fenster der App: Titel in Blau, rechts
+              // ein Kreuz. Vorher saß hier der Anfasser aus der
+              // Bottom-Sheet-Zeit.
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Ansicht',
+                      style: theme.dialogTheme.titleTextStyle ??
+                          theme.textTheme.titleMedium,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    tooltip: 'Schließen',
+                    onPressed: () => Navigator.of(ctx).pop(),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
-              Text(
-                title,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                subtitle,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                  height: 1.3,
-                ),
-              ),
+              const _Anzeigemodus(),
+              const SizedBox(height: 12),
+              const _AnzeigeGroesse(),
             ],
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 /// „Gefahrenzone": kompletter App-Reset. Löscht ALLE Daten aus der lokalen
@@ -405,6 +490,7 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
           FilledButton(
             style: FilledButton.styleFrom(
               backgroundColor: theme.colorScheme.error,
+              foregroundColor: theme.colorScheme.onError,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
             child: const Text('Weiter'),
@@ -453,7 +539,7 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          icon: const Icon(Icons.check_circle, color: Color(0xFF2E7D32)),
+          icon: Icon(Icons.check_circle, color: AppFarben.von(ctx).ok),
           title: const Text('Zurückgesetzt'),
           content: const Text(
             'Alle Daten wurden gelöscht. Bitte starte die App einmal neu, '
@@ -479,71 +565,33 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final error = theme.colorScheme.error;
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      color: error.withValues(alpha: 0.05),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: error.withValues(alpha: 0.4)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: error.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.delete_forever_rounded, color: error),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'App zurücksetzen',
-                        style: TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      Text(
-                        'Löscht alle Daten der App (SQLite). Backup-Dateien '
-                        'bleiben erhalten.',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(backgroundColor: error),
-                onPressed: _busy ? null : _reset,
-                icon: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Icon(Icons.delete_forever_rounded),
-                label: Text(_busy ? 'Wird gelöscht …' : 'App zurücksetzen'),
-              ),
-            ),
-          ],
+    final colors = Theme.of(context).colorScheme;
+    // Ein eigener Bereich mit rotem Hinweis und dem Knopf in der
+    // Fehlerfarbe. Vorher eine rötlich getönte Karte mit runden Ecken.
+    return Bereich(
+      titel: 'Gefahrenzone',
+      child: HinweisBox(
+        'Löscht alle Daten der App (SQLite). Backup-Dateien bleiben '
+        'erhalten.',
+        art: StatusArt.fehler,
+        icon: Icons.delete_forever_outlined,
+        titel: 'App zurücksetzen',
+        aktion: FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: colors.error,
+            foregroundColor: colors.onError,
+          ),
+          onPressed: _busy ? null : _reset,
+          // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein weißer
+          // Kreisel wäre darauf unsichtbar.
+          icon: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.delete_forever_rounded, size: 18),
+          label: Text(_busy ? 'Wird gelöscht …' : 'App zurücksetzen …'),
         ),
       ),
     );
@@ -585,10 +633,7 @@ class _ResetBestaetigungDialogState extends State<_ResetBestaetigungDialog> {
             controller: _ctrl,
             autofocus: true,
             textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              hintText: 'LÖSCHEN',
-              border: OutlineInputBorder(),
-            ),
+            decoration: const InputDecoration(hintText: 'LÖSCHEN'),
             onChanged: (_) => setState(() {}),
             onSubmitted: (_) {
               if (passt) Navigator.of(context).pop(true);
@@ -604,6 +649,7 @@ class _ResetBestaetigungDialogState extends State<_ResetBestaetigungDialog> {
         FilledButton(
           style: FilledButton.styleFrom(
             backgroundColor: theme.colorScheme.error,
+            foregroundColor: theme.colorScheme.onError,
           ),
           onPressed: passt ? () => Navigator.of(context).pop(true) : null,
           child: const Text('Endgültig löschen'),
@@ -622,77 +668,36 @@ class _Anzeigemodus extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final modus = ref.watch(themeModeProvider);
     final notifier = ref.read(themeModeProvider.notifier);
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.navBlau.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Icon(
-                    Icons.contrast,
-                    color: AppTheme.navBlau,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Darstellung',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      Text(
-                        'Heller oder dunkler Modus — im Navision-Look',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return Bereich(
+      titel: 'Darstellung',
+      untertitel: 'Heller oder dunkler Modus — im Navision-Look',
+      innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<ThemeMode>(
+          segments: const [
+            ButtonSegment(
+              value: ThemeMode.light,
+              icon: Icon(Icons.light_mode_outlined, size: 18),
+              label: Text('Hell'),
             ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<ThemeMode>(
-                segments: const [
-                  ButtonSegment(
-                    value: ThemeMode.light,
-                    icon: Icon(Icons.light_mode_outlined, size: 18),
-                    label: Text('Hell'),
-                  ),
-                  ButtonSegment(
-                    value: ThemeMode.dark,
-                    icon: Icon(Icons.dark_mode_outlined, size: 18),
-                    label: Text('Dunkel'),
-                  ),
-                  ButtonSegment(
-                    value: ThemeMode.system,
-                    icon: Icon(Icons.desktop_windows_outlined, size: 18),
-                    label: Text('System'),
-                  ),
-                ],
-                selected: {modus},
-                onSelectionChanged: (s) => notifier.setzen(s.first),
-                showSelectedIcon: false,
-              ),
+            ButtonSegment(
+              value: ThemeMode.dark,
+              icon: Icon(Icons.dark_mode_outlined, size: 18),
+              label: Text('Dunkel'),
+            ),
+            ButtonSegment(
+              value: ThemeMode.system,
+              icon: Icon(Icons.desktop_windows_outlined, size: 18),
+              label: Text('System'),
             ),
           ],
+          selected: {modus},
+          onSelectionChanged: (s) => notifier.setzen(s.first),
+          showSelectedIcon: false,
         ),
       ),
     );
@@ -713,109 +718,73 @@ class _AnzeigeGroesse extends ConsumerWidget {
     final notifier = ref.read(uiScaleProvider.notifier);
     final prozent = (scale * 100).round();
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF6A1B9A).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.format_size_rounded,
-                    color: Color(0xFF6A1B9A),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Anzeigegröße',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+    return Bereich(
+      titel: 'Anzeigegröße',
+      untertitel: 'Schrift und Bedienelemente in der ganzen App',
+      innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              IconButton.filledTonal(
+                onPressed: scale <= 0.25 ? null : () => notifier.kleiner(),
+                icon: const Icon(Icons.remove),
+                tooltip: 'Kleiner',
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '$prozent %',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
+                    ),
+                    if (prozent == 100)
                       Text(
-                        'Schrift und Bedienelemente in der ganzen App',
+                        'Normal',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onSurfaceVariant,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                IconButton.filledTonal(
-                  onPressed:
-                      scale <= 0.25 ? null : () => notifier.kleiner(),
-                  icon: const Icon(Icons.remove),
-                  tooltip: 'Kleiner',
-                ),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        '$prozent %',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      if (prozent == 100)
-                        Text(
-                          'Normal',
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                IconButton.filledTonal(
-                  onPressed:
-                      scale >= 2.0 ? null : () => notifier.groesser(),
-                  icon: const Icon(Icons.add),
-                  tooltip: 'Größer',
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            // Direkte Stufenauswahl — schneller als mehrfaches Tippen.
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final stufe in kUiScaleStufen)
-                  ChoiceChip(
-                    label: Text('${(stufe * 100).round()} %'),
-                    selected: (scale - stufe).abs() < 0.001,
-                    onSelected: (_) => notifier.setzen(stufe),
-                  ),
-              ],
-            ),
-            if (prozent != 100) ...[
-              const SizedBox(height: 6),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => notifier.zuruecksetzen(),
-                  icon: const Icon(Icons.restart_alt, size: 18),
-                  label: const Text('Auf 100 % zurücksetzen'),
+                  ],
                 ),
               ),
+              IconButton.filledTonal(
+                onPressed: scale >= 2.0 ? null : () => notifier.groesser(),
+                icon: const Icon(Icons.add),
+                tooltip: 'Größer',
+              ),
             ],
+          ),
+          const SizedBox(height: 10),
+          // Direkte Stufenauswahl — schneller als mehrfaches Tippen.
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final stufe in kUiScaleStufen)
+                ChoiceChip(
+                  label: Text('${(stufe * 100).round()} %'),
+                  selected: (scale - stufe).abs() < 0.001,
+                  onSelected: (_) => notifier.setzen(stufe),
+                ),
+            ],
+          ),
+          if (prozent != 100) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => notifier.zuruecksetzen(),
+                icon: const Icon(Icons.restart_alt, size: 18),
+                label: const Text('Auf 100 % zurücksetzen'),
+              ),
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

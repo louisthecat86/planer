@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/backup_provider.dart';
 import '../../core/services/backup_service.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
 
 class BackupManagementScreen extends ConsumerWidget {
   final AppDatabase database;
@@ -15,11 +17,58 @@ class BackupManagementScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final backupListAsync = ref.watch(refreshableBackupListProvider);
+    final isExporting = ref.watch(isExportingProvider);
+    final isImporting = ref.watch(isImportingProvider);
+    // Schmale Fenster: die Knöpfe der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
+    // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein weißer
+    // Kreisel wäre darauf unsichtbar.
+    const kreisel = SizedBox(
+      width: 16,
+      height: 16,
+      child: CircularProgressIndicator(strokeWidth: 2),
+    );
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Backup-Verwaltung'),
-        centerTitle: true,
+        actions: [
+          // Die Aktionen oben rechts wie auf den übrigen Seiten — vorher
+          // zwei bildschirmbreite Knöpfe über der Liste.
+          if (schmal) ...[
+            IconButton(
+              onPressed:
+                  isImporting ? null : () => _handleImport(context, ref),
+              icon: isImporting ? kreisel : const Icon(Icons.restore),
+              tooltip: 'Backup laden',
+            ),
+            IconButton(
+              onPressed:
+                  isExporting ? null : () => _handleExport(context, ref),
+              icon: isExporting ? kreisel : const Icon(Icons.backup_outlined),
+              tooltip: 'Backup erstellen',
+            ),
+          ] else ...[
+            OutlinedButton.icon(
+              onPressed:
+                  isImporting ? null : () => _handleImport(context, ref),
+              icon: isImporting
+                  ? kreisel
+                  : const Icon(Icons.restore, size: 18),
+              label: const Text('Backup laden …'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton.icon(
+              onPressed:
+                  isExporting ? null : () => _handleExport(context, ref),
+              icon: isExporting
+                  ? kreisel
+                  : const Icon(Icons.backup_outlined, size: 18),
+              label: const Text('Backup erstellen'),
+            ),
+          ],
+          const SizedBox(width: 12),
+        ],
       ),
       body: backupListAsync.when(
         data: (backups) => _buildContent(context, ref, backups),
@@ -34,73 +83,35 @@ class BackupManagementScreen extends ConsumerWidget {
     WidgetRef ref,
     List<BackupInfo> backups,
   ) {
-    final isExporting = ref.watch(isExportingProvider);
-    final isImporting = ref.watch(isImportingProvider);
-
-    return Column(
+    if (backups.isEmpty) {
+      return const Center(
+        child: LeerHinweis(
+          'Keine Backups vorhanden.',
+          icon: Icons.backup_outlined,
+        ),
+      );
+    }
+    // Die Backups als Tabelle in einem Bereich — vorher eine Karte je
+    // Backup mit bunten Symbolen.
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
       children: [
-        // Header mit Aktions-Buttons
-        Padding(
-          padding: const EdgeInsets.all(16),
+        Bereich(
+          titel: 'Backups',
+          untertitel: '${backups.length}',
+          innenAbstand: EdgeInsets.zero,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Backup erstellen
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: isExporting ? null : () => _handleExport(context, ref),
-                  icon: isExporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.backup),
-                  label: const Text('Backup erstellen'),
+              for (var i = 0; i < backups.length; i++)
+                _buildBackupListItem(
+                  context,
+                  ref,
+                  backups[i],
+                  letzte: i == backups.length - 1,
                 ),
-              ),
-              const SizedBox(height: 12),
-              // Backup laden
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: isImporting ? null : () => _handleImport(context, ref),
-                  icon: isImporting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Icon(Icons.restore),
-                  label: const Text('Backup laden'),
-                ),
-              ),
             ],
           ),
-        ),
-        // Trennlinie
-        const Divider(height: 0),
-        // Backup-Liste
-        Expanded(
-          child: backups.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.backup_outlined, size: 64, color: Colors.grey),
-                      SizedBox(height: 16),
-                      Text('Keine Backups vorhanden'),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: backups.length,
-                  itemBuilder: (context, index) => _buildBackupListItem(
-                    context,
-                    ref,
-                    backups[index],
-                  ),
-                ),
         ),
       ],
     );
@@ -109,90 +120,113 @@ class BackupManagementScreen extends ConsumerWidget {
   Widget _buildBackupListItem(
     BuildContext context,
     WidgetRef ref,
-    BackupInfo backup,
-  ) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      child: ListTile(
-        leading: Icon(
-          backup.isAuto ? Icons.schedule : Icons.backup,
-          color: backup.isAuto ? Colors.orange : Colors.blue,
-        ),
-        title: Text(backup.filename),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 4),
-            Text(
-              '${backup.formattedTimestamp} • ${backup.formattedSize} • '
-              'Version ${backup.version}',
+    BackupInfo backup, {
+    required bool letzte,
+  }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final hinweis = backup.versionsHinweis;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 6),
+      decoration: BoxDecoration(
+        border: letzte
+            ? null
+            : Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          Tooltip(
+            message: backup.isAuto
+                ? 'Automatisch gesichert'
+                : 'Von Hand gesichert',
+            child: Icon(
+              backup.isAuto ? Icons.schedule : Icons.backup_outlined,
+              size: 18,
+              color: colors.onSurfaceVariant,
             ),
-            if (backup.versionsHinweis != null)
-              Text(
-                backup.versionsHinweis!,
-                style: const TextStyle(fontSize: 11),
-              ),
-          ],
-        ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            if (value == 'load') {
-              _handleLoadBackup(context, ref, backup.filepath);
-            } else if (value == 'delete') {
-              _handleDeleteBackup(context, ref, backup.filepath);
-            }
-          },
-          itemBuilder: (BuildContext context) => [
-            const PopupMenuItem<String>(
-              value: 'load',
-              child: Row(
-                children: [
-                  Icon(Icons.restore, color: Colors.green),
-                  SizedBox(width: 8),
-                  Text('Laden'),
-                ],
-              ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  backup.filename,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${backup.formattedTimestamp} • ${backup.formattedSize} • '
+                  'Version ${backup.version}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+                if (hinweis != null)
+                  Text(
+                    hinweis,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontSize: 11,
+                      color: AppFarben.von(context).warnung,
+                    ),
+                  ),
+              ],
             ),
-            const PopupMenuDivider(),
-            const PopupMenuItem<String>(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Löschen'),
-                ],
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Aktionen',
+            onSelected: (value) {
+              if (value == 'load') {
+                _handleLoadBackup(context, ref, backup.filepath);
+              } else if (value == 'delete') {
+                _handleDeleteBackup(context, ref, backup.filepath);
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'load',
+                child: Row(
+                  children: [
+                    Icon(Icons.restore, size: 18),
+                    SizedBox(width: 8),
+                    Text('Laden …'),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18),
+                    SizedBox(width: 8),
+                    Text('Löschen …'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildErrorWidget(Object error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 64, color: Colors.red),
-            const SizedBox(height: 16),
-            const Text(
-              'Fehler beim Laden der Backups',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 18),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              error.toString(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
+    return ListView(
+      padding: const EdgeInsets.all(14),
+      children: [
+        HinweisBox(
+          error.toString(),
+          art: StatusArt.fehler,
+          titel: 'Fehler beim Laden der Backups',
+          auswaehlbar: true,
         ),
-      ),
+      ],
     );
   }
 
@@ -239,27 +273,7 @@ class BackupManagementScreen extends ConsumerWidget {
 
       if (context.mounted) {
         // Bestätigung vor dem Import
-        final shouldImport = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Backup laden'),
-            content: const Text(
-              'Dies wird die aktuellen Daten ersetzen. '
-              'Möchtest du fortfahren?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Abbrechen'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Laden'),
-              ),
-            ],
-          ),
-        );
-
+        final shouldImport = await _frageLaden(context);
         if (shouldImport != true) return;
       }
 
@@ -287,26 +301,7 @@ class BackupManagementScreen extends ConsumerWidget {
     WidgetRef ref,
     String filepath,
   ) async {
-    final confirmation = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Backup laden'),
-        content: const Text(
-          'Dies wird die aktuellen Daten ersetzen. '
-          'Möchtest du fortfahren?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Laden'),
-          ),
-        ],
-      ),
-    );
+    final confirmation = await _frageLaden(context);
 
     if (confirmation != true) return;
 
@@ -324,6 +319,30 @@ class BackupManagementScreen extends ConsumerWidget {
     }
   }
 
+  /// Fragt vor dem Laden eines Backups nach — es ersetzt alle Daten.
+  Future<bool?> _frageLaden(BuildContext context) {
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Backup laden'),
+        content: const Text(
+          'Dies wird die aktuellen Daten ersetzen. '
+          'Möchtest du fortfahren?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Laden'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _handleDeleteBackup(
     BuildContext context,
     WidgetRef ref,
@@ -339,9 +358,13 @@ class BackupManagementScreen extends ConsumerWidget {
             onPressed: () => Navigator.pop(context, false),
             child: const Text('Abbrechen'),
           ),
-          TextButton(
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+            child: const Text('Löschen'),
           ),
         ],
       ),
@@ -351,7 +374,7 @@ class BackupManagementScreen extends ConsumerWidget {
 
     try {
       await BackupService.deleteBackup(filepath);
-      
+
       // Trigger die Backup-Liste zum Refresh
       ref.read(backupRefreshProvider.notifier).state++;
 
@@ -366,10 +389,10 @@ class BackupManagementScreen extends ConsumerWidget {
   }
 
   void _showSuccessSnackbar(BuildContext context, String message) {
+    // Erfolg in der normalen Farbe der Meldungen — vorher knallgrün.
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.green,
         duration: const Duration(seconds: 3),
       ),
     );
@@ -379,12 +402,9 @@ class BackupManagementScreen extends ConsumerWidget {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: Colors.red,
+        backgroundColor: AppFarben.von(context).fehler,
         duration: const Duration(seconds: 4),
       ),
     );
   }
 }
-
-
-

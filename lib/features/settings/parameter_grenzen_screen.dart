@@ -6,6 +6,9 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/theme/app_stil.dart';
+import '../../core/ui/bausteine.dart';
+import '../../core/utils/sheet_utils.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -43,6 +46,21 @@ final grenzenProvider =
   return map;
 });
 
+/// Ziffern gleich breit, damit Zahlen untereinander ruhig stehen.
+const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
+
+/// Ein Grenzbereich als Text: „10–20", „≥ 10", „≤ 20" — oder „—".
+String _bereich(double? min, double? max) {
+  if (min != null && max != null) return '${_z(min)}–${_z(max)}';
+  if (min != null) return '≥ ${_z(min)}';
+  if (max != null) return '≤ ${_z(max)}';
+  return '—';
+}
+
+/// Eine Zahl ohne „.0" bei ganzen Werten.
+String _z(double v) =>
+    v == v.roundToDouble() ? v.round().toString() : v.toString();
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -55,78 +73,86 @@ class ParameterGrenzenScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final grenzen = ref.watch(grenzenProvider);
+    // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
+    final schmal = MediaQuery.sizeOf(context).width < 720;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Maschinen-Grenzen')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _bearbeiten(context, ref, null),
-        icon: const Icon(Icons.add),
-        label: const Text('Grenze anlegen'),
+      appBar: AppBar(
+        title: const Text('Maschinen-Grenzen'),
+        actions: [
+          // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
+          // vorher ein schwebender Knopf, der unten die letzte Grenze
+          // verdeckte.
+          if (schmal)
+            IconButton(
+              icon: const Icon(Icons.add),
+              tooltip: 'Grenze anlegen',
+              onPressed: () => _bearbeiten(context, ref, null),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _bearbeiten(context, ref, null),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Grenze anlegen'),
+            ),
+          const SizedBox(width: 12),
+        ],
       ),
       body: grenzen.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => ListView(
+          padding: const EdgeInsets.all(14),
+          children: [
+            HinweisBox(
+              'Fehler: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
+          ],
+        ),
         data: (map) {
           if (map.isEmpty) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.rule,
-                      size: 48,
-                      color:
-                          theme.colorScheme.onSurface.withValues(alpha: 0.35),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Noch keine Grenzen gepflegt.\n\n'
-                      'Grenzen verhindern Tippfehler bei Maschinen­parametern: '
-                      'Harte Grenzen blockieren das Speichern, weiche Grenzen '
-                      'zeigen eine Warnung.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: theme.colorScheme.onSurfaceVariant,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 520),
+                child: const LeerHinweis(
+                  'Noch keine Grenzen gepflegt. Grenzen verhindern '
+                  'Tippfehler bei Maschinen­parametern: Harte Grenzen '
+                  'blockieren das Speichern, weiche Grenzen zeigen eine '
+                  'Warnung.',
+                  icon: Icons.rule,
                 ),
               ),
             );
           }
+          // Je Anlage oder Gruppe eine Tabelle mit Spaltenkopf — vorher
+          // eine Karte je Grenze unter einer blauen Überschrift.
           return ListView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
             children: [
               for (final entry in map.entries) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 12, 4, 6),
-                  child: Text(
-                    entry.key,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                      color: theme.colorScheme.primary,
-                    ),
+                Bereich(
+                  titel: entry.key,
+                  untertitel: entry.value.length == 1
+                      ? '1 Grenze'
+                      : '${entry.value.length} Grenzen',
+                  innenAbstand: EdgeInsets.zero,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _GrenzenKopf(),
+                      for (var i = 0; i < entry.value.length; i++)
+                        _GrenzenZeile(
+                          grenze: entry.value[i],
+                          letzte: i == entry.value.length - 1,
+                          onTap: () =>
+                              _bearbeiten(context, ref, entry.value[i]),
+                        ),
+                    ],
                   ),
                 ),
-                for (final g in entry.value)
-                  Card(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    child: ListTile(
-                      dense: true,
-                      title: Text(
-                        g.parameterName,
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                      subtitle: Text(_beschreibung(g)),
-                      trailing: const Icon(Icons.chevron_right, size: 18),
-                      onTap: () => _bearbeiten(context, ref, g),
-                    ),
-                  ),
+                const SizedBox(height: 12),
               ],
             ],
           );
@@ -135,39 +161,153 @@ class ParameterGrenzenScreen extends ConsumerWidget {
     );
   }
 
-  String _beschreibung(ParameterGrenzenData g) {
-    String bereich(double? min, double? max) {
-      if (min != null && max != null) return '${_z(min)}–${_z(max)}';
-      if (min != null) return '≥ ${_z(min)}';
-      if (max != null) return '≤ ${_z(max)}';
-      return '—';
-    }
-
-    final teile = <String>[];
-    if (g.hartMin != null || g.hartMax != null) {
-      teile.add('Hart: ${bereich(g.hartMin, g.hartMax)}');
-    }
-    if (g.weichMin != null || g.weichMax != null) {
-      teile.add('Warnung: ${bereich(g.weichMin, g.weichMax)}');
-    }
-    return teile.isEmpty ? 'Keine Grenzen gesetzt' : teile.join('   ·   ');
-  }
-
-  static String _z(double v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toString();
-
   Future<void> _bearbeiten(
     BuildContext context,
     WidgetRef ref,
     ParameterGrenzenData? bestehend,
   ) async {
-    final geaendert = await showDialog<bool>(
+    // Ein Fenster wie die übrigen der App: Kopf mit Kreuz, Knöpfe unten.
+    final geaendert = await showSheetOhneAnimation<bool>(
       context: context,
+      constraints: const BoxConstraints(maxWidth: 520),
       builder: (_) => _GrenzeEditorDialog(bestehend: bestehend),
     );
     if (geaendert == true) {
       ref.invalidate(grenzenProvider);
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tabelle
+// ---------------------------------------------------------------------------
+
+/// Spaltenbreiten der Grenzen-Tabelle — für Kopf und Zeilen dieselben.
+abstract final class _Spalten {
+  static const double grenze = 130;
+  static const double pfeil = 24;
+}
+
+/// Spaltenköpfe auf der Fläche der Leisten.
+class _GrenzenKopf extends StatelessWidget {
+  const _GrenzenKopf();
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final stil = TextStyle(
+      fontSize: 11.5,
+      fontWeight: FontWeight.w600,
+      color: colors.onSurfaceVariant,
+    );
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 5, 6, 5),
+      decoration: BoxDecoration(
+        color: AppFarben.von(context).leiste,
+        border: Border(bottom: BorderSide(color: colors.outlineVariant)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: Text('Parameter', style: stil)),
+          SizedBox(
+            width: _Spalten.grenze,
+            child: Text('Hart (sperrt)', style: stil),
+          ),
+          SizedBox(
+            width: _Spalten.grenze,
+            child: Text('Warnung', style: stil),
+          ),
+          const SizedBox(width: _Spalten.pfeil),
+        ],
+      ),
+    );
+  }
+}
+
+/// Eine Grenze als Tabellenzeile: Parameter (darunter die Notiz), harte
+/// und weiche Grenze. Antippen öffnet das Bearbeiten.
+class _GrenzenZeile extends StatelessWidget {
+  const _GrenzenZeile({
+    required this.grenze,
+    required this.letzte,
+    required this.onTap,
+  });
+
+  final ParameterGrenzenData grenze;
+
+  /// Letzte Zeile: ohne Linie darunter, dort schließt der Rand.
+  final bool letzte;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final g = grenze;
+    final notiz = (g.notizen ?? '').trim();
+    const zahl = TextStyle(fontSize: 12.5, fontFeatures: _ziffern);
+
+    // Material statt Farbe am Container: Die Hover- und Tipp-Welle des
+    // InkWell malt auf das nächste Material.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
+          decoration: BoxDecoration(
+            border: letzte
+                ? null
+                : Border(bottom: BorderSide(color: colors.outlineVariant)),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      g.parameterName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    if (notiz.isNotEmpty)
+                      Text(
+                        notiz,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: colors.onSurfaceVariant,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: _Spalten.grenze,
+                child: Text(_bereich(g.hartMin, g.hartMax), style: zahl),
+              ),
+              SizedBox(
+                width: _Spalten.grenze,
+                child: Text(_bereich(g.weichMin, g.weichMax), style: zahl),
+              ),
+              SizedBox(
+                width: _Spalten.pfeil,
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -324,132 +464,168 @@ class _GrenzeEditorDialogState extends ConsumerState<_GrenzeEditorDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final kontexte = ref.watch(grenzenKontexteProvider);
+    const zahlTastatur = TextInputType.numberWithOptions(decimal: true);
 
-    return AlertDialog(
-      title: Text(
-        widget.bestehend == null ? 'Grenze anlegen' : 'Grenze bearbeiten',
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      content: SizedBox(
-        width: 420,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
+      child: ListView(
+        shrinkWrap: true,
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        children: [
+          // Kopf wie bei jedem Fenster der App: Titel in Blau, rechts ein
+          // Kreuz.
+          Row(
             children: [
-              kontexte.when(
-                loading: () => const LinearProgressIndicator(),
-                error: (e, _) => Text('Fehler: $e'),
-                data: (liste) => DropdownButtonFormField<String>(
-                  initialValue:
-                      liste.contains(_kontext) ? _kontext : null,
-                  decoration: const InputDecoration(
-                    labelText: 'Anlage / Gruppe',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final k in liste)
-                      DropdownMenuItem(value: k, child: Text(k)),
-                  ],
-                  onChanged: (v) => setState(() => _kontext = v),
+              Expanded(
+                child: Text(
+                  widget.bestehend == null
+                      ? 'Grenze anlegen'
+                      : 'Grenze bearbeiten',
+                  style: theme.dialogTheme.titleTextStyle ??
+                      theme.textTheme.titleMedium,
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _name,
-                decoration: const InputDecoration(
-                  labelText: 'Parametername (wie im Artikel)',
-                  hintText: 'z.B. Bratzeit, Temperatur, Takte',
-                  border: OutlineInputBorder(),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                tooltip: 'Schließen ohne Speichern',
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            'Harte Grenzen sperren das Speichern eines Werts, weiche '
+            'Grenzen zeigen nur eine Warnung.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 16),
+          kontexte.when(
+            loading: () => const LinearProgressIndicator(),
+            error: (e, _) => HinweisBox(
+              'Anlagen konnten nicht geladen werden: $e',
+              art: StatusArt.fehler,
+              auswaehlbar: true,
+            ),
+            data: (liste) => DropdownButtonFormField<String>(
+              initialValue: liste.contains(_kontext) ? _kontext : null,
+              isExpanded: true,
+              decoration: const InputDecoration(
+                labelText: 'Anlage / Gruppe',
+              ),
+              items: [
+                for (final k in liste)
+                  DropdownMenuItem(
+                    value: k,
+                    child: Text(k, overflow: TextOverflow.ellipsis),
+                  ),
+              ],
+              onChanged: (v) => setState(() => _kontext = v),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(
+              labelText: 'Parametername (wie im Artikel)',
+              hintText: 'z.B. Bratzeit, Temperatur, Takte',
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _hartMin,
+                  decoration: const InputDecoration(labelText: 'Hart min'),
+                  keyboardType: zahlTastatur,
                 ),
               ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _hartMin,
-                      decoration: const InputDecoration(
-                        labelText: 'Hart min',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _hartMax,
-                      decoration: const InputDecoration(
-                        labelText: 'Hart max',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _weichMin,
-                      decoration: const InputDecoration(
-                        labelText: 'Warnung min',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: _weichMax,
-                      decoration: const InputDecoration(
-                        labelText: 'Warnung max',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _notizen,
-                decoration: const InputDecoration(
-                  labelText: 'Notiz (optional)',
-                  hintText: 'z.B. Herstellerangabe Typenschild',
-                  border: OutlineInputBorder(),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _hartMax,
+                  decoration: const InputDecoration(labelText: 'Hart max'),
+                  keyboardType: zahlTastatur,
                 ),
               ),
             ],
           ),
-        ),
-      ),
-      actions: [
-        if (widget.bestehend != null)
-          TextButton(
-            onPressed: _busy ? null : _loeschen,
-            child: const Text('Löschen', style: TextStyle(color: Colors.red)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _weichMin,
+                  decoration: const InputDecoration(
+                    labelText: 'Warnung min',
+                  ),
+                  keyboardType: zahlTastatur,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  controller: _weichMax,
+                  decoration: const InputDecoration(
+                    labelText: 'Warnung max',
+                  ),
+                  keyboardType: zahlTastatur,
+                ),
+              ),
+            ],
           ),
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _speichern,
-          child: Text(_busy ? 'Speichern …' : 'Speichern'),
-        ),
-      ],
+          const SizedBox(height: 12),
+          TextField(
+            controller: _notizen,
+            decoration: const InputDecoration(
+              labelText: 'Notiz (optional)',
+              hintText: 'z.B. Herstellerangabe Typenschild',
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // Knöpfe unten wie in jedem Fenster der App: rechts Abbrechen
+          // und Speichern, links das Löschen — abgesetzt, damit man es
+          // nicht aus Versehen trifft.
+          Row(
+            children: [
+              if (widget.bestehend != null)
+                TextButton.icon(
+                  onPressed: _busy ? null : _loeschen,
+                  style: TextButton.styleFrom(foregroundColor: colors.error),
+                  icon: const Icon(Icons.delete_outline, size: 18),
+                  label: const Text('Löschen'),
+                ),
+              const Spacer(),
+              TextButton(
+                onPressed: _busy ? null : () => Navigator.of(context).pop(),
+                child: const Text('Abbrechen'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                onPressed: _busy ? null : _speichern,
+                // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein
+                // weißer Kreisel wäre darauf unsichtbar.
+                icon: _busy
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.save, size: 18),
+                label: Text(_busy ? 'Speichern …' : 'Speichern'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
