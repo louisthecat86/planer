@@ -56,6 +56,22 @@ void main() {
       expect(allergeneAusSuchbegriff('OHNE EI SENF'), {'senf'});
     });
 
+    test('die übrigen fünf Hauptallergene', () {
+      expect(allergeneAusSuchbegriff('KREBSTIERE'), {'krebstiere'});
+      expect(allergeneAusSuchbegriff('GARNELEN'), {'krebstiere'});
+      expect(allergeneAusSuchbegriff('THUNFISCH'), {'fisch'});
+      expect(allergeneAusSuchbegriff('ERDNUSS'), {'erdnuesse'});
+      expect(allergeneAusSuchbegriff('ERDNÜSSE'), {'erdnuesse'});
+      expect(allergeneAusSuchbegriff('LUPINEN'), {'lupinen'});
+      expect(allergeneAusSuchbegriff('TINTENFISCH'), {'weichtiere'});
+    });
+
+    test('was in der Fleischerei anders heißt, zählt nicht', () {
+      expect(allergeneAusSuchbegriff('KASSELER LACHS'), isEmpty);
+      expect(allergeneAusSuchbegriff('BRATWURST SCHNECKE'), isEmpty);
+      expect(allergeneAusSuchbegriff('NUDEL MUSCHELN'), isEmpty);
+    });
+
     test('nichts erkannt heißt leer — nie „keine"', () {
       expect(allergeneAusSuchbegriff(null), isEmpty);
       expect(allergeneAusSuchbegriff(''), isEmpty);

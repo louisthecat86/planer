@@ -1,10 +1,15 @@
 import 'dart:math' as math;
 
+// Nur die Erweiterungen für like/not: drift bringt eine eigene Klasse
+// `Column` mit, die sich sonst mit der von Flutter beißt.
+import 'package:drift/drift.dart'
+    show BooleanExpressionOperators, StringExpressionOperators;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/constants/entwicklung.dart';
 import '../../core/providers/theme_mode_provider.dart';
 import '../../core/providers/ui_scale_provider.dart';
 import '../../core/providers/database_provider.dart';
@@ -453,8 +458,10 @@ void _zeigeAnsichtSheet(BuildContext context) {
   );
 }
 
-/// „Gefahrenzone": kompletter App-Reset. Löscht ALLE Daten aus der lokalen
-/// SQLite-Datenbank. Backup-Dateien auf der Platte bleiben unberührt.
+/// „Gefahrenzone": kompletter App-Reset. Löscht alle Daten der Planung aus
+/// der lokalen SQLite-Datenbank. Backup-Dateien auf der Platte bleiben
+/// unberührt — und die Produktentwicklung auch: Sie steht hinter ihrem
+/// eigenen Passwort und hat ihr eigenes Zurücksetzen.
 class _GefahrenZone extends ConsumerStatefulWidget {
   const _GefahrenZone();
 
@@ -479,6 +486,8 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
         content: const Text(
           'Dabei werden ALLE Daten unwiderruflich gelöscht: Artikel, '
           'Schritte, Anlagen, Bedarf, Planung, Historie und Einstellungen.\n\n'
+          'Die Produktentwicklung bleibt erhalten — sie hat ihr eigenes '
+          'Zurücksetzen.\n\n'
           'Bereits erstellte Backup-Dateien bleiben erhalten — daraus '
           'könntest du später wiederherstellen.',
         ),
@@ -524,6 +533,17 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
       try {
         await db.transaction(() async {
           for (final tabelle in db.allTables) {
+            final name = tabelle.actualTableName;
+            // Die Produktentwicklung bleibt — Tabellen wie Einstellungen.
+            if (istEntwicklungsTabelle(name)) continue;
+            if (name == db.appSettings.actualTableName) {
+              await (db.delete(db.appSettings)
+                    ..where(
+                      (s) => s.key.like('$kEntwicklungPraefix%').not(),
+                    ))
+                  .go();
+              continue;
+            }
             await db.delete(tabelle).go();
           }
         });
@@ -542,8 +562,8 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
           icon: Icon(Icons.check_circle, color: AppFarben.von(ctx).ok),
           title: const Text('Zurückgesetzt'),
           content: const Text(
-            'Alle Daten wurden gelöscht. Bitte starte die App einmal neu, '
-            'damit überall der leere Stand angezeigt wird.',
+            'Alle Daten der Planung wurden gelöscht. Bitte starte die App '
+            'einmal neu, damit überall der leere Stand angezeigt wird.',
           ),
           actions: [
             FilledButton(
@@ -571,8 +591,8 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
     return Bereich(
       titel: 'Gefahrenzone',
       child: HinweisBox(
-        'Löscht alle Daten der App (SQLite). Backup-Dateien bleiben '
-        'erhalten.',
+        'Löscht alle Daten der Planung (SQLite). Backup-Dateien und die '
+        'Produktentwicklung bleiben erhalten.',
         art: StatusArt.fehler,
         icon: Icons.delete_forever_outlined,
         titel: 'App zurücksetzen',

@@ -16,7 +16,11 @@ import 'navision_import_service.dart';
 /// Bewusst nur ausdrückliche Allergen-Wörter. Es fehlen:
 /// * „NUSS" — in der Fleischerei ist die Nuss ein Teilstück (Kalbsnuss),
 /// * „KAESE", „SAHNE", „BUTTER" — sonst träfe ein „LEBER KAESE" die Milch,
-/// * „EIWEISS" — kann auch Soja- oder Milcheiweiß meinen.
+/// * „EIWEISS" — kann auch Soja- oder Milcheiweiß meinen,
+/// * „LACHS" — „KASSELER LACHS" ist Schweinelachs, kein Fisch,
+/// * „SCHNECKE", „MUSCHEL" — eine „BRATWURST SCHNECKE" ist keine
+///   Weinbergschnecke, und Nudeln heißen auch Muscheln,
+/// * „KREBS" — zu vieldeutig, „KREBSTIERE" reicht.
 const Map<String, String> kAllergenWoerter = {
   // Eier
   'EI': 'eier',
@@ -67,6 +71,30 @@ const Map<String, String> kAllergenWoerter = {
   'SULFITE': 'sulfit',
   'SCHWEFELDIOXID': 'sulfit',
   'SO2': 'sulfit',
+  // Krebstiere
+  'KREBSTIERE': 'krebstiere',
+  'GARNELE': 'krebstiere',
+  'GARNELEN': 'krebstiere',
+  'SHRIMPS': 'krebstiere',
+  'SCAMPI': 'krebstiere',
+  'HUMMER': 'krebstiere',
+  'KRABBEN': 'krebstiere',
+  // Fisch
+  'FISCH': 'fisch',
+  'THUNFISCH': 'fisch',
+  'SARDELLEN': 'fisch',
+  'ANCHOVIS': 'fisch',
+  // Erdnüsse
+  'ERDNUSS': 'erdnuesse',
+  'ERDNUESSE': 'erdnuesse',
+  // Lupinen
+  'LUPINE': 'lupinen',
+  'LUPINEN': 'lupinen',
+  // Weichtiere
+  'WEICHTIERE': 'weichtiere',
+  'TINTENFISCH': 'weichtiere',
+  'CALAMARI': 'weichtiere',
+  'KALMAR': 'weichtiere',
 };
 
 /// Die Allergene, die der Navision-Suchbegriff [suchbegriff] nennt, als

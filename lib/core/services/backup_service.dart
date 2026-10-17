@@ -4,11 +4,14 @@ import 'dart:isolate';
 
 import 'package:drift/drift.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../constants/entwicklung.dart';
 import '../database/database.dart';
+import 'entwicklung_sicherung.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
@@ -244,6 +247,12 @@ class BackupService {
     return filepath;
   }
 
+  /// Der Inhalt eines Backups — für Tests, die ihn prüfen, ohne eine
+  /// Datei zu schreiben.
+  @visibleForTesting
+  static Future<Map<String, dynamic>> backupInhalt(AppDatabase database) =>
+      _buildBackupPayload(database, isAuto: false);
+
   /// Baut das Backup-Payload zusammen. Zentrale Stelle damit
   /// `exportBackup` und `createAutoBackup` immer das gleiche Schema
   /// liefern.
@@ -252,6 +261,7 @@ class BackupService {
     required bool isAuto,
   }) async {
     final now = DateTime.now();
+    final entwicklung = await EntwicklungSicherung.exportieren(database);
     return {
       'version': _currentVersion,
       'timestamp': now.toIso8601String(),
@@ -286,6 +296,11 @@ class BackupService {
         'week_snapshots': await _exportWeekSnapshots(database),
         // ── ab Backup-Version 1.5 ────────────────────────────────────
         'tagesaufgaben': await _exportTagesaufgaben(database),
+        // ── Produktentwicklung ───────────────────────────────────────
+        // Ein eigener, verschlüsselter Teil — nur, wenn auf diesem
+        // Rechner etwas dafür eingerichtet ist. Ältere App-Stände
+        // übergehen ihn (EntwicklungSicherung).
+        if (entwicklung != null) 'entwicklung': entwicklung,
       },
     };
   }
@@ -304,6 +319,7 @@ class BackupService {
   }) async {
     // ── Schritt 1: Datei lesen und prüfen (noch nichts angefasst) ─────
     final Map<String, dynamic> data;
+    final EntwicklungsTeil entwicklung;
     try {
       final file = File(filepath);
       if (!await file.exists()) {
@@ -341,6 +357,20 @@ class BackupService {
         );
       }
       data = rohDaten;
+
+      // Die Produktentwicklung: prüfen und, wenn der Schlüssel dieses
+      // Rechners passt, schon entschlüsseln. Ist ihr Teil beschädigt,
+      // bricht das Einspielen hier ab — bevor etwas gelöscht ist.
+      try {
+        entwicklung = await EntwicklungSicherung.vorbereiten(
+          database,
+          data['entwicklung'],
+        );
+      } on FormatException catch (e) {
+        throw Exception(
+          'Der Teil der Produktentwicklung ist beschädigt (${e.message}).',
+        );
+      }
     } catch (e) {
       throw Exception('Backup-Import fehlgeschlagen: $e');
     }
@@ -363,6 +393,14 @@ class BackupService {
     }
 
     // ── Schritt 3: Transaktional einspielen ───────────────────────────
+    //
+    // Die Produktentwicklung hat einen eigenen Teil. Fehlt er — etwa im
+    // Backup eines Kollegen oder in einem älteren —, bleibt der Stand
+    // dieses Rechners erhalten: Ihre Tabellen leert [_clearDatabase] nicht,
+    // und ihre Einstellungen kommen nach dem Leeren zurück.
+    final entwicklungBisher = await EntwicklungSicherung.einstellungen(
+      database,
+    );
     try {
       await database.transaction(() async {
         if (clearExisting) {
@@ -393,6 +431,11 @@ class BackupService {
         await _importWeekSnapshots(database, data);
         await _importTagesaufgaben(database, data);
         await _importAppSettings(database, data);
+        await EntwicklungSicherung.einspielen(
+          database,
+          entwicklung,
+          entwicklungBisher,
+        );
       });
     } catch (e) {
       throw Exception('Backup-Import fehlgeschlagen: $e');
@@ -650,10 +693,15 @@ class BackupService {
           .map((p) => p.toJson())
           .toList();
 
+  /// Die Einstellungen ohne die der Produktentwicklung — die stehen in
+  /// ihrem eigenen Teil (EntwicklungSicherung).
   static Future<List<Map<String, dynamic>>> _exportAppSettings(
     AppDatabase db,
   ) async =>
-      (await db.select(db.appSettings).get()).map((s) => s.toJson()).toList();
+      (await db.select(db.appSettings).get())
+          .where((s) => !istEntwicklungsSchluessel(s.key))
+          .map((s) => s.toJson())
+          .toList();
 
   // ── Backup-Version 1.1: Steckbriefe + Grenzen ──────────────────────
 
@@ -918,9 +966,14 @@ class BackupService {
   ) async {
     final zeilen = _zeilen(data, 'app_settings');
     if (zeilen.isEmpty) return;
+    // Die Produktentwicklung kommt nur über ihren eigenen Teil herein
+    // (EntwicklungSicherung) — nie über die allgemeinen Einstellungen.
     final eintraege = zeilen
-        .map((z) => AppSetting.fromJson(z).toCompanion(true))
+        .map(AppSetting.fromJson)
+        .where((s) => !istEntwicklungsSchluessel(s.key))
+        .map((s) => s.toCompanion(true))
         .toList();
+    if (eintraege.isEmpty) return;
     await db.batch(
       (b) => b.insertAllOnConflictUpdate(db.appSettings, eintraege),
     );

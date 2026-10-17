@@ -21,6 +21,8 @@ import 'features/navision/navision_import_screen.dart';
 import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
+import 'features/entwicklung/entwicklung_screen.dart';
+import 'features/entwicklung/rezepturen/rezeptur_screen.dart';
 import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/intro/intro_screen.dart';
@@ -203,6 +205,27 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'statistik',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: StatistikScreen(),
+            ),
+          ),
+          // Produktentwicklung: Projekte, Rezepturen und Zutaten — hinter
+          // einem eigenen Passwort, das die Seite selbst abfragt.
+          GoRoute(
+            path: '/entwicklung',
+            name: 'entwicklung',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: EntwicklungScreen(),
+            ),
+          ),
+          // Eine Rezeptur mit ihren Ständen — nur bei offener Entwicklung.
+          GoRoute(
+            path: '/entwicklung/rezeptur/:id',
+            name: 'entwicklungRezeptur',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: EntwicklungGeschuetzt(
+                child: RezepturScreen(
+                  rezepturId: state.pathParameters['id']!,
+                ),
+              ),
             ),
           ),
           // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.

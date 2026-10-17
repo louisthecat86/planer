@@ -7,6 +7,8 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../data_management/data_management_screen.dart'
     show invalidiereDatenNachImport;
+import '../entwicklung/entwicklung_zugang.dart'
+    show entwicklungNachWiederherstellen;
 
 class BackupManagementScreen extends ConsumerWidget {
   final AppDatabase database;
@@ -286,6 +288,7 @@ class BackupManagementScreen extends ConsumerWidget {
       // Artikel, Schritte und Historie neu laden — vorher zeigten sie nach
       // dem Laden bis zum Neustart den alten Stand.
       invalidiereDatenNachImport(ref);
+      entwicklungNachWiederherstellen(ref);
       // Refresh die Backup-Liste
       ref.invalidate(refreshableBackupListProvider);
 
@@ -313,6 +316,7 @@ class BackupManagementScreen extends ConsumerWidget {
     try {
       await BackupService.importBackup(filepath, database, clearExisting: true);
       invalidiereDatenNachImport(ref);
+      entwicklungNachWiederherstellen(ref);
       ref.invalidate(refreshableBackupListProvider);
 
       if (context.mounted) {

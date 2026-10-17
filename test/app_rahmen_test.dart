@@ -54,6 +54,8 @@ void main() {
     expect(find.text('Auftragsbestand'), findsOneWidget);
     expect(find.text('Einstellungen'), findsOneWidget);
     expect(find.text('PLANEN'), findsOneWidget);
+    expect(find.text('ENTWICKELN'), findsOneWidget);
+    expect(find.text('Produktentwicklung'), findsOneWidget);
     expect(gewicht(tester, 'Planungsboard'), FontWeight.w600);
     expect(gewicht(tester, 'Bedarf'), FontWeight.w400);
   });
@@ -65,6 +67,13 @@ void main() {
 
     await zeige(tester, ort: '/data', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Einstellungen'), FontWeight.w600);
+
+    await zeige(
+      tester,
+      ort: '/entwicklung',
+      groesse: const Size(1600, 1000),
+    );
+    expect(gewicht(tester, 'Produktentwicklung'), FontWeight.w600);
   });
 
   testWidgets('schmales Fenster: nur Symbole, Namen im Tooltip',

@@ -156,6 +156,18 @@ const List<(String?, List<_Ziel>)> _gruppen = [
       ),
     ],
   ),
+  (
+    'Entwickeln',
+    [
+      // Hinter einem eigenen Passwort — die Seite fragt es selbst ab.
+      _Ziel(
+        'entwicklung',
+        'Produktentwicklung',
+        Icons.science_outlined,
+        ['/entwicklung'],
+      ),
+    ],
+  ),
 ];
 
 /// Einstellungen stehen unten, getrennt von der Arbeit.

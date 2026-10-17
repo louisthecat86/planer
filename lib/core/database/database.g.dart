@@ -16147,6 +16147,6007 @@ class TagesaufgabenCompanion extends UpdateCompanion<Tagesaufgabe> {
   }
 }
 
+class $EntwicklungZutatenTable extends EntwicklungZutaten
+    with TableInfo<$EntwicklungZutatenTable, Zutat> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungZutatenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _etikettNameMeta =
+      const VerificationMeta('etikettName');
+  @override
+  late final GeneratedColumn<String> etikettName = GeneratedColumn<String>(
+      'etikett_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _istFleischMeta =
+      const VerificationMeta('istFleisch');
+  @override
+  late final GeneratedColumn<bool> istFleisch = GeneratedColumn<bool>(
+      'ist_fleisch', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("ist_fleisch" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _istWasserMeta =
+      const VerificationMeta('istWasser');
+  @override
+  late final GeneratedColumn<bool> istWasser = GeneratedColumn<bool>(
+      'ist_wasser', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints:
+          GeneratedColumn.constraintIsAlways('CHECK ("ist_wasser" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _tierartMeta =
+      const VerificationMeta('tierart');
+  @override
+  late final GeneratedColumn<String> tierart = GeneratedColumn<String>(
+      'tierart', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bindegewebeMeta =
+      const VerificationMeta('bindegewebe');
+  @override
+  late final GeneratedColumn<double> bindegewebe = GeneratedColumn<double>(
+      'bindegewebe', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _fleischeiweissGrenzeMeta =
+      const VerificationMeta('fleischeiweissGrenze');
+  @override
+  late final GeneratedColumn<double> fleischeiweissGrenze =
+      GeneratedColumn<double>('fleischeiweiss_grenze', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _quidPflichtMeta =
+      const VerificationMeta('quidPflicht');
+  @override
+  late final GeneratedColumn<bool> quidPflicht = GeneratedColumn<bool>(
+      'quid_pflicht', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("quid_pflicht" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _unterzutatenMeta =
+      const VerificationMeta('unterzutaten');
+  @override
+  late final GeneratedColumn<String> unterzutaten = GeneratedColumn<String>(
+      'unterzutaten', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _verarbeitungshilfsstoffeMeta =
+      const VerificationMeta('verarbeitungshilfsstoffe');
+  @override
+  late final GeneratedColumn<String> verarbeitungshilfsstoffe =
+      GeneratedColumn<String>('verarbeitungshilfsstoffe', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _allergeneMeta =
+      const VerificationMeta('allergene');
+  @override
+  late final GeneratedColumn<String> allergene = GeneratedColumn<String>(
+      'allergene', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _energieKjMeta =
+      const VerificationMeta('energieKj');
+  @override
+  late final GeneratedColumn<double> energieKj = GeneratedColumn<double>(
+      'energie_kj', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _energieKcalMeta =
+      const VerificationMeta('energieKcal');
+  @override
+  late final GeneratedColumn<double> energieKcal = GeneratedColumn<double>(
+      'energie_kcal', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _fettMeta = const VerificationMeta('fett');
+  @override
+  late final GeneratedColumn<double> fett = GeneratedColumn<double>(
+      'fett', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _gesaettigteFettsaeurenMeta =
+      const VerificationMeta('gesaettigteFettsaeuren');
+  @override
+  late final GeneratedColumn<double> gesaettigteFettsaeuren =
+      GeneratedColumn<double>('gesaettigte_fettsaeuren', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kohlenhydrateMeta =
+      const VerificationMeta('kohlenhydrate');
+  @override
+  late final GeneratedColumn<double> kohlenhydrate = GeneratedColumn<double>(
+      'kohlenhydrate', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _zuckerMeta = const VerificationMeta('zucker');
+  @override
+  late final GeneratedColumn<double> zucker = GeneratedColumn<double>(
+      'zucker', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _eiweissMeta =
+      const VerificationMeta('eiweiss');
+  @override
+  late final GeneratedColumn<double> eiweiss = GeneratedColumn<double>(
+      'eiweiss', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _salzMeta = const VerificationMeta('salz');
+  @override
+  late final GeneratedColumn<double> salz = GeneratedColumn<double>(
+      'salz', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _wasserMeta = const VerificationMeta('wasser');
+  @override
+  late final GeneratedColumn<double> wasser = GeneratedColumn<double>(
+      'wasser', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _ascheMeta = const VerificationMeta('asche');
+  @override
+  late final GeneratedColumn<double> asche = GeneratedColumn<double>(
+      'asche', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _beffeMeta = const VerificationMeta('beffe');
+  @override
+  late final GeneratedColumn<double> beffe = GeneratedColumn<double>(
+      'beffe', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _notizMeta = const VerificationMeta('notiz');
+  @override
+  late final GeneratedColumn<String> notiz = GeneratedColumn<String>(
+      'notiz', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        artikelnummer,
+        etikettName,
+        istFleisch,
+        istWasser,
+        tierart,
+        bindegewebe,
+        fleischeiweissGrenze,
+        quidPflicht,
+        unterzutaten,
+        verarbeitungshilfsstoffe,
+        allergene,
+        energieKj,
+        energieKcal,
+        fett,
+        gesaettigteFettsaeuren,
+        kohlenhydrate,
+        zucker,
+        eiweiss,
+        salz,
+        wasser,
+        asche,
+        beffe,
+        notiz,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_zutaten';
+  @override
+  VerificationContext validateIntegrity(Insertable<Zutat> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    }
+    if (data.containsKey('etikett_name')) {
+      context.handle(
+          _etikettNameMeta,
+          etikettName.isAcceptableOrUnknown(
+              data['etikett_name']!, _etikettNameMeta));
+    }
+    if (data.containsKey('ist_fleisch')) {
+      context.handle(
+          _istFleischMeta,
+          istFleisch.isAcceptableOrUnknown(
+              data['ist_fleisch']!, _istFleischMeta));
+    }
+    if (data.containsKey('ist_wasser')) {
+      context.handle(_istWasserMeta,
+          istWasser.isAcceptableOrUnknown(data['ist_wasser']!, _istWasserMeta));
+    }
+    if (data.containsKey('tierart')) {
+      context.handle(_tierartMeta,
+          tierart.isAcceptableOrUnknown(data['tierart']!, _tierartMeta));
+    }
+    if (data.containsKey('bindegewebe')) {
+      context.handle(
+          _bindegewebeMeta,
+          bindegewebe.isAcceptableOrUnknown(
+              data['bindegewebe']!, _bindegewebeMeta));
+    }
+    if (data.containsKey('fleischeiweiss_grenze')) {
+      context.handle(
+          _fleischeiweissGrenzeMeta,
+          fleischeiweissGrenze.isAcceptableOrUnknown(
+              data['fleischeiweiss_grenze']!, _fleischeiweissGrenzeMeta));
+    }
+    if (data.containsKey('quid_pflicht')) {
+      context.handle(
+          _quidPflichtMeta,
+          quidPflicht.isAcceptableOrUnknown(
+              data['quid_pflicht']!, _quidPflichtMeta));
+    }
+    if (data.containsKey('unterzutaten')) {
+      context.handle(
+          _unterzutatenMeta,
+          unterzutaten.isAcceptableOrUnknown(
+              data['unterzutaten']!, _unterzutatenMeta));
+    }
+    if (data.containsKey('verarbeitungshilfsstoffe')) {
+      context.handle(
+          _verarbeitungshilfsstoffeMeta,
+          verarbeitungshilfsstoffe.isAcceptableOrUnknown(
+              data['verarbeitungshilfsstoffe']!,
+              _verarbeitungshilfsstoffeMeta));
+    }
+    if (data.containsKey('allergene')) {
+      context.handle(_allergeneMeta,
+          allergene.isAcceptableOrUnknown(data['allergene']!, _allergeneMeta));
+    }
+    if (data.containsKey('energie_kj')) {
+      context.handle(_energieKjMeta,
+          energieKj.isAcceptableOrUnknown(data['energie_kj']!, _energieKjMeta));
+    }
+    if (data.containsKey('energie_kcal')) {
+      context.handle(
+          _energieKcalMeta,
+          energieKcal.isAcceptableOrUnknown(
+              data['energie_kcal']!, _energieKcalMeta));
+    }
+    if (data.containsKey('fett')) {
+      context.handle(
+          _fettMeta, fett.isAcceptableOrUnknown(data['fett']!, _fettMeta));
+    }
+    if (data.containsKey('gesaettigte_fettsaeuren')) {
+      context.handle(
+          _gesaettigteFettsaeurenMeta,
+          gesaettigteFettsaeuren.isAcceptableOrUnknown(
+              data['gesaettigte_fettsaeuren']!, _gesaettigteFettsaeurenMeta));
+    }
+    if (data.containsKey('kohlenhydrate')) {
+      context.handle(
+          _kohlenhydrateMeta,
+          kohlenhydrate.isAcceptableOrUnknown(
+              data['kohlenhydrate']!, _kohlenhydrateMeta));
+    }
+    if (data.containsKey('zucker')) {
+      context.handle(_zuckerMeta,
+          zucker.isAcceptableOrUnknown(data['zucker']!, _zuckerMeta));
+    }
+    if (data.containsKey('eiweiss')) {
+      context.handle(_eiweissMeta,
+          eiweiss.isAcceptableOrUnknown(data['eiweiss']!, _eiweissMeta));
+    }
+    if (data.containsKey('salz')) {
+      context.handle(
+          _salzMeta, salz.isAcceptableOrUnknown(data['salz']!, _salzMeta));
+    }
+    if (data.containsKey('wasser')) {
+      context.handle(_wasserMeta,
+          wasser.isAcceptableOrUnknown(data['wasser']!, _wasserMeta));
+    }
+    if (data.containsKey('asche')) {
+      context.handle(
+          _ascheMeta, asche.isAcceptableOrUnknown(data['asche']!, _ascheMeta));
+    }
+    if (data.containsKey('beffe')) {
+      context.handle(
+          _beffeMeta, beffe.isAcceptableOrUnknown(data['beffe']!, _beffeMeta));
+    }
+    if (data.containsKey('notiz')) {
+      context.handle(
+          _notizMeta, notiz.isAcceptableOrUnknown(data['notiz']!, _notizMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Zutat map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Zutat(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer']),
+      etikettName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}etikett_name']),
+      istFleisch: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}ist_fleisch'])!,
+      istWasser: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}ist_wasser'])!,
+      tierart: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}tierart']),
+      bindegewebe: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}bindegewebe']),
+      fleischeiweissGrenze: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}fleischeiweiss_grenze']),
+      quidPflicht: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}quid_pflicht'])!,
+      unterzutaten: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}unterzutaten']),
+      verarbeitungshilfsstoffe: attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}verarbeitungshilfsstoffe']),
+      allergene: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}allergene']),
+      energieKj: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}energie_kj']),
+      energieKcal: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}energie_kcal']),
+      fett: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}fett']),
+      gesaettigteFettsaeuren: attachedDatabase.typeMapping.read(
+          DriftSqlType.double,
+          data['${effectivePrefix}gesaettigte_fettsaeuren']),
+      kohlenhydrate: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}kohlenhydrate']),
+      zucker: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}zucker']),
+      eiweiss: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}eiweiss']),
+      salz: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}salz']),
+      wasser: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}wasser']),
+      asche: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}asche']),
+      beffe: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}beffe']),
+      notiz: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notiz']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $EntwicklungZutatenTable createAlias(String alias) {
+    return $EntwicklungZutatenTable(attachedDatabase, alias);
+  }
+}
+
+class Zutat extends DataClass implements Insertable<Zutat> {
+  final String id;
+
+  /// Interner Name, etwa „Schweinebauch S3".
+  final String name;
+  final String? artikelnummer;
+
+  /// Name auf dem Etikett, wenn er vom internen Namen abweicht.
+  final String? etikettName;
+  final bool istFleisch;
+
+  /// Zugesetztes Wasser oder Eis — zählt im Endprodukt nur mit dem, was
+  /// nach dem Verlust übrig bleibt.
+  final bool istWasser;
+
+  /// Tierart für den Fleischanteil, etwa „schwein" (siehe Rechenkern).
+  final String? tierart;
+
+  /// Bindegewebe als Verhältnis Kollagen zu Fleischeiweiß in Prozent.
+  final double? bindegewebe;
+
+  /// Fleischeiweißgrenze in Prozent — aus der alten Suite übernommen.
+  final double? fleischeiweissGrenze;
+
+  /// Ob die Zutat in der Zutatenliste mit Menge (QUID) erscheint.
+  final bool quidPflicht;
+
+  /// Zusammengesetzte Zutat: was in Klammern dahinter steht.
+  final String? unterzutaten;
+  final String? verarbeitungshilfsstoffe;
+
+  /// Allergene als Kommaliste der Planer-Werte (kAllergene).
+  final String? allergene;
+  final double? energieKj;
+  final double? energieKcal;
+  final double? fett;
+  final double? gesaettigteFettsaeuren;
+  final double? kohlenhydrate;
+  final double? zucker;
+  final double? eiweiss;
+  final double? salz;
+  final double? wasser;
+  final double? asche;
+
+  /// Bindegewebseiweißfreies Fleischeiweiß (BEFFE) in Prozent.
+  final double? beffe;
+  final String? notiz;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Zutat(
+      {required this.id,
+      required this.name,
+      this.artikelnummer,
+      this.etikettName,
+      required this.istFleisch,
+      required this.istWasser,
+      this.tierart,
+      this.bindegewebe,
+      this.fleischeiweissGrenze,
+      required this.quidPflicht,
+      this.unterzutaten,
+      this.verarbeitungshilfsstoffe,
+      this.allergene,
+      this.energieKj,
+      this.energieKcal,
+      this.fett,
+      this.gesaettigteFettsaeuren,
+      this.kohlenhydrate,
+      this.zucker,
+      this.eiweiss,
+      this.salz,
+      this.wasser,
+      this.asche,
+      this.beffe,
+      this.notiz,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || artikelnummer != null) {
+      map['artikelnummer'] = Variable<String>(artikelnummer);
+    }
+    if (!nullToAbsent || etikettName != null) {
+      map['etikett_name'] = Variable<String>(etikettName);
+    }
+    map['ist_fleisch'] = Variable<bool>(istFleisch);
+    map['ist_wasser'] = Variable<bool>(istWasser);
+    if (!nullToAbsent || tierart != null) {
+      map['tierart'] = Variable<String>(tierart);
+    }
+    if (!nullToAbsent || bindegewebe != null) {
+      map['bindegewebe'] = Variable<double>(bindegewebe);
+    }
+    if (!nullToAbsent || fleischeiweissGrenze != null) {
+      map['fleischeiweiss_grenze'] = Variable<double>(fleischeiweissGrenze);
+    }
+    map['quid_pflicht'] = Variable<bool>(quidPflicht);
+    if (!nullToAbsent || unterzutaten != null) {
+      map['unterzutaten'] = Variable<String>(unterzutaten);
+    }
+    if (!nullToAbsent || verarbeitungshilfsstoffe != null) {
+      map['verarbeitungshilfsstoffe'] =
+          Variable<String>(verarbeitungshilfsstoffe);
+    }
+    if (!nullToAbsent || allergene != null) {
+      map['allergene'] = Variable<String>(allergene);
+    }
+    if (!nullToAbsent || energieKj != null) {
+      map['energie_kj'] = Variable<double>(energieKj);
+    }
+    if (!nullToAbsent || energieKcal != null) {
+      map['energie_kcal'] = Variable<double>(energieKcal);
+    }
+    if (!nullToAbsent || fett != null) {
+      map['fett'] = Variable<double>(fett);
+    }
+    if (!nullToAbsent || gesaettigteFettsaeuren != null) {
+      map['gesaettigte_fettsaeuren'] = Variable<double>(gesaettigteFettsaeuren);
+    }
+    if (!nullToAbsent || kohlenhydrate != null) {
+      map['kohlenhydrate'] = Variable<double>(kohlenhydrate);
+    }
+    if (!nullToAbsent || zucker != null) {
+      map['zucker'] = Variable<double>(zucker);
+    }
+    if (!nullToAbsent || eiweiss != null) {
+      map['eiweiss'] = Variable<double>(eiweiss);
+    }
+    if (!nullToAbsent || salz != null) {
+      map['salz'] = Variable<double>(salz);
+    }
+    if (!nullToAbsent || wasser != null) {
+      map['wasser'] = Variable<double>(wasser);
+    }
+    if (!nullToAbsent || asche != null) {
+      map['asche'] = Variable<double>(asche);
+    }
+    if (!nullToAbsent || beffe != null) {
+      map['beffe'] = Variable<double>(beffe);
+    }
+    if (!nullToAbsent || notiz != null) {
+      map['notiz'] = Variable<String>(notiz);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  EntwicklungZutatenCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungZutatenCompanion(
+      id: Value(id),
+      name: Value(name),
+      artikelnummer: artikelnummer == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artikelnummer),
+      etikettName: etikettName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(etikettName),
+      istFleisch: Value(istFleisch),
+      istWasser: Value(istWasser),
+      tierart: tierart == null && nullToAbsent
+          ? const Value.absent()
+          : Value(tierart),
+      bindegewebe: bindegewebe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bindegewebe),
+      fleischeiweissGrenze: fleischeiweissGrenze == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fleischeiweissGrenze),
+      quidPflicht: Value(quidPflicht),
+      unterzutaten: unterzutaten == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unterzutaten),
+      verarbeitungshilfsstoffe: verarbeitungshilfsstoffe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(verarbeitungshilfsstoffe),
+      allergene: allergene == null && nullToAbsent
+          ? const Value.absent()
+          : Value(allergene),
+      energieKj: energieKj == null && nullToAbsent
+          ? const Value.absent()
+          : Value(energieKj),
+      energieKcal: energieKcal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(energieKcal),
+      fett: fett == null && nullToAbsent ? const Value.absent() : Value(fett),
+      gesaettigteFettsaeuren: gesaettigteFettsaeuren == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gesaettigteFettsaeuren),
+      kohlenhydrate: kohlenhydrate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kohlenhydrate),
+      zucker:
+          zucker == null && nullToAbsent ? const Value.absent() : Value(zucker),
+      eiweiss: eiweiss == null && nullToAbsent
+          ? const Value.absent()
+          : Value(eiweiss),
+      salz: salz == null && nullToAbsent ? const Value.absent() : Value(salz),
+      wasser:
+          wasser == null && nullToAbsent ? const Value.absent() : Value(wasser),
+      asche:
+          asche == null && nullToAbsent ? const Value.absent() : Value(asche),
+      beffe:
+          beffe == null && nullToAbsent ? const Value.absent() : Value(beffe),
+      notiz:
+          notiz == null && nullToAbsent ? const Value.absent() : Value(notiz),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Zutat.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Zutat(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      artikelnummer: serializer.fromJson<String?>(json['artikelnummer']),
+      etikettName: serializer.fromJson<String?>(json['etikettName']),
+      istFleisch: serializer.fromJson<bool>(json['istFleisch']),
+      istWasser: serializer.fromJson<bool>(json['istWasser']),
+      tierart: serializer.fromJson<String?>(json['tierart']),
+      bindegewebe: serializer.fromJson<double?>(json['bindegewebe']),
+      fleischeiweissGrenze:
+          serializer.fromJson<double?>(json['fleischeiweissGrenze']),
+      quidPflicht: serializer.fromJson<bool>(json['quidPflicht']),
+      unterzutaten: serializer.fromJson<String?>(json['unterzutaten']),
+      verarbeitungshilfsstoffe:
+          serializer.fromJson<String?>(json['verarbeitungshilfsstoffe']),
+      allergene: serializer.fromJson<String?>(json['allergene']),
+      energieKj: serializer.fromJson<double?>(json['energieKj']),
+      energieKcal: serializer.fromJson<double?>(json['energieKcal']),
+      fett: serializer.fromJson<double?>(json['fett']),
+      gesaettigteFettsaeuren:
+          serializer.fromJson<double?>(json['gesaettigteFettsaeuren']),
+      kohlenhydrate: serializer.fromJson<double?>(json['kohlenhydrate']),
+      zucker: serializer.fromJson<double?>(json['zucker']),
+      eiweiss: serializer.fromJson<double?>(json['eiweiss']),
+      salz: serializer.fromJson<double?>(json['salz']),
+      wasser: serializer.fromJson<double?>(json['wasser']),
+      asche: serializer.fromJson<double?>(json['asche']),
+      beffe: serializer.fromJson<double?>(json['beffe']),
+      notiz: serializer.fromJson<String?>(json['notiz']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'artikelnummer': serializer.toJson<String?>(artikelnummer),
+      'etikettName': serializer.toJson<String?>(etikettName),
+      'istFleisch': serializer.toJson<bool>(istFleisch),
+      'istWasser': serializer.toJson<bool>(istWasser),
+      'tierart': serializer.toJson<String?>(tierart),
+      'bindegewebe': serializer.toJson<double?>(bindegewebe),
+      'fleischeiweissGrenze': serializer.toJson<double?>(fleischeiweissGrenze),
+      'quidPflicht': serializer.toJson<bool>(quidPflicht),
+      'unterzutaten': serializer.toJson<String?>(unterzutaten),
+      'verarbeitungshilfsstoffe':
+          serializer.toJson<String?>(verarbeitungshilfsstoffe),
+      'allergene': serializer.toJson<String?>(allergene),
+      'energieKj': serializer.toJson<double?>(energieKj),
+      'energieKcal': serializer.toJson<double?>(energieKcal),
+      'fett': serializer.toJson<double?>(fett),
+      'gesaettigteFettsaeuren':
+          serializer.toJson<double?>(gesaettigteFettsaeuren),
+      'kohlenhydrate': serializer.toJson<double?>(kohlenhydrate),
+      'zucker': serializer.toJson<double?>(zucker),
+      'eiweiss': serializer.toJson<double?>(eiweiss),
+      'salz': serializer.toJson<double?>(salz),
+      'wasser': serializer.toJson<double?>(wasser),
+      'asche': serializer.toJson<double?>(asche),
+      'beffe': serializer.toJson<double?>(beffe),
+      'notiz': serializer.toJson<String?>(notiz),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Zutat copyWith(
+          {String? id,
+          String? name,
+          Value<String?> artikelnummer = const Value.absent(),
+          Value<String?> etikettName = const Value.absent(),
+          bool? istFleisch,
+          bool? istWasser,
+          Value<String?> tierart = const Value.absent(),
+          Value<double?> bindegewebe = const Value.absent(),
+          Value<double?> fleischeiweissGrenze = const Value.absent(),
+          bool? quidPflicht,
+          Value<String?> unterzutaten = const Value.absent(),
+          Value<String?> verarbeitungshilfsstoffe = const Value.absent(),
+          Value<String?> allergene = const Value.absent(),
+          Value<double?> energieKj = const Value.absent(),
+          Value<double?> energieKcal = const Value.absent(),
+          Value<double?> fett = const Value.absent(),
+          Value<double?> gesaettigteFettsaeuren = const Value.absent(),
+          Value<double?> kohlenhydrate = const Value.absent(),
+          Value<double?> zucker = const Value.absent(),
+          Value<double?> eiweiss = const Value.absent(),
+          Value<double?> salz = const Value.absent(),
+          Value<double?> wasser = const Value.absent(),
+          Value<double?> asche = const Value.absent(),
+          Value<double?> beffe = const Value.absent(),
+          Value<String?> notiz = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Zutat(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        artikelnummer:
+            artikelnummer.present ? artikelnummer.value : this.artikelnummer,
+        etikettName: etikettName.present ? etikettName.value : this.etikettName,
+        istFleisch: istFleisch ?? this.istFleisch,
+        istWasser: istWasser ?? this.istWasser,
+        tierart: tierart.present ? tierart.value : this.tierart,
+        bindegewebe: bindegewebe.present ? bindegewebe.value : this.bindegewebe,
+        fleischeiweissGrenze: fleischeiweissGrenze.present
+            ? fleischeiweissGrenze.value
+            : this.fleischeiweissGrenze,
+        quidPflicht: quidPflicht ?? this.quidPflicht,
+        unterzutaten:
+            unterzutaten.present ? unterzutaten.value : this.unterzutaten,
+        verarbeitungshilfsstoffe: verarbeitungshilfsstoffe.present
+            ? verarbeitungshilfsstoffe.value
+            : this.verarbeitungshilfsstoffe,
+        allergene: allergene.present ? allergene.value : this.allergene,
+        energieKj: energieKj.present ? energieKj.value : this.energieKj,
+        energieKcal: energieKcal.present ? energieKcal.value : this.energieKcal,
+        fett: fett.present ? fett.value : this.fett,
+        gesaettigteFettsaeuren: gesaettigteFettsaeuren.present
+            ? gesaettigteFettsaeuren.value
+            : this.gesaettigteFettsaeuren,
+        kohlenhydrate:
+            kohlenhydrate.present ? kohlenhydrate.value : this.kohlenhydrate,
+        zucker: zucker.present ? zucker.value : this.zucker,
+        eiweiss: eiweiss.present ? eiweiss.value : this.eiweiss,
+        salz: salz.present ? salz.value : this.salz,
+        wasser: wasser.present ? wasser.value : this.wasser,
+        asche: asche.present ? asche.value : this.asche,
+        beffe: beffe.present ? beffe.value : this.beffe,
+        notiz: notiz.present ? notiz.value : this.notiz,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Zutat copyWithCompanion(EntwicklungZutatenCompanion data) {
+    return Zutat(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      etikettName:
+          data.etikettName.present ? data.etikettName.value : this.etikettName,
+      istFleisch:
+          data.istFleisch.present ? data.istFleisch.value : this.istFleisch,
+      istWasser: data.istWasser.present ? data.istWasser.value : this.istWasser,
+      tierart: data.tierart.present ? data.tierart.value : this.tierart,
+      bindegewebe:
+          data.bindegewebe.present ? data.bindegewebe.value : this.bindegewebe,
+      fleischeiweissGrenze: data.fleischeiweissGrenze.present
+          ? data.fleischeiweissGrenze.value
+          : this.fleischeiweissGrenze,
+      quidPflicht:
+          data.quidPflicht.present ? data.quidPflicht.value : this.quidPflicht,
+      unterzutaten: data.unterzutaten.present
+          ? data.unterzutaten.value
+          : this.unterzutaten,
+      verarbeitungshilfsstoffe: data.verarbeitungshilfsstoffe.present
+          ? data.verarbeitungshilfsstoffe.value
+          : this.verarbeitungshilfsstoffe,
+      allergene: data.allergene.present ? data.allergene.value : this.allergene,
+      energieKj: data.energieKj.present ? data.energieKj.value : this.energieKj,
+      energieKcal:
+          data.energieKcal.present ? data.energieKcal.value : this.energieKcal,
+      fett: data.fett.present ? data.fett.value : this.fett,
+      gesaettigteFettsaeuren: data.gesaettigteFettsaeuren.present
+          ? data.gesaettigteFettsaeuren.value
+          : this.gesaettigteFettsaeuren,
+      kohlenhydrate: data.kohlenhydrate.present
+          ? data.kohlenhydrate.value
+          : this.kohlenhydrate,
+      zucker: data.zucker.present ? data.zucker.value : this.zucker,
+      eiweiss: data.eiweiss.present ? data.eiweiss.value : this.eiweiss,
+      salz: data.salz.present ? data.salz.value : this.salz,
+      wasser: data.wasser.present ? data.wasser.value : this.wasser,
+      asche: data.asche.present ? data.asche.value : this.asche,
+      beffe: data.beffe.present ? data.beffe.value : this.beffe,
+      notiz: data.notiz.present ? data.notiz.value : this.notiz,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Zutat(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('etikettName: $etikettName, ')
+          ..write('istFleisch: $istFleisch, ')
+          ..write('istWasser: $istWasser, ')
+          ..write('tierart: $tierart, ')
+          ..write('bindegewebe: $bindegewebe, ')
+          ..write('fleischeiweissGrenze: $fleischeiweissGrenze, ')
+          ..write('quidPflicht: $quidPflicht, ')
+          ..write('unterzutaten: $unterzutaten, ')
+          ..write('verarbeitungshilfsstoffe: $verarbeitungshilfsstoffe, ')
+          ..write('allergene: $allergene, ')
+          ..write('energieKj: $energieKj, ')
+          ..write('energieKcal: $energieKcal, ')
+          ..write('fett: $fett, ')
+          ..write('gesaettigteFettsaeuren: $gesaettigteFettsaeuren, ')
+          ..write('kohlenhydrate: $kohlenhydrate, ')
+          ..write('zucker: $zucker, ')
+          ..write('eiweiss: $eiweiss, ')
+          ..write('salz: $salz, ')
+          ..write('wasser: $wasser, ')
+          ..write('asche: $asche, ')
+          ..write('beffe: $beffe, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        id,
+        name,
+        artikelnummer,
+        etikettName,
+        istFleisch,
+        istWasser,
+        tierart,
+        bindegewebe,
+        fleischeiweissGrenze,
+        quidPflicht,
+        unterzutaten,
+        verarbeitungshilfsstoffe,
+        allergene,
+        energieKj,
+        energieKcal,
+        fett,
+        gesaettigteFettsaeuren,
+        kohlenhydrate,
+        zucker,
+        eiweiss,
+        salz,
+        wasser,
+        asche,
+        beffe,
+        notiz,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Zutat &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.artikelnummer == this.artikelnummer &&
+          other.etikettName == this.etikettName &&
+          other.istFleisch == this.istFleisch &&
+          other.istWasser == this.istWasser &&
+          other.tierart == this.tierart &&
+          other.bindegewebe == this.bindegewebe &&
+          other.fleischeiweissGrenze == this.fleischeiweissGrenze &&
+          other.quidPflicht == this.quidPflicht &&
+          other.unterzutaten == this.unterzutaten &&
+          other.verarbeitungshilfsstoffe == this.verarbeitungshilfsstoffe &&
+          other.allergene == this.allergene &&
+          other.energieKj == this.energieKj &&
+          other.energieKcal == this.energieKcal &&
+          other.fett == this.fett &&
+          other.gesaettigteFettsaeuren == this.gesaettigteFettsaeuren &&
+          other.kohlenhydrate == this.kohlenhydrate &&
+          other.zucker == this.zucker &&
+          other.eiweiss == this.eiweiss &&
+          other.salz == this.salz &&
+          other.wasser == this.wasser &&
+          other.asche == this.asche &&
+          other.beffe == this.beffe &&
+          other.notiz == this.notiz &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class EntwicklungZutatenCompanion extends UpdateCompanion<Zutat> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> artikelnummer;
+  final Value<String?> etikettName;
+  final Value<bool> istFleisch;
+  final Value<bool> istWasser;
+  final Value<String?> tierart;
+  final Value<double?> bindegewebe;
+  final Value<double?> fleischeiweissGrenze;
+  final Value<bool> quidPflicht;
+  final Value<String?> unterzutaten;
+  final Value<String?> verarbeitungshilfsstoffe;
+  final Value<String?> allergene;
+  final Value<double?> energieKj;
+  final Value<double?> energieKcal;
+  final Value<double?> fett;
+  final Value<double?> gesaettigteFettsaeuren;
+  final Value<double?> kohlenhydrate;
+  final Value<double?> zucker;
+  final Value<double?> eiweiss;
+  final Value<double?> salz;
+  final Value<double?> wasser;
+  final Value<double?> asche;
+  final Value<double?> beffe;
+  final Value<String?> notiz;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const EntwicklungZutatenCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.artikelnummer = const Value.absent(),
+    this.etikettName = const Value.absent(),
+    this.istFleisch = const Value.absent(),
+    this.istWasser = const Value.absent(),
+    this.tierart = const Value.absent(),
+    this.bindegewebe = const Value.absent(),
+    this.fleischeiweissGrenze = const Value.absent(),
+    this.quidPflicht = const Value.absent(),
+    this.unterzutaten = const Value.absent(),
+    this.verarbeitungshilfsstoffe = const Value.absent(),
+    this.allergene = const Value.absent(),
+    this.energieKj = const Value.absent(),
+    this.energieKcal = const Value.absent(),
+    this.fett = const Value.absent(),
+    this.gesaettigteFettsaeuren = const Value.absent(),
+    this.kohlenhydrate = const Value.absent(),
+    this.zucker = const Value.absent(),
+    this.eiweiss = const Value.absent(),
+    this.salz = const Value.absent(),
+    this.wasser = const Value.absent(),
+    this.asche = const Value.absent(),
+    this.beffe = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungZutatenCompanion.insert({
+    required String id,
+    required String name,
+    this.artikelnummer = const Value.absent(),
+    this.etikettName = const Value.absent(),
+    this.istFleisch = const Value.absent(),
+    this.istWasser = const Value.absent(),
+    this.tierart = const Value.absent(),
+    this.bindegewebe = const Value.absent(),
+    this.fleischeiweissGrenze = const Value.absent(),
+    this.quidPflicht = const Value.absent(),
+    this.unterzutaten = const Value.absent(),
+    this.verarbeitungshilfsstoffe = const Value.absent(),
+    this.allergene = const Value.absent(),
+    this.energieKj = const Value.absent(),
+    this.energieKcal = const Value.absent(),
+    this.fett = const Value.absent(),
+    this.gesaettigteFettsaeuren = const Value.absent(),
+    this.kohlenhydrate = const Value.absent(),
+    this.zucker = const Value.absent(),
+    this.eiweiss = const Value.absent(),
+    this.salz = const Value.absent(),
+    this.wasser = const Value.absent(),
+    this.asche = const Value.absent(),
+    this.beffe = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<Zutat> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? artikelnummer,
+    Expression<String>? etikettName,
+    Expression<bool>? istFleisch,
+    Expression<bool>? istWasser,
+    Expression<String>? tierart,
+    Expression<double>? bindegewebe,
+    Expression<double>? fleischeiweissGrenze,
+    Expression<bool>? quidPflicht,
+    Expression<String>? unterzutaten,
+    Expression<String>? verarbeitungshilfsstoffe,
+    Expression<String>? allergene,
+    Expression<double>? energieKj,
+    Expression<double>? energieKcal,
+    Expression<double>? fett,
+    Expression<double>? gesaettigteFettsaeuren,
+    Expression<double>? kohlenhydrate,
+    Expression<double>? zucker,
+    Expression<double>? eiweiss,
+    Expression<double>? salz,
+    Expression<double>? wasser,
+    Expression<double>? asche,
+    Expression<double>? beffe,
+    Expression<String>? notiz,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (etikettName != null) 'etikett_name': etikettName,
+      if (istFleisch != null) 'ist_fleisch': istFleisch,
+      if (istWasser != null) 'ist_wasser': istWasser,
+      if (tierart != null) 'tierart': tierart,
+      if (bindegewebe != null) 'bindegewebe': bindegewebe,
+      if (fleischeiweissGrenze != null)
+        'fleischeiweiss_grenze': fleischeiweissGrenze,
+      if (quidPflicht != null) 'quid_pflicht': quidPflicht,
+      if (unterzutaten != null) 'unterzutaten': unterzutaten,
+      if (verarbeitungshilfsstoffe != null)
+        'verarbeitungshilfsstoffe': verarbeitungshilfsstoffe,
+      if (allergene != null) 'allergene': allergene,
+      if (energieKj != null) 'energie_kj': energieKj,
+      if (energieKcal != null) 'energie_kcal': energieKcal,
+      if (fett != null) 'fett': fett,
+      if (gesaettigteFettsaeuren != null)
+        'gesaettigte_fettsaeuren': gesaettigteFettsaeuren,
+      if (kohlenhydrate != null) 'kohlenhydrate': kohlenhydrate,
+      if (zucker != null) 'zucker': zucker,
+      if (eiweiss != null) 'eiweiss': eiweiss,
+      if (salz != null) 'salz': salz,
+      if (wasser != null) 'wasser': wasser,
+      if (asche != null) 'asche': asche,
+      if (beffe != null) 'beffe': beffe,
+      if (notiz != null) 'notiz': notiz,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungZutatenCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String?>? artikelnummer,
+      Value<String?>? etikettName,
+      Value<bool>? istFleisch,
+      Value<bool>? istWasser,
+      Value<String?>? tierart,
+      Value<double?>? bindegewebe,
+      Value<double?>? fleischeiweissGrenze,
+      Value<bool>? quidPflicht,
+      Value<String?>? unterzutaten,
+      Value<String?>? verarbeitungshilfsstoffe,
+      Value<String?>? allergene,
+      Value<double?>? energieKj,
+      Value<double?>? energieKcal,
+      Value<double?>? fett,
+      Value<double?>? gesaettigteFettsaeuren,
+      Value<double?>? kohlenhydrate,
+      Value<double?>? zucker,
+      Value<double?>? eiweiss,
+      Value<double?>? salz,
+      Value<double?>? wasser,
+      Value<double?>? asche,
+      Value<double?>? beffe,
+      Value<String?>? notiz,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return EntwicklungZutatenCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      etikettName: etikettName ?? this.etikettName,
+      istFleisch: istFleisch ?? this.istFleisch,
+      istWasser: istWasser ?? this.istWasser,
+      tierart: tierart ?? this.tierart,
+      bindegewebe: bindegewebe ?? this.bindegewebe,
+      fleischeiweissGrenze: fleischeiweissGrenze ?? this.fleischeiweissGrenze,
+      quidPflicht: quidPflicht ?? this.quidPflicht,
+      unterzutaten: unterzutaten ?? this.unterzutaten,
+      verarbeitungshilfsstoffe:
+          verarbeitungshilfsstoffe ?? this.verarbeitungshilfsstoffe,
+      allergene: allergene ?? this.allergene,
+      energieKj: energieKj ?? this.energieKj,
+      energieKcal: energieKcal ?? this.energieKcal,
+      fett: fett ?? this.fett,
+      gesaettigteFettsaeuren:
+          gesaettigteFettsaeuren ?? this.gesaettigteFettsaeuren,
+      kohlenhydrate: kohlenhydrate ?? this.kohlenhydrate,
+      zucker: zucker ?? this.zucker,
+      eiweiss: eiweiss ?? this.eiweiss,
+      salz: salz ?? this.salz,
+      wasser: wasser ?? this.wasser,
+      asche: asche ?? this.asche,
+      beffe: beffe ?? this.beffe,
+      notiz: notiz ?? this.notiz,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (etikettName.present) {
+      map['etikett_name'] = Variable<String>(etikettName.value);
+    }
+    if (istFleisch.present) {
+      map['ist_fleisch'] = Variable<bool>(istFleisch.value);
+    }
+    if (istWasser.present) {
+      map['ist_wasser'] = Variable<bool>(istWasser.value);
+    }
+    if (tierart.present) {
+      map['tierart'] = Variable<String>(tierart.value);
+    }
+    if (bindegewebe.present) {
+      map['bindegewebe'] = Variable<double>(bindegewebe.value);
+    }
+    if (fleischeiweissGrenze.present) {
+      map['fleischeiweiss_grenze'] =
+          Variable<double>(fleischeiweissGrenze.value);
+    }
+    if (quidPflicht.present) {
+      map['quid_pflicht'] = Variable<bool>(quidPflicht.value);
+    }
+    if (unterzutaten.present) {
+      map['unterzutaten'] = Variable<String>(unterzutaten.value);
+    }
+    if (verarbeitungshilfsstoffe.present) {
+      map['verarbeitungshilfsstoffe'] =
+          Variable<String>(verarbeitungshilfsstoffe.value);
+    }
+    if (allergene.present) {
+      map['allergene'] = Variable<String>(allergene.value);
+    }
+    if (energieKj.present) {
+      map['energie_kj'] = Variable<double>(energieKj.value);
+    }
+    if (energieKcal.present) {
+      map['energie_kcal'] = Variable<double>(energieKcal.value);
+    }
+    if (fett.present) {
+      map['fett'] = Variable<double>(fett.value);
+    }
+    if (gesaettigteFettsaeuren.present) {
+      map['gesaettigte_fettsaeuren'] =
+          Variable<double>(gesaettigteFettsaeuren.value);
+    }
+    if (kohlenhydrate.present) {
+      map['kohlenhydrate'] = Variable<double>(kohlenhydrate.value);
+    }
+    if (zucker.present) {
+      map['zucker'] = Variable<double>(zucker.value);
+    }
+    if (eiweiss.present) {
+      map['eiweiss'] = Variable<double>(eiweiss.value);
+    }
+    if (salz.present) {
+      map['salz'] = Variable<double>(salz.value);
+    }
+    if (wasser.present) {
+      map['wasser'] = Variable<double>(wasser.value);
+    }
+    if (asche.present) {
+      map['asche'] = Variable<double>(asche.value);
+    }
+    if (beffe.present) {
+      map['beffe'] = Variable<double>(beffe.value);
+    }
+    if (notiz.present) {
+      map['notiz'] = Variable<String>(notiz.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungZutatenCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('etikettName: $etikettName, ')
+          ..write('istFleisch: $istFleisch, ')
+          ..write('istWasser: $istWasser, ')
+          ..write('tierart: $tierart, ')
+          ..write('bindegewebe: $bindegewebe, ')
+          ..write('fleischeiweissGrenze: $fleischeiweissGrenze, ')
+          ..write('quidPflicht: $quidPflicht, ')
+          ..write('unterzutaten: $unterzutaten, ')
+          ..write('verarbeitungshilfsstoffe: $verarbeitungshilfsstoffe, ')
+          ..write('allergene: $allergene, ')
+          ..write('energieKj: $energieKj, ')
+          ..write('energieKcal: $energieKcal, ')
+          ..write('fett: $fett, ')
+          ..write('gesaettigteFettsaeuren: $gesaettigteFettsaeuren, ')
+          ..write('kohlenhydrate: $kohlenhydrate, ')
+          ..write('zucker: $zucker, ')
+          ..write('eiweiss: $eiweiss, ')
+          ..write('salz: $salz, ')
+          ..write('wasser: $wasser, ')
+          ..write('asche: $asche, ')
+          ..write('beffe: $beffe, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungRezepturenTable extends EntwicklungRezepturen
+    with TableInfo<$EntwicklungRezepturenTable, Rezeptur> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungRezepturenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _beschreibungMeta =
+      const VerificationMeta('beschreibung');
+  @override
+  late final GeneratedColumn<String> beschreibung = GeneratedColumn<String>(
+      'beschreibung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _projektIdMeta =
+      const VerificationMeta('projektId');
+  @override
+  late final GeneratedColumn<String> projektId = GeneratedColumn<String>(
+      'projekt_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        artikelnummer,
+        beschreibung,
+        projektId,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_rezepturen';
+  @override
+  VerificationContext validateIntegrity(Insertable<Rezeptur> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    }
+    if (data.containsKey('beschreibung')) {
+      context.handle(
+          _beschreibungMeta,
+          beschreibung.isAcceptableOrUnknown(
+              data['beschreibung']!, _beschreibungMeta));
+    }
+    if (data.containsKey('projekt_id')) {
+      context.handle(_projektIdMeta,
+          projektId.isAcceptableOrUnknown(data['projekt_id']!, _projektIdMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Rezeptur map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Rezeptur(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer']),
+      beschreibung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}beschreibung']),
+      projektId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}projekt_id']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $EntwicklungRezepturenTable createAlias(String alias) {
+    return $EntwicklungRezepturenTable(attachedDatabase, alias);
+  }
+}
+
+class Rezeptur extends DataClass implements Insertable<Rezeptur> {
+  final String id;
+  final String name;
+  final String? artikelnummer;
+  final String? beschreibung;
+
+  /// Das Projekt, zu dem die Rezeptur gehört — null für Rezepturen der
+  /// Bibliothek, etwa eine Marinade, die viele Produkte nutzen.
+  final String? projektId;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Rezeptur(
+      {required this.id,
+      required this.name,
+      this.artikelnummer,
+      this.beschreibung,
+      this.projektId,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || artikelnummer != null) {
+      map['artikelnummer'] = Variable<String>(artikelnummer);
+    }
+    if (!nullToAbsent || beschreibung != null) {
+      map['beschreibung'] = Variable<String>(beschreibung);
+    }
+    if (!nullToAbsent || projektId != null) {
+      map['projekt_id'] = Variable<String>(projektId);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  EntwicklungRezepturenCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungRezepturenCompanion(
+      id: Value(id),
+      name: Value(name),
+      artikelnummer: artikelnummer == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artikelnummer),
+      beschreibung: beschreibung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(beschreibung),
+      projektId: projektId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projektId),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Rezeptur.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Rezeptur(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      artikelnummer: serializer.fromJson<String?>(json['artikelnummer']),
+      beschreibung: serializer.fromJson<String?>(json['beschreibung']),
+      projektId: serializer.fromJson<String?>(json['projektId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'artikelnummer': serializer.toJson<String?>(artikelnummer),
+      'beschreibung': serializer.toJson<String?>(beschreibung),
+      'projektId': serializer.toJson<String?>(projektId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Rezeptur copyWith(
+          {String? id,
+          String? name,
+          Value<String?> artikelnummer = const Value.absent(),
+          Value<String?> beschreibung = const Value.absent(),
+          Value<String?> projektId = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Rezeptur(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        artikelnummer:
+            artikelnummer.present ? artikelnummer.value : this.artikelnummer,
+        beschreibung:
+            beschreibung.present ? beschreibung.value : this.beschreibung,
+        projektId: projektId.present ? projektId.value : this.projektId,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Rezeptur copyWithCompanion(EntwicklungRezepturenCompanion data) {
+    return Rezeptur(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      beschreibung: data.beschreibung.present
+          ? data.beschreibung.value
+          : this.beschreibung,
+      projektId: data.projektId.present ? data.projektId.value : this.projektId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Rezeptur(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('projektId: $projektId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, artikelnummer, beschreibung,
+      projektId, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Rezeptur &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.artikelnummer == this.artikelnummer &&
+          other.beschreibung == this.beschreibung &&
+          other.projektId == this.projektId &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class EntwicklungRezepturenCompanion extends UpdateCompanion<Rezeptur> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> artikelnummer;
+  final Value<String?> beschreibung;
+  final Value<String?> projektId;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const EntwicklungRezepturenCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.artikelnummer = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.projektId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungRezepturenCompanion.insert({
+    required String id,
+    required String name,
+    this.artikelnummer = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.projektId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<Rezeptur> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? artikelnummer,
+    Expression<String>? beschreibung,
+    Expression<String>? projektId,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (beschreibung != null) 'beschreibung': beschreibung,
+      if (projektId != null) 'projekt_id': projektId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungRezepturenCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String?>? artikelnummer,
+      Value<String?>? beschreibung,
+      Value<String?>? projektId,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return EntwicklungRezepturenCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      beschreibung: beschreibung ?? this.beschreibung,
+      projektId: projektId ?? this.projektId,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (beschreibung.present) {
+      map['beschreibung'] = Variable<String>(beschreibung.value);
+    }
+    if (projektId.present) {
+      map['projekt_id'] = Variable<String>(projektId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungRezepturenCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('projektId: $projektId, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungRezepturVersionenTable extends EntwicklungRezepturVersionen
+    with TableInfo<$EntwicklungRezepturVersionenTable, RezepturVersion> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungRezepturVersionenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _rezepturIdMeta =
+      const VerificationMeta('rezepturId');
+  @override
+  late final GeneratedColumn<String> rezepturId = GeneratedColumn<String>(
+      'rezeptur_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nummerMeta = const VerificationMeta('nummer');
+  @override
+  late final GeneratedColumn<int> nummer = GeneratedColumn<int>(
+      'nummer', aliasedName, false,
+      type: DriftSqlType.int, requiredDuringInsert: true);
+  static const VerificationMeta _bezeichnungMeta =
+      const VerificationMeta('bezeichnung');
+  @override
+  late final GeneratedColumn<String> bezeichnung = GeneratedColumn<String>(
+      'bezeichnung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('entwurf'));
+  static const VerificationMeta _verlustProzentMeta =
+      const VerificationMeta('verlustProzent');
+  @override
+  late final GeneratedColumn<double> verlustProzent = GeneratedColumn<double>(
+      'verlust_prozent', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _fettVerlustProzentMeta =
+      const VerificationMeta('fettVerlustProzent');
+  @override
+  late final GeneratedColumn<double> fettVerlustProzent =
+      GeneratedColumn<double>('fett_verlust_prozent', aliasedName, false,
+          type: DriftSqlType.double,
+          requiredDuringInsert: false,
+          defaultValue: const Constant(0));
+  static const VerificationMeta _verlustArtMeta =
+      const VerificationMeta('verlustArt');
+  @override
+  late final GeneratedColumn<String> verlustArt = GeneratedColumn<String>(
+      'verlust_art', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('trocknung'));
+  static const VerificationMeta _notizMeta = const VerificationMeta('notiz');
+  @override
+  late final GeneratedColumn<String> notiz = GeneratedColumn<String>(
+      'notiz', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _standMeta = const VerificationMeta('stand');
+  @override
+  late final GeneratedColumn<String> stand = GeneratedColumn<String>(
+      'stand', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _abgeschlossenAmMeta =
+      const VerificationMeta('abgeschlossenAm');
+  @override
+  late final GeneratedColumn<DateTime> abgeschlossenAm =
+      GeneratedColumn<DateTime>('abgeschlossen_am', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        rezepturId,
+        nummer,
+        bezeichnung,
+        status,
+        verlustProzent,
+        fettVerlustProzent,
+        verlustArt,
+        notiz,
+        stand,
+        abgeschlossenAm,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_rezeptur_versionen';
+  @override
+  VerificationContext validateIntegrity(Insertable<RezepturVersion> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('rezeptur_id')) {
+      context.handle(
+          _rezepturIdMeta,
+          rezepturId.isAcceptableOrUnknown(
+              data['rezeptur_id']!, _rezepturIdMeta));
+    } else if (isInserting) {
+      context.missing(_rezepturIdMeta);
+    }
+    if (data.containsKey('nummer')) {
+      context.handle(_nummerMeta,
+          nummer.isAcceptableOrUnknown(data['nummer']!, _nummerMeta));
+    } else if (isInserting) {
+      context.missing(_nummerMeta);
+    }
+    if (data.containsKey('bezeichnung')) {
+      context.handle(
+          _bezeichnungMeta,
+          bezeichnung.isAcceptableOrUnknown(
+              data['bezeichnung']!, _bezeichnungMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('verlust_prozent')) {
+      context.handle(
+          _verlustProzentMeta,
+          verlustProzent.isAcceptableOrUnknown(
+              data['verlust_prozent']!, _verlustProzentMeta));
+    }
+    if (data.containsKey('fett_verlust_prozent')) {
+      context.handle(
+          _fettVerlustProzentMeta,
+          fettVerlustProzent.isAcceptableOrUnknown(
+              data['fett_verlust_prozent']!, _fettVerlustProzentMeta));
+    }
+    if (data.containsKey('verlust_art')) {
+      context.handle(
+          _verlustArtMeta,
+          verlustArt.isAcceptableOrUnknown(
+              data['verlust_art']!, _verlustArtMeta));
+    }
+    if (data.containsKey('notiz')) {
+      context.handle(
+          _notizMeta, notiz.isAcceptableOrUnknown(data['notiz']!, _notizMeta));
+    }
+    if (data.containsKey('stand')) {
+      context.handle(
+          _standMeta, stand.isAcceptableOrUnknown(data['stand']!, _standMeta));
+    }
+    if (data.containsKey('abgeschlossen_am')) {
+      context.handle(
+          _abgeschlossenAmMeta,
+          abgeschlossenAm.isAcceptableOrUnknown(
+              data['abgeschlossen_am']!, _abgeschlossenAmMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RezepturVersion map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RezepturVersion(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      rezepturId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}rezeptur_id'])!,
+      nummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}nummer'])!,
+      bezeichnung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bezeichnung']),
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      verlustProzent: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}verlust_prozent'])!,
+      fettVerlustProzent: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}fett_verlust_prozent'])!,
+      verlustArt: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}verlust_art'])!,
+      notiz: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notiz']),
+      stand: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}stand']),
+      abgeschlossenAm: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}abgeschlossen_am']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $EntwicklungRezepturVersionenTable createAlias(String alias) {
+    return $EntwicklungRezepturVersionenTable(attachedDatabase, alias);
+  }
+}
+
+class RezepturVersion extends DataClass implements Insertable<RezepturVersion> {
+  final String id;
+  final String rezepturId;
+
+  /// 1, 2, 3 … je Rezeptur.
+  final int nummer;
+
+  /// Kurzer Name des Stands, etwa „Muster 2 für den Kunden".
+  final String? bezeichnung;
+
+  /// 'entwurf' oder 'abgeschlossen'.
+  final String status;
+
+  /// Gesamtverlust in Prozent der eingesetzten Masse.
+  final double verlustProzent;
+
+  /// Davon Fett in Prozent der eingesetzten Masse.
+  final double fettVerlustProzent;
+
+  /// 'trocknung', 'garen' oder 'keiner'.
+  final String verlustArt;
+  final String? notiz;
+
+  /// Beim Abschließen: die vollständige Eingabe des Rechenkerns als JSON.
+  final String? stand;
+  final DateTime? abgeschlossenAm;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const RezepturVersion(
+      {required this.id,
+      required this.rezepturId,
+      required this.nummer,
+      this.bezeichnung,
+      required this.status,
+      required this.verlustProzent,
+      required this.fettVerlustProzent,
+      required this.verlustArt,
+      this.notiz,
+      this.stand,
+      this.abgeschlossenAm,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['rezeptur_id'] = Variable<String>(rezepturId);
+    map['nummer'] = Variable<int>(nummer);
+    if (!nullToAbsent || bezeichnung != null) {
+      map['bezeichnung'] = Variable<String>(bezeichnung);
+    }
+    map['status'] = Variable<String>(status);
+    map['verlust_prozent'] = Variable<double>(verlustProzent);
+    map['fett_verlust_prozent'] = Variable<double>(fettVerlustProzent);
+    map['verlust_art'] = Variable<String>(verlustArt);
+    if (!nullToAbsent || notiz != null) {
+      map['notiz'] = Variable<String>(notiz);
+    }
+    if (!nullToAbsent || stand != null) {
+      map['stand'] = Variable<String>(stand);
+    }
+    if (!nullToAbsent || abgeschlossenAm != null) {
+      map['abgeschlossen_am'] = Variable<DateTime>(abgeschlossenAm);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EntwicklungRezepturVersionenCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungRezepturVersionenCompanion(
+      id: Value(id),
+      rezepturId: Value(rezepturId),
+      nummer: Value(nummer),
+      bezeichnung: bezeichnung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bezeichnung),
+      status: Value(status),
+      verlustProzent: Value(verlustProzent),
+      fettVerlustProzent: Value(fettVerlustProzent),
+      verlustArt: Value(verlustArt),
+      notiz:
+          notiz == null && nullToAbsent ? const Value.absent() : Value(notiz),
+      stand:
+          stand == null && nullToAbsent ? const Value.absent() : Value(stand),
+      abgeschlossenAm: abgeschlossenAm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(abgeschlossenAm),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RezepturVersion.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RezepturVersion(
+      id: serializer.fromJson<String>(json['id']),
+      rezepturId: serializer.fromJson<String>(json['rezepturId']),
+      nummer: serializer.fromJson<int>(json['nummer']),
+      bezeichnung: serializer.fromJson<String?>(json['bezeichnung']),
+      status: serializer.fromJson<String>(json['status']),
+      verlustProzent: serializer.fromJson<double>(json['verlustProzent']),
+      fettVerlustProzent:
+          serializer.fromJson<double>(json['fettVerlustProzent']),
+      verlustArt: serializer.fromJson<String>(json['verlustArt']),
+      notiz: serializer.fromJson<String?>(json['notiz']),
+      stand: serializer.fromJson<String?>(json['stand']),
+      abgeschlossenAm: serializer.fromJson<DateTime?>(json['abgeschlossenAm']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'rezepturId': serializer.toJson<String>(rezepturId),
+      'nummer': serializer.toJson<int>(nummer),
+      'bezeichnung': serializer.toJson<String?>(bezeichnung),
+      'status': serializer.toJson<String>(status),
+      'verlustProzent': serializer.toJson<double>(verlustProzent),
+      'fettVerlustProzent': serializer.toJson<double>(fettVerlustProzent),
+      'verlustArt': serializer.toJson<String>(verlustArt),
+      'notiz': serializer.toJson<String?>(notiz),
+      'stand': serializer.toJson<String?>(stand),
+      'abgeschlossenAm': serializer.toJson<DateTime?>(abgeschlossenAm),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  RezepturVersion copyWith(
+          {String? id,
+          String? rezepturId,
+          int? nummer,
+          Value<String?> bezeichnung = const Value.absent(),
+          String? status,
+          double? verlustProzent,
+          double? fettVerlustProzent,
+          String? verlustArt,
+          Value<String?> notiz = const Value.absent(),
+          Value<String?> stand = const Value.absent(),
+          Value<DateTime?> abgeschlossenAm = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      RezepturVersion(
+        id: id ?? this.id,
+        rezepturId: rezepturId ?? this.rezepturId,
+        nummer: nummer ?? this.nummer,
+        bezeichnung: bezeichnung.present ? bezeichnung.value : this.bezeichnung,
+        status: status ?? this.status,
+        verlustProzent: verlustProzent ?? this.verlustProzent,
+        fettVerlustProzent: fettVerlustProzent ?? this.fettVerlustProzent,
+        verlustArt: verlustArt ?? this.verlustArt,
+        notiz: notiz.present ? notiz.value : this.notiz,
+        stand: stand.present ? stand.value : this.stand,
+        abgeschlossenAm: abgeschlossenAm.present
+            ? abgeschlossenAm.value
+            : this.abgeschlossenAm,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  RezepturVersion copyWithCompanion(
+      EntwicklungRezepturVersionenCompanion data) {
+    return RezepturVersion(
+      id: data.id.present ? data.id.value : this.id,
+      rezepturId:
+          data.rezepturId.present ? data.rezepturId.value : this.rezepturId,
+      nummer: data.nummer.present ? data.nummer.value : this.nummer,
+      bezeichnung:
+          data.bezeichnung.present ? data.bezeichnung.value : this.bezeichnung,
+      status: data.status.present ? data.status.value : this.status,
+      verlustProzent: data.verlustProzent.present
+          ? data.verlustProzent.value
+          : this.verlustProzent,
+      fettVerlustProzent: data.fettVerlustProzent.present
+          ? data.fettVerlustProzent.value
+          : this.fettVerlustProzent,
+      verlustArt:
+          data.verlustArt.present ? data.verlustArt.value : this.verlustArt,
+      notiz: data.notiz.present ? data.notiz.value : this.notiz,
+      stand: data.stand.present ? data.stand.value : this.stand,
+      abgeschlossenAm: data.abgeschlossenAm.present
+          ? data.abgeschlossenAm.value
+          : this.abgeschlossenAm,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RezepturVersion(')
+          ..write('id: $id, ')
+          ..write('rezepturId: $rezepturId, ')
+          ..write('nummer: $nummer, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('status: $status, ')
+          ..write('verlustProzent: $verlustProzent, ')
+          ..write('fettVerlustProzent: $fettVerlustProzent, ')
+          ..write('verlustArt: $verlustArt, ')
+          ..write('notiz: $notiz, ')
+          ..write('stand: $stand, ')
+          ..write('abgeschlossenAm: $abgeschlossenAm, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      rezepturId,
+      nummer,
+      bezeichnung,
+      status,
+      verlustProzent,
+      fettVerlustProzent,
+      verlustArt,
+      notiz,
+      stand,
+      abgeschlossenAm,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RezepturVersion &&
+          other.id == this.id &&
+          other.rezepturId == this.rezepturId &&
+          other.nummer == this.nummer &&
+          other.bezeichnung == this.bezeichnung &&
+          other.status == this.status &&
+          other.verlustProzent == this.verlustProzent &&
+          other.fettVerlustProzent == this.fettVerlustProzent &&
+          other.verlustArt == this.verlustArt &&
+          other.notiz == this.notiz &&
+          other.stand == this.stand &&
+          other.abgeschlossenAm == this.abgeschlossenAm &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EntwicklungRezepturVersionenCompanion
+    extends UpdateCompanion<RezepturVersion> {
+  final Value<String> id;
+  final Value<String> rezepturId;
+  final Value<int> nummer;
+  final Value<String?> bezeichnung;
+  final Value<String> status;
+  final Value<double> verlustProzent;
+  final Value<double> fettVerlustProzent;
+  final Value<String> verlustArt;
+  final Value<String?> notiz;
+  final Value<String?> stand;
+  final Value<DateTime?> abgeschlossenAm;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EntwicklungRezepturVersionenCompanion({
+    this.id = const Value.absent(),
+    this.rezepturId = const Value.absent(),
+    this.nummer = const Value.absent(),
+    this.bezeichnung = const Value.absent(),
+    this.status = const Value.absent(),
+    this.verlustProzent = const Value.absent(),
+    this.fettVerlustProzent = const Value.absent(),
+    this.verlustArt = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.stand = const Value.absent(),
+    this.abgeschlossenAm = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungRezepturVersionenCompanion.insert({
+    required String id,
+    required String rezepturId,
+    required int nummer,
+    this.bezeichnung = const Value.absent(),
+    this.status = const Value.absent(),
+    this.verlustProzent = const Value.absent(),
+    this.fettVerlustProzent = const Value.absent(),
+    this.verlustArt = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.stand = const Value.absent(),
+    this.abgeschlossenAm = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        rezepturId = Value(rezepturId),
+        nummer = Value(nummer);
+  static Insertable<RezepturVersion> custom({
+    Expression<String>? id,
+    Expression<String>? rezepturId,
+    Expression<int>? nummer,
+    Expression<String>? bezeichnung,
+    Expression<String>? status,
+    Expression<double>? verlustProzent,
+    Expression<double>? fettVerlustProzent,
+    Expression<String>? verlustArt,
+    Expression<String>? notiz,
+    Expression<String>? stand,
+    Expression<DateTime>? abgeschlossenAm,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (rezepturId != null) 'rezeptur_id': rezepturId,
+      if (nummer != null) 'nummer': nummer,
+      if (bezeichnung != null) 'bezeichnung': bezeichnung,
+      if (status != null) 'status': status,
+      if (verlustProzent != null) 'verlust_prozent': verlustProzent,
+      if (fettVerlustProzent != null)
+        'fett_verlust_prozent': fettVerlustProzent,
+      if (verlustArt != null) 'verlust_art': verlustArt,
+      if (notiz != null) 'notiz': notiz,
+      if (stand != null) 'stand': stand,
+      if (abgeschlossenAm != null) 'abgeschlossen_am': abgeschlossenAm,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungRezepturVersionenCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? rezepturId,
+      Value<int>? nummer,
+      Value<String?>? bezeichnung,
+      Value<String>? status,
+      Value<double>? verlustProzent,
+      Value<double>? fettVerlustProzent,
+      Value<String>? verlustArt,
+      Value<String?>? notiz,
+      Value<String?>? stand,
+      Value<DateTime?>? abgeschlossenAm,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return EntwicklungRezepturVersionenCompanion(
+      id: id ?? this.id,
+      rezepturId: rezepturId ?? this.rezepturId,
+      nummer: nummer ?? this.nummer,
+      bezeichnung: bezeichnung ?? this.bezeichnung,
+      status: status ?? this.status,
+      verlustProzent: verlustProzent ?? this.verlustProzent,
+      fettVerlustProzent: fettVerlustProzent ?? this.fettVerlustProzent,
+      verlustArt: verlustArt ?? this.verlustArt,
+      notiz: notiz ?? this.notiz,
+      stand: stand ?? this.stand,
+      abgeschlossenAm: abgeschlossenAm ?? this.abgeschlossenAm,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (rezepturId.present) {
+      map['rezeptur_id'] = Variable<String>(rezepturId.value);
+    }
+    if (nummer.present) {
+      map['nummer'] = Variable<int>(nummer.value);
+    }
+    if (bezeichnung.present) {
+      map['bezeichnung'] = Variable<String>(bezeichnung.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (verlustProzent.present) {
+      map['verlust_prozent'] = Variable<double>(verlustProzent.value);
+    }
+    if (fettVerlustProzent.present) {
+      map['fett_verlust_prozent'] = Variable<double>(fettVerlustProzent.value);
+    }
+    if (verlustArt.present) {
+      map['verlust_art'] = Variable<String>(verlustArt.value);
+    }
+    if (notiz.present) {
+      map['notiz'] = Variable<String>(notiz.value);
+    }
+    if (stand.present) {
+      map['stand'] = Variable<String>(stand.value);
+    }
+    if (abgeschlossenAm.present) {
+      map['abgeschlossen_am'] = Variable<DateTime>(abgeschlossenAm.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungRezepturVersionenCompanion(')
+          ..write('id: $id, ')
+          ..write('rezepturId: $rezepturId, ')
+          ..write('nummer: $nummer, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('status: $status, ')
+          ..write('verlustProzent: $verlustProzent, ')
+          ..write('fettVerlustProzent: $fettVerlustProzent, ')
+          ..write('verlustArt: $verlustArt, ')
+          ..write('notiz: $notiz, ')
+          ..write('stand: $stand, ')
+          ..write('abgeschlossenAm: $abgeschlossenAm, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungRezepturPositionenTable extends EntwicklungRezepturPositionen
+    with TableInfo<$EntwicklungRezepturPositionenTable, RezepturPosition> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungRezepturPositionenTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _versionIdMeta =
+      const VerificationMeta('versionId');
+  @override
+  late final GeneratedColumn<String> versionId = GeneratedColumn<String>(
+      'version_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _reihenfolgeMeta =
+      const VerificationMeta('reihenfolge');
+  @override
+  late final GeneratedColumn<int> reihenfolge = GeneratedColumn<int>(
+      'reihenfolge', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _zutatIdMeta =
+      const VerificationMeta('zutatId');
+  @override
+  late final GeneratedColumn<String> zutatId = GeneratedColumn<String>(
+      'zutat_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _unterrezepturIdMeta =
+      const VerificationMeta('unterrezepturId');
+  @override
+  late final GeneratedColumn<String> unterrezepturId = GeneratedColumn<String>(
+      'unterrezeptur_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _unterVersionIdMeta =
+      const VerificationMeta('unterVersionId');
+  @override
+  late final GeneratedColumn<String> unterVersionId = GeneratedColumn<String>(
+      'unter_version_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _mengeKgMeta =
+      const VerificationMeta('mengeKg');
+  @override
+  late final GeneratedColumn<double> mengeKg = GeneratedColumn<double>(
+      'menge_kg', aliasedName, false,
+      type: DriftSqlType.double,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _quidPflichtMeta =
+      const VerificationMeta('quidPflicht');
+  @override
+  late final GeneratedColumn<bool> quidPflicht = GeneratedColumn<bool>(
+      'quid_pflicht', aliasedName, true,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("quid_pflicht" IN (0, 1))'));
+  static const VerificationMeta _etikettNameMeta =
+      const VerificationMeta('etikettName');
+  @override
+  late final GeneratedColumn<String> etikettName = GeneratedColumn<String>(
+      'etikett_name', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _notizMeta = const VerificationMeta('notiz');
+  @override
+  late final GeneratedColumn<String> notiz = GeneratedColumn<String>(
+      'notiz', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        versionId,
+        reihenfolge,
+        zutatId,
+        unterrezepturId,
+        unterVersionId,
+        mengeKg,
+        quidPflicht,
+        etikettName,
+        notiz,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_rezeptur_positionen';
+  @override
+  VerificationContext validateIntegrity(Insertable<RezepturPosition> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('version_id')) {
+      context.handle(_versionIdMeta,
+          versionId.isAcceptableOrUnknown(data['version_id']!, _versionIdMeta));
+    } else if (isInserting) {
+      context.missing(_versionIdMeta);
+    }
+    if (data.containsKey('reihenfolge')) {
+      context.handle(
+          _reihenfolgeMeta,
+          reihenfolge.isAcceptableOrUnknown(
+              data['reihenfolge']!, _reihenfolgeMeta));
+    }
+    if (data.containsKey('zutat_id')) {
+      context.handle(_zutatIdMeta,
+          zutatId.isAcceptableOrUnknown(data['zutat_id']!, _zutatIdMeta));
+    }
+    if (data.containsKey('unterrezeptur_id')) {
+      context.handle(
+          _unterrezepturIdMeta,
+          unterrezepturId.isAcceptableOrUnknown(
+              data['unterrezeptur_id']!, _unterrezepturIdMeta));
+    }
+    if (data.containsKey('unter_version_id')) {
+      context.handle(
+          _unterVersionIdMeta,
+          unterVersionId.isAcceptableOrUnknown(
+              data['unter_version_id']!, _unterVersionIdMeta));
+    }
+    if (data.containsKey('menge_kg')) {
+      context.handle(_mengeKgMeta,
+          mengeKg.isAcceptableOrUnknown(data['menge_kg']!, _mengeKgMeta));
+    }
+    if (data.containsKey('quid_pflicht')) {
+      context.handle(
+          _quidPflichtMeta,
+          quidPflicht.isAcceptableOrUnknown(
+              data['quid_pflicht']!, _quidPflichtMeta));
+    }
+    if (data.containsKey('etikett_name')) {
+      context.handle(
+          _etikettNameMeta,
+          etikettName.isAcceptableOrUnknown(
+              data['etikett_name']!, _etikettNameMeta));
+    }
+    if (data.containsKey('notiz')) {
+      context.handle(
+          _notizMeta, notiz.isAcceptableOrUnknown(data['notiz']!, _notizMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RezepturPosition map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RezepturPosition(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      versionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}version_id'])!,
+      reihenfolge: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}reihenfolge'])!,
+      zutatId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}zutat_id']),
+      unterrezepturId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}unterrezeptur_id']),
+      unterVersionId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}unter_version_id']),
+      mengeKg: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}menge_kg'])!,
+      quidPflicht: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}quid_pflicht']),
+      etikettName: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}etikett_name']),
+      notiz: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notiz']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $EntwicklungRezepturPositionenTable createAlias(String alias) {
+    return $EntwicklungRezepturPositionenTable(attachedDatabase, alias);
+  }
+}
+
+class RezepturPosition extends DataClass
+    implements Insertable<RezepturPosition> {
+  final String id;
+  final String versionId;
+  final int reihenfolge;
+
+  /// Die Zutat — oder null bei einer Unterrezeptur.
+  final String? zutatId;
+
+  /// Die Unterrezeptur — oder null bei einer Zutat.
+  final String? unterrezepturId;
+
+  /// Ein bestimmter Stand der Unterrezeptur. null: ihr neuester.
+  final String? unterVersionId;
+
+  /// Menge in kg. Bei einer Unterrezeptur die eingesetzte fertige Menge.
+  final double mengeKg;
+
+  /// Mengenangabe in der Zutatenliste — null: wie bei der Zutat.
+  final bool? quidPflicht;
+
+  /// Name auf dem Etikett nur für diese Rezeptur — null: wie bei der
+  /// Zutat.
+  final String? etikettName;
+  final String? notiz;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const RezepturPosition(
+      {required this.id,
+      required this.versionId,
+      required this.reihenfolge,
+      this.zutatId,
+      this.unterrezepturId,
+      this.unterVersionId,
+      required this.mengeKg,
+      this.quidPflicht,
+      this.etikettName,
+      this.notiz,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['version_id'] = Variable<String>(versionId);
+    map['reihenfolge'] = Variable<int>(reihenfolge);
+    if (!nullToAbsent || zutatId != null) {
+      map['zutat_id'] = Variable<String>(zutatId);
+    }
+    if (!nullToAbsent || unterrezepturId != null) {
+      map['unterrezeptur_id'] = Variable<String>(unterrezepturId);
+    }
+    if (!nullToAbsent || unterVersionId != null) {
+      map['unter_version_id'] = Variable<String>(unterVersionId);
+    }
+    map['menge_kg'] = Variable<double>(mengeKg);
+    if (!nullToAbsent || quidPflicht != null) {
+      map['quid_pflicht'] = Variable<bool>(quidPflicht);
+    }
+    if (!nullToAbsent || etikettName != null) {
+      map['etikett_name'] = Variable<String>(etikettName);
+    }
+    if (!nullToAbsent || notiz != null) {
+      map['notiz'] = Variable<String>(notiz);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EntwicklungRezepturPositionenCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungRezepturPositionenCompanion(
+      id: Value(id),
+      versionId: Value(versionId),
+      reihenfolge: Value(reihenfolge),
+      zutatId: zutatId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zutatId),
+      unterrezepturId: unterrezepturId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unterrezepturId),
+      unterVersionId: unterVersionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(unterVersionId),
+      mengeKg: Value(mengeKg),
+      quidPflicht: quidPflicht == null && nullToAbsent
+          ? const Value.absent()
+          : Value(quidPflicht),
+      etikettName: etikettName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(etikettName),
+      notiz:
+          notiz == null && nullToAbsent ? const Value.absent() : Value(notiz),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RezepturPosition.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RezepturPosition(
+      id: serializer.fromJson<String>(json['id']),
+      versionId: serializer.fromJson<String>(json['versionId']),
+      reihenfolge: serializer.fromJson<int>(json['reihenfolge']),
+      zutatId: serializer.fromJson<String?>(json['zutatId']),
+      unterrezepturId: serializer.fromJson<String?>(json['unterrezepturId']),
+      unterVersionId: serializer.fromJson<String?>(json['unterVersionId']),
+      mengeKg: serializer.fromJson<double>(json['mengeKg']),
+      quidPflicht: serializer.fromJson<bool?>(json['quidPflicht']),
+      etikettName: serializer.fromJson<String?>(json['etikettName']),
+      notiz: serializer.fromJson<String?>(json['notiz']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'versionId': serializer.toJson<String>(versionId),
+      'reihenfolge': serializer.toJson<int>(reihenfolge),
+      'zutatId': serializer.toJson<String?>(zutatId),
+      'unterrezepturId': serializer.toJson<String?>(unterrezepturId),
+      'unterVersionId': serializer.toJson<String?>(unterVersionId),
+      'mengeKg': serializer.toJson<double>(mengeKg),
+      'quidPflicht': serializer.toJson<bool?>(quidPflicht),
+      'etikettName': serializer.toJson<String?>(etikettName),
+      'notiz': serializer.toJson<String?>(notiz),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  RezepturPosition copyWith(
+          {String? id,
+          String? versionId,
+          int? reihenfolge,
+          Value<String?> zutatId = const Value.absent(),
+          Value<String?> unterrezepturId = const Value.absent(),
+          Value<String?> unterVersionId = const Value.absent(),
+          double? mengeKg,
+          Value<bool?> quidPflicht = const Value.absent(),
+          Value<String?> etikettName = const Value.absent(),
+          Value<String?> notiz = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      RezepturPosition(
+        id: id ?? this.id,
+        versionId: versionId ?? this.versionId,
+        reihenfolge: reihenfolge ?? this.reihenfolge,
+        zutatId: zutatId.present ? zutatId.value : this.zutatId,
+        unterrezepturId: unterrezepturId.present
+            ? unterrezepturId.value
+            : this.unterrezepturId,
+        unterVersionId:
+            unterVersionId.present ? unterVersionId.value : this.unterVersionId,
+        mengeKg: mengeKg ?? this.mengeKg,
+        quidPflicht: quidPflicht.present ? quidPflicht.value : this.quidPflicht,
+        etikettName: etikettName.present ? etikettName.value : this.etikettName,
+        notiz: notiz.present ? notiz.value : this.notiz,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  RezepturPosition copyWithCompanion(
+      EntwicklungRezepturPositionenCompanion data) {
+    return RezepturPosition(
+      id: data.id.present ? data.id.value : this.id,
+      versionId: data.versionId.present ? data.versionId.value : this.versionId,
+      reihenfolge:
+          data.reihenfolge.present ? data.reihenfolge.value : this.reihenfolge,
+      zutatId: data.zutatId.present ? data.zutatId.value : this.zutatId,
+      unterrezepturId: data.unterrezepturId.present
+          ? data.unterrezepturId.value
+          : this.unterrezepturId,
+      unterVersionId: data.unterVersionId.present
+          ? data.unterVersionId.value
+          : this.unterVersionId,
+      mengeKg: data.mengeKg.present ? data.mengeKg.value : this.mengeKg,
+      quidPflicht:
+          data.quidPflicht.present ? data.quidPflicht.value : this.quidPflicht,
+      etikettName:
+          data.etikettName.present ? data.etikettName.value : this.etikettName,
+      notiz: data.notiz.present ? data.notiz.value : this.notiz,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RezepturPosition(')
+          ..write('id: $id, ')
+          ..write('versionId: $versionId, ')
+          ..write('reihenfolge: $reihenfolge, ')
+          ..write('zutatId: $zutatId, ')
+          ..write('unterrezepturId: $unterrezepturId, ')
+          ..write('unterVersionId: $unterVersionId, ')
+          ..write('mengeKg: $mengeKg, ')
+          ..write('quidPflicht: $quidPflicht, ')
+          ..write('etikettName: $etikettName, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      versionId,
+      reihenfolge,
+      zutatId,
+      unterrezepturId,
+      unterVersionId,
+      mengeKg,
+      quidPflicht,
+      etikettName,
+      notiz,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RezepturPosition &&
+          other.id == this.id &&
+          other.versionId == this.versionId &&
+          other.reihenfolge == this.reihenfolge &&
+          other.zutatId == this.zutatId &&
+          other.unterrezepturId == this.unterrezepturId &&
+          other.unterVersionId == this.unterVersionId &&
+          other.mengeKg == this.mengeKg &&
+          other.quidPflicht == this.quidPflicht &&
+          other.etikettName == this.etikettName &&
+          other.notiz == this.notiz &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EntwicklungRezepturPositionenCompanion
+    extends UpdateCompanion<RezepturPosition> {
+  final Value<String> id;
+  final Value<String> versionId;
+  final Value<int> reihenfolge;
+  final Value<String?> zutatId;
+  final Value<String?> unterrezepturId;
+  final Value<String?> unterVersionId;
+  final Value<double> mengeKg;
+  final Value<bool?> quidPflicht;
+  final Value<String?> etikettName;
+  final Value<String?> notiz;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EntwicklungRezepturPositionenCompanion({
+    this.id = const Value.absent(),
+    this.versionId = const Value.absent(),
+    this.reihenfolge = const Value.absent(),
+    this.zutatId = const Value.absent(),
+    this.unterrezepturId = const Value.absent(),
+    this.unterVersionId = const Value.absent(),
+    this.mengeKg = const Value.absent(),
+    this.quidPflicht = const Value.absent(),
+    this.etikettName = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungRezepturPositionenCompanion.insert({
+    required String id,
+    required String versionId,
+    this.reihenfolge = const Value.absent(),
+    this.zutatId = const Value.absent(),
+    this.unterrezepturId = const Value.absent(),
+    this.unterVersionId = const Value.absent(),
+    this.mengeKg = const Value.absent(),
+    this.quidPflicht = const Value.absent(),
+    this.etikettName = const Value.absent(),
+    this.notiz = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        versionId = Value(versionId);
+  static Insertable<RezepturPosition> custom({
+    Expression<String>? id,
+    Expression<String>? versionId,
+    Expression<int>? reihenfolge,
+    Expression<String>? zutatId,
+    Expression<String>? unterrezepturId,
+    Expression<String>? unterVersionId,
+    Expression<double>? mengeKg,
+    Expression<bool>? quidPflicht,
+    Expression<String>? etikettName,
+    Expression<String>? notiz,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (versionId != null) 'version_id': versionId,
+      if (reihenfolge != null) 'reihenfolge': reihenfolge,
+      if (zutatId != null) 'zutat_id': zutatId,
+      if (unterrezepturId != null) 'unterrezeptur_id': unterrezepturId,
+      if (unterVersionId != null) 'unter_version_id': unterVersionId,
+      if (mengeKg != null) 'menge_kg': mengeKg,
+      if (quidPflicht != null) 'quid_pflicht': quidPflicht,
+      if (etikettName != null) 'etikett_name': etikettName,
+      if (notiz != null) 'notiz': notiz,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungRezepturPositionenCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? versionId,
+      Value<int>? reihenfolge,
+      Value<String?>? zutatId,
+      Value<String?>? unterrezepturId,
+      Value<String?>? unterVersionId,
+      Value<double>? mengeKg,
+      Value<bool?>? quidPflicht,
+      Value<String?>? etikettName,
+      Value<String?>? notiz,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return EntwicklungRezepturPositionenCompanion(
+      id: id ?? this.id,
+      versionId: versionId ?? this.versionId,
+      reihenfolge: reihenfolge ?? this.reihenfolge,
+      zutatId: zutatId ?? this.zutatId,
+      unterrezepturId: unterrezepturId ?? this.unterrezepturId,
+      unterVersionId: unterVersionId ?? this.unterVersionId,
+      mengeKg: mengeKg ?? this.mengeKg,
+      quidPflicht: quidPflicht ?? this.quidPflicht,
+      etikettName: etikettName ?? this.etikettName,
+      notiz: notiz ?? this.notiz,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (versionId.present) {
+      map['version_id'] = Variable<String>(versionId.value);
+    }
+    if (reihenfolge.present) {
+      map['reihenfolge'] = Variable<int>(reihenfolge.value);
+    }
+    if (zutatId.present) {
+      map['zutat_id'] = Variable<String>(zutatId.value);
+    }
+    if (unterrezepturId.present) {
+      map['unterrezeptur_id'] = Variable<String>(unterrezepturId.value);
+    }
+    if (unterVersionId.present) {
+      map['unter_version_id'] = Variable<String>(unterVersionId.value);
+    }
+    if (mengeKg.present) {
+      map['menge_kg'] = Variable<double>(mengeKg.value);
+    }
+    if (quidPflicht.present) {
+      map['quid_pflicht'] = Variable<bool>(quidPflicht.value);
+    }
+    if (etikettName.present) {
+      map['etikett_name'] = Variable<String>(etikettName.value);
+    }
+    if (notiz.present) {
+      map['notiz'] = Variable<String>(notiz.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungRezepturPositionenCompanion(')
+          ..write('id: $id, ')
+          ..write('versionId: $versionId, ')
+          ..write('reihenfolge: $reihenfolge, ')
+          ..write('zutatId: $zutatId, ')
+          ..write('unterrezepturId: $unterrezepturId, ')
+          ..write('unterVersionId: $unterVersionId, ')
+          ..write('mengeKg: $mengeKg, ')
+          ..write('quidPflicht: $quidPflicht, ')
+          ..write('etikettName: $etikettName, ')
+          ..write('notiz: $notiz, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungProjekteTable extends EntwicklungProjekte
+    with TableInfo<$EntwicklungProjekteTable, EntwicklungsProjekt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungProjekteTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _kundeMeta = const VerificationMeta('kunde');
+  @override
+  late final GeneratedColumn<String> kunde = GeneratedColumn<String>(
+      'kunde', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('entwicklung'));
+  static const VerificationMeta _produktideeMeta =
+      const VerificationMeta('produktidee');
+  @override
+  late final GeneratedColumn<String> produktidee = GeneratedColumn<String>(
+      'produktidee', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kundenvereinbarungenMeta =
+      const VerificationMeta('kundenvereinbarungen');
+  @override
+  late final GeneratedColumn<String> kundenvereinbarungen =
+      GeneratedColumn<String>('kundenvereinbarungen', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _fliessdiagrammMeta =
+      const VerificationMeta('fliessdiagramm');
+  @override
+  late final GeneratedColumn<String> fliessdiagramm = GeneratedColumn<String>(
+      'fliessdiagramm', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _neuerProzessMeta =
+      const VerificationMeta('neuerProzess');
+  @override
+  late final GeneratedColumn<bool> neuerProzess = GeneratedColumn<bool>(
+      'neuer_prozess', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("neuer_prozess" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _neueZutatenMeta =
+      const VerificationMeta('neueZutaten');
+  @override
+  late final GeneratedColumn<bool> neueZutaten = GeneratedColumn<bool>(
+      'neue_zutaten', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("neue_zutaten" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _neueZutatenDetailsMeta =
+      const VerificationMeta('neueZutatenDetails');
+  @override
+  late final GeneratedColumn<String> neueZutatenDetails =
+      GeneratedColumn<String>('neue_zutaten_details', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _zielFettMeta =
+      const VerificationMeta('zielFett');
+  @override
+  late final GeneratedColumn<double> zielFett = GeneratedColumn<double>(
+      'ziel_fett', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _zielEiweissMeta =
+      const VerificationMeta('zielEiweiss');
+  @override
+  late final GeneratedColumn<double> zielEiweiss = GeneratedColumn<double>(
+      'ziel_eiweiss', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _grenzeAwMeta =
+      const VerificationMeta('grenzeAw');
+  @override
+  late final GeneratedColumn<double> grenzeAw = GeneratedColumn<double>(
+      'grenze_aw', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _notizenMeta =
+      const VerificationMeta('notizen');
+  @override
+  late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
+      'notizen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _bildDateiIdMeta =
+      const VerificationMeta('bildDateiId');
+  @override
+  late final GeneratedColumn<String> bildDateiId = GeneratedColumn<String>(
+      'bild_datei_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _sensorikMeta =
+      const VerificationMeta('sensorik');
+  @override
+  late final GeneratedColumn<String> sensorik = GeneratedColumn<String>(
+      'sensorik', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _checklisteMeta =
+      const VerificationMeta('checkliste');
+  @override
+  late final GeneratedColumn<String> checkliste = GeneratedColumn<String>(
+      'checkliste', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _etikettChecklisteMeta =
+      const VerificationMeta('etikettCheckliste');
+  @override
+  late final GeneratedColumn<String> etikettCheckliste =
+      GeneratedColumn<String>('etikett_checkliste', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _prozessMeta =
+      const VerificationMeta('prozess');
+  @override
+  late final GeneratedColumn<String> prozess = GeneratedColumn<String>(
+      'prozess', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _prozessHistorieMeta =
+      const VerificationMeta('prozessHistorie');
+  @override
+  late final GeneratedColumn<String> prozessHistorie = GeneratedColumn<String>(
+      'prozess_historie', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _haccpMeta = const VerificationMeta('haccp');
+  @override
+  late final GeneratedColumn<String> haccp = GeneratedColumn<String>(
+      'haccp', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _artikelIdMeta =
+      const VerificationMeta('artikelId');
+  @override
+  late final GeneratedColumn<String> artikelId = GeneratedColumn<String>(
+      'artikel_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _freigabeVersionIdMeta =
+      const VerificationMeta('freigabeVersionId');
+  @override
+  late final GeneratedColumn<String> freigabeVersionId =
+      GeneratedColumn<String>('freigabe_version_id', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _freigegebenAmMeta =
+      const VerificationMeta('freigegebenAm');
+  @override
+  late final GeneratedColumn<DateTime> freigegebenAm =
+      GeneratedColumn<DateTime>('freigegeben_am', aliasedName, true,
+          type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        name,
+        kunde,
+        artikelnummer,
+        status,
+        produktidee,
+        kundenvereinbarungen,
+        fliessdiagramm,
+        neuerProzess,
+        neueZutaten,
+        neueZutatenDetails,
+        zielFett,
+        zielEiweiss,
+        grenzeAw,
+        notizen,
+        bildDateiId,
+        sensorik,
+        checkliste,
+        etikettCheckliste,
+        prozess,
+        prozessHistorie,
+        haccp,
+        artikelId,
+        freigabeVersionId,
+        freigegebenAm,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_projekte';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<EntwicklungsProjekt> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('kunde')) {
+      context.handle(
+          _kundeMeta, kunde.isAcceptableOrUnknown(data['kunde']!, _kundeMeta));
+    }
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('produktidee')) {
+      context.handle(
+          _produktideeMeta,
+          produktidee.isAcceptableOrUnknown(
+              data['produktidee']!, _produktideeMeta));
+    }
+    if (data.containsKey('kundenvereinbarungen')) {
+      context.handle(
+          _kundenvereinbarungenMeta,
+          kundenvereinbarungen.isAcceptableOrUnknown(
+              data['kundenvereinbarungen']!, _kundenvereinbarungenMeta));
+    }
+    if (data.containsKey('fliessdiagramm')) {
+      context.handle(
+          _fliessdiagrammMeta,
+          fliessdiagramm.isAcceptableOrUnknown(
+              data['fliessdiagramm']!, _fliessdiagrammMeta));
+    }
+    if (data.containsKey('neuer_prozess')) {
+      context.handle(
+          _neuerProzessMeta,
+          neuerProzess.isAcceptableOrUnknown(
+              data['neuer_prozess']!, _neuerProzessMeta));
+    }
+    if (data.containsKey('neue_zutaten')) {
+      context.handle(
+          _neueZutatenMeta,
+          neueZutaten.isAcceptableOrUnknown(
+              data['neue_zutaten']!, _neueZutatenMeta));
+    }
+    if (data.containsKey('neue_zutaten_details')) {
+      context.handle(
+          _neueZutatenDetailsMeta,
+          neueZutatenDetails.isAcceptableOrUnknown(
+              data['neue_zutaten_details']!, _neueZutatenDetailsMeta));
+    }
+    if (data.containsKey('ziel_fett')) {
+      context.handle(_zielFettMeta,
+          zielFett.isAcceptableOrUnknown(data['ziel_fett']!, _zielFettMeta));
+    }
+    if (data.containsKey('ziel_eiweiss')) {
+      context.handle(
+          _zielEiweissMeta,
+          zielEiweiss.isAcceptableOrUnknown(
+              data['ziel_eiweiss']!, _zielEiweissMeta));
+    }
+    if (data.containsKey('grenze_aw')) {
+      context.handle(_grenzeAwMeta,
+          grenzeAw.isAcceptableOrUnknown(data['grenze_aw']!, _grenzeAwMeta));
+    }
+    if (data.containsKey('notizen')) {
+      context.handle(_notizenMeta,
+          notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('bild_datei_id')) {
+      context.handle(
+          _bildDateiIdMeta,
+          bildDateiId.isAcceptableOrUnknown(
+              data['bild_datei_id']!, _bildDateiIdMeta));
+    }
+    if (data.containsKey('sensorik')) {
+      context.handle(_sensorikMeta,
+          sensorik.isAcceptableOrUnknown(data['sensorik']!, _sensorikMeta));
+    }
+    if (data.containsKey('checkliste')) {
+      context.handle(
+          _checklisteMeta,
+          checkliste.isAcceptableOrUnknown(
+              data['checkliste']!, _checklisteMeta));
+    }
+    if (data.containsKey('etikett_checkliste')) {
+      context.handle(
+          _etikettChecklisteMeta,
+          etikettCheckliste.isAcceptableOrUnknown(
+              data['etikett_checkliste']!, _etikettChecklisteMeta));
+    }
+    if (data.containsKey('prozess')) {
+      context.handle(_prozessMeta,
+          prozess.isAcceptableOrUnknown(data['prozess']!, _prozessMeta));
+    }
+    if (data.containsKey('prozess_historie')) {
+      context.handle(
+          _prozessHistorieMeta,
+          prozessHistorie.isAcceptableOrUnknown(
+              data['prozess_historie']!, _prozessHistorieMeta));
+    }
+    if (data.containsKey('haccp')) {
+      context.handle(
+          _haccpMeta, haccp.isAcceptableOrUnknown(data['haccp']!, _haccpMeta));
+    }
+    if (data.containsKey('artikel_id')) {
+      context.handle(_artikelIdMeta,
+          artikelId.isAcceptableOrUnknown(data['artikel_id']!, _artikelIdMeta));
+    }
+    if (data.containsKey('freigabe_version_id')) {
+      context.handle(
+          _freigabeVersionIdMeta,
+          freigabeVersionId.isAcceptableOrUnknown(
+              data['freigabe_version_id']!, _freigabeVersionIdMeta));
+    }
+    if (data.containsKey('freigegeben_am')) {
+      context.handle(
+          _freigegebenAmMeta,
+          freigegebenAm.isAcceptableOrUnknown(
+              data['freigegeben_am']!, _freigegebenAmMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EntwicklungsProjekt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EntwicklungsProjekt(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      kunde: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kunde']),
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer']),
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      produktidee: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}produktidee']),
+      kundenvereinbarungen: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}kundenvereinbarungen']),
+      fliessdiagramm: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}fliessdiagramm']),
+      neuerProzess: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}neuer_prozess'])!,
+      neueZutaten: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}neue_zutaten'])!,
+      neueZutatenDetails: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}neue_zutaten_details']),
+      zielFett: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ziel_fett']),
+      zielEiweiss: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}ziel_eiweiss']),
+      grenzeAw: attachedDatabase.typeMapping
+          .read(DriftSqlType.double, data['${effectivePrefix}grenze_aw']),
+      notizen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      bildDateiId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bild_datei_id']),
+      sensorik: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sensorik']),
+      checkliste: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}checkliste']),
+      etikettCheckliste: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}etikett_checkliste']),
+      prozess: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}prozess']),
+      prozessHistorie: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}prozess_historie']),
+      haccp: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}haccp']),
+      artikelId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikel_id']),
+      freigabeVersionId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}freigabe_version_id']),
+      freigegebenAm: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}freigegeben_am']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $EntwicklungProjekteTable createAlias(String alias) {
+    return $EntwicklungProjekteTable(attachedDatabase, alias);
+  }
+}
+
+class EntwicklungsProjekt extends DataClass
+    implements Insertable<EntwicklungsProjekt> {
+  final String id;
+  final String name;
+  final String? kunde;
+  final String? artikelnummer;
+
+  /// 'entwicklung', 'validierung', 'produktion' oder 'archiviert'.
+  final String status;
+  final String? produktidee;
+  final String? kundenvereinbarungen;
+
+  /// Schlüssel des Fließdiagramms aus [EntwicklungFliessdiagramme].
+  final String? fliessdiagramm;
+  final bool neuerProzess;
+  final bool neueZutaten;
+  final String? neueZutatenDetails;
+
+  /// Zielwerte: Fett und Eiweiß in Prozent, Obergrenze aw-Wert.
+  final double? zielFett;
+  final double? zielEiweiss;
+  final double? grenzeAw;
+  final String? notizen;
+
+  /// Produktbild — eine Datei aus [EntwicklungDateien].
+  final String? bildDateiId;
+
+  /// JSON: Aussehen, Geruch, Geschmack, Konsistenz, Maße, Zubereitung.
+  final String? sensorik;
+
+  /// JSON: erledigte Punkte der Projekt-Checkliste.
+  final String? checkliste;
+
+  /// JSON: erledigte Punkte der Etiketten-Checkliste.
+  final String? etikettCheckliste;
+
+  /// JSON: Prozessparameter nach Abschnitten.
+  final String? prozess;
+
+  /// JSON: frühere Stände der Prozessparameter.
+  final String? prozessHistorie;
+
+  /// JSON: Gefahrenanalyse (FMEA) und Lenkungspunkte (CCP).
+  final String? haccp;
+
+  /// Der Artikel im Planer (products.id), sobald freigegeben.
+  final String? artikelId;
+
+  /// Die freigegebene Rezeptur-Version.
+  final String? freigabeVersionId;
+  final DateTime? freigegebenAm;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const EntwicklungsProjekt(
+      {required this.id,
+      required this.name,
+      this.kunde,
+      this.artikelnummer,
+      required this.status,
+      this.produktidee,
+      this.kundenvereinbarungen,
+      this.fliessdiagramm,
+      required this.neuerProzess,
+      required this.neueZutaten,
+      this.neueZutatenDetails,
+      this.zielFett,
+      this.zielEiweiss,
+      this.grenzeAw,
+      this.notizen,
+      this.bildDateiId,
+      this.sensorik,
+      this.checkliste,
+      this.etikettCheckliste,
+      this.prozess,
+      this.prozessHistorie,
+      this.haccp,
+      this.artikelId,
+      this.freigabeVersionId,
+      this.freigegebenAm,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || kunde != null) {
+      map['kunde'] = Variable<String>(kunde);
+    }
+    if (!nullToAbsent || artikelnummer != null) {
+      map['artikelnummer'] = Variable<String>(artikelnummer);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || produktidee != null) {
+      map['produktidee'] = Variable<String>(produktidee);
+    }
+    if (!nullToAbsent || kundenvereinbarungen != null) {
+      map['kundenvereinbarungen'] = Variable<String>(kundenvereinbarungen);
+    }
+    if (!nullToAbsent || fliessdiagramm != null) {
+      map['fliessdiagramm'] = Variable<String>(fliessdiagramm);
+    }
+    map['neuer_prozess'] = Variable<bool>(neuerProzess);
+    map['neue_zutaten'] = Variable<bool>(neueZutaten);
+    if (!nullToAbsent || neueZutatenDetails != null) {
+      map['neue_zutaten_details'] = Variable<String>(neueZutatenDetails);
+    }
+    if (!nullToAbsent || zielFett != null) {
+      map['ziel_fett'] = Variable<double>(zielFett);
+    }
+    if (!nullToAbsent || zielEiweiss != null) {
+      map['ziel_eiweiss'] = Variable<double>(zielEiweiss);
+    }
+    if (!nullToAbsent || grenzeAw != null) {
+      map['grenze_aw'] = Variable<double>(grenzeAw);
+    }
+    if (!nullToAbsent || notizen != null) {
+      map['notizen'] = Variable<String>(notizen);
+    }
+    if (!nullToAbsent || bildDateiId != null) {
+      map['bild_datei_id'] = Variable<String>(bildDateiId);
+    }
+    if (!nullToAbsent || sensorik != null) {
+      map['sensorik'] = Variable<String>(sensorik);
+    }
+    if (!nullToAbsent || checkliste != null) {
+      map['checkliste'] = Variable<String>(checkliste);
+    }
+    if (!nullToAbsent || etikettCheckliste != null) {
+      map['etikett_checkliste'] = Variable<String>(etikettCheckliste);
+    }
+    if (!nullToAbsent || prozess != null) {
+      map['prozess'] = Variable<String>(prozess);
+    }
+    if (!nullToAbsent || prozessHistorie != null) {
+      map['prozess_historie'] = Variable<String>(prozessHistorie);
+    }
+    if (!nullToAbsent || haccp != null) {
+      map['haccp'] = Variable<String>(haccp);
+    }
+    if (!nullToAbsent || artikelId != null) {
+      map['artikel_id'] = Variable<String>(artikelId);
+    }
+    if (!nullToAbsent || freigabeVersionId != null) {
+      map['freigabe_version_id'] = Variable<String>(freigabeVersionId);
+    }
+    if (!nullToAbsent || freigegebenAm != null) {
+      map['freigegeben_am'] = Variable<DateTime>(freigegebenAm);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  EntwicklungProjekteCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungProjekteCompanion(
+      id: Value(id),
+      name: Value(name),
+      kunde:
+          kunde == null && nullToAbsent ? const Value.absent() : Value(kunde),
+      artikelnummer: artikelnummer == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artikelnummer),
+      status: Value(status),
+      produktidee: produktidee == null && nullToAbsent
+          ? const Value.absent()
+          : Value(produktidee),
+      kundenvereinbarungen: kundenvereinbarungen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kundenvereinbarungen),
+      fliessdiagramm: fliessdiagramm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fliessdiagramm),
+      neuerProzess: Value(neuerProzess),
+      neueZutaten: Value(neueZutaten),
+      neueZutatenDetails: neueZutatenDetails == null && nullToAbsent
+          ? const Value.absent()
+          : Value(neueZutatenDetails),
+      zielFett: zielFett == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zielFett),
+      zielEiweiss: zielEiweiss == null && nullToAbsent
+          ? const Value.absent()
+          : Value(zielEiweiss),
+      grenzeAw: grenzeAw == null && nullToAbsent
+          ? const Value.absent()
+          : Value(grenzeAw),
+      notizen: notizen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notizen),
+      bildDateiId: bildDateiId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bildDateiId),
+      sensorik: sensorik == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sensorik),
+      checkliste: checkliste == null && nullToAbsent
+          ? const Value.absent()
+          : Value(checkliste),
+      etikettCheckliste: etikettCheckliste == null && nullToAbsent
+          ? const Value.absent()
+          : Value(etikettCheckliste),
+      prozess: prozess == null && nullToAbsent
+          ? const Value.absent()
+          : Value(prozess),
+      prozessHistorie: prozessHistorie == null && nullToAbsent
+          ? const Value.absent()
+          : Value(prozessHistorie),
+      haccp:
+          haccp == null && nullToAbsent ? const Value.absent() : Value(haccp),
+      artikelId: artikelId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artikelId),
+      freigabeVersionId: freigabeVersionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(freigabeVersionId),
+      freigegebenAm: freigegebenAm == null && nullToAbsent
+          ? const Value.absent()
+          : Value(freigegebenAm),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory EntwicklungsProjekt.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EntwicklungsProjekt(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      kunde: serializer.fromJson<String?>(json['kunde']),
+      artikelnummer: serializer.fromJson<String?>(json['artikelnummer']),
+      status: serializer.fromJson<String>(json['status']),
+      produktidee: serializer.fromJson<String?>(json['produktidee']),
+      kundenvereinbarungen:
+          serializer.fromJson<String?>(json['kundenvereinbarungen']),
+      fliessdiagramm: serializer.fromJson<String?>(json['fliessdiagramm']),
+      neuerProzess: serializer.fromJson<bool>(json['neuerProzess']),
+      neueZutaten: serializer.fromJson<bool>(json['neueZutaten']),
+      neueZutatenDetails:
+          serializer.fromJson<String?>(json['neueZutatenDetails']),
+      zielFett: serializer.fromJson<double?>(json['zielFett']),
+      zielEiweiss: serializer.fromJson<double?>(json['zielEiweiss']),
+      grenzeAw: serializer.fromJson<double?>(json['grenzeAw']),
+      notizen: serializer.fromJson<String?>(json['notizen']),
+      bildDateiId: serializer.fromJson<String?>(json['bildDateiId']),
+      sensorik: serializer.fromJson<String?>(json['sensorik']),
+      checkliste: serializer.fromJson<String?>(json['checkliste']),
+      etikettCheckliste:
+          serializer.fromJson<String?>(json['etikettCheckliste']),
+      prozess: serializer.fromJson<String?>(json['prozess']),
+      prozessHistorie: serializer.fromJson<String?>(json['prozessHistorie']),
+      haccp: serializer.fromJson<String?>(json['haccp']),
+      artikelId: serializer.fromJson<String?>(json['artikelId']),
+      freigabeVersionId:
+          serializer.fromJson<String?>(json['freigabeVersionId']),
+      freigegebenAm: serializer.fromJson<DateTime?>(json['freigegebenAm']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'kunde': serializer.toJson<String?>(kunde),
+      'artikelnummer': serializer.toJson<String?>(artikelnummer),
+      'status': serializer.toJson<String>(status),
+      'produktidee': serializer.toJson<String?>(produktidee),
+      'kundenvereinbarungen': serializer.toJson<String?>(kundenvereinbarungen),
+      'fliessdiagramm': serializer.toJson<String?>(fliessdiagramm),
+      'neuerProzess': serializer.toJson<bool>(neuerProzess),
+      'neueZutaten': serializer.toJson<bool>(neueZutaten),
+      'neueZutatenDetails': serializer.toJson<String?>(neueZutatenDetails),
+      'zielFett': serializer.toJson<double?>(zielFett),
+      'zielEiweiss': serializer.toJson<double?>(zielEiweiss),
+      'grenzeAw': serializer.toJson<double?>(grenzeAw),
+      'notizen': serializer.toJson<String?>(notizen),
+      'bildDateiId': serializer.toJson<String?>(bildDateiId),
+      'sensorik': serializer.toJson<String?>(sensorik),
+      'checkliste': serializer.toJson<String?>(checkliste),
+      'etikettCheckliste': serializer.toJson<String?>(etikettCheckliste),
+      'prozess': serializer.toJson<String?>(prozess),
+      'prozessHistorie': serializer.toJson<String?>(prozessHistorie),
+      'haccp': serializer.toJson<String?>(haccp),
+      'artikelId': serializer.toJson<String?>(artikelId),
+      'freigabeVersionId': serializer.toJson<String?>(freigabeVersionId),
+      'freigegebenAm': serializer.toJson<DateTime?>(freigegebenAm),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  EntwicklungsProjekt copyWith(
+          {String? id,
+          String? name,
+          Value<String?> kunde = const Value.absent(),
+          Value<String?> artikelnummer = const Value.absent(),
+          String? status,
+          Value<String?> produktidee = const Value.absent(),
+          Value<String?> kundenvereinbarungen = const Value.absent(),
+          Value<String?> fliessdiagramm = const Value.absent(),
+          bool? neuerProzess,
+          bool? neueZutaten,
+          Value<String?> neueZutatenDetails = const Value.absent(),
+          Value<double?> zielFett = const Value.absent(),
+          Value<double?> zielEiweiss = const Value.absent(),
+          Value<double?> grenzeAw = const Value.absent(),
+          Value<String?> notizen = const Value.absent(),
+          Value<String?> bildDateiId = const Value.absent(),
+          Value<String?> sensorik = const Value.absent(),
+          Value<String?> checkliste = const Value.absent(),
+          Value<String?> etikettCheckliste = const Value.absent(),
+          Value<String?> prozess = const Value.absent(),
+          Value<String?> prozessHistorie = const Value.absent(),
+          Value<String?> haccp = const Value.absent(),
+          Value<String?> artikelId = const Value.absent(),
+          Value<String?> freigabeVersionId = const Value.absent(),
+          Value<DateTime?> freigegebenAm = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      EntwicklungsProjekt(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        kunde: kunde.present ? kunde.value : this.kunde,
+        artikelnummer:
+            artikelnummer.present ? artikelnummer.value : this.artikelnummer,
+        status: status ?? this.status,
+        produktidee: produktidee.present ? produktidee.value : this.produktidee,
+        kundenvereinbarungen: kundenvereinbarungen.present
+            ? kundenvereinbarungen.value
+            : this.kundenvereinbarungen,
+        fliessdiagramm:
+            fliessdiagramm.present ? fliessdiagramm.value : this.fliessdiagramm,
+        neuerProzess: neuerProzess ?? this.neuerProzess,
+        neueZutaten: neueZutaten ?? this.neueZutaten,
+        neueZutatenDetails: neueZutatenDetails.present
+            ? neueZutatenDetails.value
+            : this.neueZutatenDetails,
+        zielFett: zielFett.present ? zielFett.value : this.zielFett,
+        zielEiweiss: zielEiweiss.present ? zielEiweiss.value : this.zielEiweiss,
+        grenzeAw: grenzeAw.present ? grenzeAw.value : this.grenzeAw,
+        notizen: notizen.present ? notizen.value : this.notizen,
+        bildDateiId: bildDateiId.present ? bildDateiId.value : this.bildDateiId,
+        sensorik: sensorik.present ? sensorik.value : this.sensorik,
+        checkliste: checkliste.present ? checkliste.value : this.checkliste,
+        etikettCheckliste: etikettCheckliste.present
+            ? etikettCheckliste.value
+            : this.etikettCheckliste,
+        prozess: prozess.present ? prozess.value : this.prozess,
+        prozessHistorie: prozessHistorie.present
+            ? prozessHistorie.value
+            : this.prozessHistorie,
+        haccp: haccp.present ? haccp.value : this.haccp,
+        artikelId: artikelId.present ? artikelId.value : this.artikelId,
+        freigabeVersionId: freigabeVersionId.present
+            ? freigabeVersionId.value
+            : this.freigabeVersionId,
+        freigegebenAm:
+            freigegebenAm.present ? freigegebenAm.value : this.freigegebenAm,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  EntwicklungsProjekt copyWithCompanion(EntwicklungProjekteCompanion data) {
+    return EntwicklungsProjekt(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      kunde: data.kunde.present ? data.kunde.value : this.kunde,
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      status: data.status.present ? data.status.value : this.status,
+      produktidee:
+          data.produktidee.present ? data.produktidee.value : this.produktidee,
+      kundenvereinbarungen: data.kundenvereinbarungen.present
+          ? data.kundenvereinbarungen.value
+          : this.kundenvereinbarungen,
+      fliessdiagramm: data.fliessdiagramm.present
+          ? data.fliessdiagramm.value
+          : this.fliessdiagramm,
+      neuerProzess: data.neuerProzess.present
+          ? data.neuerProzess.value
+          : this.neuerProzess,
+      neueZutaten:
+          data.neueZutaten.present ? data.neueZutaten.value : this.neueZutaten,
+      neueZutatenDetails: data.neueZutatenDetails.present
+          ? data.neueZutatenDetails.value
+          : this.neueZutatenDetails,
+      zielFett: data.zielFett.present ? data.zielFett.value : this.zielFett,
+      zielEiweiss:
+          data.zielEiweiss.present ? data.zielEiweiss.value : this.zielEiweiss,
+      grenzeAw: data.grenzeAw.present ? data.grenzeAw.value : this.grenzeAw,
+      notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      bildDateiId:
+          data.bildDateiId.present ? data.bildDateiId.value : this.bildDateiId,
+      sensorik: data.sensorik.present ? data.sensorik.value : this.sensorik,
+      checkliste:
+          data.checkliste.present ? data.checkliste.value : this.checkliste,
+      etikettCheckliste: data.etikettCheckliste.present
+          ? data.etikettCheckliste.value
+          : this.etikettCheckliste,
+      prozess: data.prozess.present ? data.prozess.value : this.prozess,
+      prozessHistorie: data.prozessHistorie.present
+          ? data.prozessHistorie.value
+          : this.prozessHistorie,
+      haccp: data.haccp.present ? data.haccp.value : this.haccp,
+      artikelId: data.artikelId.present ? data.artikelId.value : this.artikelId,
+      freigabeVersionId: data.freigabeVersionId.present
+          ? data.freigabeVersionId.value
+          : this.freigabeVersionId,
+      freigegebenAm: data.freigegebenAm.present
+          ? data.freigegebenAm.value
+          : this.freigegebenAm,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungsProjekt(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kunde: $kunde, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('status: $status, ')
+          ..write('produktidee: $produktidee, ')
+          ..write('kundenvereinbarungen: $kundenvereinbarungen, ')
+          ..write('fliessdiagramm: $fliessdiagramm, ')
+          ..write('neuerProzess: $neuerProzess, ')
+          ..write('neueZutaten: $neueZutaten, ')
+          ..write('neueZutatenDetails: $neueZutatenDetails, ')
+          ..write('zielFett: $zielFett, ')
+          ..write('zielEiweiss: $zielEiweiss, ')
+          ..write('grenzeAw: $grenzeAw, ')
+          ..write('notizen: $notizen, ')
+          ..write('bildDateiId: $bildDateiId, ')
+          ..write('sensorik: $sensorik, ')
+          ..write('checkliste: $checkliste, ')
+          ..write('etikettCheckliste: $etikettCheckliste, ')
+          ..write('prozess: $prozess, ')
+          ..write('prozessHistorie: $prozessHistorie, ')
+          ..write('haccp: $haccp, ')
+          ..write('artikelId: $artikelId, ')
+          ..write('freigabeVersionId: $freigabeVersionId, ')
+          ..write('freigegebenAm: $freigegebenAm, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+        id,
+        name,
+        kunde,
+        artikelnummer,
+        status,
+        produktidee,
+        kundenvereinbarungen,
+        fliessdiagramm,
+        neuerProzess,
+        neueZutaten,
+        neueZutatenDetails,
+        zielFett,
+        zielEiweiss,
+        grenzeAw,
+        notizen,
+        bildDateiId,
+        sensorik,
+        checkliste,
+        etikettCheckliste,
+        prozess,
+        prozessHistorie,
+        haccp,
+        artikelId,
+        freigabeVersionId,
+        freigegebenAm,
+        createdAt,
+        updatedAt,
+        deletedAt
+      ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EntwicklungsProjekt &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.kunde == this.kunde &&
+          other.artikelnummer == this.artikelnummer &&
+          other.status == this.status &&
+          other.produktidee == this.produktidee &&
+          other.kundenvereinbarungen == this.kundenvereinbarungen &&
+          other.fliessdiagramm == this.fliessdiagramm &&
+          other.neuerProzess == this.neuerProzess &&
+          other.neueZutaten == this.neueZutaten &&
+          other.neueZutatenDetails == this.neueZutatenDetails &&
+          other.zielFett == this.zielFett &&
+          other.zielEiweiss == this.zielEiweiss &&
+          other.grenzeAw == this.grenzeAw &&
+          other.notizen == this.notizen &&
+          other.bildDateiId == this.bildDateiId &&
+          other.sensorik == this.sensorik &&
+          other.checkliste == this.checkliste &&
+          other.etikettCheckliste == this.etikettCheckliste &&
+          other.prozess == this.prozess &&
+          other.prozessHistorie == this.prozessHistorie &&
+          other.haccp == this.haccp &&
+          other.artikelId == this.artikelId &&
+          other.freigabeVersionId == this.freigabeVersionId &&
+          other.freigegebenAm == this.freigegebenAm &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class EntwicklungProjekteCompanion
+    extends UpdateCompanion<EntwicklungsProjekt> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> kunde;
+  final Value<String?> artikelnummer;
+  final Value<String> status;
+  final Value<String?> produktidee;
+  final Value<String?> kundenvereinbarungen;
+  final Value<String?> fliessdiagramm;
+  final Value<bool> neuerProzess;
+  final Value<bool> neueZutaten;
+  final Value<String?> neueZutatenDetails;
+  final Value<double?> zielFett;
+  final Value<double?> zielEiweiss;
+  final Value<double?> grenzeAw;
+  final Value<String?> notizen;
+  final Value<String?> bildDateiId;
+  final Value<String?> sensorik;
+  final Value<String?> checkliste;
+  final Value<String?> etikettCheckliste;
+  final Value<String?> prozess;
+  final Value<String?> prozessHistorie;
+  final Value<String?> haccp;
+  final Value<String?> artikelId;
+  final Value<String?> freigabeVersionId;
+  final Value<DateTime?> freigegebenAm;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const EntwicklungProjekteCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.kunde = const Value.absent(),
+    this.artikelnummer = const Value.absent(),
+    this.status = const Value.absent(),
+    this.produktidee = const Value.absent(),
+    this.kundenvereinbarungen = const Value.absent(),
+    this.fliessdiagramm = const Value.absent(),
+    this.neuerProzess = const Value.absent(),
+    this.neueZutaten = const Value.absent(),
+    this.neueZutatenDetails = const Value.absent(),
+    this.zielFett = const Value.absent(),
+    this.zielEiweiss = const Value.absent(),
+    this.grenzeAw = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.bildDateiId = const Value.absent(),
+    this.sensorik = const Value.absent(),
+    this.checkliste = const Value.absent(),
+    this.etikettCheckliste = const Value.absent(),
+    this.prozess = const Value.absent(),
+    this.prozessHistorie = const Value.absent(),
+    this.haccp = const Value.absent(),
+    this.artikelId = const Value.absent(),
+    this.freigabeVersionId = const Value.absent(),
+    this.freigegebenAm = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungProjekteCompanion.insert({
+    required String id,
+    required String name,
+    this.kunde = const Value.absent(),
+    this.artikelnummer = const Value.absent(),
+    this.status = const Value.absent(),
+    this.produktidee = const Value.absent(),
+    this.kundenvereinbarungen = const Value.absent(),
+    this.fliessdiagramm = const Value.absent(),
+    this.neuerProzess = const Value.absent(),
+    this.neueZutaten = const Value.absent(),
+    this.neueZutatenDetails = const Value.absent(),
+    this.zielFett = const Value.absent(),
+    this.zielEiweiss = const Value.absent(),
+    this.grenzeAw = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.bildDateiId = const Value.absent(),
+    this.sensorik = const Value.absent(),
+    this.checkliste = const Value.absent(),
+    this.etikettCheckliste = const Value.absent(),
+    this.prozess = const Value.absent(),
+    this.prozessHistorie = const Value.absent(),
+    this.haccp = const Value.absent(),
+    this.artikelId = const Value.absent(),
+    this.freigabeVersionId = const Value.absent(),
+    this.freigegebenAm = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<EntwicklungsProjekt> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? kunde,
+    Expression<String>? artikelnummer,
+    Expression<String>? status,
+    Expression<String>? produktidee,
+    Expression<String>? kundenvereinbarungen,
+    Expression<String>? fliessdiagramm,
+    Expression<bool>? neuerProzess,
+    Expression<bool>? neueZutaten,
+    Expression<String>? neueZutatenDetails,
+    Expression<double>? zielFett,
+    Expression<double>? zielEiweiss,
+    Expression<double>? grenzeAw,
+    Expression<String>? notizen,
+    Expression<String>? bildDateiId,
+    Expression<String>? sensorik,
+    Expression<String>? checkliste,
+    Expression<String>? etikettCheckliste,
+    Expression<String>? prozess,
+    Expression<String>? prozessHistorie,
+    Expression<String>? haccp,
+    Expression<String>? artikelId,
+    Expression<String>? freigabeVersionId,
+    Expression<DateTime>? freigegebenAm,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (kunde != null) 'kunde': kunde,
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (status != null) 'status': status,
+      if (produktidee != null) 'produktidee': produktidee,
+      if (kundenvereinbarungen != null)
+        'kundenvereinbarungen': kundenvereinbarungen,
+      if (fliessdiagramm != null) 'fliessdiagramm': fliessdiagramm,
+      if (neuerProzess != null) 'neuer_prozess': neuerProzess,
+      if (neueZutaten != null) 'neue_zutaten': neueZutaten,
+      if (neueZutatenDetails != null)
+        'neue_zutaten_details': neueZutatenDetails,
+      if (zielFett != null) 'ziel_fett': zielFett,
+      if (zielEiweiss != null) 'ziel_eiweiss': zielEiweiss,
+      if (grenzeAw != null) 'grenze_aw': grenzeAw,
+      if (notizen != null) 'notizen': notizen,
+      if (bildDateiId != null) 'bild_datei_id': bildDateiId,
+      if (sensorik != null) 'sensorik': sensorik,
+      if (checkliste != null) 'checkliste': checkliste,
+      if (etikettCheckliste != null) 'etikett_checkliste': etikettCheckliste,
+      if (prozess != null) 'prozess': prozess,
+      if (prozessHistorie != null) 'prozess_historie': prozessHistorie,
+      if (haccp != null) 'haccp': haccp,
+      if (artikelId != null) 'artikel_id': artikelId,
+      if (freigabeVersionId != null) 'freigabe_version_id': freigabeVersionId,
+      if (freigegebenAm != null) 'freigegeben_am': freigegebenAm,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungProjekteCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String?>? kunde,
+      Value<String?>? artikelnummer,
+      Value<String>? status,
+      Value<String?>? produktidee,
+      Value<String?>? kundenvereinbarungen,
+      Value<String?>? fliessdiagramm,
+      Value<bool>? neuerProzess,
+      Value<bool>? neueZutaten,
+      Value<String?>? neueZutatenDetails,
+      Value<double?>? zielFett,
+      Value<double?>? zielEiweiss,
+      Value<double?>? grenzeAw,
+      Value<String?>? notizen,
+      Value<String?>? bildDateiId,
+      Value<String?>? sensorik,
+      Value<String?>? checkliste,
+      Value<String?>? etikettCheckliste,
+      Value<String?>? prozess,
+      Value<String?>? prozessHistorie,
+      Value<String?>? haccp,
+      Value<String?>? artikelId,
+      Value<String?>? freigabeVersionId,
+      Value<DateTime?>? freigegebenAm,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return EntwicklungProjekteCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      kunde: kunde ?? this.kunde,
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      status: status ?? this.status,
+      produktidee: produktidee ?? this.produktidee,
+      kundenvereinbarungen: kundenvereinbarungen ?? this.kundenvereinbarungen,
+      fliessdiagramm: fliessdiagramm ?? this.fliessdiagramm,
+      neuerProzess: neuerProzess ?? this.neuerProzess,
+      neueZutaten: neueZutaten ?? this.neueZutaten,
+      neueZutatenDetails: neueZutatenDetails ?? this.neueZutatenDetails,
+      zielFett: zielFett ?? this.zielFett,
+      zielEiweiss: zielEiweiss ?? this.zielEiweiss,
+      grenzeAw: grenzeAw ?? this.grenzeAw,
+      notizen: notizen ?? this.notizen,
+      bildDateiId: bildDateiId ?? this.bildDateiId,
+      sensorik: sensorik ?? this.sensorik,
+      checkliste: checkliste ?? this.checkliste,
+      etikettCheckliste: etikettCheckliste ?? this.etikettCheckliste,
+      prozess: prozess ?? this.prozess,
+      prozessHistorie: prozessHistorie ?? this.prozessHistorie,
+      haccp: haccp ?? this.haccp,
+      artikelId: artikelId ?? this.artikelId,
+      freigabeVersionId: freigabeVersionId ?? this.freigabeVersionId,
+      freigegebenAm: freigegebenAm ?? this.freigegebenAm,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (kunde.present) {
+      map['kunde'] = Variable<String>(kunde.value);
+    }
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (produktidee.present) {
+      map['produktidee'] = Variable<String>(produktidee.value);
+    }
+    if (kundenvereinbarungen.present) {
+      map['kundenvereinbarungen'] =
+          Variable<String>(kundenvereinbarungen.value);
+    }
+    if (fliessdiagramm.present) {
+      map['fliessdiagramm'] = Variable<String>(fliessdiagramm.value);
+    }
+    if (neuerProzess.present) {
+      map['neuer_prozess'] = Variable<bool>(neuerProzess.value);
+    }
+    if (neueZutaten.present) {
+      map['neue_zutaten'] = Variable<bool>(neueZutaten.value);
+    }
+    if (neueZutatenDetails.present) {
+      map['neue_zutaten_details'] = Variable<String>(neueZutatenDetails.value);
+    }
+    if (zielFett.present) {
+      map['ziel_fett'] = Variable<double>(zielFett.value);
+    }
+    if (zielEiweiss.present) {
+      map['ziel_eiweiss'] = Variable<double>(zielEiweiss.value);
+    }
+    if (grenzeAw.present) {
+      map['grenze_aw'] = Variable<double>(grenzeAw.value);
+    }
+    if (notizen.present) {
+      map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (bildDateiId.present) {
+      map['bild_datei_id'] = Variable<String>(bildDateiId.value);
+    }
+    if (sensorik.present) {
+      map['sensorik'] = Variable<String>(sensorik.value);
+    }
+    if (checkliste.present) {
+      map['checkliste'] = Variable<String>(checkliste.value);
+    }
+    if (etikettCheckliste.present) {
+      map['etikett_checkliste'] = Variable<String>(etikettCheckliste.value);
+    }
+    if (prozess.present) {
+      map['prozess'] = Variable<String>(prozess.value);
+    }
+    if (prozessHistorie.present) {
+      map['prozess_historie'] = Variable<String>(prozessHistorie.value);
+    }
+    if (haccp.present) {
+      map['haccp'] = Variable<String>(haccp.value);
+    }
+    if (artikelId.present) {
+      map['artikel_id'] = Variable<String>(artikelId.value);
+    }
+    if (freigabeVersionId.present) {
+      map['freigabe_version_id'] = Variable<String>(freigabeVersionId.value);
+    }
+    if (freigegebenAm.present) {
+      map['freigegeben_am'] = Variable<DateTime>(freigegebenAm.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungProjekteCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kunde: $kunde, ')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('status: $status, ')
+          ..write('produktidee: $produktidee, ')
+          ..write('kundenvereinbarungen: $kundenvereinbarungen, ')
+          ..write('fliessdiagramm: $fliessdiagramm, ')
+          ..write('neuerProzess: $neuerProzess, ')
+          ..write('neueZutaten: $neueZutaten, ')
+          ..write('neueZutatenDetails: $neueZutatenDetails, ')
+          ..write('zielFett: $zielFett, ')
+          ..write('zielEiweiss: $zielEiweiss, ')
+          ..write('grenzeAw: $grenzeAw, ')
+          ..write('notizen: $notizen, ')
+          ..write('bildDateiId: $bildDateiId, ')
+          ..write('sensorik: $sensorik, ')
+          ..write('checkliste: $checkliste, ')
+          ..write('etikettCheckliste: $etikettCheckliste, ')
+          ..write('prozess: $prozess, ')
+          ..write('prozessHistorie: $prozessHistorie, ')
+          ..write('haccp: $haccp, ')
+          ..write('artikelId: $artikelId, ')
+          ..write('freigabeVersionId: $freigabeVersionId, ')
+          ..write('freigegebenAm: $freigegebenAm, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungProjektEintraegeTable extends EntwicklungProjektEintraege
+    with TableInfo<$EntwicklungProjektEintraegeTable, ProjektEintrag> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungProjektEintraegeTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _projektIdMeta =
+      const VerificationMeta('projektId');
+  @override
+  late final GeneratedColumn<String> projektId = GeneratedColumn<String>(
+      'projekt_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _artMeta = const VerificationMeta('art');
+  @override
+  late final GeneratedColumn<String> art = GeneratedColumn<String>(
+      'art', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _titelMeta = const VerificationMeta('titel');
+  @override
+  late final GeneratedColumn<String> titel = GeneratedColumn<String>(
+      'titel', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _datumMeta = const VerificationMeta('datum');
+  @override
+  late final GeneratedColumn<DateTime> datum = GeneratedColumn<DateTime>(
+      'datum', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _benutzerMeta =
+      const VerificationMeta('benutzer');
+  @override
+  late final GeneratedColumn<String> benutzer = GeneratedColumn<String>(
+      'benutzer', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _beschreibungMeta =
+      const VerificationMeta('beschreibung');
+  @override
+  late final GeneratedColumn<String> beschreibung = GeneratedColumn<String>(
+      'beschreibung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+      'status', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant('offen'));
+  static const VerificationMeta _wertMeta = const VerificationMeta('wert');
+  @override
+  late final GeneratedColumn<String> wert = GeneratedColumn<String>(
+      'wert', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _zielMeta = const VerificationMeta('ziel');
+  @override
+  late final GeneratedColumn<String> ziel = GeneratedColumn<String>(
+      'ziel', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _aenderungenMeta =
+      const VerificationMeta('aenderungen');
+  @override
+  late final GeneratedColumn<String> aenderungen = GeneratedColumn<String>(
+      'aenderungen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _dateiIdMeta =
+      const VerificationMeta('dateiId');
+  @override
+  late final GeneratedColumn<String> dateiId = GeneratedColumn<String>(
+      'datei_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _versionIdMeta =
+      const VerificationMeta('versionId');
+  @override
+  late final GeneratedColumn<String> versionId = GeneratedColumn<String>(
+      'version_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kommentareMeta =
+      const VerificationMeta('kommentare');
+  @override
+  late final GeneratedColumn<String> kommentare = GeneratedColumn<String>(
+      'kommentare', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        projektId,
+        art,
+        titel,
+        datum,
+        benutzer,
+        beschreibung,
+        status,
+        wert,
+        ziel,
+        aenderungen,
+        dateiId,
+        versionId,
+        kommentare,
+        createdAt,
+        updatedAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_projekt_eintraege';
+  @override
+  VerificationContext validateIntegrity(Insertable<ProjektEintrag> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('projekt_id')) {
+      context.handle(_projektIdMeta,
+          projektId.isAcceptableOrUnknown(data['projekt_id']!, _projektIdMeta));
+    } else if (isInserting) {
+      context.missing(_projektIdMeta);
+    }
+    if (data.containsKey('art')) {
+      context.handle(
+          _artMeta, art.isAcceptableOrUnknown(data['art']!, _artMeta));
+    } else if (isInserting) {
+      context.missing(_artMeta);
+    }
+    if (data.containsKey('titel')) {
+      context.handle(
+          _titelMeta, titel.isAcceptableOrUnknown(data['titel']!, _titelMeta));
+    } else if (isInserting) {
+      context.missing(_titelMeta);
+    }
+    if (data.containsKey('datum')) {
+      context.handle(
+          _datumMeta, datum.isAcceptableOrUnknown(data['datum']!, _datumMeta));
+    } else if (isInserting) {
+      context.missing(_datumMeta);
+    }
+    if (data.containsKey('benutzer')) {
+      context.handle(_benutzerMeta,
+          benutzer.isAcceptableOrUnknown(data['benutzer']!, _benutzerMeta));
+    }
+    if (data.containsKey('beschreibung')) {
+      context.handle(
+          _beschreibungMeta,
+          beschreibung.isAcceptableOrUnknown(
+              data['beschreibung']!, _beschreibungMeta));
+    }
+    if (data.containsKey('status')) {
+      context.handle(_statusMeta,
+          status.isAcceptableOrUnknown(data['status']!, _statusMeta));
+    }
+    if (data.containsKey('wert')) {
+      context.handle(
+          _wertMeta, wert.isAcceptableOrUnknown(data['wert']!, _wertMeta));
+    }
+    if (data.containsKey('ziel')) {
+      context.handle(
+          _zielMeta, ziel.isAcceptableOrUnknown(data['ziel']!, _zielMeta));
+    }
+    if (data.containsKey('aenderungen')) {
+      context.handle(
+          _aenderungenMeta,
+          aenderungen.isAcceptableOrUnknown(
+              data['aenderungen']!, _aenderungenMeta));
+    }
+    if (data.containsKey('datei_id')) {
+      context.handle(_dateiIdMeta,
+          dateiId.isAcceptableOrUnknown(data['datei_id']!, _dateiIdMeta));
+    }
+    if (data.containsKey('version_id')) {
+      context.handle(_versionIdMeta,
+          versionId.isAcceptableOrUnknown(data['version_id']!, _versionIdMeta));
+    }
+    if (data.containsKey('kommentare')) {
+      context.handle(
+          _kommentareMeta,
+          kommentare.isAcceptableOrUnknown(
+              data['kommentare']!, _kommentareMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProjektEintrag map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProjektEintrag(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      projektId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}projekt_id'])!,
+      art: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}art'])!,
+      titel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}titel'])!,
+      datum: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
+      benutzer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}benutzer']),
+      beschreibung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}beschreibung']),
+      status: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}status'])!,
+      wert: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}wert']),
+      ziel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}ziel']),
+      aenderungen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}aenderungen']),
+      dateiId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}datei_id']),
+      versionId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}version_id']),
+      kommentare: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kommentare']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $EntwicklungProjektEintraegeTable createAlias(String alias) {
+    return $EntwicklungProjektEintraegeTable(attachedDatabase, alias);
+  }
+}
+
+class ProjektEintrag extends DataClass implements Insertable<ProjektEintrag> {
+  final String id;
+  final String projektId;
+
+  /// 'meilenstein', 'rezeptur', 'email', 'parameter', 'datei' oder 'notiz'.
+  final String art;
+  final String titel;
+  final DateTime datum;
+  final String? benutzer;
+  final String? beschreibung;
+
+  /// 'erledigt', 'erhalten', 'ok' oder 'offen'.
+  final String status;
+
+  /// Bei Parametern: gemessener Wert und Ziel.
+  final String? wert;
+  final String? ziel;
+
+  /// JSON-Liste der Änderungen, etwa bei einem neuen Rezepturstand.
+  final String? aenderungen;
+
+  /// Angehängte Datei aus [EntwicklungDateien].
+  final String? dateiId;
+
+  /// Der Rezepturstand, um den es geht.
+  final String? versionId;
+
+  /// JSON-Liste der Kommentare: Name, Text, Datum.
+  final String? kommentare;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const ProjektEintrag(
+      {required this.id,
+      required this.projektId,
+      required this.art,
+      required this.titel,
+      required this.datum,
+      this.benutzer,
+      this.beschreibung,
+      required this.status,
+      this.wert,
+      this.ziel,
+      this.aenderungen,
+      this.dateiId,
+      this.versionId,
+      this.kommentare,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['projekt_id'] = Variable<String>(projektId);
+    map['art'] = Variable<String>(art);
+    map['titel'] = Variable<String>(titel);
+    map['datum'] = Variable<DateTime>(datum);
+    if (!nullToAbsent || benutzer != null) {
+      map['benutzer'] = Variable<String>(benutzer);
+    }
+    if (!nullToAbsent || beschreibung != null) {
+      map['beschreibung'] = Variable<String>(beschreibung);
+    }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || wert != null) {
+      map['wert'] = Variable<String>(wert);
+    }
+    if (!nullToAbsent || ziel != null) {
+      map['ziel'] = Variable<String>(ziel);
+    }
+    if (!nullToAbsent || aenderungen != null) {
+      map['aenderungen'] = Variable<String>(aenderungen);
+    }
+    if (!nullToAbsent || dateiId != null) {
+      map['datei_id'] = Variable<String>(dateiId);
+    }
+    if (!nullToAbsent || versionId != null) {
+      map['version_id'] = Variable<String>(versionId);
+    }
+    if (!nullToAbsent || kommentare != null) {
+      map['kommentare'] = Variable<String>(kommentare);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EntwicklungProjektEintraegeCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungProjektEintraegeCompanion(
+      id: Value(id),
+      projektId: Value(projektId),
+      art: Value(art),
+      titel: Value(titel),
+      datum: Value(datum),
+      benutzer: benutzer == null && nullToAbsent
+          ? const Value.absent()
+          : Value(benutzer),
+      beschreibung: beschreibung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(beschreibung),
+      status: Value(status),
+      wert: wert == null && nullToAbsent ? const Value.absent() : Value(wert),
+      ziel: ziel == null && nullToAbsent ? const Value.absent() : Value(ziel),
+      aenderungen: aenderungen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(aenderungen),
+      dateiId: dateiId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dateiId),
+      versionId: versionId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(versionId),
+      kommentare: kommentare == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kommentare),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory ProjektEintrag.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProjektEintrag(
+      id: serializer.fromJson<String>(json['id']),
+      projektId: serializer.fromJson<String>(json['projektId']),
+      art: serializer.fromJson<String>(json['art']),
+      titel: serializer.fromJson<String>(json['titel']),
+      datum: serializer.fromJson<DateTime>(json['datum']),
+      benutzer: serializer.fromJson<String?>(json['benutzer']),
+      beschreibung: serializer.fromJson<String?>(json['beschreibung']),
+      status: serializer.fromJson<String>(json['status']),
+      wert: serializer.fromJson<String?>(json['wert']),
+      ziel: serializer.fromJson<String?>(json['ziel']),
+      aenderungen: serializer.fromJson<String?>(json['aenderungen']),
+      dateiId: serializer.fromJson<String?>(json['dateiId']),
+      versionId: serializer.fromJson<String?>(json['versionId']),
+      kommentare: serializer.fromJson<String?>(json['kommentare']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projektId': serializer.toJson<String>(projektId),
+      'art': serializer.toJson<String>(art),
+      'titel': serializer.toJson<String>(titel),
+      'datum': serializer.toJson<DateTime>(datum),
+      'benutzer': serializer.toJson<String?>(benutzer),
+      'beschreibung': serializer.toJson<String?>(beschreibung),
+      'status': serializer.toJson<String>(status),
+      'wert': serializer.toJson<String?>(wert),
+      'ziel': serializer.toJson<String?>(ziel),
+      'aenderungen': serializer.toJson<String?>(aenderungen),
+      'dateiId': serializer.toJson<String?>(dateiId),
+      'versionId': serializer.toJson<String?>(versionId),
+      'kommentare': serializer.toJson<String?>(kommentare),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  ProjektEintrag copyWith(
+          {String? id,
+          String? projektId,
+          String? art,
+          String? titel,
+          DateTime? datum,
+          Value<String?> benutzer = const Value.absent(),
+          Value<String?> beschreibung = const Value.absent(),
+          String? status,
+          Value<String?> wert = const Value.absent(),
+          Value<String?> ziel = const Value.absent(),
+          Value<String?> aenderungen = const Value.absent(),
+          Value<String?> dateiId = const Value.absent(),
+          Value<String?> versionId = const Value.absent(),
+          Value<String?> kommentare = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      ProjektEintrag(
+        id: id ?? this.id,
+        projektId: projektId ?? this.projektId,
+        art: art ?? this.art,
+        titel: titel ?? this.titel,
+        datum: datum ?? this.datum,
+        benutzer: benutzer.present ? benutzer.value : this.benutzer,
+        beschreibung:
+            beschreibung.present ? beschreibung.value : this.beschreibung,
+        status: status ?? this.status,
+        wert: wert.present ? wert.value : this.wert,
+        ziel: ziel.present ? ziel.value : this.ziel,
+        aenderungen: aenderungen.present ? aenderungen.value : this.aenderungen,
+        dateiId: dateiId.present ? dateiId.value : this.dateiId,
+        versionId: versionId.present ? versionId.value : this.versionId,
+        kommentare: kommentare.present ? kommentare.value : this.kommentare,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  ProjektEintrag copyWithCompanion(EntwicklungProjektEintraegeCompanion data) {
+    return ProjektEintrag(
+      id: data.id.present ? data.id.value : this.id,
+      projektId: data.projektId.present ? data.projektId.value : this.projektId,
+      art: data.art.present ? data.art.value : this.art,
+      titel: data.titel.present ? data.titel.value : this.titel,
+      datum: data.datum.present ? data.datum.value : this.datum,
+      benutzer: data.benutzer.present ? data.benutzer.value : this.benutzer,
+      beschreibung: data.beschreibung.present
+          ? data.beschreibung.value
+          : this.beschreibung,
+      status: data.status.present ? data.status.value : this.status,
+      wert: data.wert.present ? data.wert.value : this.wert,
+      ziel: data.ziel.present ? data.ziel.value : this.ziel,
+      aenderungen:
+          data.aenderungen.present ? data.aenderungen.value : this.aenderungen,
+      dateiId: data.dateiId.present ? data.dateiId.value : this.dateiId,
+      versionId: data.versionId.present ? data.versionId.value : this.versionId,
+      kommentare:
+          data.kommentare.present ? data.kommentare.value : this.kommentare,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjektEintrag(')
+          ..write('id: $id, ')
+          ..write('projektId: $projektId, ')
+          ..write('art: $art, ')
+          ..write('titel: $titel, ')
+          ..write('datum: $datum, ')
+          ..write('benutzer: $benutzer, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('status: $status, ')
+          ..write('wert: $wert, ')
+          ..write('ziel: $ziel, ')
+          ..write('aenderungen: $aenderungen, ')
+          ..write('dateiId: $dateiId, ')
+          ..write('versionId: $versionId, ')
+          ..write('kommentare: $kommentare, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id,
+      projektId,
+      art,
+      titel,
+      datum,
+      benutzer,
+      beschreibung,
+      status,
+      wert,
+      ziel,
+      aenderungen,
+      dateiId,
+      versionId,
+      kommentare,
+      createdAt,
+      updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProjektEintrag &&
+          other.id == this.id &&
+          other.projektId == this.projektId &&
+          other.art == this.art &&
+          other.titel == this.titel &&
+          other.datum == this.datum &&
+          other.benutzer == this.benutzer &&
+          other.beschreibung == this.beschreibung &&
+          other.status == this.status &&
+          other.wert == this.wert &&
+          other.ziel == this.ziel &&
+          other.aenderungen == this.aenderungen &&
+          other.dateiId == this.dateiId &&
+          other.versionId == this.versionId &&
+          other.kommentare == this.kommentare &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EntwicklungProjektEintraegeCompanion
+    extends UpdateCompanion<ProjektEintrag> {
+  final Value<String> id;
+  final Value<String> projektId;
+  final Value<String> art;
+  final Value<String> titel;
+  final Value<DateTime> datum;
+  final Value<String?> benutzer;
+  final Value<String?> beschreibung;
+  final Value<String> status;
+  final Value<String?> wert;
+  final Value<String?> ziel;
+  final Value<String?> aenderungen;
+  final Value<String?> dateiId;
+  final Value<String?> versionId;
+  final Value<String?> kommentare;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EntwicklungProjektEintraegeCompanion({
+    this.id = const Value.absent(),
+    this.projektId = const Value.absent(),
+    this.art = const Value.absent(),
+    this.titel = const Value.absent(),
+    this.datum = const Value.absent(),
+    this.benutzer = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.status = const Value.absent(),
+    this.wert = const Value.absent(),
+    this.ziel = const Value.absent(),
+    this.aenderungen = const Value.absent(),
+    this.dateiId = const Value.absent(),
+    this.versionId = const Value.absent(),
+    this.kommentare = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungProjektEintraegeCompanion.insert({
+    required String id,
+    required String projektId,
+    required String art,
+    required String titel,
+    required DateTime datum,
+    this.benutzer = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.status = const Value.absent(),
+    this.wert = const Value.absent(),
+    this.ziel = const Value.absent(),
+    this.aenderungen = const Value.absent(),
+    this.dateiId = const Value.absent(),
+    this.versionId = const Value.absent(),
+    this.kommentare = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        projektId = Value(projektId),
+        art = Value(art),
+        titel = Value(titel),
+        datum = Value(datum);
+  static Insertable<ProjektEintrag> custom({
+    Expression<String>? id,
+    Expression<String>? projektId,
+    Expression<String>? art,
+    Expression<String>? titel,
+    Expression<DateTime>? datum,
+    Expression<String>? benutzer,
+    Expression<String>? beschreibung,
+    Expression<String>? status,
+    Expression<String>? wert,
+    Expression<String>? ziel,
+    Expression<String>? aenderungen,
+    Expression<String>? dateiId,
+    Expression<String>? versionId,
+    Expression<String>? kommentare,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projektId != null) 'projekt_id': projektId,
+      if (art != null) 'art': art,
+      if (titel != null) 'titel': titel,
+      if (datum != null) 'datum': datum,
+      if (benutzer != null) 'benutzer': benutzer,
+      if (beschreibung != null) 'beschreibung': beschreibung,
+      if (status != null) 'status': status,
+      if (wert != null) 'wert': wert,
+      if (ziel != null) 'ziel': ziel,
+      if (aenderungen != null) 'aenderungen': aenderungen,
+      if (dateiId != null) 'datei_id': dateiId,
+      if (versionId != null) 'version_id': versionId,
+      if (kommentare != null) 'kommentare': kommentare,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungProjektEintraegeCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? projektId,
+      Value<String>? art,
+      Value<String>? titel,
+      Value<DateTime>? datum,
+      Value<String?>? benutzer,
+      Value<String?>? beschreibung,
+      Value<String>? status,
+      Value<String?>? wert,
+      Value<String?>? ziel,
+      Value<String?>? aenderungen,
+      Value<String?>? dateiId,
+      Value<String?>? versionId,
+      Value<String?>? kommentare,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return EntwicklungProjektEintraegeCompanion(
+      id: id ?? this.id,
+      projektId: projektId ?? this.projektId,
+      art: art ?? this.art,
+      titel: titel ?? this.titel,
+      datum: datum ?? this.datum,
+      benutzer: benutzer ?? this.benutzer,
+      beschreibung: beschreibung ?? this.beschreibung,
+      status: status ?? this.status,
+      wert: wert ?? this.wert,
+      ziel: ziel ?? this.ziel,
+      aenderungen: aenderungen ?? this.aenderungen,
+      dateiId: dateiId ?? this.dateiId,
+      versionId: versionId ?? this.versionId,
+      kommentare: kommentare ?? this.kommentare,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projektId.present) {
+      map['projekt_id'] = Variable<String>(projektId.value);
+    }
+    if (art.present) {
+      map['art'] = Variable<String>(art.value);
+    }
+    if (titel.present) {
+      map['titel'] = Variable<String>(titel.value);
+    }
+    if (datum.present) {
+      map['datum'] = Variable<DateTime>(datum.value);
+    }
+    if (benutzer.present) {
+      map['benutzer'] = Variable<String>(benutzer.value);
+    }
+    if (beschreibung.present) {
+      map['beschreibung'] = Variable<String>(beschreibung.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (wert.present) {
+      map['wert'] = Variable<String>(wert.value);
+    }
+    if (ziel.present) {
+      map['ziel'] = Variable<String>(ziel.value);
+    }
+    if (aenderungen.present) {
+      map['aenderungen'] = Variable<String>(aenderungen.value);
+    }
+    if (dateiId.present) {
+      map['datei_id'] = Variable<String>(dateiId.value);
+    }
+    if (versionId.present) {
+      map['version_id'] = Variable<String>(versionId.value);
+    }
+    if (kommentare.present) {
+      map['kommentare'] = Variable<String>(kommentare.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungProjektEintraegeCompanion(')
+          ..write('id: $id, ')
+          ..write('projektId: $projektId, ')
+          ..write('art: $art, ')
+          ..write('titel: $titel, ')
+          ..write('datum: $datum, ')
+          ..write('benutzer: $benutzer, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('status: $status, ')
+          ..write('wert: $wert, ')
+          ..write('ziel: $ziel, ')
+          ..write('aenderungen: $aenderungen, ')
+          ..write('dateiId: $dateiId, ')
+          ..write('versionId: $versionId, ')
+          ..write('kommentare: $kommentare, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungDateienTable extends EntwicklungDateien
+    with TableInfo<$EntwicklungDateienTable, EntwicklungsDatei> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungDateienTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _projektIdMeta =
+      const VerificationMeta('projektId');
+  @override
+  late final GeneratedColumn<String> projektId = GeneratedColumn<String>(
+      'projekt_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _mimeTypMeta =
+      const VerificationMeta('mimeTyp');
+  @override
+  late final GeneratedColumn<String> mimeTyp = GeneratedColumn<String>(
+      'mime_typ', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _groesseMeta =
+      const VerificationMeta('groesse');
+  @override
+  late final GeneratedColumn<int> groesse = GeneratedColumn<int>(
+      'groesse', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, projektId, name, mimeTyp, groesse, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_dateien';
+  @override
+  VerificationContext validateIntegrity(Insertable<EntwicklungsDatei> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('projekt_id')) {
+      context.handle(_projektIdMeta,
+          projektId.isAcceptableOrUnknown(data['projekt_id']!, _projektIdMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('mime_typ')) {
+      context.handle(_mimeTypMeta,
+          mimeTyp.isAcceptableOrUnknown(data['mime_typ']!, _mimeTypMeta));
+    }
+    if (data.containsKey('groesse')) {
+      context.handle(_groesseMeta,
+          groesse.isAcceptableOrUnknown(data['groesse']!, _groesseMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  EntwicklungsDatei map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return EntwicklungsDatei(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      projektId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}projekt_id']),
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      mimeTyp: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}mime_typ']),
+      groesse: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}groesse'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $EntwicklungDateienTable createAlias(String alias) {
+    return $EntwicklungDateienTable(attachedDatabase, alias);
+  }
+}
+
+class EntwicklungsDatei extends DataClass
+    implements Insertable<EntwicklungsDatei> {
+  final String id;
+  final String? projektId;
+
+  /// Dateiname mit Endung, etwa „Spezifikation Kunde.pdf".
+  final String name;
+  final String? mimeTyp;
+
+  /// Größe des Klartexts in Bytes.
+  final int groesse;
+  final DateTime createdAt;
+  const EntwicklungsDatei(
+      {required this.id,
+      this.projektId,
+      required this.name,
+      this.mimeTyp,
+      required this.groesse,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    if (!nullToAbsent || projektId != null) {
+      map['projekt_id'] = Variable<String>(projektId);
+    }
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || mimeTyp != null) {
+      map['mime_typ'] = Variable<String>(mimeTyp);
+    }
+    map['groesse'] = Variable<int>(groesse);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  EntwicklungDateienCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungDateienCompanion(
+      id: Value(id),
+      projektId: projektId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projektId),
+      name: Value(name),
+      mimeTyp: mimeTyp == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mimeTyp),
+      groesse: Value(groesse),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory EntwicklungsDatei.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return EntwicklungsDatei(
+      id: serializer.fromJson<String>(json['id']),
+      projektId: serializer.fromJson<String?>(json['projektId']),
+      name: serializer.fromJson<String>(json['name']),
+      mimeTyp: serializer.fromJson<String?>(json['mimeTyp']),
+      groesse: serializer.fromJson<int>(json['groesse']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'projektId': serializer.toJson<String?>(projektId),
+      'name': serializer.toJson<String>(name),
+      'mimeTyp': serializer.toJson<String?>(mimeTyp),
+      'groesse': serializer.toJson<int>(groesse),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  EntwicklungsDatei copyWith(
+          {String? id,
+          Value<String?> projektId = const Value.absent(),
+          String? name,
+          Value<String?> mimeTyp = const Value.absent(),
+          int? groesse,
+          DateTime? createdAt}) =>
+      EntwicklungsDatei(
+        id: id ?? this.id,
+        projektId: projektId.present ? projektId.value : this.projektId,
+        name: name ?? this.name,
+        mimeTyp: mimeTyp.present ? mimeTyp.value : this.mimeTyp,
+        groesse: groesse ?? this.groesse,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  EntwicklungsDatei copyWithCompanion(EntwicklungDateienCompanion data) {
+    return EntwicklungsDatei(
+      id: data.id.present ? data.id.value : this.id,
+      projektId: data.projektId.present ? data.projektId.value : this.projektId,
+      name: data.name.present ? data.name.value : this.name,
+      mimeTyp: data.mimeTyp.present ? data.mimeTyp.value : this.mimeTyp,
+      groesse: data.groesse.present ? data.groesse.value : this.groesse,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungsDatei(')
+          ..write('id: $id, ')
+          ..write('projektId: $projektId, ')
+          ..write('name: $name, ')
+          ..write('mimeTyp: $mimeTyp, ')
+          ..write('groesse: $groesse, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, projektId, name, mimeTyp, groesse, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is EntwicklungsDatei &&
+          other.id == this.id &&
+          other.projektId == this.projektId &&
+          other.name == this.name &&
+          other.mimeTyp == this.mimeTyp &&
+          other.groesse == this.groesse &&
+          other.createdAt == this.createdAt);
+}
+
+class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
+  final Value<String> id;
+  final Value<String?> projektId;
+  final Value<String> name;
+  final Value<String?> mimeTyp;
+  final Value<int> groesse;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const EntwicklungDateienCompanion({
+    this.id = const Value.absent(),
+    this.projektId = const Value.absent(),
+    this.name = const Value.absent(),
+    this.mimeTyp = const Value.absent(),
+    this.groesse = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungDateienCompanion.insert({
+    required String id,
+    this.projektId = const Value.absent(),
+    required String name,
+    this.mimeTyp = const Value.absent(),
+    this.groesse = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<EntwicklungsDatei> custom({
+    Expression<String>? id,
+    Expression<String>? projektId,
+    Expression<String>? name,
+    Expression<String>? mimeTyp,
+    Expression<int>? groesse,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (projektId != null) 'projekt_id': projektId,
+      if (name != null) 'name': name,
+      if (mimeTyp != null) 'mime_typ': mimeTyp,
+      if (groesse != null) 'groesse': groesse,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungDateienCompanion copyWith(
+      {Value<String>? id,
+      Value<String?>? projektId,
+      Value<String>? name,
+      Value<String?>? mimeTyp,
+      Value<int>? groesse,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return EntwicklungDateienCompanion(
+      id: id ?? this.id,
+      projektId: projektId ?? this.projektId,
+      name: name ?? this.name,
+      mimeTyp: mimeTyp ?? this.mimeTyp,
+      groesse: groesse ?? this.groesse,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (projektId.present) {
+      map['projekt_id'] = Variable<String>(projektId.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (mimeTyp.present) {
+      map['mime_typ'] = Variable<String>(mimeTyp.value);
+    }
+    if (groesse.present) {
+      map['groesse'] = Variable<int>(groesse.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungDateienCompanion(')
+          ..write('id: $id, ')
+          ..write('projektId: $projektId, ')
+          ..write('name: $name, ')
+          ..write('mimeTyp: $mimeTyp, ')
+          ..write('groesse: $groesse, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungDateiInhalteTable extends EntwicklungDateiInhalte
+    with TableInfo<$EntwicklungDateiInhalteTable, DateiInhalt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungDateiInhalteTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _dateiIdMeta =
+      const VerificationMeta('dateiId');
+  @override
+  late final GeneratedColumn<String> dateiId = GeneratedColumn<String>(
+      'datei_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _inhaltMeta = const VerificationMeta('inhalt');
+  @override
+  late final GeneratedColumn<Uint8List> inhalt = GeneratedColumn<Uint8List>(
+      'inhalt', aliasedName, false,
+      type: DriftSqlType.blob, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [dateiId, inhalt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_datei_inhalte';
+  @override
+  VerificationContext validateIntegrity(Insertable<DateiInhalt> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('datei_id')) {
+      context.handle(_dateiIdMeta,
+          dateiId.isAcceptableOrUnknown(data['datei_id']!, _dateiIdMeta));
+    } else if (isInserting) {
+      context.missing(_dateiIdMeta);
+    }
+    if (data.containsKey('inhalt')) {
+      context.handle(_inhaltMeta,
+          inhalt.isAcceptableOrUnknown(data['inhalt']!, _inhaltMeta));
+    } else if (isInserting) {
+      context.missing(_inhaltMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {dateiId};
+  @override
+  DateiInhalt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DateiInhalt(
+      dateiId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}datei_id'])!,
+      inhalt: attachedDatabase.typeMapping
+          .read(DriftSqlType.blob, data['${effectivePrefix}inhalt'])!,
+    );
+  }
+
+  @override
+  $EntwicklungDateiInhalteTable createAlias(String alias) {
+    return $EntwicklungDateiInhalteTable(attachedDatabase, alias);
+  }
+}
+
+class DateiInhalt extends DataClass implements Insertable<DateiInhalt> {
+  final String dateiId;
+  final Uint8List inhalt;
+  const DateiInhalt({required this.dateiId, required this.inhalt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['datei_id'] = Variable<String>(dateiId);
+    map['inhalt'] = Variable<Uint8List>(inhalt);
+    return map;
+  }
+
+  EntwicklungDateiInhalteCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungDateiInhalteCompanion(
+      dateiId: Value(dateiId),
+      inhalt: Value(inhalt),
+    );
+  }
+
+  factory DateiInhalt.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DateiInhalt(
+      dateiId: serializer.fromJson<String>(json['dateiId']),
+      inhalt: serializer.fromJson<Uint8List>(json['inhalt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'dateiId': serializer.toJson<String>(dateiId),
+      'inhalt': serializer.toJson<Uint8List>(inhalt),
+    };
+  }
+
+  DateiInhalt copyWith({String? dateiId, Uint8List? inhalt}) => DateiInhalt(
+        dateiId: dateiId ?? this.dateiId,
+        inhalt: inhalt ?? this.inhalt,
+      );
+  DateiInhalt copyWithCompanion(EntwicklungDateiInhalteCompanion data) {
+    return DateiInhalt(
+      dateiId: data.dateiId.present ? data.dateiId.value : this.dateiId,
+      inhalt: data.inhalt.present ? data.inhalt.value : this.inhalt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DateiInhalt(')
+          ..write('dateiId: $dateiId, ')
+          ..write('inhalt: $inhalt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(dateiId, $driftBlobEquality.hash(inhalt));
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DateiInhalt &&
+          other.dateiId == this.dateiId &&
+          $driftBlobEquality.equals(other.inhalt, this.inhalt));
+}
+
+class EntwicklungDateiInhalteCompanion extends UpdateCompanion<DateiInhalt> {
+  final Value<String> dateiId;
+  final Value<Uint8List> inhalt;
+  final Value<int> rowid;
+  const EntwicklungDateiInhalteCompanion({
+    this.dateiId = const Value.absent(),
+    this.inhalt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungDateiInhalteCompanion.insert({
+    required String dateiId,
+    required Uint8List inhalt,
+    this.rowid = const Value.absent(),
+  })  : dateiId = Value(dateiId),
+        inhalt = Value(inhalt);
+  static Insertable<DateiInhalt> custom({
+    Expression<String>? dateiId,
+    Expression<Uint8List>? inhalt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (dateiId != null) 'datei_id': dateiId,
+      if (inhalt != null) 'inhalt': inhalt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungDateiInhalteCompanion copyWith(
+      {Value<String>? dateiId, Value<Uint8List>? inhalt, Value<int>? rowid}) {
+    return EntwicklungDateiInhalteCompanion(
+      dateiId: dateiId ?? this.dateiId,
+      inhalt: inhalt ?? this.inhalt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (dateiId.present) {
+      map['datei_id'] = Variable<String>(dateiId.value);
+    }
+    if (inhalt.present) {
+      map['inhalt'] = Variable<Uint8List>(inhalt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungDateiInhalteCompanion(')
+          ..write('dateiId: $dateiId, ')
+          ..write('inhalt: $inhalt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $EntwicklungFliessdiagrammeTable extends EntwicklungFliessdiagramme
+    with TableInfo<$EntwicklungFliessdiagrammeTable, Fliessdiagramm> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungFliessdiagrammeTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _bezeichnungMeta =
+      const VerificationMeta('bezeichnung');
+  @override
+  late final GeneratedColumn<String> bezeichnung = GeneratedColumn<String>(
+      'bezeichnung', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _sortierungMeta =
+      const VerificationMeta('sortierung');
+  @override
+  late final GeneratedColumn<int> sortierung = GeneratedColumn<int>(
+      'sortierung', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, bezeichnung, sortierung, createdAt, updatedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_fliessdiagramme';
+  @override
+  VerificationContext validateIntegrity(Insertable<Fliessdiagramm> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('bezeichnung')) {
+      context.handle(
+          _bezeichnungMeta,
+          bezeichnung.isAcceptableOrUnknown(
+              data['bezeichnung']!, _bezeichnungMeta));
+    } else if (isInserting) {
+      context.missing(_bezeichnungMeta);
+    }
+    if (data.containsKey('sortierung')) {
+      context.handle(
+          _sortierungMeta,
+          sortierung.isAcceptableOrUnknown(
+              data['sortierung']!, _sortierungMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Fliessdiagramm map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Fliessdiagramm(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      bezeichnung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bezeichnung'])!,
+      sortierung: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}sortierung'])!,
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+    );
+  }
+
+  @override
+  $EntwicklungFliessdiagrammeTable createAlias(String alias) {
+    return $EntwicklungFliessdiagrammeTable(attachedDatabase, alias);
+  }
+}
+
+class Fliessdiagramm extends DataClass implements Insertable<Fliessdiagramm> {
+  /// Kürzel, etwa „FD_009".
+  final String id;
+  final String bezeichnung;
+  final int sortierung;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  const Fliessdiagramm(
+      {required this.id,
+      required this.bezeichnung,
+      required this.sortierung,
+      required this.createdAt,
+      required this.updatedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['bezeichnung'] = Variable<String>(bezeichnung);
+    map['sortierung'] = Variable<int>(sortierung);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  EntwicklungFliessdiagrammeCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungFliessdiagrammeCompanion(
+      id: Value(id),
+      bezeichnung: Value(bezeichnung),
+      sortierung: Value(sortierung),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory Fliessdiagramm.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Fliessdiagramm(
+      id: serializer.fromJson<String>(json['id']),
+      bezeichnung: serializer.fromJson<String>(json['bezeichnung']),
+      sortierung: serializer.fromJson<int>(json['sortierung']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'bezeichnung': serializer.toJson<String>(bezeichnung),
+      'sortierung': serializer.toJson<int>(sortierung),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  Fliessdiagramm copyWith(
+          {String? id,
+          String? bezeichnung,
+          int? sortierung,
+          DateTime? createdAt,
+          DateTime? updatedAt}) =>
+      Fliessdiagramm(
+        id: id ?? this.id,
+        bezeichnung: bezeichnung ?? this.bezeichnung,
+        sortierung: sortierung ?? this.sortierung,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+  Fliessdiagramm copyWithCompanion(EntwicklungFliessdiagrammeCompanion data) {
+    return Fliessdiagramm(
+      id: data.id.present ? data.id.value : this.id,
+      bezeichnung:
+          data.bezeichnung.present ? data.bezeichnung.value : this.bezeichnung,
+      sortierung:
+          data.sortierung.present ? data.sortierung.value : this.sortierung,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Fliessdiagramm(')
+          ..write('id: $id, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, bezeichnung, sortierung, createdAt, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Fliessdiagramm &&
+          other.id == this.id &&
+          other.bezeichnung == this.bezeichnung &&
+          other.sortierung == this.sortierung &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class EntwicklungFliessdiagrammeCompanion
+    extends UpdateCompanion<Fliessdiagramm> {
+  final Value<String> id;
+  final Value<String> bezeichnung;
+  final Value<int> sortierung;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const EntwicklungFliessdiagrammeCompanion({
+    this.id = const Value.absent(),
+    this.bezeichnung = const Value.absent(),
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungFliessdiagrammeCompanion.insert({
+    required String id,
+    required String bezeichnung,
+    this.sortierung = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        bezeichnung = Value(bezeichnung);
+  static Insertable<Fliessdiagramm> custom({
+    Expression<String>? id,
+    Expression<String>? bezeichnung,
+    Expression<int>? sortierung,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (bezeichnung != null) 'bezeichnung': bezeichnung,
+      if (sortierung != null) 'sortierung': sortierung,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungFliessdiagrammeCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? bezeichnung,
+      Value<int>? sortierung,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<int>? rowid}) {
+    return EntwicklungFliessdiagrammeCompanion(
+      id: id ?? this.id,
+      bezeichnung: bezeichnung ?? this.bezeichnung,
+      sortierung: sortierung ?? this.sortierung,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (bezeichnung.present) {
+      map['bezeichnung'] = Variable<String>(bezeichnung.value);
+    }
+    if (sortierung.present) {
+      map['sortierung'] = Variable<int>(sortierung.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungFliessdiagrammeCompanion(')
+          ..write('id: $id, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('sortierung: $sortierung, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -16186,6 +22187,24 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       auftragsbestandPositionenVorher =
       $AuftragsbestandPositionenVorherTable(this);
   late final $TagesaufgabenTable tagesaufgaben = $TagesaufgabenTable(this);
+  late final $EntwicklungZutatenTable entwicklungZutaten =
+      $EntwicklungZutatenTable(this);
+  late final $EntwicklungRezepturenTable entwicklungRezepturen =
+      $EntwicklungRezepturenTable(this);
+  late final $EntwicklungRezepturVersionenTable entwicklungRezepturVersionen =
+      $EntwicklungRezepturVersionenTable(this);
+  late final $EntwicklungRezepturPositionenTable entwicklungRezepturPositionen =
+      $EntwicklungRezepturPositionenTable(this);
+  late final $EntwicklungProjekteTable entwicklungProjekte =
+      $EntwicklungProjekteTable(this);
+  late final $EntwicklungProjektEintraegeTable entwicklungProjektEintraege =
+      $EntwicklungProjektEintraegeTable(this);
+  late final $EntwicklungDateienTable entwicklungDateien =
+      $EntwicklungDateienTable(this);
+  late final $EntwicklungDateiInhalteTable entwicklungDateiInhalte =
+      $EntwicklungDateiInhalteTable(this);
+  late final $EntwicklungFliessdiagrammeTable entwicklungFliessdiagramme =
+      $EntwicklungFliessdiagrammeTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -16213,7 +22232,16 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         auftragsbestandPositionen,
         auftragsbestandArtikelVorher,
         auftragsbestandPositionenVorher,
-        tagesaufgaben
+        tagesaufgaben,
+        entwicklungZutaten,
+        entwicklungRezepturen,
+        entwicklungRezepturVersionen,
+        entwicklungRezepturPositionen,
+        entwicklungProjekte,
+        entwicklungProjektEintraege,
+        entwicklungDateien,
+        entwicklungDateiInhalte,
+        entwicklungFliessdiagramme
       ];
 }
 
@@ -25437,6 +31465,2737 @@ typedef $$TagesaufgabenTableProcessedTableManager = ProcessedTableManager<
     ),
     Tagesaufgabe,
     PrefetchHooks Function()>;
+typedef $$EntwicklungZutatenTableCreateCompanionBuilder
+    = EntwicklungZutatenCompanion Function({
+  required String id,
+  required String name,
+  Value<String?> artikelnummer,
+  Value<String?> etikettName,
+  Value<bool> istFleisch,
+  Value<bool> istWasser,
+  Value<String?> tierart,
+  Value<double?> bindegewebe,
+  Value<double?> fleischeiweissGrenze,
+  Value<bool> quidPflicht,
+  Value<String?> unterzutaten,
+  Value<String?> verarbeitungshilfsstoffe,
+  Value<String?> allergene,
+  Value<double?> energieKj,
+  Value<double?> energieKcal,
+  Value<double?> fett,
+  Value<double?> gesaettigteFettsaeuren,
+  Value<double?> kohlenhydrate,
+  Value<double?> zucker,
+  Value<double?> eiweiss,
+  Value<double?> salz,
+  Value<double?> wasser,
+  Value<double?> asche,
+  Value<double?> beffe,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungZutatenTableUpdateCompanionBuilder
+    = EntwicklungZutatenCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String?> artikelnummer,
+  Value<String?> etikettName,
+  Value<bool> istFleisch,
+  Value<bool> istWasser,
+  Value<String?> tierart,
+  Value<double?> bindegewebe,
+  Value<double?> fleischeiweissGrenze,
+  Value<bool> quidPflicht,
+  Value<String?> unterzutaten,
+  Value<String?> verarbeitungshilfsstoffe,
+  Value<String?> allergene,
+  Value<double?> energieKj,
+  Value<double?> energieKcal,
+  Value<double?> fett,
+  Value<double?> gesaettigteFettsaeuren,
+  Value<double?> kohlenhydrate,
+  Value<double?> zucker,
+  Value<double?> eiweiss,
+  Value<double?> salz,
+  Value<double?> wasser,
+  Value<double?> asche,
+  Value<double?> beffe,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungZutatenTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungZutatenTable> {
+  $$EntwicklungZutatenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istFleisch => $composableBuilder(
+      column: $table.istFleisch, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istWasser => $composableBuilder(
+      column: $table.istWasser, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get tierart => $composableBuilder(
+      column: $table.tierart, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get bindegewebe => $composableBuilder(
+      column: $table.bindegewebe, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fleischeiweissGrenze => $composableBuilder(
+      column: $table.fleischeiweissGrenze,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get unterzutaten => $composableBuilder(
+      column: $table.unterzutaten, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verarbeitungshilfsstoffe => $composableBuilder(
+      column: $table.verarbeitungshilfsstoffe,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get allergene => $composableBuilder(
+      column: $table.allergene, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get energieKj => $composableBuilder(
+      column: $table.energieKj, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get energieKcal => $composableBuilder(
+      column: $table.energieKcal, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fett => $composableBuilder(
+      column: $table.fett, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get gesaettigteFettsaeuren => $composableBuilder(
+      column: $table.gesaettigteFettsaeuren,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kohlenhydrate => $composableBuilder(
+      column: $table.kohlenhydrate, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zucker => $composableBuilder(
+      column: $table.zucker, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get eiweiss => $composableBuilder(
+      column: $table.eiweiss, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get salz => $composableBuilder(
+      column: $table.salz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get wasser => $composableBuilder(
+      column: $table.wasser, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get asche => $composableBuilder(
+      column: $table.asche, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get beffe => $composableBuilder(
+      column: $table.beffe, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungZutatenTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungZutatenTable> {
+  $$EntwicklungZutatenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get istFleisch => $composableBuilder(
+      column: $table.istFleisch, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get istWasser => $composableBuilder(
+      column: $table.istWasser, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get tierart => $composableBuilder(
+      column: $table.tierart, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get bindegewebe => $composableBuilder(
+      column: $table.bindegewebe, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get fleischeiweissGrenze => $composableBuilder(
+      column: $table.fleischeiweissGrenze,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get unterzutaten => $composableBuilder(
+      column: $table.unterzutaten,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get verarbeitungshilfsstoffe => $composableBuilder(
+      column: $table.verarbeitungshilfsstoffe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get allergene => $composableBuilder(
+      column: $table.allergene, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get energieKj => $composableBuilder(
+      column: $table.energieKj, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get energieKcal => $composableBuilder(
+      column: $table.energieKcal, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get fett => $composableBuilder(
+      column: $table.fett, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get gesaettigteFettsaeuren => $composableBuilder(
+      column: $table.gesaettigteFettsaeuren,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kohlenhydrate => $composableBuilder(
+      column: $table.kohlenhydrate,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zucker => $composableBuilder(
+      column: $table.zucker, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get eiweiss => $composableBuilder(
+      column: $table.eiweiss, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get salz => $composableBuilder(
+      column: $table.salz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get wasser => $composableBuilder(
+      column: $table.wasser, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get asche => $composableBuilder(
+      column: $table.asche, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get beffe => $composableBuilder(
+      column: $table.beffe, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungZutatenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungZutatenTable> {
+  $$EntwicklungZutatenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => column);
+
+  GeneratedColumn<bool> get istFleisch => $composableBuilder(
+      column: $table.istFleisch, builder: (column) => column);
+
+  GeneratedColumn<bool> get istWasser =>
+      $composableBuilder(column: $table.istWasser, builder: (column) => column);
+
+  GeneratedColumn<String> get tierart =>
+      $composableBuilder(column: $table.tierart, builder: (column) => column);
+
+  GeneratedColumn<double> get bindegewebe => $composableBuilder(
+      column: $table.bindegewebe, builder: (column) => column);
+
+  GeneratedColumn<double> get fleischeiweissGrenze => $composableBuilder(
+      column: $table.fleischeiweissGrenze, builder: (column) => column);
+
+  GeneratedColumn<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => column);
+
+  GeneratedColumn<String> get unterzutaten => $composableBuilder(
+      column: $table.unterzutaten, builder: (column) => column);
+
+  GeneratedColumn<String> get verarbeitungshilfsstoffe => $composableBuilder(
+      column: $table.verarbeitungshilfsstoffe, builder: (column) => column);
+
+  GeneratedColumn<String> get allergene =>
+      $composableBuilder(column: $table.allergene, builder: (column) => column);
+
+  GeneratedColumn<double> get energieKj =>
+      $composableBuilder(column: $table.energieKj, builder: (column) => column);
+
+  GeneratedColumn<double> get energieKcal => $composableBuilder(
+      column: $table.energieKcal, builder: (column) => column);
+
+  GeneratedColumn<double> get fett =>
+      $composableBuilder(column: $table.fett, builder: (column) => column);
+
+  GeneratedColumn<double> get gesaettigteFettsaeuren => $composableBuilder(
+      column: $table.gesaettigteFettsaeuren, builder: (column) => column);
+
+  GeneratedColumn<double> get kohlenhydrate => $composableBuilder(
+      column: $table.kohlenhydrate, builder: (column) => column);
+
+  GeneratedColumn<double> get zucker =>
+      $composableBuilder(column: $table.zucker, builder: (column) => column);
+
+  GeneratedColumn<double> get eiweiss =>
+      $composableBuilder(column: $table.eiweiss, builder: (column) => column);
+
+  GeneratedColumn<double> get salz =>
+      $composableBuilder(column: $table.salz, builder: (column) => column);
+
+  GeneratedColumn<double> get wasser =>
+      $composableBuilder(column: $table.wasser, builder: (column) => column);
+
+  GeneratedColumn<double> get asche =>
+      $composableBuilder(column: $table.asche, builder: (column) => column);
+
+  GeneratedColumn<double> get beffe =>
+      $composableBuilder(column: $table.beffe, builder: (column) => column);
+
+  GeneratedColumn<String> get notiz =>
+      $composableBuilder(column: $table.notiz, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$EntwicklungZutatenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungZutatenTable,
+    Zutat,
+    $$EntwicklungZutatenTableFilterComposer,
+    $$EntwicklungZutatenTableOrderingComposer,
+    $$EntwicklungZutatenTableAnnotationComposer,
+    $$EntwicklungZutatenTableCreateCompanionBuilder,
+    $$EntwicklungZutatenTableUpdateCompanionBuilder,
+    (Zutat, BaseReferences<_$AppDatabase, $EntwicklungZutatenTable, Zutat>),
+    Zutat,
+    PrefetchHooks Function()> {
+  $$EntwicklungZutatenTableTableManager(
+      _$AppDatabase db, $EntwicklungZutatenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungZutatenTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungZutatenTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungZutatenTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String?> etikettName = const Value.absent(),
+            Value<bool> istFleisch = const Value.absent(),
+            Value<bool> istWasser = const Value.absent(),
+            Value<String?> tierart = const Value.absent(),
+            Value<double?> bindegewebe = const Value.absent(),
+            Value<double?> fleischeiweissGrenze = const Value.absent(),
+            Value<bool> quidPflicht = const Value.absent(),
+            Value<String?> unterzutaten = const Value.absent(),
+            Value<String?> verarbeitungshilfsstoffe = const Value.absent(),
+            Value<String?> allergene = const Value.absent(),
+            Value<double?> energieKj = const Value.absent(),
+            Value<double?> energieKcal = const Value.absent(),
+            Value<double?> fett = const Value.absent(),
+            Value<double?> gesaettigteFettsaeuren = const Value.absent(),
+            Value<double?> kohlenhydrate = const Value.absent(),
+            Value<double?> zucker = const Value.absent(),
+            Value<double?> eiweiss = const Value.absent(),
+            Value<double?> salz = const Value.absent(),
+            Value<double?> wasser = const Value.absent(),
+            Value<double?> asche = const Value.absent(),
+            Value<double?> beffe = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungZutatenCompanion(
+            id: id,
+            name: name,
+            artikelnummer: artikelnummer,
+            etikettName: etikettName,
+            istFleisch: istFleisch,
+            istWasser: istWasser,
+            tierart: tierart,
+            bindegewebe: bindegewebe,
+            fleischeiweissGrenze: fleischeiweissGrenze,
+            quidPflicht: quidPflicht,
+            unterzutaten: unterzutaten,
+            verarbeitungshilfsstoffe: verarbeitungshilfsstoffe,
+            allergene: allergene,
+            energieKj: energieKj,
+            energieKcal: energieKcal,
+            fett: fett,
+            gesaettigteFettsaeuren: gesaettigteFettsaeuren,
+            kohlenhydrate: kohlenhydrate,
+            zucker: zucker,
+            eiweiss: eiweiss,
+            salz: salz,
+            wasser: wasser,
+            asche: asche,
+            beffe: beffe,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String?> etikettName = const Value.absent(),
+            Value<bool> istFleisch = const Value.absent(),
+            Value<bool> istWasser = const Value.absent(),
+            Value<String?> tierart = const Value.absent(),
+            Value<double?> bindegewebe = const Value.absent(),
+            Value<double?> fleischeiweissGrenze = const Value.absent(),
+            Value<bool> quidPflicht = const Value.absent(),
+            Value<String?> unterzutaten = const Value.absent(),
+            Value<String?> verarbeitungshilfsstoffe = const Value.absent(),
+            Value<String?> allergene = const Value.absent(),
+            Value<double?> energieKj = const Value.absent(),
+            Value<double?> energieKcal = const Value.absent(),
+            Value<double?> fett = const Value.absent(),
+            Value<double?> gesaettigteFettsaeuren = const Value.absent(),
+            Value<double?> kohlenhydrate = const Value.absent(),
+            Value<double?> zucker = const Value.absent(),
+            Value<double?> eiweiss = const Value.absent(),
+            Value<double?> salz = const Value.absent(),
+            Value<double?> wasser = const Value.absent(),
+            Value<double?> asche = const Value.absent(),
+            Value<double?> beffe = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungZutatenCompanion.insert(
+            id: id,
+            name: name,
+            artikelnummer: artikelnummer,
+            etikettName: etikettName,
+            istFleisch: istFleisch,
+            istWasser: istWasser,
+            tierart: tierart,
+            bindegewebe: bindegewebe,
+            fleischeiweissGrenze: fleischeiweissGrenze,
+            quidPflicht: quidPflicht,
+            unterzutaten: unterzutaten,
+            verarbeitungshilfsstoffe: verarbeitungshilfsstoffe,
+            allergene: allergene,
+            energieKj: energieKj,
+            energieKcal: energieKcal,
+            fett: fett,
+            gesaettigteFettsaeuren: gesaettigteFettsaeuren,
+            kohlenhydrate: kohlenhydrate,
+            zucker: zucker,
+            eiweiss: eiweiss,
+            salz: salz,
+            wasser: wasser,
+            asche: asche,
+            beffe: beffe,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungZutatenTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $EntwicklungZutatenTable,
+    Zutat,
+    $$EntwicklungZutatenTableFilterComposer,
+    $$EntwicklungZutatenTableOrderingComposer,
+    $$EntwicklungZutatenTableAnnotationComposer,
+    $$EntwicklungZutatenTableCreateCompanionBuilder,
+    $$EntwicklungZutatenTableUpdateCompanionBuilder,
+    (Zutat, BaseReferences<_$AppDatabase, $EntwicklungZutatenTable, Zutat>),
+    Zutat,
+    PrefetchHooks Function()>;
+typedef $$EntwicklungRezepturenTableCreateCompanionBuilder
+    = EntwicklungRezepturenCompanion Function({
+  required String id,
+  required String name,
+  Value<String?> artikelnummer,
+  Value<String?> beschreibung,
+  Value<String?> projektId,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungRezepturenTableUpdateCompanionBuilder
+    = EntwicklungRezepturenCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String?> artikelnummer,
+  Value<String?> beschreibung,
+  Value<String?> projektId,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungRezepturenTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturenTable> {
+  $$EntwicklungRezepturenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungRezepturenTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturenTable> {
+  $$EntwicklungRezepturenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungRezepturenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturenTable> {
+  $$EntwicklungRezepturenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => column);
+
+  GeneratedColumn<String> get projektId =>
+      $composableBuilder(column: $table.projektId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$EntwicklungRezepturenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungRezepturenTable,
+    Rezeptur,
+    $$EntwicklungRezepturenTableFilterComposer,
+    $$EntwicklungRezepturenTableOrderingComposer,
+    $$EntwicklungRezepturenTableAnnotationComposer,
+    $$EntwicklungRezepturenTableCreateCompanionBuilder,
+    $$EntwicklungRezepturenTableUpdateCompanionBuilder,
+    (
+      Rezeptur,
+      BaseReferences<_$AppDatabase, $EntwicklungRezepturenTable, Rezeptur>
+    ),
+    Rezeptur,
+    PrefetchHooks Function()> {
+  $$EntwicklungRezepturenTableTableManager(
+      _$AppDatabase db, $EntwicklungRezepturenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungRezepturenTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungRezepturenTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungRezepturenTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String?> beschreibung = const Value.absent(),
+            Value<String?> projektId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturenCompanion(
+            id: id,
+            name: name,
+            artikelnummer: artikelnummer,
+            beschreibung: beschreibung,
+            projektId: projektId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String?> beschreibung = const Value.absent(),
+            Value<String?> projektId = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturenCompanion.insert(
+            id: id,
+            name: name,
+            artikelnummer: artikelnummer,
+            beschreibung: beschreibung,
+            projektId: projektId,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungRezepturenTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungRezepturenTable,
+        Rezeptur,
+        $$EntwicklungRezepturenTableFilterComposer,
+        $$EntwicklungRezepturenTableOrderingComposer,
+        $$EntwicklungRezepturenTableAnnotationComposer,
+        $$EntwicklungRezepturenTableCreateCompanionBuilder,
+        $$EntwicklungRezepturenTableUpdateCompanionBuilder,
+        (
+          Rezeptur,
+          BaseReferences<_$AppDatabase, $EntwicklungRezepturenTable, Rezeptur>
+        ),
+        Rezeptur,
+        PrefetchHooks Function()>;
+typedef $$EntwicklungRezepturVersionenTableCreateCompanionBuilder
+    = EntwicklungRezepturVersionenCompanion Function({
+  required String id,
+  required String rezepturId,
+  required int nummer,
+  Value<String?> bezeichnung,
+  Value<String> status,
+  Value<double> verlustProzent,
+  Value<double> fettVerlustProzent,
+  Value<String> verlustArt,
+  Value<String?> notiz,
+  Value<String?> stand,
+  Value<DateTime?> abgeschlossenAm,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungRezepturVersionenTableUpdateCompanionBuilder
+    = EntwicklungRezepturVersionenCompanion Function({
+  Value<String> id,
+  Value<String> rezepturId,
+  Value<int> nummer,
+  Value<String?> bezeichnung,
+  Value<String> status,
+  Value<double> verlustProzent,
+  Value<double> fettVerlustProzent,
+  Value<String> verlustArt,
+  Value<String?> notiz,
+  Value<String?> stand,
+  Value<DateTime?> abgeschlossenAm,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungRezepturVersionenTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturVersionenTable> {
+  $$EntwicklungRezepturVersionenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get rezepturId => $composableBuilder(
+      column: $table.rezepturId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get nummer => $composableBuilder(
+      column: $table.nummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get verlustProzent => $composableBuilder(
+      column: $table.verlustProzent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fettVerlustProzent => $composableBuilder(
+      column: $table.fettVerlustProzent,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get verlustArt => $composableBuilder(
+      column: $table.verlustArt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get stand => $composableBuilder(
+      column: $table.stand, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get abgeschlossenAm => $composableBuilder(
+      column: $table.abgeschlossenAm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungRezepturVersionenTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturVersionenTable> {
+  $$EntwicklungRezepturVersionenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get rezepturId => $composableBuilder(
+      column: $table.rezepturId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get nummer => $composableBuilder(
+      column: $table.nummer, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get verlustProzent => $composableBuilder(
+      column: $table.verlustProzent,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get fettVerlustProzent => $composableBuilder(
+      column: $table.fettVerlustProzent,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get verlustArt => $composableBuilder(
+      column: $table.verlustArt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get stand => $composableBuilder(
+      column: $table.stand, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get abgeschlossenAm => $composableBuilder(
+      column: $table.abgeschlossenAm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungRezepturVersionenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturVersionenTable> {
+  $$EntwicklungRezepturVersionenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get rezepturId => $composableBuilder(
+      column: $table.rezepturId, builder: (column) => column);
+
+  GeneratedColumn<int> get nummer =>
+      $composableBuilder(column: $table.nummer, builder: (column) => column);
+
+  GeneratedColumn<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<double> get verlustProzent => $composableBuilder(
+      column: $table.verlustProzent, builder: (column) => column);
+
+  GeneratedColumn<double> get fettVerlustProzent => $composableBuilder(
+      column: $table.fettVerlustProzent, builder: (column) => column);
+
+  GeneratedColumn<String> get verlustArt => $composableBuilder(
+      column: $table.verlustArt, builder: (column) => column);
+
+  GeneratedColumn<String> get notiz =>
+      $composableBuilder(column: $table.notiz, builder: (column) => column);
+
+  GeneratedColumn<String> get stand =>
+      $composableBuilder(column: $table.stand, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get abgeschlossenAm => $composableBuilder(
+      column: $table.abgeschlossenAm, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EntwicklungRezepturVersionenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungRezepturVersionenTable,
+    RezepturVersion,
+    $$EntwicklungRezepturVersionenTableFilterComposer,
+    $$EntwicklungRezepturVersionenTableOrderingComposer,
+    $$EntwicklungRezepturVersionenTableAnnotationComposer,
+    $$EntwicklungRezepturVersionenTableCreateCompanionBuilder,
+    $$EntwicklungRezepturVersionenTableUpdateCompanionBuilder,
+    (
+      RezepturVersion,
+      BaseReferences<_$AppDatabase, $EntwicklungRezepturVersionenTable,
+          RezepturVersion>
+    ),
+    RezepturVersion,
+    PrefetchHooks Function()> {
+  $$EntwicklungRezepturVersionenTableTableManager(
+      _$AppDatabase db, $EntwicklungRezepturVersionenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungRezepturVersionenTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungRezepturVersionenTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungRezepturVersionenTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> rezepturId = const Value.absent(),
+            Value<int> nummer = const Value.absent(),
+            Value<String?> bezeichnung = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<double> verlustProzent = const Value.absent(),
+            Value<double> fettVerlustProzent = const Value.absent(),
+            Value<String> verlustArt = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<String?> stand = const Value.absent(),
+            Value<DateTime?> abgeschlossenAm = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturVersionenCompanion(
+            id: id,
+            rezepturId: rezepturId,
+            nummer: nummer,
+            bezeichnung: bezeichnung,
+            status: status,
+            verlustProzent: verlustProzent,
+            fettVerlustProzent: fettVerlustProzent,
+            verlustArt: verlustArt,
+            notiz: notiz,
+            stand: stand,
+            abgeschlossenAm: abgeschlossenAm,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String rezepturId,
+            required int nummer,
+            Value<String?> bezeichnung = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<double> verlustProzent = const Value.absent(),
+            Value<double> fettVerlustProzent = const Value.absent(),
+            Value<String> verlustArt = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<String?> stand = const Value.absent(),
+            Value<DateTime?> abgeschlossenAm = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturVersionenCompanion.insert(
+            id: id,
+            rezepturId: rezepturId,
+            nummer: nummer,
+            bezeichnung: bezeichnung,
+            status: status,
+            verlustProzent: verlustProzent,
+            fettVerlustProzent: fettVerlustProzent,
+            verlustArt: verlustArt,
+            notiz: notiz,
+            stand: stand,
+            abgeschlossenAm: abgeschlossenAm,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungRezepturVersionenTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungRezepturVersionenTable,
+        RezepturVersion,
+        $$EntwicklungRezepturVersionenTableFilterComposer,
+        $$EntwicklungRezepturVersionenTableOrderingComposer,
+        $$EntwicklungRezepturVersionenTableAnnotationComposer,
+        $$EntwicklungRezepturVersionenTableCreateCompanionBuilder,
+        $$EntwicklungRezepturVersionenTableUpdateCompanionBuilder,
+        (
+          RezepturVersion,
+          BaseReferences<_$AppDatabase, $EntwicklungRezepturVersionenTable,
+              RezepturVersion>
+        ),
+        RezepturVersion,
+        PrefetchHooks Function()>;
+typedef $$EntwicklungRezepturPositionenTableCreateCompanionBuilder
+    = EntwicklungRezepturPositionenCompanion Function({
+  required String id,
+  required String versionId,
+  Value<int> reihenfolge,
+  Value<String?> zutatId,
+  Value<String?> unterrezepturId,
+  Value<String?> unterVersionId,
+  Value<double> mengeKg,
+  Value<bool?> quidPflicht,
+  Value<String?> etikettName,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungRezepturPositionenTableUpdateCompanionBuilder
+    = EntwicklungRezepturPositionenCompanion Function({
+  Value<String> id,
+  Value<String> versionId,
+  Value<int> reihenfolge,
+  Value<String?> zutatId,
+  Value<String?> unterrezepturId,
+  Value<String?> unterVersionId,
+  Value<double> mengeKg,
+  Value<bool?> quidPflicht,
+  Value<String?> etikettName,
+  Value<String?> notiz,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungRezepturPositionenTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturPositionenTable> {
+  $$EntwicklungRezepturPositionenTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get versionId => $composableBuilder(
+      column: $table.versionId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get zutatId => $composableBuilder(
+      column: $table.zutatId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get unterrezepturId => $composableBuilder(
+      column: $table.unterrezepturId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get unterVersionId => $composableBuilder(
+      column: $table.unterVersionId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get mengeKg => $composableBuilder(
+      column: $table.mengeKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungRezepturPositionenTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturPositionenTable> {
+  $$EntwicklungRezepturPositionenTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get versionId => $composableBuilder(
+      column: $table.versionId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get zutatId => $composableBuilder(
+      column: $table.zutatId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get unterrezepturId => $composableBuilder(
+      column: $table.unterrezepturId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get unterVersionId => $composableBuilder(
+      column: $table.unterVersionId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get mengeKg => $composableBuilder(
+      column: $table.mengeKg, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notiz => $composableBuilder(
+      column: $table.notiz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungRezepturPositionenTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungRezepturPositionenTable> {
+  $$EntwicklungRezepturPositionenTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get versionId =>
+      $composableBuilder(column: $table.versionId, builder: (column) => column);
+
+  GeneratedColumn<int> get reihenfolge => $composableBuilder(
+      column: $table.reihenfolge, builder: (column) => column);
+
+  GeneratedColumn<String> get zutatId =>
+      $composableBuilder(column: $table.zutatId, builder: (column) => column);
+
+  GeneratedColumn<String> get unterrezepturId => $composableBuilder(
+      column: $table.unterrezepturId, builder: (column) => column);
+
+  GeneratedColumn<String> get unterVersionId => $composableBuilder(
+      column: $table.unterVersionId, builder: (column) => column);
+
+  GeneratedColumn<double> get mengeKg =>
+      $composableBuilder(column: $table.mengeKg, builder: (column) => column);
+
+  GeneratedColumn<bool> get quidPflicht => $composableBuilder(
+      column: $table.quidPflicht, builder: (column) => column);
+
+  GeneratedColumn<String> get etikettName => $composableBuilder(
+      column: $table.etikettName, builder: (column) => column);
+
+  GeneratedColumn<String> get notiz =>
+      $composableBuilder(column: $table.notiz, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EntwicklungRezepturPositionenTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungRezepturPositionenTable,
+    RezepturPosition,
+    $$EntwicklungRezepturPositionenTableFilterComposer,
+    $$EntwicklungRezepturPositionenTableOrderingComposer,
+    $$EntwicklungRezepturPositionenTableAnnotationComposer,
+    $$EntwicklungRezepturPositionenTableCreateCompanionBuilder,
+    $$EntwicklungRezepturPositionenTableUpdateCompanionBuilder,
+    (
+      RezepturPosition,
+      BaseReferences<_$AppDatabase, $EntwicklungRezepturPositionenTable,
+          RezepturPosition>
+    ),
+    RezepturPosition,
+    PrefetchHooks Function()> {
+  $$EntwicklungRezepturPositionenTableTableManager(
+      _$AppDatabase db, $EntwicklungRezepturPositionenTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungRezepturPositionenTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungRezepturPositionenTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungRezepturPositionenTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> versionId = const Value.absent(),
+            Value<int> reihenfolge = const Value.absent(),
+            Value<String?> zutatId = const Value.absent(),
+            Value<String?> unterrezepturId = const Value.absent(),
+            Value<String?> unterVersionId = const Value.absent(),
+            Value<double> mengeKg = const Value.absent(),
+            Value<bool?> quidPflicht = const Value.absent(),
+            Value<String?> etikettName = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturPositionenCompanion(
+            id: id,
+            versionId: versionId,
+            reihenfolge: reihenfolge,
+            zutatId: zutatId,
+            unterrezepturId: unterrezepturId,
+            unterVersionId: unterVersionId,
+            mengeKg: mengeKg,
+            quidPflicht: quidPflicht,
+            etikettName: etikettName,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String versionId,
+            Value<int> reihenfolge = const Value.absent(),
+            Value<String?> zutatId = const Value.absent(),
+            Value<String?> unterrezepturId = const Value.absent(),
+            Value<String?> unterVersionId = const Value.absent(),
+            Value<double> mengeKg = const Value.absent(),
+            Value<bool?> quidPflicht = const Value.absent(),
+            Value<String?> etikettName = const Value.absent(),
+            Value<String?> notiz = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungRezepturPositionenCompanion.insert(
+            id: id,
+            versionId: versionId,
+            reihenfolge: reihenfolge,
+            zutatId: zutatId,
+            unterrezepturId: unterrezepturId,
+            unterVersionId: unterVersionId,
+            mengeKg: mengeKg,
+            quidPflicht: quidPflicht,
+            etikettName: etikettName,
+            notiz: notiz,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungRezepturPositionenTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungRezepturPositionenTable,
+        RezepturPosition,
+        $$EntwicklungRezepturPositionenTableFilterComposer,
+        $$EntwicklungRezepturPositionenTableOrderingComposer,
+        $$EntwicklungRezepturPositionenTableAnnotationComposer,
+        $$EntwicklungRezepturPositionenTableCreateCompanionBuilder,
+        $$EntwicklungRezepturPositionenTableUpdateCompanionBuilder,
+        (
+          RezepturPosition,
+          BaseReferences<_$AppDatabase, $EntwicklungRezepturPositionenTable,
+              RezepturPosition>
+        ),
+        RezepturPosition,
+        PrefetchHooks Function()>;
+typedef $$EntwicklungProjekteTableCreateCompanionBuilder
+    = EntwicklungProjekteCompanion Function({
+  required String id,
+  required String name,
+  Value<String?> kunde,
+  Value<String?> artikelnummer,
+  Value<String> status,
+  Value<String?> produktidee,
+  Value<String?> kundenvereinbarungen,
+  Value<String?> fliessdiagramm,
+  Value<bool> neuerProzess,
+  Value<bool> neueZutaten,
+  Value<String?> neueZutatenDetails,
+  Value<double?> zielFett,
+  Value<double?> zielEiweiss,
+  Value<double?> grenzeAw,
+  Value<String?> notizen,
+  Value<String?> bildDateiId,
+  Value<String?> sensorik,
+  Value<String?> checkliste,
+  Value<String?> etikettCheckliste,
+  Value<String?> prozess,
+  Value<String?> prozessHistorie,
+  Value<String?> haccp,
+  Value<String?> artikelId,
+  Value<String?> freigabeVersionId,
+  Value<DateTime?> freigegebenAm,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungProjekteTableUpdateCompanionBuilder
+    = EntwicklungProjekteCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String?> kunde,
+  Value<String?> artikelnummer,
+  Value<String> status,
+  Value<String?> produktidee,
+  Value<String?> kundenvereinbarungen,
+  Value<String?> fliessdiagramm,
+  Value<bool> neuerProzess,
+  Value<bool> neueZutaten,
+  Value<String?> neueZutatenDetails,
+  Value<double?> zielFett,
+  Value<double?> zielEiweiss,
+  Value<double?> grenzeAw,
+  Value<String?> notizen,
+  Value<String?> bildDateiId,
+  Value<String?> sensorik,
+  Value<String?> checkliste,
+  Value<String?> etikettCheckliste,
+  Value<String?> prozess,
+  Value<String?> prozessHistorie,
+  Value<String?> haccp,
+  Value<String?> artikelId,
+  Value<String?> freigabeVersionId,
+  Value<DateTime?> freigegebenAm,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungProjekteTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjekteTable> {
+  $$EntwicklungProjekteTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kunde => $composableBuilder(
+      column: $table.kunde, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get produktidee => $composableBuilder(
+      column: $table.produktidee, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kundenvereinbarungen => $composableBuilder(
+      column: $table.kundenvereinbarungen,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get fliessdiagramm => $composableBuilder(
+      column: $table.fliessdiagramm,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get neuerProzess => $composableBuilder(
+      column: $table.neuerProzess, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get neueZutaten => $composableBuilder(
+      column: $table.neueZutaten, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get neueZutatenDetails => $composableBuilder(
+      column: $table.neueZutatenDetails,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zielFett => $composableBuilder(
+      column: $table.zielFett, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get zielEiweiss => $composableBuilder(
+      column: $table.zielEiweiss, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get grenzeAw => $composableBuilder(
+      column: $table.grenzeAw, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bildDateiId => $composableBuilder(
+      column: $table.bildDateiId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sensorik => $composableBuilder(
+      column: $table.sensorik, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get checkliste => $composableBuilder(
+      column: $table.checkliste, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get etikettCheckliste => $composableBuilder(
+      column: $table.etikettCheckliste,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prozess => $composableBuilder(
+      column: $table.prozess, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get prozessHistorie => $composableBuilder(
+      column: $table.prozessHistorie,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get haccp => $composableBuilder(
+      column: $table.haccp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelId => $composableBuilder(
+      column: $table.artikelId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get freigabeVersionId => $composableBuilder(
+      column: $table.freigabeVersionId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get freigegebenAm => $composableBuilder(
+      column: $table.freigegebenAm, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungProjekteTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjekteTable> {
+  $$EntwicklungProjekteTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kunde => $composableBuilder(
+      column: $table.kunde, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get produktidee => $composableBuilder(
+      column: $table.produktidee, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kundenvereinbarungen => $composableBuilder(
+      column: $table.kundenvereinbarungen,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get fliessdiagramm => $composableBuilder(
+      column: $table.fliessdiagramm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get neuerProzess => $composableBuilder(
+      column: $table.neuerProzess,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get neueZutaten => $composableBuilder(
+      column: $table.neueZutaten, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get neueZutatenDetails => $composableBuilder(
+      column: $table.neueZutatenDetails,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zielFett => $composableBuilder(
+      column: $table.zielFett, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get zielEiweiss => $composableBuilder(
+      column: $table.zielEiweiss, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get grenzeAw => $composableBuilder(
+      column: $table.grenzeAw, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bildDateiId => $composableBuilder(
+      column: $table.bildDateiId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sensorik => $composableBuilder(
+      column: $table.sensorik, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get checkliste => $composableBuilder(
+      column: $table.checkliste, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get etikettCheckliste => $composableBuilder(
+      column: $table.etikettCheckliste,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get prozess => $composableBuilder(
+      column: $table.prozess, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get prozessHistorie => $composableBuilder(
+      column: $table.prozessHistorie,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get haccp => $composableBuilder(
+      column: $table.haccp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelId => $composableBuilder(
+      column: $table.artikelId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get freigabeVersionId => $composableBuilder(
+      column: $table.freigabeVersionId,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get freigegebenAm => $composableBuilder(
+      column: $table.freigegebenAm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungProjekteTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjekteTable> {
+  $$EntwicklungProjekteTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get kunde =>
+      $composableBuilder(column: $table.kunde, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get produktidee => $composableBuilder(
+      column: $table.produktidee, builder: (column) => column);
+
+  GeneratedColumn<String> get kundenvereinbarungen => $composableBuilder(
+      column: $table.kundenvereinbarungen, builder: (column) => column);
+
+  GeneratedColumn<String> get fliessdiagramm => $composableBuilder(
+      column: $table.fliessdiagramm, builder: (column) => column);
+
+  GeneratedColumn<bool> get neuerProzess => $composableBuilder(
+      column: $table.neuerProzess, builder: (column) => column);
+
+  GeneratedColumn<bool> get neueZutaten => $composableBuilder(
+      column: $table.neueZutaten, builder: (column) => column);
+
+  GeneratedColumn<String> get neueZutatenDetails => $composableBuilder(
+      column: $table.neueZutatenDetails, builder: (column) => column);
+
+  GeneratedColumn<double> get zielFett =>
+      $composableBuilder(column: $table.zielFett, builder: (column) => column);
+
+  GeneratedColumn<double> get zielEiweiss => $composableBuilder(
+      column: $table.zielEiweiss, builder: (column) => column);
+
+  GeneratedColumn<double> get grenzeAw =>
+      $composableBuilder(column: $table.grenzeAw, builder: (column) => column);
+
+  GeneratedColumn<String> get notizen =>
+      $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<String> get bildDateiId => $composableBuilder(
+      column: $table.bildDateiId, builder: (column) => column);
+
+  GeneratedColumn<String> get sensorik =>
+      $composableBuilder(column: $table.sensorik, builder: (column) => column);
+
+  GeneratedColumn<String> get checkliste => $composableBuilder(
+      column: $table.checkliste, builder: (column) => column);
+
+  GeneratedColumn<String> get etikettCheckliste => $composableBuilder(
+      column: $table.etikettCheckliste, builder: (column) => column);
+
+  GeneratedColumn<String> get prozess =>
+      $composableBuilder(column: $table.prozess, builder: (column) => column);
+
+  GeneratedColumn<String> get prozessHistorie => $composableBuilder(
+      column: $table.prozessHistorie, builder: (column) => column);
+
+  GeneratedColumn<String> get haccp =>
+      $composableBuilder(column: $table.haccp, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelId =>
+      $composableBuilder(column: $table.artikelId, builder: (column) => column);
+
+  GeneratedColumn<String> get freigabeVersionId => $composableBuilder(
+      column: $table.freigabeVersionId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get freigegebenAm => $composableBuilder(
+      column: $table.freigegebenAm, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$EntwicklungProjekteTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungProjekteTable,
+    EntwicklungsProjekt,
+    $$EntwicklungProjekteTableFilterComposer,
+    $$EntwicklungProjekteTableOrderingComposer,
+    $$EntwicklungProjekteTableAnnotationComposer,
+    $$EntwicklungProjekteTableCreateCompanionBuilder,
+    $$EntwicklungProjekteTableUpdateCompanionBuilder,
+    (
+      EntwicklungsProjekt,
+      BaseReferences<_$AppDatabase, $EntwicklungProjekteTable,
+          EntwicklungsProjekt>
+    ),
+    EntwicklungsProjekt,
+    PrefetchHooks Function()> {
+  $$EntwicklungProjekteTableTableManager(
+      _$AppDatabase db, $EntwicklungProjekteTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungProjekteTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungProjekteTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungProjekteTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> kunde = const Value.absent(),
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> produktidee = const Value.absent(),
+            Value<String?> kundenvereinbarungen = const Value.absent(),
+            Value<String?> fliessdiagramm = const Value.absent(),
+            Value<bool> neuerProzess = const Value.absent(),
+            Value<bool> neueZutaten = const Value.absent(),
+            Value<String?> neueZutatenDetails = const Value.absent(),
+            Value<double?> zielFett = const Value.absent(),
+            Value<double?> zielEiweiss = const Value.absent(),
+            Value<double?> grenzeAw = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<String?> bildDateiId = const Value.absent(),
+            Value<String?> sensorik = const Value.absent(),
+            Value<String?> checkliste = const Value.absent(),
+            Value<String?> etikettCheckliste = const Value.absent(),
+            Value<String?> prozess = const Value.absent(),
+            Value<String?> prozessHistorie = const Value.absent(),
+            Value<String?> haccp = const Value.absent(),
+            Value<String?> artikelId = const Value.absent(),
+            Value<String?> freigabeVersionId = const Value.absent(),
+            Value<DateTime?> freigegebenAm = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungProjekteCompanion(
+            id: id,
+            name: name,
+            kunde: kunde,
+            artikelnummer: artikelnummer,
+            status: status,
+            produktidee: produktidee,
+            kundenvereinbarungen: kundenvereinbarungen,
+            fliessdiagramm: fliessdiagramm,
+            neuerProzess: neuerProzess,
+            neueZutaten: neueZutaten,
+            neueZutatenDetails: neueZutatenDetails,
+            zielFett: zielFett,
+            zielEiweiss: zielEiweiss,
+            grenzeAw: grenzeAw,
+            notizen: notizen,
+            bildDateiId: bildDateiId,
+            sensorik: sensorik,
+            checkliste: checkliste,
+            etikettCheckliste: etikettCheckliste,
+            prozess: prozess,
+            prozessHistorie: prozessHistorie,
+            haccp: haccp,
+            artikelId: artikelId,
+            freigabeVersionId: freigabeVersionId,
+            freigegebenAm: freigegebenAm,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            Value<String?> kunde = const Value.absent(),
+            Value<String?> artikelnummer = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> produktidee = const Value.absent(),
+            Value<String?> kundenvereinbarungen = const Value.absent(),
+            Value<String?> fliessdiagramm = const Value.absent(),
+            Value<bool> neuerProzess = const Value.absent(),
+            Value<bool> neueZutaten = const Value.absent(),
+            Value<String?> neueZutatenDetails = const Value.absent(),
+            Value<double?> zielFett = const Value.absent(),
+            Value<double?> zielEiweiss = const Value.absent(),
+            Value<double?> grenzeAw = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<String?> bildDateiId = const Value.absent(),
+            Value<String?> sensorik = const Value.absent(),
+            Value<String?> checkliste = const Value.absent(),
+            Value<String?> etikettCheckliste = const Value.absent(),
+            Value<String?> prozess = const Value.absent(),
+            Value<String?> prozessHistorie = const Value.absent(),
+            Value<String?> haccp = const Value.absent(),
+            Value<String?> artikelId = const Value.absent(),
+            Value<String?> freigabeVersionId = const Value.absent(),
+            Value<DateTime?> freigegebenAm = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungProjekteCompanion.insert(
+            id: id,
+            name: name,
+            kunde: kunde,
+            artikelnummer: artikelnummer,
+            status: status,
+            produktidee: produktidee,
+            kundenvereinbarungen: kundenvereinbarungen,
+            fliessdiagramm: fliessdiagramm,
+            neuerProzess: neuerProzess,
+            neueZutaten: neueZutaten,
+            neueZutatenDetails: neueZutatenDetails,
+            zielFett: zielFett,
+            zielEiweiss: zielEiweiss,
+            grenzeAw: grenzeAw,
+            notizen: notizen,
+            bildDateiId: bildDateiId,
+            sensorik: sensorik,
+            checkliste: checkliste,
+            etikettCheckliste: etikettCheckliste,
+            prozess: prozess,
+            prozessHistorie: prozessHistorie,
+            haccp: haccp,
+            artikelId: artikelId,
+            freigabeVersionId: freigabeVersionId,
+            freigegebenAm: freigegebenAm,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungProjekteTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $EntwicklungProjekteTable,
+    EntwicklungsProjekt,
+    $$EntwicklungProjekteTableFilterComposer,
+    $$EntwicklungProjekteTableOrderingComposer,
+    $$EntwicklungProjekteTableAnnotationComposer,
+    $$EntwicklungProjekteTableCreateCompanionBuilder,
+    $$EntwicklungProjekteTableUpdateCompanionBuilder,
+    (
+      EntwicklungsProjekt,
+      BaseReferences<_$AppDatabase, $EntwicklungProjekteTable,
+          EntwicklungsProjekt>
+    ),
+    EntwicklungsProjekt,
+    PrefetchHooks Function()>;
+typedef $$EntwicklungProjektEintraegeTableCreateCompanionBuilder
+    = EntwicklungProjektEintraegeCompanion Function({
+  required String id,
+  required String projektId,
+  required String art,
+  required String titel,
+  required DateTime datum,
+  Value<String?> benutzer,
+  Value<String?> beschreibung,
+  Value<String> status,
+  Value<String?> wert,
+  Value<String?> ziel,
+  Value<String?> aenderungen,
+  Value<String?> dateiId,
+  Value<String?> versionId,
+  Value<String?> kommentare,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungProjektEintraegeTableUpdateCompanionBuilder
+    = EntwicklungProjektEintraegeCompanion Function({
+  Value<String> id,
+  Value<String> projektId,
+  Value<String> art,
+  Value<String> titel,
+  Value<DateTime> datum,
+  Value<String?> benutzer,
+  Value<String?> beschreibung,
+  Value<String> status,
+  Value<String?> wert,
+  Value<String?> ziel,
+  Value<String?> aenderungen,
+  Value<String?> dateiId,
+  Value<String?> versionId,
+  Value<String?> kommentare,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungProjektEintraegeTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjektEintraegeTable> {
+  $$EntwicklungProjektEintraegeTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get art => $composableBuilder(
+      column: $table.art, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get titel => $composableBuilder(
+      column: $table.titel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get benutzer => $composableBuilder(
+      column: $table.benutzer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get wert => $composableBuilder(
+      column: $table.wert, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get ziel => $composableBuilder(
+      column: $table.ziel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get aenderungen => $composableBuilder(
+      column: $table.aenderungen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get dateiId => $composableBuilder(
+      column: $table.dateiId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get versionId => $composableBuilder(
+      column: $table.versionId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kommentare => $composableBuilder(
+      column: $table.kommentare, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungProjektEintraegeTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjektEintraegeTable> {
+  $$EntwicklungProjektEintraegeTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get art => $composableBuilder(
+      column: $table.art, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get titel => $composableBuilder(
+      column: $table.titel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get datum => $composableBuilder(
+      column: $table.datum, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get benutzer => $composableBuilder(
+      column: $table.benutzer, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get status => $composableBuilder(
+      column: $table.status, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get wert => $composableBuilder(
+      column: $table.wert, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get ziel => $composableBuilder(
+      column: $table.ziel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get aenderungen => $composableBuilder(
+      column: $table.aenderungen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get dateiId => $composableBuilder(
+      column: $table.dateiId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get versionId => $composableBuilder(
+      column: $table.versionId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kommentare => $composableBuilder(
+      column: $table.kommentare, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungProjektEintraegeTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungProjektEintraegeTable> {
+  $$EntwicklungProjektEintraegeTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get projektId =>
+      $composableBuilder(column: $table.projektId, builder: (column) => column);
+
+  GeneratedColumn<String> get art =>
+      $composableBuilder(column: $table.art, builder: (column) => column);
+
+  GeneratedColumn<String> get titel =>
+      $composableBuilder(column: $table.titel, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get datum =>
+      $composableBuilder(column: $table.datum, builder: (column) => column);
+
+  GeneratedColumn<String> get benutzer =>
+      $composableBuilder(column: $table.benutzer, builder: (column) => column);
+
+  GeneratedColumn<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get wert =>
+      $composableBuilder(column: $table.wert, builder: (column) => column);
+
+  GeneratedColumn<String> get ziel =>
+      $composableBuilder(column: $table.ziel, builder: (column) => column);
+
+  GeneratedColumn<String> get aenderungen => $composableBuilder(
+      column: $table.aenderungen, builder: (column) => column);
+
+  GeneratedColumn<String> get dateiId =>
+      $composableBuilder(column: $table.dateiId, builder: (column) => column);
+
+  GeneratedColumn<String> get versionId =>
+      $composableBuilder(column: $table.versionId, builder: (column) => column);
+
+  GeneratedColumn<String> get kommentare => $composableBuilder(
+      column: $table.kommentare, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EntwicklungProjektEintraegeTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungProjektEintraegeTable,
+    ProjektEintrag,
+    $$EntwicklungProjektEintraegeTableFilterComposer,
+    $$EntwicklungProjektEintraegeTableOrderingComposer,
+    $$EntwicklungProjektEintraegeTableAnnotationComposer,
+    $$EntwicklungProjektEintraegeTableCreateCompanionBuilder,
+    $$EntwicklungProjektEintraegeTableUpdateCompanionBuilder,
+    (
+      ProjektEintrag,
+      BaseReferences<_$AppDatabase, $EntwicklungProjektEintraegeTable,
+          ProjektEintrag>
+    ),
+    ProjektEintrag,
+    PrefetchHooks Function()> {
+  $$EntwicklungProjektEintraegeTableTableManager(
+      _$AppDatabase db, $EntwicklungProjektEintraegeTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungProjektEintraegeTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungProjektEintraegeTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungProjektEintraegeTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> projektId = const Value.absent(),
+            Value<String> art = const Value.absent(),
+            Value<String> titel = const Value.absent(),
+            Value<DateTime> datum = const Value.absent(),
+            Value<String?> benutzer = const Value.absent(),
+            Value<String?> beschreibung = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> wert = const Value.absent(),
+            Value<String?> ziel = const Value.absent(),
+            Value<String?> aenderungen = const Value.absent(),
+            Value<String?> dateiId = const Value.absent(),
+            Value<String?> versionId = const Value.absent(),
+            Value<String?> kommentare = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungProjektEintraegeCompanion(
+            id: id,
+            projektId: projektId,
+            art: art,
+            titel: titel,
+            datum: datum,
+            benutzer: benutzer,
+            beschreibung: beschreibung,
+            status: status,
+            wert: wert,
+            ziel: ziel,
+            aenderungen: aenderungen,
+            dateiId: dateiId,
+            versionId: versionId,
+            kommentare: kommentare,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String projektId,
+            required String art,
+            required String titel,
+            required DateTime datum,
+            Value<String?> benutzer = const Value.absent(),
+            Value<String?> beschreibung = const Value.absent(),
+            Value<String> status = const Value.absent(),
+            Value<String?> wert = const Value.absent(),
+            Value<String?> ziel = const Value.absent(),
+            Value<String?> aenderungen = const Value.absent(),
+            Value<String?> dateiId = const Value.absent(),
+            Value<String?> versionId = const Value.absent(),
+            Value<String?> kommentare = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungProjektEintraegeCompanion.insert(
+            id: id,
+            projektId: projektId,
+            art: art,
+            titel: titel,
+            datum: datum,
+            benutzer: benutzer,
+            beschreibung: beschreibung,
+            status: status,
+            wert: wert,
+            ziel: ziel,
+            aenderungen: aenderungen,
+            dateiId: dateiId,
+            versionId: versionId,
+            kommentare: kommentare,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungProjektEintraegeTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungProjektEintraegeTable,
+        ProjektEintrag,
+        $$EntwicklungProjektEintraegeTableFilterComposer,
+        $$EntwicklungProjektEintraegeTableOrderingComposer,
+        $$EntwicklungProjektEintraegeTableAnnotationComposer,
+        $$EntwicklungProjektEintraegeTableCreateCompanionBuilder,
+        $$EntwicklungProjektEintraegeTableUpdateCompanionBuilder,
+        (
+          ProjektEintrag,
+          BaseReferences<_$AppDatabase, $EntwicklungProjektEintraegeTable,
+              ProjektEintrag>
+        ),
+        ProjektEintrag,
+        PrefetchHooks Function()>;
+typedef $$EntwicklungDateienTableCreateCompanionBuilder
+    = EntwicklungDateienCompanion Function({
+  required String id,
+  Value<String?> projektId,
+  required String name,
+  Value<String?> mimeTyp,
+  Value<int> groesse,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungDateienTableUpdateCompanionBuilder
+    = EntwicklungDateienCompanion Function({
+  Value<String> id,
+  Value<String?> projektId,
+  Value<String> name,
+  Value<String?> mimeTyp,
+  Value<int> groesse,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungDateienTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateienTable> {
+  $$EntwicklungDateienTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get mimeTyp => $composableBuilder(
+      column: $table.mimeTyp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get groesse => $composableBuilder(
+      column: $table.groesse, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungDateienTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateienTable> {
+  $$EntwicklungDateienTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get projektId => $composableBuilder(
+      column: $table.projektId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get mimeTyp => $composableBuilder(
+      column: $table.mimeTyp, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get groesse => $composableBuilder(
+      column: $table.groesse, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungDateienTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateienTable> {
+  $$EntwicklungDateienTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get projektId =>
+      $composableBuilder(column: $table.projektId, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get mimeTyp =>
+      $composableBuilder(column: $table.mimeTyp, builder: (column) => column);
+
+  GeneratedColumn<int> get groesse =>
+      $composableBuilder(column: $table.groesse, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$EntwicklungDateienTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungDateienTable,
+    EntwicklungsDatei,
+    $$EntwicklungDateienTableFilterComposer,
+    $$EntwicklungDateienTableOrderingComposer,
+    $$EntwicklungDateienTableAnnotationComposer,
+    $$EntwicklungDateienTableCreateCompanionBuilder,
+    $$EntwicklungDateienTableUpdateCompanionBuilder,
+    (
+      EntwicklungsDatei,
+      BaseReferences<_$AppDatabase, $EntwicklungDateienTable, EntwicklungsDatei>
+    ),
+    EntwicklungsDatei,
+    PrefetchHooks Function()> {
+  $$EntwicklungDateienTableTableManager(
+      _$AppDatabase db, $EntwicklungDateienTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungDateienTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungDateienTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungDateienTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String?> projektId = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> mimeTyp = const Value.absent(),
+            Value<int> groesse = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungDateienCompanion(
+            id: id,
+            projektId: projektId,
+            name: name,
+            mimeTyp: mimeTyp,
+            groesse: groesse,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            Value<String?> projektId = const Value.absent(),
+            required String name,
+            Value<String?> mimeTyp = const Value.absent(),
+            Value<int> groesse = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungDateienCompanion.insert(
+            id: id,
+            projektId: projektId,
+            name: name,
+            mimeTyp: mimeTyp,
+            groesse: groesse,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungDateienTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $EntwicklungDateienTable,
+    EntwicklungsDatei,
+    $$EntwicklungDateienTableFilterComposer,
+    $$EntwicklungDateienTableOrderingComposer,
+    $$EntwicklungDateienTableAnnotationComposer,
+    $$EntwicklungDateienTableCreateCompanionBuilder,
+    $$EntwicklungDateienTableUpdateCompanionBuilder,
+    (
+      EntwicklungsDatei,
+      BaseReferences<_$AppDatabase, $EntwicklungDateienTable, EntwicklungsDatei>
+    ),
+    EntwicklungsDatei,
+    PrefetchHooks Function()>;
+typedef $$EntwicklungDateiInhalteTableCreateCompanionBuilder
+    = EntwicklungDateiInhalteCompanion Function({
+  required String dateiId,
+  required Uint8List inhalt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungDateiInhalteTableUpdateCompanionBuilder
+    = EntwicklungDateiInhalteCompanion Function({
+  Value<String> dateiId,
+  Value<Uint8List> inhalt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungDateiInhalteTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateiInhalteTable> {
+  $$EntwicklungDateiInhalteTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get dateiId => $composableBuilder(
+      column: $table.dateiId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<Uint8List> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungDateiInhalteTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateiInhalteTable> {
+  $$EntwicklungDateiInhalteTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get dateiId => $composableBuilder(
+      column: $table.dateiId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<Uint8List> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungDateiInhalteTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungDateiInhalteTable> {
+  $$EntwicklungDateiInhalteTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get dateiId =>
+      $composableBuilder(column: $table.dateiId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get inhalt =>
+      $composableBuilder(column: $table.inhalt, builder: (column) => column);
+}
+
+class $$EntwicklungDateiInhalteTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungDateiInhalteTable,
+    DateiInhalt,
+    $$EntwicklungDateiInhalteTableFilterComposer,
+    $$EntwicklungDateiInhalteTableOrderingComposer,
+    $$EntwicklungDateiInhalteTableAnnotationComposer,
+    $$EntwicklungDateiInhalteTableCreateCompanionBuilder,
+    $$EntwicklungDateiInhalteTableUpdateCompanionBuilder,
+    (
+      DateiInhalt,
+      BaseReferences<_$AppDatabase, $EntwicklungDateiInhalteTable, DateiInhalt>
+    ),
+    DateiInhalt,
+    PrefetchHooks Function()> {
+  $$EntwicklungDateiInhalteTableTableManager(
+      _$AppDatabase db, $EntwicklungDateiInhalteTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungDateiInhalteTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungDateiInhalteTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungDateiInhalteTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> dateiId = const Value.absent(),
+            Value<Uint8List> inhalt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungDateiInhalteCompanion(
+            dateiId: dateiId,
+            inhalt: inhalt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String dateiId,
+            required Uint8List inhalt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungDateiInhalteCompanion.insert(
+            dateiId: dateiId,
+            inhalt: inhalt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungDateiInhalteTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungDateiInhalteTable,
+        DateiInhalt,
+        $$EntwicklungDateiInhalteTableFilterComposer,
+        $$EntwicklungDateiInhalteTableOrderingComposer,
+        $$EntwicklungDateiInhalteTableAnnotationComposer,
+        $$EntwicklungDateiInhalteTableCreateCompanionBuilder,
+        $$EntwicklungDateiInhalteTableUpdateCompanionBuilder,
+        (
+          DateiInhalt,
+          BaseReferences<_$AppDatabase, $EntwicklungDateiInhalteTable,
+              DateiInhalt>
+        ),
+        DateiInhalt,
+        PrefetchHooks Function()>;
+typedef $$EntwicklungFliessdiagrammeTableCreateCompanionBuilder
+    = EntwicklungFliessdiagrammeCompanion Function({
+  required String id,
+  required String bezeichnung,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungFliessdiagrammeTableUpdateCompanionBuilder
+    = EntwicklungFliessdiagrammeCompanion Function({
+  Value<String> id,
+  Value<String> bezeichnung,
+  Value<int> sortierung,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungFliessdiagrammeTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungFliessdiagrammeTable> {
+  $$EntwicklungFliessdiagrammeTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungFliessdiagrammeTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungFliessdiagrammeTable> {
+  $$EntwicklungFliessdiagrammeTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungFliessdiagrammeTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungFliessdiagrammeTable> {
+  $$EntwicklungFliessdiagrammeTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => column);
+
+  GeneratedColumn<int> get sortierung => $composableBuilder(
+      column: $table.sortierung, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$EntwicklungFliessdiagrammeTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungFliessdiagrammeTable,
+    Fliessdiagramm,
+    $$EntwicklungFliessdiagrammeTableFilterComposer,
+    $$EntwicklungFliessdiagrammeTableOrderingComposer,
+    $$EntwicklungFliessdiagrammeTableAnnotationComposer,
+    $$EntwicklungFliessdiagrammeTableCreateCompanionBuilder,
+    $$EntwicklungFliessdiagrammeTableUpdateCompanionBuilder,
+    (
+      Fliessdiagramm,
+      BaseReferences<_$AppDatabase, $EntwicklungFliessdiagrammeTable,
+          Fliessdiagramm>
+    ),
+    Fliessdiagramm,
+    PrefetchHooks Function()> {
+  $$EntwicklungFliessdiagrammeTableTableManager(
+      _$AppDatabase db, $EntwicklungFliessdiagrammeTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungFliessdiagrammeTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungFliessdiagrammeTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungFliessdiagrammeTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> bezeichnung = const Value.absent(),
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungFliessdiagrammeCompanion(
+            id: id,
+            bezeichnung: bezeichnung,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String bezeichnung,
+            Value<int> sortierung = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungFliessdiagrammeCompanion.insert(
+            id: id,
+            bezeichnung: bezeichnung,
+            sortierung: sortierung,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungFliessdiagrammeTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungFliessdiagrammeTable,
+        Fliessdiagramm,
+        $$EntwicklungFliessdiagrammeTableFilterComposer,
+        $$EntwicklungFliessdiagrammeTableOrderingComposer,
+        $$EntwicklungFliessdiagrammeTableAnnotationComposer,
+        $$EntwicklungFliessdiagrammeTableCreateCompanionBuilder,
+        $$EntwicklungFliessdiagrammeTableUpdateCompanionBuilder,
+        (
+          Fliessdiagramm,
+          BaseReferences<_$AppDatabase, $EntwicklungFliessdiagrammeTable,
+              Fliessdiagramm>
+        ),
+        Fliessdiagramm,
+        PrefetchHooks Function()>;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -25493,4 +34252,31 @@ class $AppDatabaseManager {
               _db, _db.auftragsbestandPositionenVorher);
   $$TagesaufgabenTableTableManager get tagesaufgaben =>
       $$TagesaufgabenTableTableManager(_db, _db.tagesaufgaben);
+  $$EntwicklungZutatenTableTableManager get entwicklungZutaten =>
+      $$EntwicklungZutatenTableTableManager(_db, _db.entwicklungZutaten);
+  $$EntwicklungRezepturenTableTableManager get entwicklungRezepturen =>
+      $$EntwicklungRezepturenTableTableManager(_db, _db.entwicklungRezepturen);
+  $$EntwicklungRezepturVersionenTableTableManager
+      get entwicklungRezepturVersionen =>
+          $$EntwicklungRezepturVersionenTableTableManager(
+              _db, _db.entwicklungRezepturVersionen);
+  $$EntwicklungRezepturPositionenTableTableManager
+      get entwicklungRezepturPositionen =>
+          $$EntwicklungRezepturPositionenTableTableManager(
+              _db, _db.entwicklungRezepturPositionen);
+  $$EntwicklungProjekteTableTableManager get entwicklungProjekte =>
+      $$EntwicklungProjekteTableTableManager(_db, _db.entwicklungProjekte);
+  $$EntwicklungProjektEintraegeTableTableManager
+      get entwicklungProjektEintraege =>
+          $$EntwicklungProjektEintraegeTableTableManager(
+              _db, _db.entwicklungProjektEintraege);
+  $$EntwicklungDateienTableTableManager get entwicklungDateien =>
+      $$EntwicklungDateienTableTableManager(_db, _db.entwicklungDateien);
+  $$EntwicklungDateiInhalteTableTableManager get entwicklungDateiInhalte =>
+      $$EntwicklungDateiInhalteTableTableManager(
+          _db, _db.entwicklungDateiInhalte);
+  $$EntwicklungFliessdiagrammeTableTableManager
+      get entwicklungFliessdiagramme =>
+          $$EntwicklungFliessdiagrammeTableTableManager(
+              _db, _db.entwicklungFliessdiagramme);
 }

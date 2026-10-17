@@ -13,6 +13,7 @@ import 'tables/product_steps.dart';
 import 'tables/production_history.dart';
 import 'tables/production_runs.dart';
 import 'tables/demands.dart';
+import 'tables/entwicklung.dart';
 import 'tables/production_tasks.dart';
 import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
@@ -57,6 +58,16 @@ part 'database.g.dart';
     AuftragsbestandArtikelVorher,
     AuftragsbestandPositionenVorher,
     Tagesaufgaben,
+    // Produktentwicklung — hinter eigenem Passwort, im Backup verschlüsselt.
+    EntwicklungZutaten,
+    EntwicklungRezepturen,
+    EntwicklungRezepturVersionen,
+    EntwicklungRezepturPositionen,
+    EntwicklungProjekte,
+    EntwicklungProjektEintraege,
+    EntwicklungDateien,
+    EntwicklungDateiInhalte,
+    EntwicklungFliessdiagramme,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -74,7 +85,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 31;
+  int get schemaVersion => 32;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -503,6 +514,22 @@ class AppDatabase extends _$AppDatabase {
           // IF NOT EXISTS.
           if (from < 31) {
             await m.createTable(tagesaufgaben);
+          }
+
+          // --- v31 → v32: Produktentwicklung ---------------------------
+          // Zutaten, Rezepturen mit Versionen, Projekte mit Verlauf und
+          // Dateien, Fließdiagramme. createTable arbeitet mit
+          // IF NOT EXISTS.
+          if (from < 32) {
+            await m.createTable(entwicklungZutaten);
+            await m.createTable(entwicklungRezepturen);
+            await m.createTable(entwicklungRezepturVersionen);
+            await m.createTable(entwicklungRezepturPositionen);
+            await m.createTable(entwicklungProjekte);
+            await m.createTable(entwicklungProjektEintraege);
+            await m.createTable(entwicklungDateien);
+            await m.createTable(entwicklungDateiInhalte);
+            await m.createTable(entwicklungFliessdiagramme);
           }
         },
         beforeOpen: (details) async {

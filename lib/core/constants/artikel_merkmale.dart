@@ -37,6 +37,13 @@ const kAllergene = <Merkmal>[
   (dbValue: 'senf', label: 'Senf'),
   (dbValue: 'sesam', label: 'Sesam'),
   (dbValue: 'sulfit', label: 'Sulfit'),
+  // Die übrigen fünf der 14 Hauptallergene (LMIV Anhang II). Im Betrieb
+  // selten — deshalb bewusst hinten: Ein Artikel damit läuft zuletzt.
+  (dbValue: 'krebstiere', label: 'Krebstiere'),
+  (dbValue: 'fisch', label: 'Fisch'),
+  (dbValue: 'erdnuesse', label: 'Erdnüsse'),
+  (dbValue: 'lupinen', label: 'Lupinen'),
+  (dbValue: 'weichtiere', label: 'Weichtiere'),
 ];
 
 // ── Qualitätsstufe ────────────────────────────────────────────────────

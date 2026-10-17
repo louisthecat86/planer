@@ -19,6 +19,8 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../articles/article_detail_providers.dart';
 import '../articles/article_list_screen.dart';
+import '../entwicklung/entwicklung_zugang.dart'
+    show entwicklungNachWiederherstellen;
 
 /// Zentraler „Daten verwalten"-Screen.
 ///
@@ -428,6 +430,7 @@ class _DataManagementScreenState
       await BackupService.importBackup(info.filepath, db, clearExisting: true);
 
       _invalidiereDatenProvider();
+      entwicklungNachWiederherstellen(ref);
 
       // Bewusst KEIN Auto-Backup nach Restore — wir haben gerade von
       // einem Backup wiederhergestellt, ein neues Backup wäre redundant
@@ -467,6 +470,7 @@ class _DataManagementScreenState
       await BackupService.importBackup(filePath, db, clearExisting: true);
 
       _invalidiereDatenProvider();
+      entwicklungNachWiederherstellen(ref);
 
       _setBusy(false, msg: 'Backup wiederhergestellt');
     } catch (e) {
