@@ -12,7 +12,9 @@ import 'package:produktion_planer/features/entwicklung/projekte/datei_aktionen.d
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_screen.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_verlauf.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekte_ansicht.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/zeitstrahl.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 
 import 'helpers/test_db.dart';
@@ -468,6 +470,27 @@ void main() {
       await zeige(tester, const ProjektScreen(projektId: 'p1'));
 
       await reiter(tester, 'Verlauf');
+      // Zuerst der Zeitstrahl: Titel und Datum an der Achse.
+      expect(find.byType(Zeitstrahl), findsOneWidget);
+      expect(find.text('Datenblatt erhalten'), findsOneWidget);
+      expect(find.text('3 Einträge'), findsOneWidget);
+      expect(find.text('passt so'), findsNothing);
+
+      // Antippen öffnet den Eintrag mit allem, was die Karte kann.
+      await tester.tap(find.text('Datenblatt erhalten'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(EintragKarte), findsOneWidget);
+      expect(find.text('passt so'), findsOneWidget);
+      await tester.tap(find.text('Schließen'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.byType(EintragKarte), findsNothing);
+
+      // Als Liste: die Karten mit Kommentar, Datei und Rezepturstand.
+      await tester.tap(find.byTooltip('Liste'));
+      await tester.pump();
+      expect(find.byType(Zeitstrahl), findsNothing);
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
       expect(find.text('passt so'), findsOneWidget);
       expect(find.text('Datenblatt.pdf'), findsOneWidget);
@@ -497,7 +520,11 @@ void main() {
       await tester.pump();
       expect(bereich('Stammdaten'), findsOneWidget);
       await reiter(tester, 'Verlauf');
+      expect(find.byType(Zeitstrahl), findsOneWidget);
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
+      await tester.tap(find.byTooltip('Liste'));
+      await tester.pump();
+      expect(find.text('passt so'), findsOneWidget);
     });
   });
 }

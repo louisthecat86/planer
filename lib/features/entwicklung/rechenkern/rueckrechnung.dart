@@ -20,6 +20,13 @@ import 'rechenkern.dart';
 // Was die Rechnung nicht sieht, entscheidet eine schwache Führung zu einer
 // Verteilung, die mit der Reihenfolge abnimmt. Am Ende rechnet der
 // Rechenkern die geschätzte Rezeptur ganz normal nach.
+//
+// Fleisch mit Fett oder Bindegewebe über dem Grenzwert wiegt auf dem
+// Etikett weniger als roh — der Überschuss steht als eigene Zeile da. Die
+// Reihenfolge und eine Mengenangabe wie „Schweinefleisch (60 %)" meinen
+// das Fleisch auf dem Etikett. Wie viel davon ein kg jedes Stücks bringt,
+// liest die Rechnung in ein paar Runden am Rechenkern ab; zuletzt trifft
+// sie die Mengenangabe genau.
 
 /// Rohmasse der geschätzten Rezeptur — die Mengen sind kg je 100 kg.
 const double kRueckRohmasseKg = 100;
@@ -199,20 +206,100 @@ RueckrechnungsErgebnis rueckrechnen({
       }
     }
   }
-  final festRoh = fest.entries
+  // Auf dem Etikett wiegt nichts mehr als roh — mehr als die Rohmasse
+  // können die festen Zeilen also nie verlangen.
+  final festEtikett = fest.entries
       .fold<double>(0, (s, e) => s + e.value + versatz(e.key));
-  if (festRoh > roh + 1e-6) {
+  if (festEtikett > roh + 1e-6) {
     throw ArgumentError(
       'Die festen Mengenangaben verlangen zusammen mehr als die ganze '
       'Rohmasse.',
     );
   }
+  final nZeilen = zeilen.length;
+
+  /// Der Name der Fleischzeile im Ergebnis, wenn Zeile [j] Fleisch einer
+  /// Tierart ist, die in keiner anderen Zeile steht.
+  String? fleischName(int j) {
+    final art = _tierart(zutaten[zeilen[j].first].zutat);
+    if (art == null) return null;
+    for (var k = 0; k < nZeilen; k++) {
+      if (k != j && _tierart(zutaten[zeilen[k].first].zutat) == art) {
+        return null;
+      }
+    }
+    return art.fleischName;
+  }
+
+  double? fleischKgIn(RezepturErgebnis e, String name) {
+    for (final z in e.zeilen) {
+      if (z.istFleisch && z.name == name) return z.masseKg;
+    }
+    return null;
+  }
+
+  // Fett und Bindegewebe über dem Grenzwert stehen als eigene Zeilen da —
+  // Fleisch wiegt auf dem Etikett weniger als roh. Je Stück ein Faktor:
+  // so viel Fleisch auf dem Etikett bringt ein kg mehr davon. Ein mageres
+  // Stück kann mehr als 1 bringen, weil es den Überschuss der anderen
+  // senkt. Der Rechenkern liefert die Faktoren an der jeweiligen Mischung.
+  final faktor = List<double>.filled(zutaten.length, 1);
+
+  /// Fleisch auf dem Etikett aus den Stücken von Zeile [j] mit [kg].
+  double fleischAus(int j, List<double> kg) {
+    final r = RechenRezeptur(
+      id: 'stuecke',
+      name: 'Stücke',
+      positionen: [
+        for (var k = 0; k < zeilen[j].length; k++)
+          RechenPosition.zutat(zutaten[zeilen[j][k]].zutat, mengeKg: kg[k]),
+      ],
+      verlustart: Verlustart.keiner,
+    );
+    return fleischKgIn(berechne(r), fleischName(j)!) ?? 0;
+  }
+
+  /// Die Faktoren an der Mischung [mengen] — bei leeren Zeilen an gleichen
+  /// Teilen. Gibt zurück, ob sich einer geändert hat.
+  bool faktorenAn(List<double>? mengen) {
+    var anders = false;
+    for (var j = 0; j < nZeilen; j++) {
+      if (fleischName(j) == null) continue;
+      final stuecke = zeilen[j];
+      var kg = [for (final i in stuecke) mengen?[i] ?? 0.0];
+      var summe = kg.fold<double>(0, (s, x) => s + x);
+      if (summe <= 1e-9) {
+        kg = List<double>.filled(stuecke.length, 1);
+        summe = stuecke.length.toDouble();
+      }
+      final f0 = fleischAus(j, kg);
+      final neu = <double>[];
+      if (stuecke.length == 1) {
+        // Ein Stück: Fleisch je kg roh — mindestens ein wenig, sonst
+        // wüchse die Rohmasse ins Unendliche.
+        neu.add(math.max(0.01, f0 / kg.single));
+      } else {
+        final d = 1e-6 * summe;
+        for (var k = 0; k < stuecke.length; k++) {
+          final mehr = [...kg]..[k] += d;
+          neu.add((fleischAus(j, mehr) - f0) / d);
+        }
+      }
+      for (var k = 0; k < stuecke.length; k++) {
+        if ((neu[k] - faktor[stuecke[k]]).abs() > 1e-9) {
+          faktor[stuecke[k]] = neu[k];
+          anders = true;
+        }
+      }
+    }
+    return anders;
+  }
 
   // ── Unbekannte ──────────────────────────────────────────────────────
   // Je Zeile eine: mit [reihenfolge] der Abstand zur nächsten Zeile (die
-  // Masse einer Zeile ist dann die Summe ab ihr), sonst die Masse selbst.
-  // Dazu je Stück einer Fleischzeile mit mehreren Stücken eins.
-  final nZeilen = zeilen.length;
+  // Masse einer Zeile auf dem Etikett ist dann die Summe ab ihr), sonst
+  // die Masse selbst. Dazu je Stück einer Fleischzeile mit mehreren
+  // Stücken eins — seine Rohmasse.
   var nVar = nZeilen;
   final stueck = <int, int>{};
   for (final z in zeilen) {
@@ -222,6 +309,7 @@ RueckrechnungsErgebnis rueckrechnen({
     }
   }
 
+  /// Die Masse einer Zeile auf dem Etikett.
   List<double> masseZeile(int j) {
     final c = List<double>.filled(nVar, 0);
     if (reihenfolge) {
@@ -242,126 +330,216 @@ RueckrechnungsErgebnis rueckrechnen({
       return (c, 0.0);
     }
     final j = zeileVon[i]!;
-    return (masseZeile(j), versatz(j));
+    return (
+      [for (final c in masseZeile(j)) c / faktor[i]],
+      versatz(j),
+    );
   }
 
-  final matrix = <List<double>>[];
-  final rechts = <double>[];
-  void gleichung(List<double> c, double wert, double gewicht) {
-    matrix.add([for (final v in c) v * gewicht]);
-    rechts.add(wert * gewicht);
-  }
+  final mitZiel =
+      kRueckGewichte.keys.any((s) => naehrstoffWert(ziel, s) != null);
 
-  // 1. Die Nährwerte je 100 g.
-  var mitZiel = false;
-  for (final MapEntry(key: stoff, value: gewicht) in kRueckGewichte.entries) {
-    final t = naehrstoffWert(ziel, stoff);
-    if (t == null) continue;
-    mitZiel = true;
-    final c = List<double>.filled(nVar, 0);
-    var fix = 0.0;
-    for (var i = 0; i < zutaten.length; i++) {
-      final n = _gehalt(zutaten[i].zutat, stoff);
-      if (n == 0) continue;
-      final (ci, ki) = rohmasse(i);
-      for (var v = 0; v < nVar; v++) {
-        c[v] += ci[v] * n / endKg;
-      }
-      fix += ki * n / endKg;
+  /// Schätzt die Mengen je Zutat mit den aktuellen Faktoren.
+  List<double> loese() {
+    final matrix = <List<double>>[];
+    final rechts = <double>[];
+    void gleichung(List<double> c, double wert, double gewicht) {
+      matrix.add([for (final v in c) v * gewicht]);
+      rechts.add(wert * gewicht);
     }
-    final verlorenKg = switch (stoff) {
-      Naehrstoff.fett => fettKg,
-      Naehrstoff.eiweiss when verlustart == Verlustart.garen =>
-        saftKg * kSaftEiweiss,
-      Naehrstoff.salz when verlustart == Verlustart.garen =>
-        saftKg * kSaftSalz,
-      Naehrstoff.zucker || Naehrstoff.kohlenhydrate
-          when verlustart == Verlustart.garen =>
-        saftKg * kSaftZucker,
-      _ => 0.0,
+
+    // 1. Die Nährwerte je 100 g.
+    for (final MapEntry(key: stoff, value: gewicht)
+        in kRueckGewichte.entries) {
+      final t = naehrstoffWert(ziel, stoff);
+      if (t == null) continue;
+      final c = List<double>.filled(nVar, 0);
+      var fix = 0.0;
+      for (var i = 0; i < zutaten.length; i++) {
+        final n = _gehalt(zutaten[i].zutat, stoff);
+        if (n == 0) continue;
+        final (ci, ki) = rohmasse(i);
+        for (var v = 0; v < nVar; v++) {
+          c[v] += ci[v] * n / endKg;
+        }
+        fix += ki * n / endKg;
+      }
+      final verlorenKg = switch (stoff) {
+        Naehrstoff.fett => fettKg,
+        Naehrstoff.eiweiss when verlustart == Verlustart.garen =>
+          saftKg * kSaftEiweiss,
+        Naehrstoff.salz when verlustart == Verlustart.garen =>
+          saftKg * kSaftSalz,
+        Naehrstoff.zucker || Naehrstoff.kohlenhydrate
+            when verlustart == Verlustart.garen =>
+          saftKg * kSaftZucker,
+        _ => 0.0,
+      };
+      gleichung(c, t - fix + 100 * verlorenKg / endKg, gewicht);
+    }
+
+    // 2. Die Gleichungen: Summe der Rohmassen, feste Zeilen, Stücke einer
+    //    Fleischzeile (ihr Fleisch ergibt die Masse der Zeile).
+    {
+      final c = List<double>.filled(nVar, 0);
+      var fix = 0.0;
+      for (var i = 0; i < zutaten.length; i++) {
+        final (ci, ki) = rohmasse(i);
+        for (var v = 0; v < nVar; v++) {
+          c[v] += ci[v];
+        }
+        fix += ki;
+      }
+      gleichung(c, roh - fix, _gleichungGewicht);
+    }
+    for (final MapEntry(key: j, value: kg) in fest.entries) {
+      gleichung(masseZeile(j), kg, _gleichungGewicht);
+    }
+    for (var j = 0; j < nZeilen; j++) {
+      if (zeilen[j].length < 2) continue;
+      final c = [for (final v in masseZeile(j)) -v];
+      for (final i in zeilen[j]) {
+        c[stueck[i]!] += faktor[i];
+      }
+      gleichung(c, 0, _gleichungGewicht);
+    }
+
+    // 3. Die schwache Führung: abnehmend mit der Reihenfolge.
+    final frei = [
+      for (var j = 0; j < nZeilen; j++)
+        if (!fest.containsKey(j)) j,
+    ];
+    final gewichte = {
+      for (final j in frei) j: math.pow(_fuehrungFaktor, j).toDouble(),
     };
-    gleichung(c, t - fix + 100 * verlorenKg / endKg, gewicht);
-  }
+    final gewichtSumme = gewichte.values.fold<double>(0, (s, g) => s + g);
+    final freiKg = math.max(
+      0.0,
+      roh -
+          festEtikett -
+          (wasserZeile >= 0 && !fest.containsKey(wasserZeile)
+              ? verlustKg
+              : 0),
+    );
+    for (var i = 0; i < zutaten.length; i++) {
+      final j = zeileVon[i]!;
+      final zeileKg = fest[j] ??
+          (gewichtSumme > 0 ? gewichte[j]! / gewichtSumme * freiKg : 0.0);
+      final vorschlag = zeileKg / zeilen[j].length + versatz(j);
+      final (ci, ki) = rohmasse(i);
+      gleichung(ci, vorschlag - ki, _fuehrungGewicht);
+    }
 
-  // 2. Die Gleichungen: Summe der Rohmassen, feste Zeilen, Stücke einer
-  //    Fleischzeile.
-  {
-    final c = List<double>.filled(nVar, 0);
-    var fix = 0.0;
+    // ── Lösen ─────────────────────────────────────────────────────────
+    final x = nnls(matrix, rechts);
+    final mengen = <double>[];
     for (var i = 0; i < zutaten.length; i++) {
       final (ci, ki) = rohmasse(i);
+      var w = ki;
       for (var v = 0; v < nVar; v++) {
-        c[v] += ci[v];
+        w += ci[v] * x[v];
       }
-      fix += ki;
+      mengen.add(w > 0 ? w : 0.0);
     }
-    gleichung(c, roh - fix, _gleichungGewicht);
-  }
-  for (final MapEntry(key: j, value: kg) in fest.entries) {
-    gleichung(masseZeile(j), kg, _gleichungGewicht);
-  }
-  for (var j = 0; j < nZeilen; j++) {
-    if (zeilen[j].length < 2) continue;
-    final c = [for (final v in masseZeile(j)) -v];
-    for (final i in zeilen[j]) {
-      c[stueck[i]!] += 1;
+    // Die festen Zeilen genau auf ihre Angabe, die übrigen auf den Rest.
+    final festRohKg = <int, double>{};
+    for (final MapEntry(key: j, value: sollKg) in fest.entries) {
+      final rohKg = zeilen[j].fold<double>(0, (s, i) => s + mengen[i]);
+      final etikettKg = zeilen[j]
+              .fold<double>(0, (s, i) => s + mengen[i] * faktor[i]) -
+          versatz(j);
+      festRohKg[j] = etikettKg > 1e-9
+          ? (rohKg - versatz(j)) * sollKg / etikettKg + versatz(j)
+          : sollKg + versatz(j);
     }
-    gleichung(c, 0, _gleichungGewicht);
+    _aufRohmasse(mengen, zeilen, festRohKg);
+    return mengen;
   }
 
-  // 3. Die schwache Führung: abnehmend mit der Reihenfolge.
-  final frei = [
-    for (var j = 0; j < nZeilen; j++)
-      if (!fest.containsKey(j)) j,
-  ];
-  final gewichte = {
-    for (final j in frei) j: math.pow(_fuehrungFaktor, j).toDouble(),
-  };
-  final gewichtSumme = gewichte.values.fold<double>(0, (s, g) => s + g);
-  final freiKg = math.max(
-    0.0,
-    roh -
-        fest.values.fold<double>(0, (s, kg) => s + kg) -
-        (wasserZeile >= 0 ? verlustKg : 0),
-  );
-  for (var i = 0; i < zutaten.length; i++) {
-    final j = zeileVon[i]!;
-    final zeileKg = fest[j] ??
-        (gewichtSumme > 0 ? gewichte[j]! / gewichtSumme * freiKg : 0.0);
-    final vorschlag = zeileKg / zeilen[j].length + versatz(j);
-    final (ci, ki) = rohmasse(i);
-    gleichung(ci, vorschlag - ki, _fuehrungGewicht);
-  }
+  RechenRezeptur rezepturAus(List<double> mengen) => RechenRezeptur(
+        id: 'rueckrechnung',
+        name: 'Rückrechnung',
+        positionen: [
+          for (var i = 0; i < zutaten.length; i++)
+            RechenPosition.zutat(
+              zutaten[i].zutat,
+              mengeKg: mengen[i],
+              quidPflicht: zutaten[i].quidProzent != null ? true : null,
+            ),
+        ],
+        verlustProzent: verlust,
+        fettVerlustProzent: verlustKg <= 0 ? 0 : fettVerlustProzent,
+        verlustart: verlustart,
+      );
 
-  // ── Lösen und nachrechnen ───────────────────────────────────────────
-  final x = nnls(matrix, rechts);
-  final mengen = <double>[];
-  for (var i = 0; i < zutaten.length; i++) {
-    final (ci, ki) = rohmasse(i);
-    var w = ki;
-    for (var v = 0; v < nVar; v++) {
-      w += ci[v] * x[v];
+  /// Eine feste Fleischzeile behält ihre Mischung und wird so groß, dass
+  /// ihr Fleisch die Mengenangabe trifft. null, wenn das mehr Rohmasse
+  /// verlangt, als da ist.
+  List<double>? quidGenau(List<double> mengen, RezepturErgebnis e) {
+    final festRohKg = <int, double>{};
+    var korrigiert = false;
+    for (final MapEntry(key: j, value: sollKg) in fest.entries) {
+      final rohKg = zeilen[j].fold<double>(0, (s, i) => s + mengen[i]);
+      festRohKg[j] = rohKg;
+      final name = fleischName(j);
+      final istKg = name == null ? null : fleischKgIn(e, name);
+      if (istKg == null || istKg <= 1e-9) continue;
+      if ((istKg - sollKg).abs() <= 1e-9 * roh) continue;
+      festRohKg[j] = rohKg * sollKg / istKg;
+      korrigiert = true;
     }
-    mengen.add(w > 0 ? w : 0.0);
+    if (!korrigiert) return mengen;
+    if (festRohKg.values.fold<double>(0, (s, kg) => s + kg) > roh + 1e-6) {
+      return null;
+    }
+    final neu = [...mengen];
+    _aufRohmasse(neu, zeilen, festRohKg);
+    return neu;
   }
-  _aufRohmasse(mengen, zeilen, fest, versatz);
 
-  final rezeptur = RechenRezeptur(
-    id: 'rueckrechnung',
-    name: 'Rückrechnung',
-    positionen: [
-      for (var i = 0; i < zutaten.length; i++)
-        RechenPosition.zutat(
-          zutaten[i].zutat,
-          mengeKg: mengen[i],
-          quidPflicht: zutaten[i].quidProzent != null ? true : null,
-        ),
-    ],
-    verlustProzent: verlust,
-    fettVerlustProzent: verlustKg <= 0 ? 0 : fettVerlustProzent,
-    verlustart: verlustart,
-  );
-  final ergebnis = berechne(rezeptur);
+  /// Wie weit die Nährwerte von [e] vom Ziel liegen — gewichtet wie beim
+  /// Ausgleich.
+  double abstand(RezepturErgebnis e) {
+    var summe = 0.0;
+    for (final MapEntry(key: stoff, value: gewicht)
+        in kRueckGewichte.entries) {
+      final t = naehrstoffWert(ziel, stoff);
+      if (t == null) continue;
+      final d = (naehrstoffWert(e.je100g, stoff) ?? 0) - t;
+      summe += gewicht * gewicht * d * d;
+    }
+    return summe;
+  }
+
+  // Ein paar Runden: lösen, die Faktoren an der neuen Mischung ablesen,
+  // wieder lösen. Es gilt die Runde, die nach dem genauen Treffen der
+  // Mengenangaben am besten zum Etikett passt.
+  faktorenAn(null);
+  var mengen = loese();
+  var ergebnis = berechne(rezepturAus(mengen));
+  ({List<double> mengen, RezepturErgebnis ergebnis})? bestes;
+  var bestesAbstand = double.infinity;
+  for (var runde = 0; runde < 6; runde++) {
+    final genau = quidGenau(mengen, ergebnis);
+    if (genau != null) {
+      final e = identical(genau, mengen)
+          ? ergebnis
+          : berechne(rezepturAus(genau));
+      final a = abstand(e);
+      if (a < bestesAbstand - 1e-12) {
+        bestesAbstand = a;
+        bestes = (mengen: genau, ergebnis: e);
+      }
+    }
+    if (!faktorenAn(mengen)) break;
+    mengen = loese();
+    ergebnis = berechne(rezepturAus(mengen));
+  }
+  if (bestes != null) {
+    mengen = bestes.mengen;
+    ergebnis = bestes.ergebnis;
+  }
+  final rezeptur = rezepturAus(mengen);
 
   final vergleich = [
     for (final s in Naehrstoff.values)
@@ -373,6 +551,21 @@ RueckrechnungsErgebnis rueckrechnen({
             wert: naehrstoffWert(ergebnis.je100g, s) ?? 0,
           ),
   ];
+
+  // Mengenangaben für Fleisch, die der Rechenkern nicht bestätigt.
+  final abweichend = <String>[];
+  for (final MapEntry(key: j, value: sollKg) in fest.entries) {
+    final name = fleischName(j);
+    if (name == null) continue;
+    final istKg = fleischKgIn(ergebnis, name) ?? 0;
+    if ((istKg - sollKg).abs() / endKg * 100 < 0.05) continue;
+    abweichend.add(
+      '$name: auf dem Etikett ${_p(sollKg / endKg * 100)}, nachgerechnet '
+      '${_p(istKg / endKg * 100)} — Fett oder Bindegewebe über dem '
+      'Grenzwert zählen nicht als Fleisch; mehr passt nicht in die '
+      'Rohmasse.',
+    );
+  }
 
   final hinweise = <String>[
     if (!mitZiel)
@@ -386,6 +579,7 @@ RueckrechnungsErgebnis rueckrechnen({
             '${v.abweichung > 0 ? 'zu viel' : 'zu wenig'} — mit diesen '
             'Zutaten nicht genauer zu treffen. Fehlt eine Zutat, oder passt '
             'eine Zutat aus dem Katalog nicht zum Original?',
+    ...abweichend,
     if (reihenfolge && !_absteigend(fest))
       'Die festen Mengenangaben widersprechen der Reihenfolge der Liste.',
     for (final w in ergebnis.warnungen)
@@ -401,6 +595,8 @@ RueckrechnungsErgebnis rueckrechnen({
   );
 }
 
+String _p(double prozent) => '${Format.zahl(prozent, nachkomma: 1)} %';
+
 String _g(double wert) =>
     '${Format.zahl(wert, nachkomma: wert < 1 ? 2 : 1)} g';
 
@@ -414,24 +610,23 @@ bool _absteigend(Map<int, double> fest) {
 }
 
 /// Bringt die Mengen genau auf [kRueckRohmasseKg]: Feste Zeilen stehen
-/// genau auf ihrer Angabe, die übrigen werden gemeinsam skaliert.
+/// genau auf ihrer Rohmasse [festRohKg], die übrigen werden gemeinsam
+/// skaliert.
 void _aufRohmasse(
   List<double> mengen,
   List<List<int>> zeilen,
-  Map<int, double> fest,
-  double Function(int zeile) versatz,
+  Map<int, double> festRohKg,
 ) {
   var festKg = 0.0;
   var freiKg = 0.0;
   for (var j = 0; j < zeilen.length; j++) {
-    final ziel = fest[j];
-    if (ziel == null) {
+    final soll = festRohKg[j];
+    if (soll == null) {
       for (final i in zeilen[j]) {
         freiKg += mengen[i];
       }
       continue;
     }
-    final soll = ziel + versatz(j);
     final ist = zeilen[j].fold<double>(0, (s, i) => s + mengen[i]);
     for (final i in zeilen[j]) {
       mengen[i] = ist > 0 ? mengen[i] * soll / ist : soll / zeilen[j].length;
@@ -442,7 +637,7 @@ void _aufRohmasse(
   if (freiKg <= 0 || rest <= 0) return;
   final faktor = rest / freiKg;
   for (var j = 0; j < zeilen.length; j++) {
-    if (fest.containsKey(j)) continue;
+    if (festRohKg.containsKey(j)) continue;
     for (final i in zeilen[j]) {
       mengen[i] *= faktor;
     }

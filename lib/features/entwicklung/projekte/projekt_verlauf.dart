@@ -17,10 +17,18 @@ import 'datei_aktionen.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
+import 'zeitstrahl.dart';
 
 /// Der zuletzt verwendete Name für Einträge und Kommentare — gilt, bis
 /// die App schließt.
 final entwicklungNameProvider = StateProvider<String>((ref) => '');
+
+/// Wie der Verlauf aussieht: als Zeitstrahl oder als Liste der Karten.
+enum VerlaufAnsicht { zeitstrahl, liste }
+
+/// Die gewählte Ansicht des Verlaufs — gilt, bis die App schließt.
+final verlaufAnsichtProvider =
+    StateProvider<VerlaufAnsicht>((ref) => VerlaufAnsicht.zeitstrahl);
 
 /// Die Farbe eines Eintragsstatus.
 StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
@@ -30,7 +38,8 @@ StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
     };
 
 /// Der Verlauf eines Projekts: Meilensteine, Rezepturstände, Mails,
-/// Parameter, Dateien und Notizen — der neueste zuerst.
+/// Parameter, Dateien und Notizen — als Zeitstrahl (ältester links) oder
+/// als Liste (neuester zuerst).
 class ProjektVerlauf extends ConsumerWidget {
   const ProjektVerlauf({super.key, required this.projekt});
 
@@ -93,50 +102,94 @@ class ProjektVerlauf extends ConsumerWidget {
           auswaehlbar: true,
         ),
       ),
-      data: (liste) => ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${liste.length} '
-                  '${liste.length == 1 ? 'Eintrag' : 'Einträge'}',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+      data: (liste) {
+        final ansicht = ref.watch(verlaufAnsichtProvider);
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            Row(
+              children: [
+                SegmentedButton<VerlaufAnsicht>(
+                  segments: const [
+                    ButtonSegment(
+                      value: VerlaufAnsicht.zeitstrahl,
+                      icon: Icon(Icons.timeline),
+                      tooltip: 'Zeitstrahl',
+                    ),
+                    ButtonSegment(
+                      value: VerlaufAnsicht.liste,
+                      icon: Icon(Icons.view_agenda_outlined),
+                      tooltip: 'Liste',
+                    ),
+                  ],
+                  selected: {ansicht},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (s) => ref
+                      .read(verlaufAnsichtProvider.notifier)
+                      .state = s.first,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    '${liste.length} '
+                    '${liste.length == 1 ? 'Eintrag' : 'Einträge'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => dateiAlsEintrag(context, ref, projekt.id),
-                icon: const Icon(Icons.attach_file, size: 18),
-                label: const Text('Datei ablegen'),
-              ),
-              const SizedBox(width: 8),
-              FilledButton.icon(
-                onPressed: () => _neu(context, ref),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Neuer Eintrag'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (liste.isEmpty)
-            const LeerHinweis(
-              'Noch keine Einträge.',
-              icon: Icons.history,
+                // In schmalen Fenstern rutschen die Knöpfe untereinander.
+                Flexible(
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            dateiAlsEintrag(context, ref, projekt.id),
+                        icon: const Icon(Icons.attach_file, size: 18),
+                        label: const Text('Datei ablegen'),
+                      ),
+                      FilledButton.icon(
+                        onPressed: () => _neu(context, ref),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: const Text('Neuer Eintrag'),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-          for (final e in liste)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: EintragKarte(
-                eintrag: e,
-                datei: dateien[e.dateiId],
-                version: versionen[e.versionId],
-              ),
-            ),
-        ],
-      ),
+            const SizedBox(height: 12),
+            if (liste.isEmpty)
+              const LeerHinweis(
+                'Noch keine Einträge.',
+                icon: Icons.history,
+              )
+            else if (ansicht == VerlaufAnsicht.zeitstrahl)
+              Zeitstrahl(
+                eintraege: liste,
+                dateien: dateien,
+                onTippen: (e) => eintragZeigen(
+                  context,
+                  projektId: projekt.id,
+                  eintragId: e.id,
+                ),
+              )
+            else
+              for (final e in liste)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: EintragKarte(
+                    eintrag: e,
+                    datei: dateien[e.dateiId],
+                    version: versionen[e.versionId],
+                  ),
+                ),
+          ],
+        );
+      },
     );
   }
 }

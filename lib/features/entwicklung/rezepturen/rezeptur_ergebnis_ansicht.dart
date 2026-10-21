@@ -69,6 +69,8 @@ class ErgebnisInhalt extends StatelessWidget {
               wert: prozentText(e.fleischanteilProzent),
               label: 'Fleischanteil',
             ),
+            if (e.je100g.beffe case final beffe?)
+              Kennzahl(wert: prozentText(beffe), label: 'BEFFE'),
           ],
         ),
         const SizedBox(height: 12),
@@ -80,6 +82,13 @@ class ErgebnisInhalt extends StatelessWidget {
           HinweisBox(
             'Ohne Nährwerte: ${e.ohneNaehrwerte.join(', ')} — die Tabelle '
             'ist dann zu niedrig.',
+          ),
+          const SizedBox(height: 6),
+        ],
+        if (e.ohneBeffe.isNotEmpty) ...[
+          HinweisBox(
+            'Ohne BEFFE-Wert: ${e.ohneBeffe.join(', ')} — das BEFFE ist dann '
+            'zu niedrig.',
           ),
           const SizedBox(height: 6),
         ],

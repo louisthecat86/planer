@@ -122,6 +122,59 @@ void main() {
       expect(e.warnungen.any((t) => t.contains('Wasser')), isTrue);
     });
 
+    test('Wasser, das der Verlust ganz nimmt, steht nicht in der Liste', () {
+      // 5 kg Wasser, 10 % Verlust von 100 kg: Es bleibt nichts.
+      final e = berechne(
+        rezeptur([z(schwein(), 95), z(wasser, 5)], verlust: 10),
+      );
+      expect(
+        e.zutatenliste,
+        'hergestellt aus 106 g Schweinefleisch je 100 g des Enderzeugnisses',
+      );
+      expect(e.zeilen.singleWhere((zz) => zz.istWasser).ausgelassen, isTrue);
+      expect(
+        e.warnungen.any((w) => w.contains('geht ganz mit dem Verlust')),
+        isTrue,
+      );
+    });
+
+    test('Zeilen gleichen Namens stehen einmal da', () {
+      // Trinkwasser und Eis heißen beide „Wasser".
+      const eis = RechenZutat(
+        id: 'eis',
+        name: 'Scherbeneis',
+        etikettName: 'Wasser',
+        istWasser: true,
+      );
+      // „Speck" als Zutat und als Fett über dem Grenzwert.
+      const speck = RechenZutat(
+        id: 'speck',
+        name: 'Speck',
+        naehrwerte: Naehrwerte(fett: 80, eiweiss: 5, wasser: 15),
+      );
+      final e = berechne(
+        rezeptur([
+          z(schwein(fett: 40, eiweiss: 14), 70),
+          z(speck, 5),
+          z(wasser, 10),
+          z(eis, 15),
+        ]),
+      );
+      // Speck: 5 kg + 70 × (40 − 30) / 70 = 15 kg.
+      expect(
+        e.zutatenliste,
+        'Schweinefleisch (60,0 %), Wasser, Speck',
+      );
+      expect(
+        e.zeilen.singleWhere((zz) => zz.name == 'Wasser').masseKg,
+        closeTo(25, 1e-9),
+      );
+      expect(
+        e.zeilen.singleWhere((zz) => zz.name == 'Speck').masseKg,
+        closeTo(15, 1e-9),
+      );
+    });
+
     test('gleiche Zutaten aus Unterrezeptur und Rezeptur stehen einmal da', () {
       final wuerze = rezeptur(
         [z(salz, 1), z(pfeffer, 1)],
@@ -223,6 +276,23 @@ void main() {
         ]),
       );
       expect(e.tierarten.single.kollagenVerhaeltnis, closeTo(20, 1e-9));
+    });
+
+    test('reine Schwarte: nie mehr Bindegewebe, als da ist', () {
+      // Eiweiß 30 %, davon 90 % Kollagen: Der Faktor 4,625 ergäbe über
+      // 100 % Bindegewebe. Höchstens alles außer dem Fett (10 %) zählt —
+      // Fleisch bleibt keines, und die Masse stimmt.
+      final e = berechne(
+        rezeptur(
+          [z(schwein(fett: 10, eiweiss: 30, bindegewebe: 90), 20)],
+        ),
+      );
+      final p = e.tierarten.single;
+      expect(p.ueberschussBindegewebeKg, closeTo(18, 1e-9));
+      expect(p.ueberschussFettKg, closeTo(2, 1e-9));
+      expect(p.fleischKg, closeTo(0, 1e-9));
+      expect(e.fleischanteilProzent, closeTo(0, 1e-9));
+      expect(e.zutatenliste, startsWith('Schweinebindegewebe, Speck'));
     });
 
     test('ohne Bindegewebswerte wird das Bindegewebe nicht geprüft', () {
@@ -372,7 +442,8 @@ void main() {
 
     test('Garen mit Fettverlust: Fett nach Angabe, der Rest als Saft', () {
       // 20 kg Verlust, davon 5 kg Fett. Saft 15 kg: 0,75 kg Eiweiß,
-      // 0,15 kg Salz (mehr als da ist → 0), 13,95 kg Wasser.
+      // 0,15 kg Salz (nur 0,1 kg da), 0,15 kg Zucker (keiner da), der Rest
+      // Wasser: 15 − 0,75 − 0,1 = 14,15 kg.
       final e = berechne(
         rezeptur(
           [z(fleisch, 100)],
@@ -385,7 +456,77 @@ void main() {
       expect(e.je100g.gesaettigteFettsaeuren, closeTo(7.5, 1e-9));
       expect(e.je100g.eiweiss, closeTo(21.5625, 1e-9));
       expect(e.je100g.salz, closeTo(0, 1e-9));
-      expect(e.je100g.wasser, closeTo(57.5625, 1e-9));
+      expect(e.je100g.wasser, closeTo(57.3125, 1e-9));
+      // Was hineinging, abzüglich Verlust: 98,1 − 20 = 78,1 kg in 80 kg.
+      final n = e.je100g;
+      expect(
+        n.fett! + n.eiweiss! + n.salz! + n.wasser! + n.kohlenhydrate!,
+        closeTo(97.625, 1e-9),
+      );
+    });
+
+    test('Garen: das BEFFE geht anteilig mit dem Eiweiß', () {
+      // 18 kg Eiweiß, davon 15 kg BEFFE. 20 kg Saft nehmen 1 kg Eiweiß:
+      // BEFFE 15 × 17 / 18 = 14,1667 kg in 80 kg.
+      const mitBeffe = RechenZutat(
+        id: 'fb',
+        name: 'Schweinefleisch',
+        istFleisch: true,
+        tierart: Tierart.schwein,
+        naehrwerte: Naehrwerte(fett: 20, eiweiss: 18, beffe: 15, wasser: 61),
+      );
+      final e = berechne(
+        rezeptur([z(mitBeffe, 100)], verlust: 20, art: Verlustart.garen),
+      );
+      expect(e.je100g.eiweiss, closeTo(17 / 80 * 100, 1e-9));
+      expect(e.je100g.beffe, closeTo(15 * 17 / 18 / 80 * 100, 1e-9));
+    });
+
+    test('BEFFE: Fleisch ohne Wert wird genannt', () {
+      const mit = RechenZutat(
+        id: 'mit',
+        name: 'Schweineschulter',
+        istFleisch: true,
+        tierart: Tierart.schwein,
+        naehrwerte: Naehrwerte(fett: 20, eiweiss: 18, beffe: 15),
+      );
+      const ohne = RechenZutat(
+        id: 'ohne',
+        name: 'Schweinebacke',
+        istFleisch: true,
+        tierart: Tierart.schwein,
+        naehrwerte: Naehrwerte(fett: 30, eiweiss: 15),
+      );
+      final beide = berechne(rezeptur([z(mit, 50), z(ohne, 30), z(salz, 2)]));
+      // Nur die Schulter zählt: 50 × 15 % = 7,5 kg in 82 kg.
+      expect(beide.je100g.beffe, closeTo(7.5 / 82 * 100, 1e-9));
+      // Salz ist kein Fleisch und braucht keinen Wert.
+      expect(beide.ohneBeffe, ['Schweinebacke']);
+      // Hat keine Zutat einen Wert, gibt es kein BEFFE und keinen Hinweis.
+      final keine = berechne(rezeptur([z(ohne, 30), z(salz, 2)]));
+      expect(keine.je100g.beffe, isNull);
+      expect(keine.ohneBeffe, isEmpty);
+    });
+
+    test('mehr Fettverlust als Fett: der Rest geht als Wasser', () {
+      const mager = RechenZutat(
+        id: 'm',
+        name: 'Putenbrust',
+        istFleisch: true,
+        tierart: Tierart.pute,
+        naehrwerte: Naehrwerte(fett: 2, eiweiss: 23, wasser: 74, asche: 1),
+      );
+      // 100 kg mit 2 kg Fett, 10 % Verlust, davon 5 % Fett: Es gehen die
+      // 2 kg Fett und 8 kg Wasser.
+      final e = berechne(
+        rezeptur([z(mager, 100)], verlust: 10, fettVerlust: 5),
+      );
+      expect(e.je100g.fett, closeTo(0, 1e-9));
+      expect(e.je100g.wasser, closeTo(66 / 90 * 100, 1e-9));
+      expect(
+        e.warnungen.any((w) => w.contains('Fettverlust')),
+        isTrue,
+      );
     });
 
     test('„kein Verlust" übergeht einen eingetragenen Verlust', () {
@@ -501,7 +642,9 @@ void main() {
         '0,1',
       );
       expect(naehrwertGerundet(Naehrstoff.salz, 1.234), '1,2');
-      expect(naehrwertGerundet(Naehrstoff.salz, 0.96), '1,0');
+      // Unter 1 g auf Hundertstel; erst was dabei 1,00 ergibt, auf Zehntel.
+      expect(naehrwertGerundet(Naehrstoff.salz, 0.96), '0,96');
+      expect(naehrwertGerundet(Naehrstoff.salz, 0.996), '1,0');
       expect(naehrwertGerundet(Naehrstoff.salz, 0.456), '0,46');
       expect(naehrwertGerundet(Naehrstoff.salz, 0.01), '< 0,01');
       expect(naehrwertGerundet(Naehrstoff.eiweiss, null), '—');
@@ -545,6 +688,17 @@ void main() {
       expect(Tierart.aus('Hähnchenbrust'), Tierart.huhn);
       expect(Tierart.aus(''), isNull);
       expect(Tierart.aus(null), isNull);
+    });
+
+    test('wirksamer Verlust: „kein Verlust" zählt als 0', () {
+      expect(rezeptur(const [], verlust: 12).wirksamerVerlust, 12);
+      expect(
+        rezeptur(const [], verlust: 12, art: Verlustart.keiner)
+            .wirksamerVerlust,
+        0,
+      );
+      expect(rezeptur(const [], verlust: 120).wirksamerVerlust, 100);
+      expect(rezeptur(const [], verlust: -5).wirksamerVerlust, 0);
     });
 
     test('Verlustart aus gespeicherten Werten', () {

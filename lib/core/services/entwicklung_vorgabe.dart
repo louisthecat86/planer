@@ -6,7 +6,7 @@ import '../database/database.dart';
 /// Produktentwicklung rechnen kann, solange noch keine Produktion mit
 /// Fertigware erfasst ist: der Verlust des freigegebenen Rezepturstands,
 /// in Prozent. null, wenn der Artikel nicht aus einer Freigabe stammt oder
-/// der Stand keinen Verlust hat.
+/// der Stand keinen Verlust hat (auch bei „kein Verlust").
 ///
 /// Bewusst nicht aus der alten Spalte `gesamtAusbeuteFaktor` des Artikels:
 /// Was dort aus früheren Versionen noch steht, soll die Planung nicht
@@ -25,8 +25,11 @@ Future<double?> verlustVorgabeAusEntwicklung(
     final v = await (db.select(db.entwicklungRezepturVersionen)
           ..where((v) => v.id.equals(p.freigabeVersionId!)))
         .getSingleOrNull();
-    final prozent = v?.verlustProzent;
-    if (prozent != null && prozent > 0 && prozent < 100) return prozent;
+    // „Kein Verlust" (Verlustart.keiner): Ein eingetragener Wert bleibt
+    // stehen, zählt aber nicht — auch der Rechenkern rechnet ohne.
+    if (v == null || v.verlustArt == 'keiner') continue;
+    final prozent = v.verlustProzent;
+    if (prozent > 0 && prozent < 100) return prozent;
   }
   return null;
 }

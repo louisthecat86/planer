@@ -266,8 +266,8 @@ class _Inhalt extends StatelessWidget {
             children: [
               zahlZeile(
                 'Verlust',
-                prozentText(a.verlustProzent),
-                prozentText(b.verlustProzent),
+                prozentText(a.wirksamerVerlust),
+                prozentText(b.wirksamerVerlust),
               ),
               zahlZeile(
                 'Endgewicht',

@@ -296,7 +296,7 @@ class FreigabeDienst {
     double? verlust;
     if (eingabe != null) {
       allergene = allergeneFuerArtikel(eingabe, berechne(eingabe));
-      final v = eingabe.verlustProzent;
+      final v = eingabe.wirksamerVerlust;
       if (v > 0 && v < 100) verlust = v;
     }
     final vorhanden = projekt.artikelId == null
@@ -466,13 +466,21 @@ class FreigabeDienst {
     final erfasst = ausbeuteAusProduktionen(historie);
     if (erfasst == null) return null;
     final gemessen = (1 - erfasst.faktor) * 100;
+    final mitVerlust = eingabe.verlustart != Verlustart.keiner;
     final mitRezeptur = berechne(eingabe);
-    final mitMessung = berechne(eingabe.kopie(verlustProzent: gemessen));
+    final mitMessung = berechne(
+      eingabe.kopie(
+        verlustProzent: gemessen,
+        // Gerechnet mit „kein Verlust", gemessen aber einer: Für den
+        // Fleischanteil zählt nur, wie viel verloren geht.
+        verlustart: mitVerlust ? null : Verlustart.trocknung,
+      ),
+    );
     final mitFleisch = mitRezeptur.fleischanteilProzent > 0;
     return VerlustAbgleich(
       produktionen: erfasst.anzahl,
       gemessenProzent: gemessen,
-      rezepturProzent: eingabe.verlustProzent,
+      rezepturProzent: eingabe.wirksamerVerlust,
       fleischRezeptur: mitFleisch ? mitRezeptur.fleischanteilProzent : null,
       fleischGemessen: mitFleisch ? mitMessung.fleischanteilProzent : null,
       zutatenlisteRezeptur: mitRezeptur.zutatenliste,

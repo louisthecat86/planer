@@ -346,6 +346,23 @@ void main() {
       expect(await zugangFuer(db).pruefen('geheim123'), isTrue);
     });
 
+    test('ein älteres Backup bringt kein früheres Passwort zurück', () async {
+      final zugang = zugangFuer(db);
+      await zugang.festlegen('geheim123');
+      await zutat(db, 'z1', 'Geheimgewürz Nr. 7');
+      final pfad = await sichern(db);
+      expect(await zugang.aendern('geheim123', 'neues-Passwort'), isTrue);
+      await db.delete(db.entwicklungZutaten).go();
+
+      await BackupService.importBackup(pfad, db, sicherungAnlegen: false);
+
+      // Die Daten aus dem Backup, das Passwort von vor dem Einspielen.
+      expect(await zutaten(db), ['Geheimgewürz Nr. 7']);
+      expect(await zugangFuer(db).pruefen('neues-Passwort'), isTrue);
+      expect(await zugangFuer(db).pruefen('geheim123'), isFalse);
+      expect(await zugangFuer(db).oeffnen('neues-Passwort'), isTrue);
+    });
+
     test('auf einem anderen Rechner: wartet aufs Passwort des Backups',
         () async {
       final andere = testDatenbank();

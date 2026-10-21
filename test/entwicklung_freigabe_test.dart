@@ -99,6 +99,7 @@ void main() {
     /// abgeschlossen.
     Future<({EntwicklungsProjekt projekt, String versionId})> anlegen({
       String? artikelnummer = 'A-100',
+      String verlustArt = 'garen',
     }) async {
       final id = await projekte.projektAnlegen(
         name: 'Schnitzel Wiener Art',
@@ -143,9 +144,9 @@ void main() {
       await rezepte.positionHinzufuegen(v.id, zutatId: mehl, mengeKg: 20);
       await rezepte.versionAendern(
         v.id,
-        const EntwicklungRezepturVersionenCompanion(
-          verlustProzent: Value(10),
-          verlustArt: Value('garen'),
+        EntwicklungRezepturVersionenCompanion(
+          verlustProzent: const Value(10),
+          verlustArt: Value(verlustArt),
         ),
       );
       await rezepte.versionAbschliessen(v.id);
@@ -283,6 +284,19 @@ void main() {
       expect(p.istEingepflegt, isFalse);
     });
 
+    test('„kein Verlust" im Stand: auch keiner für die Planung', () async {
+      // Die 10 % bleiben eingetragen, zählen bei „kein Verlust" aber nicht.
+      final a = await anlegen(verlustArt: 'keiner');
+      final w = await dienst.vorschlag(a.projekt, a.versionId);
+      expect(w.verlustProzent, isNull);
+      final artikelId = await dienst.freigeben(
+        projekt: a.projekt,
+        versionId: a.versionId,
+        werte: w,
+      );
+      expect(await verlustVorgabeAusEntwicklung(db, artikelId), isNull);
+    });
+
     test('ohne Artikelnummer keine Freigabe', () async {
       final a = await anlegen(artikelnummer: null);
       final w = await dienst.vorschlag(a.projekt, a.versionId);
@@ -310,9 +324,10 @@ void main() {
               );
 
       Future<FreigabeUebersicht> freigegeben(
-        List<(double, double)> produktionen,
-      ) async {
-        final a = await anlegen();
+        List<(double, double)> produktionen, {
+        String verlustArt = 'garen',
+      }) async {
+        final a = await anlegen(verlustArt: verlustArt);
         final artikelId = await dienst.freigeben(
           projekt: a.projekt,
           versionId: a.versionId,
@@ -352,6 +367,21 @@ void main() {
         expect(a.gemessenProzent, closeTo(15, 1e-9));
         expect(a.fleischZuNiedrig, isTrue);
         expect(a.fleischZuHoch, isFalse);
+      });
+
+      test('„kein Verlust" gerechnet, aber einer gemessen', () async {
+        final u = await freigegeben(
+          const [(100, 95)],
+          verlustArt: 'keiner',
+        );
+        final a = u.abgleich!;
+        expect(a.rezepturProzent, 0);
+        expect(a.gemessenProzent, closeTo(5, 1e-9));
+        // 50 kg Fleisch in 100 kg bzw. 95 kg Enderzeugnis.
+        expect(a.fleischRezeptur, closeTo(50, 1e-6));
+        expect(a.fleischGemessen, closeTo(50 / 95 * 100, 1e-6));
+        expect(a.verlustWeichtAb, isTrue);
+        expect(a.fleischZuNiedrig, isTrue);
       });
 
       test('passend: keine Hinweise', () async {

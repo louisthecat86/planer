@@ -241,6 +241,25 @@ void main() {
       expect(e.ergebnis.zutatenliste, startsWith('Schweinefleisch (80,0 %)'));
     });
 
+    test('Mengenangabe bei Fett über dem Grenzwert: gemeint ist das Fleisch',
+        () {
+      // Schweinebauch mit 40 % Fett: Von 70 kg zählen nur 60 kg als
+      // Fleisch, 10 kg stehen als „Speck" da. „Schweinefleisch (60 %)"
+      // verlangt also 70 kg Bauch.
+      final bauch = zutat('Schweinebauch', fleisch: true, fett: 40, eiweiss: 14);
+      final e = rueckrechnen(
+        zutaten: [
+          RueckZutat(bauch, quidProzent: 60),
+          RueckZutat(wasser),
+          RueckZutat(salz),
+        ],
+        ziel: const Naehrwerte(salz: 2),
+      );
+      expect(e.mengenKg[0], closeTo(70, 1e-3));
+      expect(e.ergebnis.zutatenliste, startsWith('Schweinefleisch (60,0 %)'));
+      expect(e.hinweise.any((h) => h.contains('auf dem Etikett')), isFalse);
+    });
+
     test('Fehler und Hinweise', () {
       expect(
         () => rueckrechnen(zutaten: const [], ziel: const Naehrwerte()),

@@ -26,8 +26,9 @@ import 'entwicklung_daten.dart';
 // Beim Einspielen gilt: Ein Backup ohne diesen Teil lässt die
 // Produktentwicklung dieses Rechners stehen. Ein Backup mit ihm ersetzt
 // sie. Lässt sich der Teil mit dem Schlüssel dieses Rechners öffnen, wird
-// er sofort eingespielt — sonst wartet er, bis jemand mit dem Passwort
-// entsperrt (siehe EntwicklungZugang).
+// er sofort eingespielt, und das Passwort dieses Rechners bleibt — sonst
+// wartet er, bis jemand mit dem Passwort des Backups entsperrt (siehe
+// EntwicklungZugang).
 
 /// Der entschlüsselte Inhalt eines Entwicklungsteils.
 class EntwicklungsInhalt {
@@ -212,8 +213,12 @@ class EntwicklungSicherung {
         final inhalt = teil.inhalt!;
         await EntwicklungDaten.leeren(db);
         await EntwicklungDaten.schreiben(db, inhalt.daten, inhalt.dateien);
+        // Derselbe Datenschlüssel: Das Passwort dieses Rechners bleibt —
+        // ein älteres Backup bringt kein früheres (vielleicht bekannt
+        // gewordenes) Passwort zurück. Beide verpacken denselben Schlüssel.
         neu = {
-          kEntwicklungPasswortSchluessel: teil.passwort!,
+          kEntwicklungPasswortSchluessel:
+              lokal[kEntwicklungPasswortSchluessel] ?? teil.passwort!,
           if (lokalerSchluessel != null)
             kEntwicklungDatenschluessel: lokalerSchluessel,
         };

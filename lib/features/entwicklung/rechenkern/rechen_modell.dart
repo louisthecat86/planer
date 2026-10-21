@@ -465,6 +465,13 @@ class RechenRezeptur {
 
   final Verlustart verlustart;
 
+  /// Der Verlust, mit dem gerechnet wird: 0 bei „kein Verlust" — ein
+  /// eingetragener Wert bleibt dann stehen, zählt aber nicht —, sonst
+  /// [verlustProzent] zwischen 0 und 100.
+  double get wirksamerVerlust => verlustart == Verlustart.keiner
+      ? 0
+      : verlustProzent.clamp(0, 100).toDouble();
+
   /// Dieselbe Rezeptur mit anderen Positionen oder anderem Verlust.
   RechenRezeptur kopie({
     List<RechenPosition>? positionen,

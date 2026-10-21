@@ -59,9 +59,13 @@ String naehrwertGerundet(Naehrstoff stoff, double? wert) {
       return _gestuft(w, unter: 0.1, unterText: '< 0,1');
     case Naehrstoff.salz:
       if (w <= 0.0125) return '< 0,01';
-      final zehntel = (w * 10).round() / 10;
-      if (w >= 1 || zehntel >= 1) return Format.zahl(zehntel, nachkomma: 1);
-      return Format.zahl(w, nachkomma: 2);
+      // Unter 1 g auf Hundertstel — erst wenn das 1,00 ergibt, gilt die
+      // Stufe darüber (0,96 bleibt „0,96", 0,996 wird „1,0").
+      final hundertstel = (w * 100).round() / 100;
+      if (w >= 1 || hundertstel >= 1) {
+        return Format.zahl((w * 10).round() / 10, nachkomma: 1);
+      }
+      return Format.zahl(hundertstel, nachkomma: 2);
   }
 }
 

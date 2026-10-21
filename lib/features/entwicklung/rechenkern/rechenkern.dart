@@ -22,6 +22,12 @@ import 'rechen_modell.dart';
 //   Die Rechnung folgt der Methode der irischen Lebensmittelbehörde FSAI
 //   („Calculation of Meat Content", Abschnitt 8).
 // * Allergene werden nur in ganzen Wortteilen hervorgehoben.
+// * Zeilen gleichen Namens stehen einmal da — Wasser und Eis (beide
+//   „Wasser"), „Speck" als Zutat und als Fett über dem Grenzwert.
+// * Zugesetztes Wasser, das der Verlust ganz nimmt, fehlt in der Liste.
+// * Verlangt der Verlust mehr Fett (oder beim Garen mehr Eiweiß, Salz,
+//   Zucker), als da ist, geht an seiner Stelle Wasser: Die Nährwerte
+//   ergeben weiter 100 g. Das BEFFE sinkt beim Garen mit dem Eiweiß.
 //
 // Über dem Grenzwert stehen Fett und Bindegewebe als eigene Zutaten in
 // der Liste — „Speck" bzw. „…fett" und „…bindegewebe" — und senken den
@@ -146,6 +152,7 @@ class RezepturErgebnis {
     required this.verarbeitungshilfsstoffe,
     required this.warnungen,
     required this.ohneNaehrwerte,
+    this.ohneBeffe = const [],
   });
 
   /// Summe der Positionen: Zutaten roh, Unterrezepturen mit der
@@ -183,6 +190,10 @@ class RezepturErgebnis {
 
   /// Zutaten ohne Nährwerte — die Tabelle ist dann zu niedrig.
   final List<String> ohneNaehrwerte;
+
+  /// Fleischzutaten ohne BEFFE-Wert, wenn andere einen haben — das BEFFE
+  /// in [je100g] ist dann zu niedrig.
+  final List<String> ohneBeffe;
 }
 
 /// Berechnet [rezeptur].
@@ -208,21 +219,24 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
   final blaetter = zusammen.values.where((b) => b.rohKg > 0).toList();
 
   // ── Fleisch je Tierart ──────────────────────────────────────────────
+  // Geprüft wird mit jeder Zutat einzeln: Dieselbe Zutat kann in einer
+  // eingefrorenen Unterrezeptur andere Werte haben als im Katalog.
   final gruppen = <Tierart, List<_Blatt>>{};
+  for (final b in teil.blaetter) {
+    if (b.rohKg <= 0 || !b.zutat.istFleisch) continue;
+    final art = _tierart(b.zutat);
+    if (art != null) gruppen.putIfAbsent(art, () => []).add(b);
+  }
   final uebrige = <_Blatt>[];
   for (final b in blaetter) {
-    final art = b.zutat.tierart ?? Tierart.aus(b.zutat.name);
-    if (b.zutat.istFleisch && art != null) {
-      gruppen.putIfAbsent(art, () => []).add(b);
-    } else {
-      if (b.zutat.istFleisch) {
-        warnungen.add(
-          '„${b.zutat.name}" ist Fleisch ohne Tierart — es zählt nicht zum '
-          'Fleischanteil und steht einzeln in der Liste.',
-        );
-      }
-      uebrige.add(b);
+    if (b.zutat.istFleisch && _tierart(b.zutat) != null) continue;
+    if (b.zutat.istFleisch) {
+      warnungen.add(
+        '„${b.zutat.name}" ist Fleisch ohne Tierart — es zählt nicht zum '
+        'Fleischanteil und steht einzeln in der Liste.',
+      );
     }
+    uebrige.add(b);
   }
 
   final pruefungen = <TierartPruefung>[];
@@ -276,30 +290,50 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
     }
   }
   for (final b in uebrige) {
+    final unter = b.zutat.unterzutaten?.trim() ?? '';
     zeilen.add(
       _Zeile(
         name: b.anzeigeName,
         masseKg: b.zutat.istWasser ? b.wasserKg : b.rohKg,
         quid: b.quid,
-        unterzutaten: b.zutat.unterzutaten,
+        unterzutaten: unter.isEmpty ? null : unter,
         istWasser: b.zutat.istWasser,
         allergene: b.zutat.allergene,
       ),
     );
   }
 
-  // Absteigend nach dem Gewicht zum Zeitpunkt der Verwendung; Wasser nach
-  // dem, was im Enderzeugnis bleibt (LMIV Art. 18, Anhang VII Teil A).
-  zeilen.sort((a, b) {
-    final m = b.masseKg.compareTo(a.masseKg);
-    return m != 0 ? m : a.name.compareTo(b.name);
-  });
+  // Jede Zutat steht einmal in der Liste (LMIV Art. 18): Zeilen mit
+  // gleichem Namen — etwa Wasser und Eis, beide „Wasser", oder „Speck"
+  // als Zutat und als Fett über dem Grenzwert — werden eine. Die
+  // Fleischzeilen bleiben für sich.
+  final gleich = <String, _Zeile>{};
+  for (final z in zeilen) {
+    final schluessel = z.istFleisch
+        ? 'fleisch\u0000${z.name}'
+        : '${z.name}\u0000${z.unterzutaten ?? ''}\u0000${z.istWasser}';
+    final vorher = gleich[schluessel];
+    gleich[schluessel] = vorher == null ? z : vorher.plus(z);
+  }
+  zeilen
+    ..clear()
+    ..addAll(gleich.values)
+    // Absteigend nach dem Gewicht zum Zeitpunkt der Verwendung; Wasser
+    // nach dem, was im Enderzeugnis bleibt (LMIV Art. 18, Anhang VII
+    // Teil A).
+    ..sort((a, b) {
+      final m = b.masseKg.compareTo(a.masseKg);
+      return m != 0 ? m : a.name.compareTo(b.name);
+    });
 
+  // Bleibt vom zugesetzten Wasser höchstens 5 % — oder gar nichts, weil
+  // der Verlust es ganz genommen hat —, steht es nicht in der Liste.
+  final mitWasser = zeilen.any((z) => z.istWasser);
   final wasserKg = zeilen
       .where((z) => z.istWasser)
       .fold<double>(0, (s, z) => s + z.masseKg);
   final wasserAuslassen =
-      wasserKg > 0 && anteil(wasserKg) <= kWasserGrenzeProzent;
+      mitWasser && anteil(wasserKg) <= kWasserGrenzeProzent;
 
   final fertig = <EtikettZeile>[];
   for (final z in zeilen) {
@@ -337,9 +371,13 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
   }
   if (wasserAuslassen) {
     warnungen.add(
-      'Zugesetztes Wasser bleibt mit '
-      '${Format.zahl(anteil(wasserKg), nachkomma: 1)} % unter '
-      '${Format.zahl(kWasserGrenzeProzent)} % und steht nicht in der Liste.',
+      wasserKg < 1e-9
+          ? 'Das zugesetzte Wasser geht ganz mit dem Verlust und steht nicht '
+              'in der Liste.'
+          : 'Zugesetztes Wasser bleibt mit '
+              '${Format.zahl(anteil(wasserKg), nachkomma: 1)} % unter '
+              '${Format.zahl(kWasserGrenzeProzent)} % und steht nicht in der '
+              'Liste.',
     );
   }
 
@@ -363,6 +401,16 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
 
   final fleischKg = pruefungen.fold<double>(0, (s, p) => s + p.fleischKg);
 
+  // BEFFE zählt nur, was einen Wert hat — Fleisch ohne Wert fehlt darin.
+  final ohneBeffe = !teil.naehrstoffe.containsKey(_Stoff.beffe)
+      ? <String>[]
+      : ({
+          for (final b in blaetter)
+            if (b.zutat.istFleisch && b.zutat.naehrwerte.beffe == null)
+              b.anzeigeName,
+        }.toList()
+        ..sort());
+
   return RezepturErgebnis(
     eingesetztKg: teil.eingesetztKg,
     rohmasseKg: blaetter.fold<double>(0, (s, b) => s + b.rohKg),
@@ -384,6 +432,7 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
     },
     warnungen: warnungen,
     ohneNaehrwerte: teil.ohneNaehrwerte.toList()..sort(),
+    ohneBeffe: ohneBeffe,
   );
 }
 
@@ -391,6 +440,9 @@ int _rang(String allergen) {
   final i = kAllergene.indexWhere((m) => m.dbValue == allergen);
   return i < 0 ? kAllergene.length : i;
 }
+
+/// Die Tierart einer Fleischzutat — angegeben oder aus dem Namen.
+Tierart? _tierart(RechenZutat z) => z.tierart ?? Tierart.aus(z.name);
 
 /// Text einer Zeile: Name, Unterzutaten in Klammern, Menge.
 String _zeilenText(
@@ -419,15 +471,18 @@ TierartPruefung _pruefe(Tierart art, List<_Blatt> gruppe) {
   var eiweiss = 0.0;
   var kollagenBekannt = 0.0;
   var eiweissBekannt = 0.0;
+  // Unmögliche Katalogwerte (über 100 % oder negativ) werden begrenzt.
+  double prozent(double? wert) =>
+      wert == null ? 0 : wert.clamp(0, 100).toDouble();
   for (final b in gruppe) {
     masse += b.rohKg;
     final n = b.zutat.naehrwerte;
-    fett += b.rohKg * (n.fett ?? 0) / 100;
-    final e = b.rohKg * (n.eiweiss ?? 0) / 100;
+    fett += b.rohKg * prozent(n.fett) / 100;
+    final e = b.rohKg * prozent(n.eiweiss) / 100;
     eiweiss += e;
     final verhaeltnis = b.zutat.bindegewebe;
     if (verhaeltnis != null && e > 0) {
-      kollagenBekannt += e * verhaeltnis / 100;
+      kollagenBekannt += e * prozent(verhaeltnis) / 100;
       eiweissBekannt += e;
     }
   }
@@ -455,6 +510,9 @@ TierartPruefung _pruefe(Tierart art, List<_Blatt> gruppe) {
     final maxcol = grenze * (p - c) / (100 - grenze);
     final excol = c - maxcol;
     if (excol > 0) exct = excol * _bindegewebeJeKollagen;
+    // Mehr als alles außer dem Fett kann nicht Bindegewebe sein — bei
+    // reiner Schwarte ergäbe der Faktor sonst über 100 %.
+    if (exct > 100 - f) exct = 100 - f;
   }
   // Fett: auf der Masse ohne das überschüssige Bindegewebe.
   final maxfat = art.fettGrenze * (100 - exct - f) / (100 - art.fettGrenze);
@@ -592,6 +650,18 @@ class _Zeile {
   final bool istFleisch;
   final bool istWasser;
   final Set<String> allergene;
+
+  /// Zwei Zeilen gleichen Namens als eine: Mengen zusammen, die
+  /// Mengenangabe, wenn eine sie verlangt.
+  _Zeile plus(_Zeile andere) => _Zeile(
+        name: name,
+        masseKg: masseKg + andere.masseKg,
+        quid: quid || andere.quid,
+        unterzutaten: unterzutaten,
+        istFleisch: istFleisch,
+        istWasser: istWasser,
+        allergene: {...allergene, ...andere.allergene},
+      );
 }
 
 _Teil _rechne(
@@ -665,8 +735,9 @@ _Teil _rechne(
       if (teil.endKg <= 0) {
         if (menge > 0) {
           warnungen.add(
-            'Die Unterrezeptur „${unter.name}" hat kein Endgewicht — sie '
-            'zählt nicht mit.',
+            'Die Unterrezeptur „${unter.name}" hat kein Endgewicht — ihre '
+            '${Format.kg(menge)} zählen zur Masse, ihre Zutaten fehlen aber '
+            'in der Liste und in den Nährwerten.',
           );
         }
         continue;
@@ -714,38 +785,57 @@ _Teil _rechne(
   ];
 
   // Nährstoffe: Fett nach Angabe, der Rest des Verlusts als Wasser oder
-  // beim Garen als Saft.
+  // beim Garen als Saft. Fehlt etwas davon, geht an seiner Stelle Wasser —
+  // so wiegt das Enderzeugnis, was die Rezeptur sagt.
   if (verlustKg > 0) {
     final verlustG = verlustKg * 1000;
+
+    /// Nimmt bis zu [wunsch] Gramm von [s] weg; gibt zurück, wie viel es
+    /// war.
+    double weg(_Stoff s, double wunsch) {
+      final da = gramm[s] ?? 0;
+      final w = wunsch < da ? wunsch : (da > 0 ? da : 0.0);
+      gramm[s] = da - w;
+      return w;
+    }
+
     var fettG = eingesetzt * 1000 * rezeptur.fettVerlustProzent / 100;
     if (fettG < 0) fettG = 0;
     if (fettG > verlustG) fettG = verlustG;
     final fettVorher = gramm[_Stoff.fett] ?? 0;
-    final fettNachher = fettVorher > fettG ? fettVorher - fettG : 0.0;
+    final fettWeg = weg(_Stoff.fett, fettG);
+    if (fettWeg < fettG - 1e-6) {
+      warnungen.add(
+        'Der Fettverlust von „${rezeptur.name}" ist größer als das Fett '
+        'darin — gerechnet wird mit dem ganzen Fett, der Rest geht als '
+        'Wasser.',
+      );
+    }
     if (fettVorher > 0) {
-      gramm[_Stoff.gesaettigt] =
-          (gramm[_Stoff.gesaettigt] ?? 0) * fettNachher / fettVorher;
+      gramm[_Stoff.gesaettigt] = (gramm[_Stoff.gesaettigt] ?? 0) *
+          (fettVorher - fettWeg) /
+          fettVorher;
     }
-    gramm[_Stoff.fett] = fettNachher;
 
-    final rest = verlustG - fettG;
-    final wasserVor = gramm[_Stoff.wasser] ?? 0;
+    final rest = verlustG - fettWeg;
+    var wasserG = rest;
     if (rezeptur.verlustart == Verlustart.garen) {
-      void minus(_Stoff s, double wert) {
-        final v = (gramm[s] ?? 0) - wert;
-        gramm[s] = v < 0 ? 0 : v;
+      final eiweissVorher = gramm[_Stoff.eiweiss] ?? 0;
+      final eiweissWeg = weg(_Stoff.eiweiss, rest * kSaftEiweiss);
+      // Das BEFFE geht anteilig mit dem Eiweiß.
+      final beffe = gramm[_Stoff.beffe];
+      if (beffe != null && eiweissVorher > 0) {
+        gramm[_Stoff.beffe] =
+            beffe * (eiweissVorher - eiweissWeg) / eiweissVorher;
       }
-
-      minus(_Stoff.eiweiss, rest * kSaftEiweiss);
-      minus(_Stoff.salz, rest * kSaftSalz);
-      minus(_Stoff.zucker, rest * kSaftZucker);
-      minus(_Stoff.kohlenhydrate, rest * kSaftZucker);
-      minus(_Stoff.wasser, rest * kSaftWasser);
-      if (wasserVor < rest * kSaftWasser) _zuWenigWasser(rezeptur, warnungen);
-    } else {
-      gramm[_Stoff.wasser] = wasserVor > rest ? wasserVor - rest : 0;
-      if (wasserVor < rest) _zuWenigWasser(rezeptur, warnungen);
+      final salzWeg = weg(_Stoff.salz, rest * kSaftSalz);
+      final zuckerWeg = weg(_Stoff.kohlenhydrate, rest * kSaftZucker);
+      // Zucker zählt zu den Kohlenhydraten.
+      weg(_Stoff.zucker, zuckerWeg);
+      wasserG = rest - eiweissWeg - salzWeg - zuckerWeg;
     }
+    final wasserWeg = weg(_Stoff.wasser, wasserG);
+    if (wasserWeg < wasserG - 1e-6) _zuWenigWasser(rezeptur, warnungen);
   }
   if (!beffeBekannt) gramm.remove(_Stoff.beffe);
 

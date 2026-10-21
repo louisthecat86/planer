@@ -72,6 +72,7 @@ List<Platzhalter> get kSpezifikationPlatzhalter => [
       (name: 'stand', erklaerung: 'Rezepturstand, etwa „Stand 3"'),
       (name: 'zutaten', erklaerung: 'Zutatenliste mit Allergenen in GROSS'),
       (name: 'fleischanteil', erklaerung: 'Fleischanteil nach LMIV'),
+      (name: 'beffe', erklaerung: 'BEFFE je 100 g, wenn bekannt'),
       (name: 'verlust', erklaerung: 'Verlust der Rezeptur'),
       (name: 'haltbarkeit', erklaerung: 'Haltbarkeit des Artikels'),
       (name: 'aw', erklaerung: 'aw-Wert (Grenze aus dem Projekt)'),
@@ -199,6 +200,7 @@ Map<String, String> spezifikationsWerte(
     'zutaten': e.zutatenliste,
     'fleischanteil':
         e.fleischanteilProzent > 0 ? prozent(e.fleischanteilProzent) : '',
+    'beffe': e.je100g.beffe == null ? '' : prozent(e.je100g.beffe!),
     'verlust': prozent(q.verlustProzent),
     'haltbarkeit': q.haltbarkeitTage == null
         ? ''

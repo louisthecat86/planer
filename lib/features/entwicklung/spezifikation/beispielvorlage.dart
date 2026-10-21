@@ -141,6 +141,7 @@ Uint8List beispielvorlage() {
   spez
     ..verbinde('B${spez.zeile}:D${spez.zeile}')
     ..schreibe(['Fleischanteil', p('fleischanteil')])
+    ..schreibe(['BEFFE', p('beffe')])
     ..schreibe(['Allergene', p('allergene')])
     ..leer()
     ..schreibe(['Verarbeitungshilfsstoffe', 'aus'], stil: 1);

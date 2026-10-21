@@ -91,7 +91,9 @@ Firmenangaben.
   Ältere Backup-Versionen (ab 1.0) lassen sich weiter einspielen.
 - **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
   lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
-  Der DeepL-Schlüssel bleibt auf dem Rechner und geht nie ins Backup.
+  Auf demselben Rechner eingespielt, bleibt das aktuelle Passwort; ein Backup
+  von einem anderen Rechner öffnet das Passwort, das dort galt. Der
+  DeepL-Schlüssel bleibt auf dem Rechner und geht nie ins Backup.
 - **Stammdaten-Mappe** (Excel): wird bei jedem Export frisch aus der
   Datenbank gebaut — Blätter „Anlagen", „Steckbriefe" und je Artikel eines.
   In Excel bearbeitet, lässt sie sich wieder einlesen. Den Maschinen-Katalog

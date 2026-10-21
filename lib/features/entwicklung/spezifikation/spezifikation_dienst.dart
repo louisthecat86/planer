@@ -223,7 +223,7 @@ class SpezifikationDienst {
     final quelle = SpezifikationsQuelle(
       projektName: projekt.name,
       ergebnis: berechne(eingabe),
-      verlustProzent: eingabe.verlustProzent,
+      verlustProzent: eingabe.wirksamerVerlust,
       artikelnummer: artikel?.artikelnummer ?? projekt.artikelnummer,
       bezeichnung: artikel?.artikelbezeichnung,
       kunde: projekt.kunde,

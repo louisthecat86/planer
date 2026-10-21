@@ -356,6 +356,12 @@ Future<Uint8List> baueProjektPdf(
                   ? '${_zahl(e.fleischanteilProzent)} %'
                   : '',
             ),
+            if (e.je100g.beffe case final beffe?)
+              (
+                'BEFFE',
+                '${_zahl(beffe)} %'
+                    '${e.ohneBeffe.isEmpty ? '' : ' (ohne ${e.ohneBeffe.join(', ')})'}',
+              ),
             (
               'Allergene',
               e.allergene.isEmpty
