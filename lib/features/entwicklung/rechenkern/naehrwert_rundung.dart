@@ -1,4 +1,5 @@
 import '../../../core/utils/format.dart';
+import 'rechen_modell.dart';
 
 // Gerundete Nährwerte für das Etikett — nach dem Leitfaden der
 // EU-Kommission zu Toleranzen und Rundung (Dezember 2012):
@@ -27,6 +28,18 @@ enum Naehrstoff {
   final String label;
   final String einheit;
 }
+
+/// Der ungerundete Wert eines Nährstoffs je 100 g.
+double? naehrstoffWert(Naehrwerte n, Naehrstoff stoff) => switch (stoff) {
+      Naehrstoff.energieKj => n.energieKj,
+      Naehrstoff.energieKcal => n.energieKcal,
+      Naehrstoff.fett => n.fett,
+      Naehrstoff.gesaettigteFettsaeuren => n.gesaettigteFettsaeuren,
+      Naehrstoff.kohlenhydrate => n.kohlenhydrate,
+      Naehrstoff.zucker => n.zucker,
+      Naehrstoff.eiweiss => n.eiweiss,
+      Naehrstoff.salz => n.salz,
+    };
 
 /// Der gerundete Wert ohne Einheit, etwa „12", „3,4" oder „< 0,5".
 /// „—" für einen unbekannten Wert.

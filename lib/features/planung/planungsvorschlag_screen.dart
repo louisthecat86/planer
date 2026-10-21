@@ -9,6 +9,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/zeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider;
 import '../datenblatt/datenblatt.dart';
@@ -292,7 +293,10 @@ class _PlanungsvorschlagScreenState
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
-        SnackBar(content: Text('Fehler: $e'), backgroundColor: fehlerFarbe),
+        SnackBar(
+          content: Text('Fehler: ${fehlerText(e)}'),
+          backgroundColor: fehlerFarbe,
+        ),
       );
     }
   }

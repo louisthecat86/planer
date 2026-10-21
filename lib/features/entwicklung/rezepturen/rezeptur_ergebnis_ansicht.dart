@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
@@ -28,7 +29,7 @@ class RezepturErgebnisAnsicht extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator()),
       ),
       error: (e, _) => HinweisBox(
-        '$e',
+        fehlerText(e),
         art: StatusArt.fehler,
         titel: 'Die Rezeptur ließ sich nicht berechnen',
         auswaehlbar: true,

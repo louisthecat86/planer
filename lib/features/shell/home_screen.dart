@@ -17,6 +17,7 @@ import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart' show montagDerWoche;
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/zeit.dart';
@@ -414,7 +415,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           FilledButton.icon(
             onPressed: () => context.goNamed('boardPlanen'),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('Produkt planen'),
+            label: const Text('Artikel planen'),
           ),
           const SizedBox(width: 12),
         ],
@@ -441,7 +442,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
                 error: (e, _) => Bereich(
                   titel: 'Übersicht nicht verfügbar',
-                  child: Text('$e'),
+                  child: Text(fehlerText(e)),
                 ),
                 data: (u) => _Tagesbereich(
                   uebersicht: u,

@@ -4,6 +4,8 @@ import 'dart:isolate';
 import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
 
+import '../utils/fehler_text.dart';
+
 /// Abschnitt, in dem das Einlesen gerade steckt.
 enum NavisionPhase {
   /// Die Arbeitsmappe wird geöffnet. Dieser Abschnitt lässt sich nicht
@@ -278,7 +280,9 @@ class NavisionImportService {
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
-      throw FormatException('Die Datei ließ sich nicht als Excel öffnen: $e');
+      throw FormatException(
+        'Die Datei ließ sich nicht als Excel öffnen: ${fehlerText(e)}',
+      );
     }
 
     if (excel.tables.isEmpty) {

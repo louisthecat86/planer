@@ -6,6 +6,8 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../articles/article_detail_providers.dart'
     show productionHistoryProvider;
@@ -194,7 +196,7 @@ class _ProduktionErfassungScreenState
           padding: const EdgeInsets.all(14),
           children: [
             HinweisBox(
-              'Fehler: $e',
+              'Fehler: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),
@@ -360,7 +362,7 @@ class _ProduktionZeile extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               Text(
-                '${prod.mengeKg.toStringAsFixed(0)} kg geplant',
+                '${Format.kg(prod.mengeKg)} geplant',
                 style: zahlen?.copyWith(color: farben.onSurfaceVariant),
               ),
               const SizedBox(width: 16),

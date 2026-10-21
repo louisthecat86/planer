@@ -9,6 +9,7 @@ import 'core/providers/ui_scale_provider.dart';
 import 'core/providers/database_provider.dart';
 import 'core/services/backup_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/ui/fehler_anzeige.dart';
 import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
@@ -22,7 +23,9 @@ import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/entwicklung/entwicklung_screen.dart';
+import 'features/entwicklung/projekte/projekt_screen.dart';
 import 'features/entwicklung/rezepturen/rezeptur_screen.dart';
+import 'features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
 import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/intro/intro_screen.dart';
@@ -216,6 +219,19 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: EntwicklungScreen(),
             ),
           ),
+          // Ein Projekt mit Verlauf, Dateien und Sensorik — nur bei offener
+          // Entwicklung.
+          GoRoute(
+            path: '/entwicklung/projekt/:id',
+            name: 'entwicklungProjekt',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: EntwicklungGeschuetzt(
+                child: ProjektScreen(
+                  projektId: state.pathParameters['id']!,
+                ),
+              ),
+            ),
+          ),
           // Eine Rezeptur mit ihren Ständen — nur bei offener Entwicklung.
           GoRoute(
             path: '/entwicklung/rezeptur/:id',
@@ -226,6 +242,14 @@ final routerProvider = Provider<GoRouter>((ref) {
                   rezepturId: state.pathParameters['id']!,
                 ),
               ),
+            ),
+          ),
+          // Rezeptur rückrechnen — nur bei offener Entwicklung.
+          GoRoute(
+            path: '/entwicklung/rueckrechnung',
+            name: 'entwicklungRueckrechnung',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: EntwicklungGeschuetzt(child: RueckrechnungScreen()),
             ),
           ),
           // Einstellungen: Sammelpunkt für Stammdaten/Excel/Backup + Kapazität.
@@ -346,6 +370,8 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
+      // Damit Meldungen auch ohne BuildContext erscheinen können.
+      scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       // App-weite Skalierung: in den Einstellungen frei wählbar (25 %…200 %).
       //

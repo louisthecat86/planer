@@ -10,6 +10,8 @@ import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import '../datenblatt/datenblatt.dart';
@@ -71,8 +73,9 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   void initState() {
     super.initState();
     final t = widget.wbTask.task;
-    _mengeController =
-        TextEditingController(text: t.mengeKg.toStringAsFixed(1));
+    _mengeController = TextEditingController(
+      text: Format.eingabe(t.mengeKg, nachkomma: 1),
+    );
     _dauerController =
         TextEditingController(text: t.geplanteDauerMinuten.toStringAsFixed(0));
     _mitarbeiterController =
@@ -101,16 +104,16 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
   /// Die Menge im Feld, solange sie gültig ist — sonst die des Auftrags.
   double get _aktuelleMenge {
-    final v = double.tryParse(_mengeController.text.replaceAll(',', '.'));
-    return (v != null && v.isFinite && v > 0)
+    final v = Format.lies(_mengeController.text);
+    return (v != null && v > 0)
         ? v
         : widget.wbTask.task.mengeKg;
   }
 
   /// Menge geändert: speicherbar machen und die Dauer hochrechnen.
   void _mengeGeaendert() {
-    final v = double.tryParse(_mengeController.text.replaceAll(',', '.'));
-    if (v == null || !v.isFinite || v <= 0) return;
+    final v = Format.lies(_mengeController.text);
+    if (v == null || v <= 0) return;
     // Auch wenn sich die Dauer nicht hochrechnen lässt, muss die neue
     // Menge speicherbar sein — vorher blieb „Speichern" dann gesperrt.
     setState(() => _isDirty = true);
@@ -154,10 +157,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   /// geteilt.
   Future<void> _verteileAufTageDialog() async {
     final task = widget.wbTask.task;
-    final gesamtMenge = double.tryParse(
-          _mengeController.text.replaceAll(',', '.'),
-        ) ??
-        task.mengeKg;
+    final gesamtMenge = Format.lies(_mengeController.text) ?? task.mengeKg;
     final gesamtDauer =
         double.tryParse(_dauerController.text) ?? task.geplanteDauerMinuten;
 
@@ -215,7 +215,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Je Tag: ${teilMenge.toStringAsFixed(0)} kg · '
+                    'Je Tag: ${Format.kg(teilMenge)} · '
                     '${dauer.toStringAsFixed(0)} min\n'
                     'Tage: $tagesliste',
                     style: Theme.of(ctx).textTheme.bodySmall,
@@ -322,7 +322,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           SnackBar(
             content: Text(
               'Auftrag auf $tage Tage verteilt '
-              '(je ${(gesamtMenge / tage).toStringAsFixed(0)} kg).',
+              '(je ${Format.kg(gesamtMenge / tage)}).',
             ),
           ),
         );
@@ -335,7 +335,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
           SnackBar(
             content: Text(
               'Verteilen fehlgeschlagen — der Auftrag ist unverändert '
-              'geblieben. ($e)',
+              'geblieben. (${fehlerText(e)})',
             ),
             duration: const Duration(seconds: 8),
           ),
@@ -379,12 +379,11 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     setState(() => _isSaving = true);
     try {
       final db = ref.read(databaseProvider);
-      // double.tryParse akzeptiert auch 'NaN'/'Infinity' — solche Werte
-      // dürfen nie in die Datenbank (NOT-NULL-Constraint schlägt fehl,
-      // weil NaN als NULL gebunden wird).
+      // Nur endliche Werte (Format.lies lässt 'NaN'/'Infinity' weg) —
+      // NaN würde als NULL gebunden und am NOT-NULL-Constraint scheitern.
       double? sicher(String text) {
-        final v = double.tryParse(text.replaceAll(',', '.'));
-        return (v != null && v.isFinite && v >= 0) ? v : null;
+        final v = Format.lies(text);
+        return (v != null && v >= 0) ? v : null;
       }
 
       final newMenge = sicher(_mengeController.text) ??
@@ -416,7 +415,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: $e'),
+            content: Text('Fehler: ${fehlerText(e)}'),
             backgroundColor: AppFarben.von(context).fehler,
           ),
         );
@@ -498,7 +497,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: $e'),
+            content: Text('Fehler: ${fehlerText(e)}'),
             backgroundColor: AppFarben.von(context).fehler,
           ),
         );

@@ -6,6 +6,7 @@ import '../../core/constants/artikel_merkmale.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 
 const kProduktgruppen = <({String dbValue, String label})>[
@@ -174,7 +175,7 @@ class _ArticleInfoEditorDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: $e'),
+            content: Text('Fehler: ${fehlerText(e)}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

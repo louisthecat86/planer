@@ -8,10 +8,12 @@ import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../rechenkern/rechen_modell.dart';
+import 'fleischanteil_dialog.dart';
 import 'rezeptur_ergebnis_ansicht.dart';
 import 'rezepturen_ansicht.dart';
 import 'versionsvergleich.dart';
@@ -40,7 +42,7 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
   Future<void> _fehler(Object e) async {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$e')),
+      SnackBar(content: Text(fehlerText(e))),
     );
   }
 
@@ -175,6 +177,15 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
     }
   }
 
+  Future<void> _fleischanteil(RezepturVersion v) async {
+    final id = await fleischanteilOeffnen(
+      context,
+      rezepturId: widget.rezepturId,
+      version: v,
+    );
+    if (id != null && mounted) setState(() => _versionId = id);
+  }
+
   Future<void> _vergleichen(
     List<RezepturVersion> versionen,
     RezepturVersion aktuell,
@@ -224,7 +235,7 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
         error: (e, _) => Padding(
           padding: const EdgeInsets.all(16),
           child: HinweisBox(
-            '$e',
+            fehlerText(e),
             art: StatusArt.fehler,
             titel: 'Die Rezeptur ließ sich nicht laden',
             auswaehlbar: true,
@@ -260,6 +271,7 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
             onNeu: () => _neuerStand(aktuell),
             onAbschliessen: () => _abschliessen(aktuell),
             onVergleichen: () => _vergleichen(liste, aktuell),
+            onFleisch: () => _fleischanteil(aktuell),
             onLoeschen: liste.length > 1 &&
                     aktuell.status == VersionStatus.entwurf
                 ? () => _standLoeschen(aktuell)
@@ -333,6 +345,7 @@ class _StandLeiste extends StatelessWidget {
     required this.onAbschliessen,
     required this.onVergleichen,
     required this.onLoeschen,
+    this.onFleisch,
   });
 
   final List<RezepturVersion> versionen;
@@ -342,6 +355,9 @@ class _StandLeiste extends StatelessWidget {
   final VoidCallback onAbschliessen;
   final VoidCallback onVergleichen;
   final VoidCallback? onLoeschen;
+
+  /// „Fleischanteil einstellen" — null: kein Knopf.
+  final VoidCallback? onFleisch;
 
   @override
   Widget build(BuildContext context) {
@@ -402,6 +418,12 @@ class _StandLeiste extends StatelessWidget {
               icon: const Icon(Icons.compare_arrows, size: 18),
               label: const Text('Vergleichen'),
             ),
+          if (onFleisch != null)
+            OutlinedButton.icon(
+              onPressed: onFleisch,
+              icon: const Icon(Icons.tune, size: 18),
+              label: const Text('Fleischanteil einstellen…'),
+            ),
           if (loeschen != null)
             IconButton(
               tooltip: 'Diesen Entwurf löschen',
@@ -450,7 +472,7 @@ class Zusammensetzung extends ConsumerWidget {
       } catch (e) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$e')),
+          SnackBar(content: Text(fehlerText(e))),
         );
       }
     }

@@ -19,6 +19,7 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
+import '../../core/utils/fehler_text.dart';
 import '../datenblatt/datenblatt.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show Ausbeute, AusbeuteQuelle, dailyTasksProvider, ermittleAusbeute;
@@ -383,7 +384,9 @@ class _AuftragsbestandScreenState
     } on FormatException catch (e) {
       if (mounted) setState(() => _fehler = e.message);
     } catch (e) {
-      if (mounted) setState(() => _fehler = 'Einlesen fehlgeschlagen: $e');
+      if (mounted) {
+        setState(() => _fehler = 'Einlesen fehlgeschlagen: ${fehlerText(e)}');
+      }
     } finally {
       if (mounted) setState(() => _liest = false);
     }
@@ -452,7 +455,8 @@ class _AuftragsbestandScreenState
         SnackBar(
           duration: const Duration(seconds: 8),
           content: Text(
-            'Anlegen fehlgeschlagen — es wurde nichts angelegt. ($e)',
+            'Anlegen fehlgeschlagen — es wurde nichts angelegt. '
+            '(${fehlerText(e)})',
           ),
         ),
       );
@@ -607,7 +611,8 @@ class _AuftragsbestandScreenState
         SnackBar(
           duration: const Duration(seconds: 8),
           content: Text(
-            'Einplanen fehlgeschlagen — es wurde nichts angelegt. ($e)',
+            'Einplanen fehlgeschlagen — es wurde nichts angelegt. '
+            '(${fehlerText(e)})',
           ),
         ),
       );
@@ -661,7 +666,7 @@ class _AuftragsbestandScreenState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 8),
-          content: Text('Aufheben fehlgeschlagen. ($e)'),
+          content: Text('Aufheben fehlgeschlagen. (${fehlerText(e)})'),
         ),
       );
     }
@@ -797,7 +802,7 @@ class _AuftragsbestandScreenState
             tooltip: 'Neu rechnen — etwa nach Änderungen im Board',
           ),
           const SizedBox(width: 8),
-          // Die Hauptaktion der Seite oben rechts — wie „Produkt planen" im
+          // Die Hauptaktion der Seite oben rechts — wie „Artikel planen" im
           // Board und „Neuer Artikel" in der Artikelliste.
           if (schmal)
             IconButton(
@@ -847,7 +852,9 @@ class _AuftragsbestandScreenState
                 child: ansicht.when(
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(child: Text('Fehler: $e')),
+                  error: (e, _) => Center(
+                    child: Text('Fehler: ${fehlerText(e)}'),
+                  ),
                   data: (a) => a.leer
                       ? const _LeerHinweis()
                       : _inhalt(context, a, appNummern, abteilungen, heute),

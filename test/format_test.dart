@@ -38,6 +38,36 @@ void main() {
       expect(Format.zahl(double.nan), '—');
       expect(Format.menge(double.infinity), '—');
     });
+
+    test('für Eingabefelder: Komma, keine Tausenderpunkte, keine Nullen am '
+        'Ende', () {
+      expect(Format.eingabe(1250.5), '1250,5');
+      expect(Format.eingabe(7.5, nachkomma: 1), '7,5');
+      expect(Format.eingabe(8.0, nachkomma: 1), '8');
+      expect(Format.eingabe(100, nachkomma: 0), '100');
+      expect(Format.eingabe(0.125, nachkomma: 3), '0,125');
+      expect(Format.eingabe(2.004), '2');
+      expect(Format.eingabe(-0.001), '0');
+      expect(Format.eingabe(double.nan), '');
+    });
+
+    test('aus Eingabefeldern: Komma, Punkt und Tausenderpunkte', () {
+      expect(Format.lies('7,5'), 7.5);
+      expect(Format.lies(' 7.5 '), 7.5);
+      expect(Format.lies('1.250,5'), 1250.5);
+      expect(Format.lies('12.500'), 12500);
+      expect(Format.lies('0.125'), 0.125);
+      expect(Format.lies('1 250'), 1250);
+      expect(Format.lies('-3,25'), -3.25);
+      expect(Format.lies(''), isNull);
+      expect(Format.lies('abc'), isNull);
+      expect(Format.lies('NaN'), isNull);
+      expect(Format.lies('Infinity'), isNull);
+      // Was hinausgeht, kommt wieder herein.
+      for (final w in [0.5, 12.25, 1250.5, 99999.75]) {
+        expect(Format.lies(Format.eingabe(w)), w);
+      }
+    });
   });
 
   group('Daten', () {

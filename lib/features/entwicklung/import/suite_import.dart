@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/krypto.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart' show VersionStatus;
@@ -99,7 +100,7 @@ SuiteDaten suiteDatenLesen(Uint8List bytes) {
   try {
     archiv = ZipDecoder().decodeBytes(bytes);
   } catch (e) {
-    throw FormatException('Das ZIP ließ sich nicht öffnen: $e');
+    throw FormatException('Das ZIP ließ sich nicht öffnen: ${fehlerText(e)}');
   }
   var zutaten = <Map<String, dynamic>>[];
   var rezepturen = <Map<String, dynamic>>[];

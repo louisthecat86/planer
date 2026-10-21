@@ -5,6 +5,7 @@ import '../../core/providers/backup_provider.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../data_management/data_management_screen.dart'
     show invalidiereDatenNachImport;
 import '../entwicklung/entwicklung_zugang.dart'
@@ -225,7 +226,7 @@ class BackupManagementScreen extends ConsumerWidget {
       padding: const EdgeInsets.all(14),
       children: [
         HinweisBox(
-          error.toString(),
+          fehlerText(error),
           art: StatusArt.fehler,
           titel: 'Fehler beim Laden der Backups',
           auswaehlbar: true,
@@ -260,7 +261,7 @@ class BackupManagementScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _showErrorSnackbar(context, 'Fehler beim Export: $e');
+        _showErrorSnackbar(context, 'Fehler beim Export: ${fehlerText(e)}');
       }
     } finally {
       ref.read(isExportingProvider.notifier).state = false;
@@ -297,7 +298,7 @@ class BackupManagementScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _showErrorSnackbar(context, 'Fehler beim Import: $e');
+        _showErrorSnackbar(context, 'Fehler beim Import: ${fehlerText(e)}');
       }
     } finally {
       ref.read(isImportingProvider.notifier).state = false;
@@ -324,7 +325,7 @@ class BackupManagementScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _showErrorSnackbar(context, 'Fehler beim Laden: $e');
+        _showErrorSnackbar(context, 'Fehler beim Laden: ${fehlerText(e)}');
       }
     }
   }
@@ -393,7 +394,7 @@ class BackupManagementScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _showErrorSnackbar(context, 'Fehler beim Löschen: $e');
+        _showErrorSnackbar(context, 'Fehler beim Löschen: ${fehlerText(e)}');
       }
     }
   }

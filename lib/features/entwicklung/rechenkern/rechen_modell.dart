@@ -40,29 +40,71 @@ enum Verlustart {
 /// Eine Tierart mit den Grenzwerten für „Fleisch" nach LMIV Anhang VII
 /// Teil B: Fett und Bindegewebe (Kollagen zu Fleischeiweiß), je in Prozent.
 enum Tierart {
-  schwein('schwein', 'Schwein', 'Schweinefleisch', 'Speck', 30, 25),
-  rind('rind', 'Rind', 'Rindfleisch', 'Rinderfett', 25, 25),
-  kalb('kalb', 'Kalb', 'Kalbfleisch', 'Kalbsfett', 25, 25),
-  lamm('lamm', 'Lamm', 'Lammfleisch', 'Lammfett', 25, 25),
+  schwein(
+    'schwein',
+    'Schwein',
+    'Schweinefleisch',
+    'Speck',
+    'Schweinebindegewebe',
+    30,
+    25,
+  ),
+  rind(
+    'rind',
+    'Rind',
+    'Rindfleisch',
+    'Rinderfett',
+    'Rinderbindegewebe',
+    25,
+    25,
+  ),
+  kalb('kalb', 'Kalb', 'Kalbfleisch', 'Kalbsfett', 'Kalbsbindegewebe', 25, 25),
+  lamm('lamm', 'Lamm', 'Lammfleisch', 'Lammfett', 'Lammbindegewebe', 25, 25),
   saeugetier(
     'saeugetier',
     'Säugetier (gemischt)',
     'Säugetierfleisch',
     'Tierisches Fett',
+    'Tierisches Bindegewebe',
     25,
     25,
   ),
-  huhn('huhn', 'Huhn', 'Hühnerfleisch', 'Hühnerfett', 15, 10),
-  pute('pute', 'Pute', 'Putenfleisch', 'Putenfett', 15, 10),
-  ente('ente', 'Ente', 'Entenfleisch', 'Entenfett', 15, 10),
-  gefluegel('gefluegel', 'Geflügel', 'Geflügelfleisch', 'Geflügelfett', 15, 10),
-  kaninchen('kaninchen', 'Kaninchen', 'Kaninchenfleisch', 'Kaninchenfett', 15, 10);
+  huhn(
+    'huhn',
+    'Huhn',
+    'Hühnerfleisch',
+    'Hühnerfett',
+    'Hühnerbindegewebe',
+    15,
+    10,
+  ),
+  pute('pute', 'Pute', 'Putenfleisch', 'Putenfett', 'Putenbindegewebe', 15, 10),
+  ente('ente', 'Ente', 'Entenfleisch', 'Entenfett', 'Entenbindegewebe', 15, 10),
+  gefluegel(
+    'gefluegel',
+    'Geflügel',
+    'Geflügelfleisch',
+    'Geflügelfett',
+    'Geflügelbindegewebe',
+    15,
+    10,
+  ),
+  kaninchen(
+    'kaninchen',
+    'Kaninchen',
+    'Kaninchenfleisch',
+    'Kaninchenfett',
+    'Kaninchenbindegewebe',
+    15,
+    10,
+  );
 
   const Tierart(
     this.schluessel,
     this.label,
     this.fleischName,
     this.fettName,
+    this.bindegewebeName,
     this.fettGrenze,
     this.bindegewebeGrenze,
   );
@@ -78,6 +120,11 @@ enum Tierart {
 
   /// Name des Fetts über dem Grenzwert, etwa „Speck".
   final String fettName;
+
+  /// Name des Bindegewebes über dem Grenzwert, etwa „Schweinebindegewebe"
+  /// — es steht dann als eigene Zutat in der Liste (LMIV Anhang VII
+  /// Teil B Nr. 17, F16).
+  final String bindegewebeName;
 
   /// Höchster Fettanteil in Prozent.
   final double fettGrenze;

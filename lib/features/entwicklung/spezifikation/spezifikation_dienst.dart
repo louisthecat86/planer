@@ -1,0 +1,309 @@
+import 'dart:typed_data';
+
+import 'package:drift/drift.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../core/constants/entwicklung.dart';
+import '../../../core/database/database.dart';
+import '../../../core/providers/database_provider.dart';
+import '../daten/dateien.dart';
+import '../daten/entwicklung_repository.dart';
+import '../freigabe/freigabe.dart' show FreigabeStand;
+import '../projekte/projekt_modell.dart';
+import '../projekte/projekt_repository.dart';
+import '../rechenkern/rechenkern.dart';
+import 'deepl.dart';
+import 'spezifikation_werte.dart';
+import 'xlsx_vorlage.dart';
+
+// Spezifikationen aus der eigenen Excel-Vorlage erstellen. Die Vorlagen
+// (je eine deutsche und eine englische) liegen verschlüsselt bei den
+// Entwicklungsdateien und wandern so ins Backup — im Code steht keine.
+
+/// Die IDs der Vorlagen unter den Entwicklungsdateien.
+String spezVorlageId(SpezSprache s) => 'vorlage.spezifikation.${s.name}';
+
+const String kXlsxMime =
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+/// Übersetzt Texte — im Test ersetzbar.
+typedef Uebersetzer = Future<List<String>> Function(
+  List<String> texte,
+  String schluessel,
+);
+
+/// Was beim Erstellen herauskam.
+class SpezifikationErgebnis {
+  const SpezifikationErgebnis({
+    required this.bytes,
+    required this.dateiname,
+    required this.ersetzt,
+    this.unbekannt = const {},
+    this.uebersetzt = false,
+    this.uebersetzungsFehler,
+  });
+
+  final Uint8List bytes;
+  final String dateiname;
+
+  /// Wie viele Platzhalter ersetzt wurden.
+  final int ersetzt;
+
+  /// Platzhalter in der Vorlage, die die App nicht kennt.
+  final Set<String> unbekannt;
+
+  /// Mit DeepL übersetzt.
+  final bool uebersetzt;
+
+  /// Warum nicht übersetzt wurde — null, wenn es klappte oder nicht
+  /// gewünscht war.
+  final String? uebersetzungsFehler;
+}
+
+/// Vorlagen verwalten und Spezifikationen erstellen.
+class SpezifikationDienst {
+  SpezifikationDienst(
+    this._db,
+    this._dateien, {
+    Uebersetzer uebersetzer = _deepl,
+  }) : _uebersetzer = uebersetzer;
+
+  final AppDatabase _db;
+  final EntwicklungDateienDienst _dateien;
+  final Uebersetzer _uebersetzer;
+
+  static Future<List<String>> _deepl(List<String> texte, String schluessel) =>
+      deeplUebersetzen(texte, schluessel);
+
+  /// Die gespeicherte Vorlage einer Sprache — null, wenn keine da ist.
+  Future<EntwicklungsDatei?> vorlage(SpezSprache s) =>
+      _dateien.datei(spezVorlageId(s));
+
+  /// Speichert eine Vorlage und gibt ihre Platzhalter zurück. Wirft
+  /// [FormatException], wenn sie keine Excel-Mappe ist.
+  Future<Set<String>> vorlageSpeichern(
+    SpezSprache s,
+    String name,
+    Uint8List bytes,
+  ) async {
+    final platzhalter = platzhalterIn(bytes);
+    await _dateien.speichern(
+      id: spezVorlageId(s),
+      name: name,
+      inhalt: bytes,
+      mimeTyp: kXlsxMime,
+    );
+    return platzhalter;
+  }
+
+  Future<void> vorlageLoeschen(SpezSprache s) =>
+      _dateien.loeschen(spezVorlageId(s));
+
+  /// Die Stände der Rezepturen eines Projekts: abgeschlossene vor
+  /// Entwürfen, jeweils der neueste zuerst.
+  Future<List<FreigabeStand>> staende(String projektId) async {
+    final rezepturen = await (_db.select(_db.entwicklungRezepturen)
+          ..where((r) => r.projektId.equals(projektId))
+          ..where((r) => r.deletedAt.isNull()))
+        .get();
+    final liste = <FreigabeStand>[];
+    for (final r in rezepturen) {
+      final versionen = await (_db.select(_db.entwicklungRezepturVersionen)
+            ..where((v) => v.rezepturId.equals(r.id)))
+          .get();
+      for (final v in versionen) {
+        liste.add(FreigabeStand(rezeptur: r, version: v));
+      }
+    }
+    int rang(FreigabeStand s) =>
+        s.version.status == VersionStatus.abgeschlossen ? 0 : 1;
+    DateTime zeit(FreigabeStand s) =>
+        s.version.abgeschlossenAm ?? s.version.updatedAt;
+    liste.sort((a, b) {
+      final r = rang(a).compareTo(rang(b));
+      return r != 0 ? r : zeit(b).compareTo(zeit(a));
+    });
+    return liste;
+  }
+
+  /// Legt die Spezifikation verschlüsselt bei den Projektdateien ab und
+  /// schreibt sie mit dem Rezepturstand in den Verlauf.
+  Future<String> ablegen({
+    required EntwicklungsProjekt projekt,
+    required String versionId,
+    required SpezSprache sprache,
+    required SpezifikationErgebnis ergebnis,
+    DateTime? jetzt,
+  }) async {
+    final heute = jetzt ?? DateTime.now();
+    final dateiId = await _dateien.speichern(
+      name: ergebnis.dateiname,
+      inhalt: ergebnis.bytes,
+      projektId: projekt.id,
+      mimeTyp: kXlsxMime,
+    );
+    final version = await EntwicklungRepository(_db).version(versionId);
+    await ProjektRepository(_db).eintragAnlegen(
+      projektId: projekt.id,
+      art: EintragArt.datei,
+      titel: 'Spezifikation (${sprache.label})',
+      datum: DateTime(heute.year, heute.month, heute.day),
+      status: EintragStatus.erledigt,
+      beschreibung: version == null
+          ? null
+          : 'Erstellt aus Rezepturstand ${version.nummer}'
+              '${ergebnis.uebersetzt ? ', Texte mit DeepL übersetzt' : ''}.',
+      dateiId: dateiId,
+      versionId: versionId,
+    );
+    return dateiId;
+  }
+
+  /// Hakt „Spezifikation erstellt" in der Checkliste des Projekts ab.
+  Future<void> abhaken(String projektId) =>
+      ProjektRepository(_db).checklistePunkt(
+        projektId,
+        schluessel: 'spezifikationErstellt',
+        erledigt: true,
+      );
+
+  Future<String?> deeplSchluessel() async {
+    final zeile = await (_db.select(_db.appSettings)
+          ..where((s) => s.key.equals(kEntwicklungDeeplSchluessel)))
+        .getSingleOrNull();
+    final t = zeile?.value.trim();
+    return t == null || t.isEmpty ? null : t;
+  }
+
+  /// Hinterlegt den DeepL-Schlüssel — leer löscht ihn.
+  Future<void> deeplSpeichern(String? schluessel) async {
+    final t = schluessel?.trim() ?? '';
+    if (t.isEmpty) {
+      await (_db.delete(_db.appSettings)
+            ..where((s) => s.key.equals(kEntwicklungDeeplSchluessel)))
+          .go();
+      return;
+    }
+    await _db.into(_db.appSettings).insertOnConflictUpdate(
+          AppSettingsCompanion.insert(
+            key: kEntwicklungDeeplSchluessel,
+            value: t,
+          ),
+        );
+  }
+
+  /// Erstellt die Spezifikation des Stands [versionId] in [sprache].
+  /// Wirft [StateError], wenn Vorlage oder Stand fehlen.
+  Future<SpezifikationErgebnis> erstellen({
+    required EntwicklungsProjekt projekt,
+    required String versionId,
+    required SpezSprache sprache,
+    bool uebersetzen = true,
+    DateTime? datum,
+  }) async {
+    final vorlage = await _dateien.lesen(spezVorlageId(sprache));
+    if (vorlage == null) {
+      throw StateError(
+        'Für ${sprache.label} ist noch keine Vorlage gewählt.',
+      );
+    }
+    final repo = EntwicklungRepository(_db);
+    final eingabe = await repo.rechenRezeptur(versionId);
+    final version = await repo.version(versionId);
+    if (eingabe == null || version == null) {
+      throw StateError('Den Rezepturstand gibt es nicht.');
+    }
+    final artikelId = projekt.artikelId;
+    final artikel = artikelId == null
+        ? null
+        : await (_db.select(_db.products)
+              ..where((p) => p.id.equals(artikelId))
+              ..where((p) => p.deletedAt.isNull()))
+            .getSingleOrNull();
+    final quelle = SpezifikationsQuelle(
+      projektName: projekt.name,
+      ergebnis: berechne(eingabe),
+      verlustProzent: eingabe.verlustProzent,
+      artikelnummer: artikel?.artikelnummer ?? projekt.artikelnummer,
+      bezeichnung: artikel?.artikelbezeichnung,
+      kunde: projekt.kunde,
+      standNummer: version.nummer,
+      haltbarkeitTage: artikel?.haltbarkeitTage,
+      aw: projekt.grenzeAw,
+      sensorik: Sensorik.aus(projekt.sensorik),
+    );
+    var werte = spezifikationsWerte(
+      quelle,
+      sprache: sprache,
+      datum: datum ?? DateTime.now(),
+    );
+
+    var uebersetzt = false;
+    String? fehler;
+    if (sprache == SpezSprache.en && uebersetzen) {
+      final schluessel = await deeplSchluessel();
+      if (schluessel == null) {
+        fehler = 'Kein DeepL-Schlüssel hinterlegt — die Texte sind deutsch.';
+      } else {
+        final texte = uebersetzbareTexte(werte);
+        final eindeutig = texte.values.toSet().toList();
+        try {
+          final englisch = await _uebersetzer(eindeutig, schluessel);
+          final zuordnung = {
+            for (var i = 0; i < eindeutig.length; i++)
+              eindeutig[i]: englisch[i],
+          };
+          werte = {
+            ...werte,
+            for (final MapEntry(:key, :value) in texte.entries)
+              key: zuordnung[value] ?? value,
+          };
+          uebersetzt = true;
+        } on DeepLFehler catch (e) {
+          fehler = '${e.meldung} Die Texte sind deutsch.';
+        }
+      }
+    }
+
+    final gefuellt = vorlageFuellen(vorlage, werte);
+    final name = (artikel?.artikelbezeichnung ?? projekt.name)
+        .replaceAll(RegExp(r'[^A-Za-z0-9äöüßÄÖÜ \-]'), '_')
+        .trim();
+    return SpezifikationErgebnis(
+      bytes: gefuellt.bytes,
+      dateiname: '${name.isEmpty ? 'Artikel' : name}_'
+          '${sprache == SpezSprache.de ? 'Spezifikation' : 'Specification'}'
+          '.xlsx',
+      ersetzt: gefuellt.ersetzt.length,
+      unbekannt: gefuellt.unbekannt,
+      uebersetzt: uebersetzt,
+      uebersetzungsFehler: fehler,
+    );
+  }
+}
+
+final spezifikationDienstProvider = Provider<SpezifikationDienst>(
+  (ref) => SpezifikationDienst(
+    ref.watch(databaseProvider),
+    ref.watch(entwicklungDateienProvider),
+  ),
+);
+
+/// Die gespeicherte Vorlage je Sprache — null, wenn keine gewählt ist.
+final spezVorlageProvider =
+    FutureProvider.autoDispose.family<EntwicklungsDatei?, SpezSprache>(
+  (ref, s) => ref.watch(spezifikationDienstProvider).vorlage(s),
+);
+
+/// Ob auf diesem Rechner ein DeepL-Schlüssel hinterlegt ist.
+final deeplHinterlegtProvider = FutureProvider.autoDispose<bool>(
+  (ref) async =>
+      await ref.watch(spezifikationDienstProvider).deeplSchluessel() != null,
+);
+
+/// Die Rezepturstände eines Projekts zur Auswahl.
+final spezStaendeProvider =
+    FutureProvider.autoDispose.family<List<FreigabeStand>, String>(
+  (ref, projektId) =>
+      ref.watch(spezifikationDienstProvider).staende(projektId),
+);

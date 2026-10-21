@@ -11,6 +11,8 @@ import '../../core/services/week_snapshot_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 // Dasselbe Datum wie im Board: Die Auswahl zum Archivieren beginnt bei der
@@ -133,7 +135,7 @@ class _WeekSnapshotArchiveScreenState
             backgroundColor: AppFarben.von(context).fehler,
             content: Text(
               'Archivieren fehlgeschlagen — es wurde nichts gespeichert. '
-              '($e)',
+              '(${fehlerText(e)})',
             ),
           ),
         );
@@ -221,7 +223,7 @@ class _WeekSnapshotArchiveScreenState
           padding: const EdgeInsets.all(14),
           children: [
             HinweisBox(
-              'Fehler: $e',
+              'Fehler: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),
@@ -557,7 +559,7 @@ class _AbteilungsZeile extends StatelessWidget {
           ),
           Text(
             '${Zeit.kurz(belegt)} · '
-            '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge',
+            '${Format.kg(kg)} · $anzahl Aufträge',
             style: TextStyle(
               fontSize: 12,
               color: colors.onSurfaceVariant,

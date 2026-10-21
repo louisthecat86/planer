@@ -9,6 +9,8 @@ import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 
@@ -120,13 +122,10 @@ class _ProductionEntryDialogState
 
   // ── Parsing-Helfer ────────────────────────────────────────────────────
 
-  static double? _num(String s) =>
-      double.tryParse(s.trim().replaceAll(',', '.'));
+  static double? _num(String s) => Format.lies(s);
 
-  static String _kgText(double? v) {
-    if (v == null) return '';
-    return v == v.roundToDouble() ? v.toInt().toString() : v.toString();
-  }
+  static String _kgText(double? v) =>
+      v == null ? '' : Format.eingabe(v, nachkomma: 3);
 
   double? get _roh => _num(_rohController.text);
   double? get _fertig => _num(_fertigController.text);
@@ -147,7 +146,7 @@ class _ProductionEntryDialogState
       '${_pad(_datum.day)}.${_pad(_datum.month)}.${_datum.year}';
 
   static String _fmtKg(double v) =>
-      v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+      Format.zahl(v, nachkomma: v == v.roundToDouble() ? 0 : 1);
 
   // ── Aktionen ──────────────────────────────────────────────────────────
 
@@ -202,7 +201,7 @@ class _ProductionEntryDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: $e'),
+            content: Text('Fehler: ${fehlerText(e)}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -262,7 +261,7 @@ class _ProductionEntryDialogState
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Fehler: $e'),
+            content: Text('Fehler: ${fehlerText(e)}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -495,7 +494,7 @@ class _Vorschau extends StatelessWidget {
       if (k.verlustAnteil != null)
         (
           label: 'Verlust',
-          wert: '${(k.verlustAnteil! * 100).toStringAsFixed(1)} %',
+          wert: Format.prozent(k.verlustAnteil!),
         ),
       if (k.produktionszeitMinuten != null)
         (label: 'Dauer', wert: Zeit.lang(k.produktionszeitMinuten)),

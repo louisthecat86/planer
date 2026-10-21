@@ -16,6 +16,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../datenblatt/datenblatt.dart';
 
@@ -356,7 +357,7 @@ class BedarfScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       ),
     );
   }
@@ -1086,7 +1087,7 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
             },
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => HinweisBox(
-              'Artikel konnten nicht geladen werden: $e',
+              'Artikel konnten nicht geladen werden: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),

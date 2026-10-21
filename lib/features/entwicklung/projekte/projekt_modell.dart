@@ -345,3 +345,7 @@ List<String> texteAus(String? json) {
     return const [];
   }
 }
+
+/// Schreibt eine Liste von Texten als JSON — null, wenn sie leer ist.
+String? texteZuJson(List<String> texte) =>
+    texte.isEmpty ? null : jsonEncode(texte);

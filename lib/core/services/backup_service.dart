@@ -11,13 +11,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../constants/entwicklung.dart';
 import '../database/database.dart';
+import '../utils/fehler_text.dart';
+import '../utils/format.dart';
 import 'entwicklung_sicherung.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
-/// Speichert Backups in:
-/// - Android/iOS: `<App Documents>/backups/`
-/// - Desktop: `~/.produktion_planer/backups/`
+/// Speichert Backups im Ordner `backups` unter den Dokumenten — oder in
+/// einem selbst gewählten Ordner (siehe [getEigenerBackupOrdner]).
 class BackupService {
   static const String _backupDirName = 'backups';
   static const String _backupFilePrefix = 'planer_backup';
@@ -58,10 +59,16 @@ class BackupService {
   /// Backup soll ihn also NICHT mit auf einen anderen Rechner tragen.
   static const String _prefsKeyBackupDir = 'backup_verzeichnis';
 
+  /// Merker: Der Ordner aus der Zeit vor dem neuen Programmnamen wurde
+  /// schon gesucht (siehe [alteEinstellungUebernehmen]).
+  static const String _prefsKeyOrdnerUebernommen =
+      'backup_verzeichnis_uebernommen';
+
   /// Der selbst gewählte Backup-Ordner, oder null = Standard.
   static Future<String?> getEigenerBackupOrdner() async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      if (Platform.isWindows) await alteEinstellungUebernehmen(prefs);
       final p = prefs.getString(_prefsKeyBackupDir);
       return (p != null && p.trim().isNotEmpty) ? p.trim() : null;
     } catch (_) {
@@ -77,6 +84,56 @@ class BackupService {
       await prefs.remove(_prefsKeyBackupDir);
     } else {
       await prefs.setString(_prefsKeyBackupDir, pfad.trim());
+    }
+  }
+
+  /// Holt den Backup-Ordner aus den Einstellungen unter dem alten
+  /// Programmnamen.
+  ///
+  /// Unter Windows hieß das Programm „produktion_planer" der Firma
+  /// „com.example", jetzt „Produktions Planer". Windows legt die
+  /// Einstellungen in einem Ordner nach diesen Namen ab — vorher
+  /// `%APPDATA%\com.example\produktion_planer`, jetzt
+  /// `%APPDATA%\Produktions Planer`. Ohne die Übernahme wäre ein selbst
+  /// gewählter Backup-Ordner nach dem Update vergessen, und die Backups
+  /// landeten still wieder im Standardordner. Die Daten selbst liegen in
+  /// den Dokumenten und bleiben vom Namen unberührt.
+  ///
+  /// Einmalig: Wer danach wieder den Standard wählt, bekommt den alten
+  /// Pfad nicht zurück. [appData] ist nur für Tests.
+  @visibleForTesting
+  static Future<void> alteEinstellungUebernehmen(
+    SharedPreferences prefs, {
+    String? appData,
+  }) async {
+    if (prefs.getBool(_prefsKeyOrdnerUebernommen) ?? false) return;
+    if (prefs.getString(_prefsKeyBackupDir) == null) {
+      final alt = await _alterBackupOrdner(
+        appData ?? Platform.environment['APPDATA'],
+      );
+      if (alt != null) await prefs.setString(_prefsKeyBackupDir, alt);
+    }
+    await prefs.setBool(_prefsKeyOrdnerUebernommen, true);
+  }
+
+  static Future<String?> _alterBackupOrdner(String? appData) async {
+    if (appData == null || appData.trim().isEmpty) return null;
+    try {
+      final datei = File(
+        [
+          appData,
+          'com.example',
+          'produktion_planer',
+          'shared_preferences.json',
+        ].join(Platform.pathSeparator),
+      );
+      if (!await datei.exists()) return null;
+      final inhalt = jsonDecode(await datei.readAsString());
+      if (inhalt is! Map) return null;
+      final wert = inhalt['flutter.$_prefsKeyBackupDir'];
+      return wert is String && wert.trim().isNotEmpty ? wert.trim() : null;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -184,7 +241,7 @@ class BackupService {
 
       return outputPath;
     } catch (e) {
-      throw Exception('Backup-Export fehlgeschlagen: $e');
+      throw Exception('Backup-Export fehlgeschlagen: ${fehlerText(e)}');
     }
   }
 
@@ -207,7 +264,7 @@ class BackupService {
 
       return filepath;
     } catch (e) {
-      throw Exception('Auto-Backup fehlgeschlagen: $e');
+      throw Exception('Auto-Backup fehlgeschlagen: ${fehlerText(e)}');
     }
   }
 
@@ -372,7 +429,7 @@ class BackupService {
         );
       }
     } catch (e) {
-      throw Exception('Backup-Import fehlgeschlagen: $e');
+      throw Exception('Backup-Import fehlgeschlagen: ${fehlerText(e)}');
     }
 
     // ── Schritt 2: Aktuellen Stand sichern ────────────────────────────
@@ -385,7 +442,8 @@ class BackupService {
         await _schreibeSicherungVorRestore(database);
       } catch (e) {
         throw Exception(
-          'Der aktuelle Stand konnte nicht gesichert werden ($e). '
+          'Der aktuelle Stand konnte nicht gesichert werden '
+          '(${fehlerText(e)}). '
           'Das Wiederherstellen wurde NICHT ausgeführt — deine Daten sind '
           'unverändert. Bitte zuerst den Backup-Ordner prüfen.',
         );
@@ -438,7 +496,7 @@ class BackupService {
         );
       });
     } catch (e) {
-      throw Exception('Backup-Import fehlgeschlagen: $e');
+      throw Exception('Backup-Import fehlgeschlagen: ${fehlerText(e)}');
     }
   }
 
@@ -474,7 +532,9 @@ class BackupService {
       backups.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return backups;
     } catch (e) {
-      throw Exception('Backup-List auslesen fehlgeschlagen: $e');
+      throw Exception(
+        'Die Backups ließen sich nicht auflisten: ${fehlerText(e)}',
+      );
     }
   }
 
@@ -571,7 +631,7 @@ class BackupService {
         await file.delete();
       }
     } catch (e) {
-      throw Exception('Backup-Löschung fehlgeschlagen: $e');
+      throw Exception('Das Backup ließ sich nicht löschen: ${fehlerText(e)}');
     }
   }
 
@@ -1151,9 +1211,9 @@ class BackupInfo {
   String get sizeFormatted {
     if (sizeBytes < 1024) return '$sizeBytes B';
     if (sizeBytes < 1024 * 1024) {
-      return '${(sizeBytes / 1024).toStringAsFixed(1)} KB';
+      return '${Format.zahl(sizeBytes / 1024, nachkomma: 1)} KB';
     }
-    return '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+    return '${Format.zahl(sizeBytes / (1024 * 1024), nachkomma: 1)} MB';
   }
 
   /// Alias zu [sizeFormatted] — der bestehende BackupManagementScreen

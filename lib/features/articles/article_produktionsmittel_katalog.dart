@@ -110,7 +110,7 @@ class _ProduktionsmittelKatalog extends ConsumerWidget {
             ),
           ),
           error: (e, _) => Text(
-            'Fehler: $e',
+            'Fehler: ${fehlerText(e)}',
             style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
           ),
         ),

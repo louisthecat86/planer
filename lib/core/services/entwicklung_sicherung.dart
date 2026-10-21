@@ -226,13 +226,19 @@ class EntwicklungSicherung {
           kEntwicklungAusstehend: jsonEncode(teil.roh),
         };
     }
+    // Was nur diesem Rechner gehört (der DeepL-Schlüssel), bleibt.
+    final alle = {
+      for (final k in kEntwicklungNurLokal)
+        if (lokal[k] case final wert?) k: wert,
+      ...neu,
+    };
     await (db.delete(db.appSettings)
           ..where((s) => s.key.like('$kEntwicklungPraefix%')))
         .go();
-    if (neu.isEmpty) return;
+    if (alle.isEmpty) return;
     await db.batch(
       (b) => b.insertAllOnConflictUpdate(db.appSettings, [
-        for (final MapEntry(:key, :value) in neu.entries)
+        for (final MapEntry(:key, :value) in alle.entries)
           AppSettingsCompanion.insert(key: key, value: value),
       ]),
     );

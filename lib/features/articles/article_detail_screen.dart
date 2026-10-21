@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../../core/constants/parameter_namen.dart';
 import '../../core/constants/product_groups.dart';
@@ -96,7 +98,9 @@ class ArticleDetailScreen extends ConsumerWidget {
                   await ArticlePrintService.drucke(context, ref, productId);
                 } catch (e) {
                   messenger.showSnackBar(
-                    SnackBar(content: Text('Druck-Fehler: $e')),
+                    SnackBar(
+                      content: Text('Drucken fehlgeschlagen: ${fehlerText(e)}'),
+                    ),
                   );
                 }
               },
@@ -106,7 +110,7 @@ class ArticleDetailScreen extends ConsumerWidget {
               _NummernFeld(nummer: nummer),
             ],
             const SizedBox(width: 8),
-            // Wie „Produkt planen" im Board: die Aktion oben rechts in der
+            // Wie „Artikel planen" im Board: die Aktion oben rechts in der
             // Kopfleiste statt als schwebender Knopf, der unten rechts die
             // Prozesskette und die letzte Produktion verdeckte.
             if (schmal)
@@ -200,7 +204,7 @@ class _InfoTab extends ConsumerWidget {
 
     return productAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Fehler: $e')),
+      error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       data: (p) {
         if (p == null) {
           return const Center(
@@ -357,16 +361,8 @@ class _InfoTab extends ConsumerWidget {
 typedef _Eintrag = ({String label, String wert, bool fehlt});
 
 /// Füllmenge lesbar: unter 1000 g in Gramm, darüber in Kilo.
-String _gramm(double g) {
-  if (g >= 1000) {
-    final kg = g / 1000;
-    final text = kg == kg.roundToDouble()
-        ? kg.round().toString()
-        : kg.toStringAsFixed(2).replaceAll('.', ',');
-    return '$text kg';
-  }
-  return '${g == g.roundToDouble() ? g.round() : g} g';
-}
+String _gramm(double g) =>
+    g >= 1000 ? '${Format.eingabe(g / 1000)} kg' : '${Format.eingabe(g)} g';
 
 /// Beschriftung links, Wert rechts, dünne Linie dazwischen — wie ein
 /// Infofenster in Navision.
@@ -466,7 +462,7 @@ class _ProcessTab extends ConsumerWidget {
     return stepsAsync.when(
       data: (steps) => _StepsList(productId: productId, steps: steps),
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Fehler: $e')),
+      error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
     );
   }
 }

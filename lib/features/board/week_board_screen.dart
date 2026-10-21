@@ -4,12 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/zeit.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show AuftragsBezug, bezuegeFuerNeueProduktion;
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/entwicklung_vorgabe.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart'
@@ -265,7 +267,7 @@ class _HakenKnopf extends StatelessWidget {
 ///   gewählten Tag.
 ///
 /// [oeffnePlanenDirekt] = true öffnet beim Aufruf sofort den
-/// „Produkt planen"-Dialog (für die „Planen"-Kachel auf dem Home-Screen).
+/// „Artikel planen"-Dialog (für die „Planen"-Kachel auf dem Home-Screen).
 class WeekBoardScreen extends ConsumerStatefulWidget {
   const WeekBoardScreen({super.key, this.oeffnePlanenDirekt = false});
 
@@ -481,7 +483,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
       messenger.showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 8),
-          content: Text('Der Plan ließ sich nicht drucken. ($e)'),
+          content: Text('Der Plan ließ sich nicht drucken. (${fehlerText(e)})'),
         ),
       );
     } finally {
@@ -554,7 +556,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
           FilledButton.icon(
             onPressed: geladen == null ? null : () => _planen(geladen),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('Produkt planen'),
+            label: const Text('Artikel planen'),
           ),
           const SizedBox(width: 12),
         ],
@@ -631,7 +633,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
               child: Text(
                 'Sonstige Aufgaben konnten nicht geladen werden: '
-                '$aufgabenFehler',
+                '${fehlerText(aufgabenFehler)}',
                 style: TextStyle(
                   fontSize: 12,
                   color: Theme.of(context).colorScheme.error,
@@ -643,7 +645,9 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                 ? weekAsync.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Fehler: $e')),
+                    error: (e, _) => Center(
+                      child: Text('Fehler: ${fehlerText(e)}'),
+                    ),
                     data: (board) => _BoardGrid(
                       board: board,
                       onTapTask: _bearbeite,
@@ -654,7 +658,9 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                 : dayAsync.when(
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
-                    error: (e, _) => Center(child: Text('Fehler: $e')),
+                    error: (e, _) => Center(
+                      child: Text('Fehler: ${fehlerText(e)}'),
+                    ),
                     data: (day) => _DayList(
                       day: day,
                       onTapTask: _bearbeite,
@@ -1601,7 +1607,7 @@ class _KartenInhalt extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               Text(
-                '${task.mengeKg.toStringAsFixed(0)}kg·'
+                '${_fmtKg(task.mengeKg)}kg·'
                 '${_fmtStunden(task.dauerMinuten)} h',
                 style: TextStyle(
                   fontSize: 10,
@@ -1692,7 +1698,7 @@ class _KartenInhalt extends StatelessWidget {
                               ),
                               const SizedBox(height: 3),
                               Text(
-                                '${task.mengeKg.toStringAsFixed(0)} kg · '
+                                '${_fmtKg(task.mengeKg)} kg · '
                                 '${_fmtStunden(task.dauerMinuten)} h',
                                 style: TextStyle(
                                   fontSize: 11,
@@ -1837,7 +1843,7 @@ class _LeerHinweis extends StatelessWidget {
       width: double.infinity,
       color: Theme.of(context).colorScheme.surface,
       child: const LeerHinweis(
-        'Noch keine Aufträge in dieser Woche. Über „Produkt planen" oben '
+        'Noch keine Aufträge in dieser Woche. Über „Artikel planen" oben '
         'rechts legst du aus einem Artikel die Schritte aller Abteilungen '
         'an.',
         icon: Icons.view_week_outlined,
@@ -2235,7 +2241,7 @@ class _DayTaskRow extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
               Text(
-                '${task.mengeKg.toStringAsFixed(0)} kg · '
+                '${_fmtKg(task.mengeKg)} kg · '
                 '${_fmtStunden(task.dauerMinuten)} h',
                 style: TextStyle(
                   fontSize: 11,
@@ -2419,8 +2425,10 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       _ausbeute = null;
       _dauerModelle = [];
       _zeitAbteilung = null;
+      _verlustVorgabe = null;
     });
     _ladeArtikeldaten(p.id);
+    _ladeVerlustVorgabe(p.id);
   }
 
   void _produktAbwaehlen() {
@@ -2431,7 +2439,46 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       _ausbeute = null;
       _dauerModelle = [];
       _zeitAbteilung = null;
+      _verlustVorgabe = null;
     });
+  }
+
+  /// Verlust in Prozent aus der Freigabe in der Produktentwicklung — null,
+  /// wenn der Artikel nicht von dort kommt.
+  double? _verlustVorgabe;
+
+  /// Stammt der Artikel aus einer Freigabe, steht der Verlust der Rezeptur
+  /// im Feld. Er gilt nur, solange keine Produktion mit Fertigware erfasst
+  /// ist — danach rechnet die Planung mit den erfassten.
+  Future<void> _ladeVerlustVorgabe(String productId) async {
+    final double? gelesen;
+    try {
+      gelesen = await verlustVorgabeAusEntwicklung(
+        ref.read(databaseProvider),
+        productId,
+      );
+    } catch (_) {
+      return;
+    }
+    // Eigene Variable mit Startwert: Nur so bleibt „nicht null" auch in
+    // der Closure von setState erhalten.
+    final vorgabe = gelesen;
+    if (!mounted || vorgabe == null || _gewaehlt?.id != productId) return;
+    setState(() {
+      _verlustVorgabe = vorgabe;
+      _verlustProzent.text = _prozentFeld(vorgabe);
+    });
+    // Ausbeute und Zeitmodell hängen am eingetragenen Verlust.
+    _ladeArtikeldaten(productId);
+  }
+
+  /// „12,5" — eine Nachkommastelle, ohne „,0".
+  static String _prozentFeld(double prozent) {
+    final gerundet = (prozent * 10).round() / 10;
+    final text = gerundet == gerundet.roundToDouble()
+        ? gerundet.toStringAsFixed(0)
+        : gerundet.toStringAsFixed(1);
+    return text.replaceAll('.', ',');
   }
 
   /// Lädt Ausbeute und Zeitmodell des Artikels.
@@ -2686,7 +2733,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     if (fertig == null || fertig <= 0) {
       final hinweis = _einheit == _MengenEinheit.stunden
           ? (_dauerModelle.isEmpty
-              ? 'Für dieses Produkt lässt sich aus der Zeit keine Menge '
+              ? 'Für diesen Artikel lässt sich aus der Zeit keine Menge '
                   'ableiten — es gibt weder mengenabhängige Leistungsdaten '
                   'noch erfasste Produktionen mit Zeit.'
               : 'Bitte eine gültige Produktionszeit eingeben.')
@@ -2717,7 +2764,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       setState(() => _busy = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Plan konnte nicht berechnet werden: $e'),
+          content: Text('Plan konnte nicht berechnet werden: ${fehlerText(e)}'),
           duration: const Duration(seconds: 6),
         ),
       );
@@ -2730,7 +2777,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Dieses Produkt hat keine Schritte. Lege zuerst Schritte im '
+            'Dieser Artikel hat keine Schritte. Lege zuerst Schritte im '
             'Artikel an.',
           ),
         ),
@@ -2747,7 +2794,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
     });
   }
 
-  // -- Stufe 2: Tasks anlegen --------------------------------------------
+  // -- Stufe 2: Einplanen (Aufträge anlegen) -----------------------------
   /// Die Schritte, die angelegt werden — ohne die abgewählten.
   List<GeplanterSchritt> get _ausgewaehlt => [
         for (final s in _plan)
@@ -2799,7 +2846,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
         SnackBar(
           content: Text(
             'Einplanen fehlgeschlagen — es wurde nichts gespeichert. '
-            'Bitte erneut versuchen. ($e)',
+            'Bitte erneut versuchen. (${fehlerText(e)})',
           ),
           duration: const Duration(seconds: 8),
         ),
@@ -2809,7 +2856,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
 
     ref
         .read(autoBackupTriggerProvider)
-        .fireDebounced(reason: 'Produkt geplant');
+        .fireDebounced(reason: 'Artikel geplant');
     ref.invalidate(bedarfProvider);
 
     if (!mounted) return;
@@ -2908,12 +2955,12 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       children: [
         _griff(),
         const Text(
-          'Produkt planen',
+          'Artikel planen',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(
-          'Wähle Produkt, Starttag und Menge — danach weist du jeder '
+          'Wähle Artikel, Starttag und Menge — danach weist du jeder '
           'Abteilung ihren Tag zu.',
           style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
         ),
@@ -2974,7 +3021,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
           TextField(
             controller: _suche,
             decoration: const InputDecoration(
-              labelText: 'Produkt suchen',
+              labelText: 'Artikel suchen',
               prefixIcon: Icon(Icons.search),
               border: OutlineInputBorder(),
             ),
@@ -2991,7 +3038,9 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                 ? Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Text(
-                      'Keine Produkte. Importiere zuerst eine Excel-Vorlage.',
+                      _suche.text.trim().isEmpty
+                          ? 'Keine Artikel. Lege zuerst einen Artikel an.'
+                          : 'Kein Artikel passt zur Suche.',
                       style: TextStyle(color: colors.onSurfaceVariant),
                     ),
                   )
@@ -3072,7 +3121,7 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
             if (_ausbeute != null && _dauerModelle.isEmpty) ...[
               const SizedBox(height: 10),
               const _RohwareHinweis(
-                text: 'Für dieses Produkt gibt es weder mengenabhängige '
+                text: 'Für diesen Artikel gibt es weder mengenabhängige '
                     'Leistungsdaten noch erfasste Produktionen mit Zeit — aus '
                     'der Zeit lässt sich noch keine Menge ableiten.',
               ),
@@ -3160,11 +3209,15 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       if (_verlustAbfragen)
         TextField(
           controller: _verlustProzent,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
             labelText: 'Verlust (%) — noch keine Produktion mit '
                 'Fertigware erfasst',
+            helperText: _verlustVorgabe == null
+                ? null
+                : 'Vorgabe aus der Produktentwicklung: '
+                    '${_prozentFeld(_verlustVorgabe!)} %',
             suffixText: '%',
-            border: OutlineInputBorder(),
+            border: const OutlineInputBorder(),
           ),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
           onChanged: (_) {
@@ -3301,8 +3354,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
                   _busy
                       ? 'Wird angelegt …'
                       : anzahl < _plan.length
-                          ? 'Tasks anlegen ($anzahl von ${_plan.length})'
-                          : 'Tasks anlegen',
+                          ? 'Einplanen ($anzahl von ${_plan.length})'
+                          : 'Einplanen',
                 ),
               ),
             ),

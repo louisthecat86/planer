@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../constants/abteilungen.dart';
 import '../constants/parameter_namen.dart';
 import '../database/database.dart';
+import '../utils/fehler_text.dart';
 
 /// Ergebnis eines Katalog-Imports.
 class KatalogImportErgebnis {
@@ -178,7 +179,9 @@ class MaschinenKatalogExcelService {
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
-      throw Exception('Die Datei ließ sich nicht als Excel öffnen: $e');
+      throw Exception(
+        'Die Datei ließ sich nicht als Excel öffnen: ${fehlerText(e)}',
+      );
     }
 
     final warnungen = <String>[];

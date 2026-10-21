@@ -38,7 +38,7 @@ class ArchivWochenplanScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(14),
           children: [
             HinweisBox(
-              'Fehler: $e',
+              'Fehler: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),

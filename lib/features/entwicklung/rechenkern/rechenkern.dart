@@ -23,9 +23,10 @@ import 'rechen_modell.dart';
 //   („Calculation of Meat Content", Abschnitt 8).
 // * Allergene werden nur in ganzen Wortteilen hervorgehoben.
 //
-// Wie in der Suite (und nach Aussage des Nutzers) steht überschüssiges
-// Bindegewebe nicht als eigene Zutat in der Liste — es senkt nur den
-// Fleischanteil. Überschüssiges Fett steht als „Speck" bzw. „…fett" da.
+// Über dem Grenzwert stehen Fett und Bindegewebe als eigene Zutaten mit
+// Menge in der Liste — „Speck" bzw. „…fett" und „…bindegewebe" — und
+// senken den Fleischanteil (LMIV Anhang VII Teil B Nr. 17). Die Suite
+// nannte das Bindegewebe nicht; seit F16 steht es da.
 
 /// Energie je Gramm (LMIV Anhang XIV).
 const double _kjJeGrammFett = 37;
@@ -41,10 +42,10 @@ const double _bindegewebeJeKollagen = 4.625;
 /// Zusammensetzung des Garsafts beim Braten oder Garen — eine Näherung
 /// aus der Suite: Fleischsaft ist zum größten Teil Wasser, mit etwas
 /// Eiweiß, Salz und gelöstem Zucker.
-const double _saftEiweiss = 0.05;
-const double _saftSalz = 0.01;
-const double _saftZucker = 0.01;
-const double _saftWasser = 0.93;
+const double kSaftEiweiss = 0.05;
+const double kSaftSalz = 0.01;
+const double kSaftZucker = 0.01;
+const double kSaftWasser = 0.93;
 
 /// Zugesetztes Wasser bis zu diesem Anteil am Enderzeugnis muss nicht in
 /// der Zutatenliste stehen (LMIV Anhang VII Teil A Nr. 1).
@@ -255,12 +256,20 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
       );
     }
     if (pruefung.bindegewebeUeberGrenze) {
+      zeilen.add(
+        _Zeile(
+          name: art.bindegewebeName,
+          masseKg: pruefung.ueberschussBindegewebeKg,
+          quid: true,
+        ),
+      );
       warnungen.add(
         'Das Bindegewebe bei ${art.label} '
         '(${Format.zahl(pruefung.kollagenVerhaeltnis!, nachkomma: 1)} % '
         'Kollagen im Fleischeiweiß) liegt über '
-        '${Format.zahl(art.bindegewebeGrenze)} % — der Fleischanteil sinkt '
-        'um ${Format.kg(pruefung.ueberschussBindegewebeKg)}.',
+        '${Format.zahl(art.bindegewebeGrenze)} % — '
+        '${Format.kg(pruefung.ueberschussBindegewebeKg)} stehen als '
+        '„${art.bindegewebeName}" in der Liste.',
       );
     }
   }
@@ -725,12 +734,12 @@ _Teil _rechne(
         gramm[s] = v < 0 ? 0 : v;
       }
 
-      minus(_Stoff.eiweiss, rest * _saftEiweiss);
-      minus(_Stoff.salz, rest * _saftSalz);
-      minus(_Stoff.zucker, rest * _saftZucker);
-      minus(_Stoff.kohlenhydrate, rest * _saftZucker);
-      minus(_Stoff.wasser, rest * _saftWasser);
-      if (wasserVor < rest * _saftWasser) _zuWenigWasser(rezeptur, warnungen);
+      minus(_Stoff.eiweiss, rest * kSaftEiweiss);
+      minus(_Stoff.salz, rest * kSaftSalz);
+      minus(_Stoff.zucker, rest * kSaftZucker);
+      minus(_Stoff.kohlenhydrate, rest * kSaftZucker);
+      minus(_Stoff.wasser, rest * kSaftWasser);
+      if (wasserVor < rest * kSaftWasser) _zuWenigWasser(rezeptur, warnungen);
     } else {
       gramm[_Stoff.wasser] = wasserVor > rest ? wasserVor - rest : 0;
       if (wasserVor < rest) _zuWenigWasser(rezeptur, warnungen);

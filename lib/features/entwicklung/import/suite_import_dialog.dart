@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../daten/dateien.dart';
 import 'suite_import.dart';
 
@@ -127,7 +128,7 @@ class _SuiteImportDialogState extends ConsumerState<SuiteImportDialog> {
     if (!mounted) return;
     setState(() {
       _phase = _Phase.fehler;
-      _fehler = e is FormatException ? e.message : '$e';
+      _fehler = fehlerText(e);
     });
   }
 

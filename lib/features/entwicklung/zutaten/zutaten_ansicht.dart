@@ -5,6 +5,7 @@ import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/sheet_utils.dart';
 import '../daten/entwicklung_repository.dart';
 import '../import/suite_import_dialog.dart';
@@ -55,7 +56,7 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(16),
         child: HinweisBox(
-          '$e',
+          fehlerText(e),
           art: StatusArt.fehler,
           titel: 'Die Zutaten ließen sich nicht laden',
           auswaehlbar: true,

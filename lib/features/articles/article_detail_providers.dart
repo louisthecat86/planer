@@ -13,6 +13,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 
 // Provider, Konstanten und gemeinsame Helfer der Artikel-Detailansicht.
@@ -297,14 +298,14 @@ String _pad(int n) => n.toString().padLeft(2, '0');
 
 String fmtDatum(DateTime d) => '${_pad(d.day)}.${_pad(d.month)}.${d.year}';
 
+/// „1.250", „12,5" — ganze Kilo ohne Nachkommastelle; „—" ohne Wert.
 String fmtKg(double? v) {
   if (v == null) return '—';
-  return v == v.roundToDouble()
-      ? v.toInt().toString()
-      : v.toStringAsFixed(1);
+  return Format.zahl(v, nachkomma: v == v.roundToDouble() ? 0 : 1);
 }
 
-String fmtProzent(double anteil) => '${(anteil * 100).toStringAsFixed(1)} %';
+/// „89,7 %" — [anteil] als Bruchteil.
+String fmtProzent(double anteil) => Format.prozent(anteil);
 
 String fmtDauer(double? minuten) => Zeit.lang(minuten);
 

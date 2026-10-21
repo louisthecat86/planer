@@ -9,6 +9,7 @@ import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
 import 'auftragsbestand_screen.dart' show auftragsbestandProvider;
+import '../../core/utils/fehler_text.dart';
 import 'planung_pruefen.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -143,7 +144,8 @@ class _AenderungenState
         SnackBar(
           duration: const Duration(seconds: 8),
           content: Text(
-            'Anpassen fehlgeschlagen — es wurde nichts geändert. ($e)',
+            'Anpassen fehlgeschlagen — es wurde nichts geändert. '
+            '(${fehlerText(e)})',
           ),
         ),
       );
@@ -204,7 +206,7 @@ class _AenderungenState
         children: [
           ansicht.when(
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text('Fehler: $e')),
+            error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
             data: (a) => a.ohneBericht
                 ? const Center(
                     child: LeerHinweis(

@@ -12,6 +12,7 @@ import 'package:produktion_planer/core/utils/krypto.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 
 import 'helpers/test_db.dart';
 
@@ -250,6 +251,7 @@ void main() {
               ),
             ),
             // Der offene Bereich zeigt Listen aus der Datenbank — hier leer.
+            projekteProvider.overrideWith((ref) => Stream.value(const [])),
             zutatenProvider.overrideWith((ref) => Stream.value(const [])),
             rezepturenProvider.overrideWith((ref) => Stream.value(const [])),
             alleVersionenProvider
@@ -340,9 +342,7 @@ void main() {
         ..werte[kEntwicklungPasswortSchluessel] = _datensatz('geheim123')
         ..werte[kEntwicklungAusstehend] = '{}';
       await zeige(tester, speicher);
-      // Der Backup-Provider startet erst, sobald die Abfrage steht —
-      // ein Bild später.
-      await tester.pump();
+      await warte(tester);
 
       expect(find.text('Gesperrt'), findsOneWidget);
       expect(find.text('Backup wartet'), findsOneWidget);

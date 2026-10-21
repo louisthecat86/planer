@@ -9,6 +9,7 @@ import '../constants/abteilungen.dart';
 import '../constants/parameter_namen.dart';
 import '../database/database.dart';
 import '../constants/artikel_merkmale.dart';
+import '../utils/fehler_text.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis
@@ -175,7 +176,7 @@ class StammdatenImportService {
       roh = await _lesenImIsolate(bytes, port?.sendPort);
     } catch (e) {
       return StammdatenImportErgebnis(
-        fehler: ['Die Datei ließ sich nicht auswerten: $e'],
+        fehler: ['Die Datei ließ sich nicht auswerten: ${fehlerText(e)}'],
       );
     } finally {
       await lauscher?.cancel();
@@ -213,7 +214,11 @@ class StammdatenImportService {
     try {
       excel = Excel.decodeBytes(bytes);
     } catch (e) {
-      return {'fehler': <String>['Die Datei ließ sich nicht öffnen: $e']};
+      return {
+        'fehler': <String>[
+          'Die Datei ließ sich nicht öffnen: ${fehlerText(e)}',
+        ],
+      };
     }
 
     final blattNamen = excel.tables.keys.toList();
@@ -274,7 +279,7 @@ class StammdatenImportService {
           _lesArtikel(name, excel.tables[name]!.rows, geraetNamen, warnungen),
         );
       } catch (e) {
-        warnungen.add('Blatt „$name" übersprungen: $e');
+        warnungen.add('Blatt „$name" übersprungen: ${fehlerText(e)}');
       }
     }
     fortschritt?.send(<Object?>[

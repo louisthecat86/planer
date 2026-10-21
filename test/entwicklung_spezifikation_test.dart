@@ -1,0 +1,924 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
+// `show Value`: drift bringt eine eigene Klasse `Column` mit.
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/theme/app_theme.dart';
+import 'package:produktion_planer/features/entwicklung/bericht/projekt_bericht.dart';
+import 'package:produktion_planer/features/entwicklung/daten/dateien.dart';
+import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
+import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
+import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
+import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
+import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
+import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
+import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/beispielvorlage.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/deepl.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dialog.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_vorlage.dart';
+
+import 'helpers/test_db.dart';
+
+/// Tests für Spezifikation und Projektbericht: Werte der Platzhalter auf
+/// Deutsch und Englisch, das Füllen einer Excel-Vorlage, DeepL, der Dienst
+/// mit der Datenbank, das Fenster und das PDF. Rezepturen, Projekte und
+/// Vorlagen sind erfunden.
+void main() {
+  /// Alle Texte einer Mappe: geteilte Texte und Blätter hintereinander.
+  String mappenText(Uint8List xlsx) {
+    final archiv = ZipDecoder().decodeBytes(xlsx);
+    return [
+      for (final d in archiv.files)
+        if (d.isFile &&
+            (d.name == 'xl/sharedStrings.xml' ||
+                d.name.startsWith('xl/worksheets/')))
+          utf8.decode(d.content as List<int>),
+    ].join('\n');
+  }
+
+  /// Eine kleine Mappe von Hand: ein geteilter Text, in zwei
+  /// Formatierungsstücke zerlegt, und ein Text direkt in der Zelle.
+  Uint8List kleineMappe(String geteilt, String direkt) {
+    final archiv = Archive();
+    void datei(String pfad, String inhalt) {
+      final bytes = utf8.encode(inhalt);
+      archiv.addFile(ArchiveFile(pfad, bytes.length, bytes));
+    }
+
+    datei('xl/workbook.xml', '<workbook><sheets/></workbook>');
+    datei('xl/sharedStrings.xml', '<sst count="1">$geteilt</sst>');
+    datei(
+      'xl/worksheets/sheet1.xml',
+      '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c>'
+          '<c r="B1" t="inlineStr">$direkt</c></row></sheetData>'
+          '</worksheet>',
+    );
+    datei('xl/styles.xml', '<styleSheet>unverändert</styleSheet>');
+    return Uint8List.fromList(ZipEncoder().encode(archiv)!);
+  }
+
+  RechenZutat zutat(
+    String id, {
+    bool fleisch = false,
+    bool wasser = false,
+    Set<String> allergene = const {},
+    List<String> hilfsstoffe = const [],
+    Naehrwerte naehrwerte = Naehrwerte.leer,
+  }) =>
+      RechenZutat(
+        id: id,
+        name: id,
+        istFleisch: fleisch,
+        istWasser: wasser,
+        tierart: fleisch ? Tierart.schwein : null,
+        allergene: allergene,
+        verarbeitungshilfsstoffe: hilfsstoffe,
+        naehrwerte: naehrwerte,
+      );
+
+  /// Frikadellen aus Schweinefleisch, Wasser, Weizenmehl und Gewürz mit
+  /// Trennmittel — 10 % Garverlust.
+  RechenRezeptur frikadelle({bool mitHilfsstoff = true}) => RechenRezeptur(
+        id: 'r',
+        name: 'Frikadelle',
+        verlustProzent: 10,
+        verlustart: Verlustart.garen,
+        positionen: [
+          RechenPosition.zutat(
+            zutat(
+              'Schweinefleisch',
+              fleisch: true,
+              naehrwerte: const Naehrwerte(fett: 20, eiweiss: 18),
+            ),
+            mengeKg: 60,
+          ),
+          RechenPosition.zutat(zutat('Trinkwasser', wasser: true), mengeKg: 20),
+          RechenPosition.zutat(
+            zutat(
+              'Weizenmehl',
+              allergene: {'gluten'},
+              naehrwerte: const Naehrwerte(kohlenhydrate: 70, eiweiss: 10),
+            ),
+            mengeKg: 15,
+          ),
+          RechenPosition.zutat(
+            zutat(
+              'Gewürzmischung',
+              hilfsstoffe: mitHilfsstoff ? const ['Siliziumdioxid'] : const [],
+              naehrwerte: const Naehrwerte(salz: 40),
+            ),
+            mengeKg: 5,
+          ),
+        ],
+      );
+
+  SpezifikationsQuelle quelle({bool mitHilfsstoff = true}) =>
+      SpezifikationsQuelle(
+        projektName: 'Frikadelle Testart',
+        ergebnis: berechne(frikadelle(mitHilfsstoff: mitHilfsstoff)),
+        verlustProzent: 10,
+        artikelnummer: 'T-200',
+        kunde: 'Muster GmbH',
+        standNummer: 2,
+        haltbarkeitTage: 14,
+        aw: 0.97,
+        sensorik: const Sensorik(
+          geschmack: 'würzig, leicht pfeffrig',
+          gewicht: '80 g',
+        ),
+      );
+
+  final datum = DateTime(2026, 3, 5);
+
+  group('Werte der Platzhalter', () {
+    test('jeder Platzhalter hat einen Wert und umgekehrt', () {
+      final werte = spezifikationsWerte(
+        quelle(),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(
+        werte.keys.toSet(),
+        {for (final p in kSpezifikationPlatzhalter) p.name},
+      );
+      // Keine Namen doppelt.
+      expect(
+        kSpezifikationPlatzhalter.map((p) => p.name).toSet().length,
+        kSpezifikationPlatzhalter.length,
+      );
+    });
+
+    test('deutsch: Komma, Datum mit Punkten, Stand, Tage', () {
+      final w = spezifikationsWerte(
+        quelle(),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(w['gueltig_ab'], '05.03.2026');
+      expect(w['artikelnummer'], 'T-200');
+      // Ohne Artikel heißt die Spezifikation wie das Projekt.
+      expect(w['bezeichnung'], 'Frikadelle Testart');
+      expect(w['kunde'], 'Muster GmbH');
+      expect(w['stand'], 'Stand 2');
+      expect(w['verlust'], '10,0 %');
+      expect(w['haltbarkeit'], '14 Tage');
+      expect(w['aw'], '0,97');
+      expect(w['zutaten'], contains('WEIZENmehl'));
+      expect(w['fleischanteil'], endsWith(' %'));
+      expect(w['naehrwert.energie'], matches(RegExp(r'^\d+ kJ / \d+ kcal$')));
+      expect(w['naehrwert.salz'], contains(','));
+      expect(w['sensorik.geschmack'], 'würzig, leicht pfeffrig');
+      expect(w['allergene'], allergenName('gluten', SpezSprache.de));
+      expect(w['allergen.gluten.ja'], 'X');
+      expect(w['allergen.gluten.nein'], '');
+      expect(w['allergen.gluten.quelle'], 'Weizenmehl');
+      expect(w['allergen.milch.ja'], '');
+      expect(w['allergen.milch.nein'], 'X');
+      expect(w['hilfsstoff.1.name'], 'Siliziumdioxid');
+      expect(w['hilfsstoff.1.quelle'], 'Gewürzmischung');
+      expect(w['hilfsstoff.2.name'], '');
+    });
+
+    test('englisch: Punkt, Datum mit Schrägstrichen, Version, days', () {
+      final w = spezifikationsWerte(
+        quelle(mitHilfsstoff: false),
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      expect(w['gueltig_ab'], '05/03/2026');
+      expect(w['stand'], 'Version 2');
+      expect(w['verlust'], '10.0 %');
+      expect(w['haltbarkeit'], '14 days');
+      expect(w['aw'], '0.97');
+      expect(w['naehrwert.salz'], isNot(contains(',')));
+      expect(w['allergene'], 'Cereals containing gluten');
+      // Ohne Hilfsstoffe sagt der erste Platz „keine".
+      expect(w['hilfsstoff.1.name'], 'None');
+      expect(w['hilfsstoff.1.quelle'], '-');
+      expect(w['hilfsstoff.2.name'], '');
+    });
+
+    test('übersetzt werden nur Texte, nicht Zahlen und nicht „None"', () {
+      final w = spezifikationsWerte(
+        quelle(mitHilfsstoff: false),
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      final texte = uebersetzbareTexte(w);
+      expect(
+        texte.keys,
+        containsAll([
+          'bezeichnung',
+          'zutaten',
+          'sensorik.geschmack',
+          'sensorik.gewicht',
+          'allergen.gluten.quelle',
+        ]),
+      );
+      for (final k in [
+        'verlust',
+        'aw',
+        'gueltig_ab',
+        'naehrwert.fett',
+        'allergen.gluten.ja',
+        'hilfsstoff.1.name',
+        'hilfsstoff.1.quelle',
+        'sensorik.aussehen',
+      ]) {
+        expect(texte.containsKey(k), isFalse, reason: k);
+      }
+    });
+  });
+
+  group('Excel-Vorlage füllen', () {
+    test('die Beispielvorlage enthält jeden Platzhalter', () {
+      expect(
+        platzhalterIn(beispielvorlage()),
+        {for (final p in kSpezifikationPlatzhalter) p.name},
+      );
+    });
+
+    test('gefüllt bleibt kein Platzhalter, die Formatierung unberührt', () {
+      final vorlage = beispielvorlage();
+      final werte = spezifikationsWerte(
+        quelle(),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      final e = vorlageFuellen(vorlage, werte);
+      expect(e.unbekannt, isEmpty);
+      expect(e.ersetzt, werte.keys.toSet());
+      expect(platzhalterIn(e.bytes), isEmpty);
+
+      final text = mappenText(e.bytes);
+      expect(text, contains('T-200'));
+      expect(text, contains('Stand 2'));
+      expect(text, contains('WEIZENmehl'));
+      // Die Liste der Platzhalter im zweiten Blatt steht ohne Klammern da
+      // und bleibt.
+      expect(text, contains('allergen.gluten.ja'));
+
+      String styles(Uint8List b) => utf8.decode(
+            ZipDecoder().decodeBytes(b).findFile('xl/styles.xml')!.content
+                as List<int>,
+          );
+      expect(styles(e.bytes), styles(vorlage));
+    });
+
+    test('zerlegte Platzhalter, Sonderzeichen und unbekannte Namen', () {
+      final mappe = kleineMappe(
+        '<si><r><rPr><b/></rPr><t>Nr. {{arti</t></r>'
+            '<r><t xml:space="preserve">kelnummer}} und {{ tippfehler }}</t>'
+            '</r></si>',
+        '<is><t>{{kunde}}</t></is>',
+      );
+      expect(platzhalterIn(mappe), {'artikelnummer', 'tippfehler', 'kunde'});
+
+      final e = vorlageFuellen(mappe, {
+        'artikelnummer': 'A&B <1>',
+        'kunde': 'Müller & Söhne',
+      });
+      expect(e.ersetzt, {'artikelnummer', 'kunde'});
+      expect(e.unbekannt, {'tippfehler'});
+      final text = mappenText(e.bytes);
+      expect(
+        text,
+        contains(
+          '<si><t xml:space="preserve">Nr. A&amp;B &lt;1&gt; und '
+          '{{ tippfehler }}</t></si>',
+        ),
+      );
+      expect(
+        text,
+        contains('<is><t xml:space="preserve">Müller &amp; Söhne</t></is>'),
+      );
+      // Die übrigen Teile der Mappe bleiben, wie sie waren.
+      final styles = ZipDecoder()
+          .decodeBytes(e.bytes)
+          .findFile('xl/styles.xml')!
+          .content as List<int>;
+      expect(utf8.decode(styles), '<styleSheet>unverändert</styleSheet>');
+    });
+
+    test('keine Excel-Mappe: ein verständlicher Fehler', () {
+      expect(
+        () => platzhalterIn(Uint8List.fromList(utf8.encode('kein zip'))),
+        throwsFormatException,
+      );
+      final archiv = Archive()
+        ..addFile(ArchiveFile('irgendwas.txt', 3, utf8.encode('abc')));
+      final zip = Uint8List.fromList(ZipEncoder().encode(archiv)!);
+      expect(() => vorlageFuellen(zip, const {}), throwsFormatException);
+    });
+  });
+
+  group('DeepL', () {
+    test('Adresse nach Art des Schlüssels', () {
+      expect(deeplAdresse('abc:fx').host, 'api-free.deepl.com');
+      expect(deeplAdresse(' abc:fx ').host, 'api-free.deepl.com');
+      expect(deeplAdresse('abc').host, 'api.deepl.com');
+    });
+
+    test('die Anfrage trägt alle Texte, kodiert', () {
+      expect(
+        deeplAnfrage(['Rind & Schwein', 'Größe']),
+        'text=Rind+%26+Schwein&text=Gr%C3%B6%C3%9Fe'
+        '&source_lang=DE&target_lang=EN-GB',
+      );
+    });
+
+    test('die Antwort in derselben Reihenfolge, sonst ein Fehler', () {
+      expect(
+        deeplAntwort(
+          '{"translations":[{"text":"Beef"},{"text":"Size"}]}',
+          2,
+        ),
+        ['Beef', 'Size'],
+      );
+      expect(
+        () => deeplAntwort('{"translations":[{"text":"Beef"}]}', 2),
+        throwsA(isA<DeepLFehler>()),
+      );
+      expect(
+        () => deeplAntwort('<html>', 1),
+        throwsA(isA<DeepLFehler>()),
+      );
+      expect(
+        () => deeplAntwort('{"translations":[{"x":1}]}', 1),
+        throwsA(isA<DeepLFehler>()),
+      );
+    });
+  });
+
+  group('Dienst mit der Datenbank', () {
+    late AppDatabase db;
+    late EntwicklungRepository rezepte;
+    late ProjektRepository projekte;
+    late EntwicklungDateienDienst dateien;
+    late List<List<String>> aufrufe;
+
+    setUp(() async {
+      db = testDatenbank();
+      rezepte = EntwicklungRepository(db);
+      projekte = ProjektRepository(db);
+      dateien = EntwicklungDateienDienst(db);
+      aufrufe = [];
+      // Der Datenschlüssel entsteht mit dem Passwort.
+      await EntwicklungZugang(
+        DbEntwicklungsSpeicher(db),
+        iterationen: 1000,
+        imHintergrund: false,
+      ).festlegen('geheim123');
+    });
+    tearDown(() => db.close());
+
+    SpezifikationDienst dienst({Uebersetzer? uebersetzer}) =>
+        SpezifikationDienst(
+          db,
+          dateien,
+          uebersetzer: uebersetzer ??
+              (List<String> texte, String schluessel) async {
+                aufrufe.add(texte);
+                return [for (final t in texte) 'EN[$t]'];
+              },
+        );
+
+    /// Ein Projekt mit einer Rezeptur: Stand 1 abgeschlossen, Stand 2 als
+    /// Entwurf.
+    Future<({EntwicklungsProjekt projekt, String v1, String v2})>
+        anlegen() async {
+      final id = await projekte.projektAnlegen(
+        name: 'Frikadelle Testart',
+        kunde: 'Muster GmbH',
+        artikelnummer: 'T-200',
+      );
+      await projekte.projektAendern(
+        id,
+        EntwicklungProjekteCompanion(
+          grenzeAw: const Value(0.97),
+          sensorik: Value(
+            const Sensorik(geschmack: 'würzig', gewicht: '80 g').alsJson(),
+          ),
+        ),
+      );
+      final rezeptur = await rezepte.rezepturAnlegen(
+        name: 'Frikadelle Testart',
+        projektId: id,
+      );
+      final fleisch = await rezepte.zutatAnlegen(
+        const EntwicklungZutatenCompanion(
+          name: Value('Schweinefleisch'),
+          istFleisch: Value(true),
+          tierart: Value('schwein'),
+          fett: Value(20),
+          eiweiss: Value(18),
+        ),
+      );
+      final mehl = await rezepte.zutatAnlegen(
+        const EntwicklungZutatenCompanion(
+          name: Value('Weizenmehl'),
+          allergene: Value('gluten'),
+          kohlenhydrate: Value(70),
+        ),
+      );
+      final v1 = (await rezepte.neuesteVersion(rezeptur))!;
+      await rezepte.positionHinzufuegen(v1.id, zutatId: fleisch, mengeKg: 80);
+      await rezepte.positionHinzufuegen(v1.id, zutatId: mehl, mengeKg: 20);
+      await rezepte.versionAendern(
+        v1.id,
+        const EntwicklungRezepturVersionenCompanion(
+          verlustProzent: Value(10),
+          verlustArt: Value('garen'),
+        ),
+      );
+      await rezepte.versionAbschliessen(v1.id);
+      final v2 = await rezepte.versionAnlegen(rezeptur, vorlageId: v1.id);
+      return (projekt: (await projekte.projekt(id))!, v1: v1.id, v2: v2);
+    }
+
+    test('Stände: abgeschlossene vor Entwürfen', () async {
+      final a = await anlegen();
+      final staende = await dienst().staende(a.projekt.id);
+      expect([for (final s in staende) s.version.id], [a.v1, a.v2]);
+      expect(
+        spezStandLabel(staende.last),
+        'Frikadelle Testart · Stand 2 · Entwurf',
+      );
+      expect(
+        spezStandLabel(staende.first, freigegebeneVersionId: a.v1),
+        'Frikadelle Testart · Stand 1 · freigegeben',
+      );
+      expect(spezStandVorschlag(staende, null), a.v1);
+      expect(spezStandVorschlag(staende, a.v2), a.v2);
+      expect(spezStandVorschlag(staende, 'gibt-es-nicht'), a.v1);
+      expect(spezStandVorschlag(const [], null), isNull);
+    });
+
+    test('ohne Vorlage ein verständlicher Fehler', () async {
+      final a = await anlegen();
+      await expectLater(
+        dienst().erstellen(
+          projekt: a.projekt,
+          versionId: a.v1,
+          sprache: SpezSprache.de,
+        ),
+        throwsStateError,
+      );
+    });
+
+    test('eine Vorlage, die keine Excel-Mappe ist, wird nicht gespeichert',
+        () async {
+      final d = dienst();
+      await expectLater(
+        d.vorlageSpeichern(
+          SpezSprache.de,
+          'notiz.xlsx',
+          Uint8List.fromList(utf8.encode('kein zip')),
+        ),
+        throwsFormatException,
+      );
+      expect(await d.vorlage(SpezSprache.de), isNull);
+    });
+
+    test('deutsch: Vorlage speichern, füllen, ablegen, abhaken', () async {
+      final a = await anlegen();
+      final d = dienst();
+      final platzhalter = await d.vorlageSpeichern(
+        SpezSprache.de,
+        'Unsere Spezifikation.xlsx',
+        beispielvorlage(),
+      );
+      expect(platzhalter.length, kSpezifikationPlatzhalter.length);
+      final vorlage = (await d.vorlage(SpezSprache.de))!;
+      expect(vorlage.name, 'Unsere Spezifikation.xlsx');
+      // Eine Vorlage gehört zu keinem Projekt.
+      expect(vorlage.projektId, isNull);
+
+      final e = await d.erstellen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(e.dateiname, 'Frikadelle Testart_Spezifikation.xlsx');
+      expect(e.ersetzt, kSpezifikationPlatzhalter.length);
+      expect(e.unbekannt, isEmpty);
+      expect(e.uebersetzt, isFalse);
+      expect(e.uebersetzungsFehler, isNull);
+      final text = mappenText(e.bytes);
+      expect(text, contains('T-200'));
+      expect(text, contains('Stand 1'));
+      expect(text, contains('05.03.2026'));
+      expect(text, contains('10,0 %'));
+      expect(text, contains('0,97'));
+      expect(text, contains('WEIZENmehl'));
+      expect(text, contains('würzig'));
+      // Deutsch wird nie übersetzt.
+      expect(aufrufe, isEmpty);
+
+      final dateiId = await d.ablegen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.de,
+        ergebnis: e,
+        jetzt: DateTime(2026, 3, 5, 14, 30),
+      );
+      expect(await dateien.lesen(dateiId), e.bytes);
+      final datei = (await dateien.datei(dateiId))!;
+      expect(datei.projektId, a.projekt.id);
+      expect(datei.mimeTyp, kXlsxMime);
+      final verlauf = await projekte.eintraegeBeobachten(a.projekt.id).first;
+      final eintrag = verlauf.firstWhere((v) => v.dateiId == dateiId);
+      expect(eintrag.titel, 'Spezifikation (Deutsch)');
+      expect(eintrag.art, EintragArt.datei.schluessel);
+      expect(eintrag.status, EintragStatus.erledigt.schluessel);
+      expect(eintrag.versionId, a.v1);
+      expect(eintrag.datum, DateTime(2026, 3, 5));
+      expect(eintrag.beschreibung, 'Erstellt aus Rezepturstand 1.');
+
+      await d.abhaken(a.projekt.id);
+      final p = (await projekte.projekt(a.projekt.id))!;
+      expect(checklisteAus(p.checkliste), contains('spezifikationErstellt'));
+    });
+
+    test('englisch: ohne Schlüssel deutsch, mit Schlüssel übersetzt',
+        () async {
+      final a = await anlegen();
+      final d = dienst();
+      await d.vorlageSpeichern(SpezSprache.en, 'Spec.xlsx', beispielvorlage());
+
+      final ohne = await d.erstellen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      expect(ohne.dateiname, 'Frikadelle Testart_Specification.xlsx');
+      expect(ohne.uebersetzt, isFalse);
+      expect(ohne.uebersetzungsFehler, contains('Kein DeepL-Schlüssel'));
+      expect(aufrufe, isEmpty);
+      // Zahlen und Daten trotzdem englisch.
+      final textOhne = mappenText(ohne.bytes);
+      expect(textOhne, contains('Version 1'));
+      expect(textOhne, contains('05/03/2026'));
+      expect(textOhne, contains('10.0 %'));
+
+      await d.deeplSpeichern(' test-schluessel:fx ');
+      expect(await d.deeplSchluessel(), 'test-schluessel:fx');
+      final mit = await d.erstellen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      expect(mit.uebersetzt, isTrue);
+      expect(mit.uebersetzungsFehler, isNull);
+      // Ein Aufruf, jeder Text nur einmal.
+      expect(aufrufe, hasLength(1));
+      expect(aufrufe.single.toSet().length, aufrufe.single.length);
+      expect(aufrufe.single, contains('Frikadelle Testart'));
+      expect(aufrufe.single, isNot(contains('None')));
+      final text = mappenText(mit.bytes);
+      expect(text, contains('EN[Frikadelle Testart]'));
+      expect(text, contains('EN[würzig]'));
+      expect(text, contains('Version 1'));
+      expect(text, contains('Cereals containing gluten'));
+
+      await d.deeplSpeichern('');
+      expect(await d.deeplSchluessel(), isNull);
+    });
+
+    test('ein Fehler von DeepL: deutsch mit Hinweis', () async {
+      final a = await anlegen();
+      final d = dienst(
+        uebersetzer: (List<String> texte, String schluessel) async =>
+            throw const DeepLFehler(
+          'Das Kontingent des DeepL-Schlüssels ist aufgebraucht.',
+        ),
+      );
+      await d.vorlageSpeichern(SpezSprache.en, 'Spec.xlsx', beispielvorlage());
+      await d.deeplSpeichern('test-schluessel:fx');
+      final e = await d.erstellen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      expect(e.uebersetzt, isFalse);
+      expect(
+        e.uebersetzungsFehler,
+        'Das Kontingent des DeepL-Schlüssels ist aufgebraucht. '
+        'Die Texte sind deutsch.',
+      );
+      expect(mappenText(e.bytes), contains('Frikadelle Testart'));
+    });
+
+    test('ohne Übersetzen-Wunsch kein Aufruf', () async {
+      final a = await anlegen();
+      final d = dienst();
+      await d.vorlageSpeichern(SpezSprache.en, 'Spec.xlsx', beispielvorlage());
+      await d.deeplSpeichern('test-schluessel:fx');
+      final e = await d.erstellen(
+        projekt: a.projekt,
+        versionId: a.v1,
+        sprache: SpezSprache.en,
+        uebersetzen: false,
+        datum: datum,
+      );
+      expect(e.uebersetzt, isFalse);
+      expect(e.uebersetzungsFehler, isNull);
+      expect(aufrufe, isEmpty);
+    });
+
+    test('Vorlage entfernen', () async {
+      final d = dienst();
+      await d.vorlageSpeichern(SpezSprache.de, 'V.xlsx', beispielvorlage());
+      expect(await d.vorlage(SpezSprache.de), isNotNull);
+      expect(await d.vorlage(SpezSprache.en), isNull);
+      await d.vorlageLoeschen(SpezSprache.de);
+      expect(await d.vorlage(SpezSprache.de), isNull);
+    });
+
+    group('Projektbericht', () {
+      // Ein Bild mit einem Bildpunkt (PNG).
+      final png = base64Decode(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAj'
+        'CB0C8AAAAASUVORK5CYII=',
+      );
+
+      test('mit allem: Stand, Bild, Prozess, HACCP, Verlauf', () async {
+        final a = await anlegen();
+        final bildId = await dateien.speichern(
+          name: 'Produkt.png',
+          inhalt: png,
+          projektId: a.projekt.id,
+          mimeTyp: 'image/png',
+        );
+        await projekte.projektAendern(
+          a.projekt.id,
+          EntwicklungProjekteCompanion(
+            bildDateiId: Value(bildId),
+            notizen: const Value('Kunde wünscht weniger Salz.'),
+            prozess: Value(kNeutraleProzessVorlage.alsJson()),
+            haccp: Value(
+              const Haccp(
+                gefahren: [
+                  Gefahr(
+                    id: 'g1',
+                    gefahr: 'Fremdkörper',
+                    schwere: 3,
+                    wahrscheinlichkeit: 2,
+                    massnahmen: 'Metalldetektor',
+                  ),
+                ],
+              ).alsJson(),
+            ),
+          ),
+        );
+        for (var i = 0; i < 3; i++) {
+          await projekte.eintragAnlegen(
+            projektId: a.projekt.id,
+            art: EintragArt.notiz,
+            titel: 'Verkostung $i',
+            datum: DateTime(2026, 3, i + 1),
+            beschreibung: 'Probe $i — „gut"',
+          );
+        }
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+
+        final b = await berichtLaden(db, dateien, projekt);
+        // Ohne Freigabe: der neueste abgeschlossene Stand.
+        expect(b.version?.id, a.v1);
+        expect(b.rezepturName, 'Frikadelle Testart');
+        expect(b.ergebnis, isNotNull);
+        expect(b.bild, png);
+        // Der neueste Eintrag zuerst.
+        final titel = [for (final v in b.verlauf) v.titel];
+        expect(
+          titel.indexOf('Verkostung 2'),
+          lessThan(titel.indexOf('Verkostung 0')),
+        );
+        expect(Haccp.aus(projekt.haccp).gefahren.single.risiko, 6);
+
+        final pdf = await baueProjektPdf(b, gedrucktAm: datum);
+        expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
+      });
+
+      test('der freigegebene Stand geht vor', () async {
+        final a = await anlegen();
+        await projekte.projektAendern(
+          a.projekt.id,
+          EntwicklungProjekteCompanion(freigabeVersionId: Value(a.v2)),
+        );
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+        expect(b.version?.id, a.v2);
+      });
+
+      test('ohne Rezeptur, mit kaputtem Bild und sehr langem Text', () async {
+        final id = await projekte.projektAnlegen(name: 'Leeres Projekt');
+        await projekte.projektAendern(
+          id,
+          EntwicklungProjekteCompanion(
+            notizen: Value('Eine lange Notiz. ' * 4000),
+          ),
+        );
+        for (var i = 0; i < 120; i++) {
+          await projekte.eintragAnlegen(
+            projektId: id,
+            art: EintragArt.notiz,
+            titel: 'Eintrag $i',
+            datum: DateTime(2026, 1, 1).add(Duration(days: i)),
+            beschreibung: 'Beschreibung $i ' * 20,
+          );
+        }
+        final projekt = (await projekte.projekt(id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+        expect(b.version, isNull);
+        expect(b.ergebnis, isNull);
+
+        final pdf = await baueProjektPdf(
+          ProjektBericht(
+            projekt: projekt,
+            verlauf: b.verlauf,
+            bild: Uint8List.fromList([1, 2, 3]),
+          ),
+        );
+        expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
+      });
+    });
+  });
+
+  group('Fenster', () {
+    final zeit = DateTime(2026, 10, 20);
+    final projekt = EntwicklungsProjekt(
+      id: 'p1',
+      name: 'Frikadelle Testart',
+      status: ProjektStatus.entwicklung.schluessel,
+      neuerProzess: false,
+      neueZutaten: false,
+      freigabeVersionId: 'v1',
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    final rezeptur = Rezeptur(
+      id: 'r1',
+      name: 'Frikadelle Testart',
+      projektId: 'p1',
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    RezepturVersion version(String id, int nummer, String status) =>
+        RezepturVersion(
+          id: id,
+          rezepturId: 'r1',
+          nummer: nummer,
+          status: status,
+          verlustProzent: 10,
+          fettVerlustProzent: 0,
+          verlustArt: 'garen',
+          createdAt: zeit,
+          updatedAt: zeit,
+        );
+    final staende = [
+      FreigabeStand(
+        rezeptur: rezeptur,
+        version: version('v1', 1, VersionStatus.abgeschlossen),
+      ),
+      FreigabeStand(
+        rezeptur: rezeptur,
+        version: version('v2', 2, VersionStatus.entwurf),
+      ),
+    ];
+    final vorlage = EntwicklungsDatei(
+      id: spezVorlageId(SpezSprache.de),
+      name: 'Unsere Spezifikation.xlsx',
+      mimeTyp: kXlsxMime,
+      groesse: 2048,
+      createdAt: zeit,
+    );
+
+    Future<void> zeige(
+      WidgetTester tester, {
+      List<FreigabeStand>? liste,
+      bool mitVorlage = false,
+      bool schluessel = false,
+    }) async {
+      tester.view.physicalSize = const Size(1400, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            spezStaendeProvider.overrideWith(
+              (ref, id) async => liste ?? staende,
+            ),
+            spezVorlageProvider.overrideWith(
+              (ref, s) async =>
+                  mitVorlage && s == SpezSprache.de ? vorlage : null,
+            ),
+            deeplHinterlegtProvider.overrideWith((ref) async => schluessel),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(body: SpezifikationDialog(projekt: projekt)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    ButtonStyleButton knopf(WidgetTester tester, String text) =>
+        tester.widget<ButtonStyleButton>(
+          find.ancestor(
+            of: find.text(text),
+            matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+          ),
+        );
+
+    testWidgets('ohne Vorlage: Hinweis, Erstellen gesperrt', (tester) async {
+      await zeige(tester);
+      expect(find.text('Spezifikation erstellen'), findsOneWidget);
+      // Vorgeschlagen ist der freigegebene Stand.
+      expect(
+        find.text('Frikadelle Testart · Stand 1 · freigegeben'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Noch keine Vorlage für Deutsch gewählt.'),
+        findsOneWidget,
+      );
+      expect(find.text('Vorlage wählen…'), findsOneWidget);
+      expect(knopf(tester, 'Erstellen…').enabled, isFalse);
+      // DeepL gibt es nur für Englisch.
+      expect(find.text('Texte mit DeepL übersetzen'), findsNothing);
+    });
+
+    testWidgets('mit Vorlage: Name und Größe, Erstellen frei', (tester) async {
+      await zeige(tester, mitVorlage: true);
+      expect(find.text('Unsere Spezifikation.xlsx · 2 KB'), findsOneWidget);
+      expect(find.text('Ersetzen…'), findsOneWidget);
+      expect(find.byTooltip('Vorlage entfernen'), findsOneWidget);
+      expect(knopf(tester, 'Erstellen…').enabled, isTrue);
+    });
+
+    testWidgets('Englisch: eigene Vorlage und DeepL', (tester) async {
+      await zeige(tester, mitVorlage: true);
+      await tester.tap(find.text('Englisch'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        find.text('Noch keine Vorlage für Englisch gewählt.'),
+        findsOneWidget,
+      );
+      expect(knopf(tester, 'Erstellen…').enabled, isFalse);
+      expect(find.text('Texte mit DeepL übersetzen'), findsOneWidget);
+      expect(find.text('Schlüssel eingeben…'), findsOneWidget);
+      // Ohne Schlüssel lässt sich nicht übersetzen.
+      final schalter = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(schalter.onChanged, isNull);
+      expect(schalter.value, isFalse);
+    });
+
+    testWidgets('Englisch mit Schlüssel: Übersetzen an', (tester) async {
+      await zeige(tester, schluessel: true);
+      await tester.tap(find.text('Englisch'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Schlüssel ändern…'), findsOneWidget);
+      final schalter = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      expect(schalter.value, isTrue);
+      expect(schalter.onChanged, isNotNull);
+    });
+
+    testWidgets('ohne Rezeptur ein Hinweis', (tester) async {
+      await zeige(tester, liste: const [], mitVorlage: true);
+      expect(find.textContaining('noch keine Rezeptur'), findsOneWidget);
+      expect(knopf(tester, 'Erstellen…').enabled, isFalse);
+    });
+
+    testWidgets('die Platzhalter zum Nachschlagen', (tester) async {
+      await zeige(tester);
+      expect(find.text('{{artikelnummer}}'), findsNothing);
+      await tester.ensureVisible(find.text('Alle Platzhalter'));
+      await tester.pump();
+      await tester.tap(find.text('Alle Platzhalter'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('{{artikelnummer}}'), findsOneWidget);
+      expect(find.text('{{allergen.gluten.ja}}'), findsOneWidget);
+    });
+  });
+}

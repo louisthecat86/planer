@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/database/database.dart';
 import '../../../core/utils/sheet_utils.dart';
 import '../daten/entwicklung_repository.dart';
 import '../rechenkern/rechen_modell.dart';
@@ -19,11 +20,18 @@ class ZutatAuswahl {
 
 /// Wählt eine Zutat aus dem Katalog oder eine Rezeptur als Unterrezeptur.
 class ZutatAuswahlDialog extends ConsumerStatefulWidget {
-  const ZutatAuswahlDialog({super.key, required this.ohneRezepturId});
+  const ZutatAuswahlDialog({
+    super.key,
+    required this.ohneRezepturId,
+    this.nurZutaten = false,
+  });
 
   /// Die Rezeptur, in die eingefügt wird — sie selbst steht nicht zur
   /// Wahl.
   final String ohneRezepturId;
+
+  /// Nur Zutaten aus dem Katalog, keine Rezepturen.
+  final bool nurZutaten;
 
   @override
   ConsumerState<ZutatAuswahlDialog> createState() =>
@@ -62,7 +70,9 @@ class _ZutatAuswahlDialogState extends ConsumerState<ZutatAuswahlDialog> {
     final zutaten = (ref.watch(zutatenProvider).valueOrNull ?? const [])
         .where((z) => _passt(z.name, z.artikelnummer))
         .toList();
-    final rezepturen = (ref.watch(rezepturenProvider).valueOrNull ?? const [])
+    final rezepturen = (widget.nurZutaten
+            ? const <Rezeptur>[]
+            : ref.watch(rezepturenProvider).valueOrNull ?? const <Rezeptur>[])
         .where((r) => r.id != widget.ohneRezepturId)
         .where((r) => _passt(r.name, r.artikelnummer))
         .toList();
@@ -84,7 +94,13 @@ class _ZutatAuswahlDialogState extends ConsumerState<ZutatAuswahlDialog> {
     return AlertDialog(
       title: Row(
         children: [
-          const Expanded(child: Text('Zutat oder Rezeptur einfügen')),
+          Expanded(
+            child: Text(
+              widget.nurZutaten
+                  ? 'Zutat wählen'
+                  : 'Zutat oder Rezeptur einfügen',
+            ),
+          ),
           TextButton.icon(
             onPressed: _neueZutat,
             icon: const Icon(Icons.add, size: 18),
@@ -142,8 +158,9 @@ class _ZutatAuswahlDialogState extends ConsumerState<ZutatAuswahlDialog> {
                       onTap: () =>
                           Navigator.of(context).pop(ZutatAuswahl.zutat(z.id)),
                     ),
-                  ueberschrift('REZEPTUREN — als Unterrezeptur'),
-                  if (rezepturen.isEmpty)
+                  if (!widget.nurZutaten)
+                    ueberschrift('REZEPTUREN — als Unterrezeptur'),
+                  if (rezepturen.isEmpty && !widget.nurZutaten)
                     Padding(
                       padding: const EdgeInsets.all(8),
                       child: Text(

@@ -6,6 +6,7 @@ import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 
@@ -58,7 +59,7 @@ class _RezepturenAnsichtState extends ConsumerState<RezepturenAnsicht> {
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(16),
         child: HinweisBox(
-          '$e',
+          fehlerText(e),
           art: StatusArt.fehler,
           titel: 'Die Rezepturen ließen sich nicht laden',
           auswaehlbar: true,
@@ -320,15 +321,9 @@ class _Zeile extends StatelessWidget {
                 child: Align(
                   alignment: Alignment.centerLeft,
                   heightFactor: 1,
-                  // Passt die Marke nicht, wird sie verkleinert statt
-                  // zu überlaufen.
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: neueste == null
-                        ? Text('—', style: stil?.copyWith(color: grau))
-                        : StandMarke(version: neueste),
-                  ),
+                  child: neueste == null
+                      ? Text('—', style: stil?.copyWith(color: grau))
+                      : StandMarke(version: neueste),
                 ),
               ),
               if (breit)
@@ -429,7 +424,7 @@ class _NeueRezepturDialogState extends ConsumerState<NeueRezepturDialog> {
       if (!mounted) return;
       setState(() {
         _speichert = false;
-        _fehler = 'Anlegen fehlgeschlagen: $e';
+        _fehler = 'Anlegen fehlgeschlagen: ${fehlerText(e)}';
       });
     }
   }

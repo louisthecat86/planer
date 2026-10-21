@@ -10,6 +10,8 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import 'maschinen_seed.dart';
@@ -106,7 +108,7 @@ class MaschinenKatalogScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(14),
           children: [
             HinweisBox(
-              'Fehler: $e',
+              'Fehler: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),
@@ -262,7 +264,7 @@ class MaschinenKatalogScreen extends ConsumerWidget {
             duration: const Duration(seconds: 8),
             content: Text(
               'Ergänzen fehlgeschlagen — es wurde nichts angelegt. '
-              'Du kannst es erneut versuchen. ($e)',
+              'Du kannst es erneut versuchen. (${fehlerText(e)})',
             ),
           ),
         );
@@ -473,9 +475,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
     _kapazitaetStunden = TextEditingController(
       text: m == null
           ? '10'
-          : (m.kapazitaetMinutenProTag / 60)
-              .toStringAsFixed(1)
-              .replaceAll('.0', ''),
+          : Format.eingabe(m.kapazitaetMinutenProTag / 60),
     );
     _eignung = TextEditingController(text: m?.eignungHinweis ?? '');
   }
@@ -496,8 +496,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
       );
       return;
     }
-    final stunden =
-        double.tryParse(_kapazitaetStunden.text.replaceAll(',', '.'));
+    final stunden = Format.lies(_kapazitaetStunden.text);
     if (stunden == null || stunden <= 0 || stunden > 24) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -970,7 +969,7 @@ class _MaschineEditorSheetState extends ConsumerState<_MaschineEditorSheet> {
               Padding(
                 padding: const EdgeInsets.all(12),
                 child: HinweisBox(
-                  'Fehler: $e',
+                  'Fehler: ${fehlerText(e)}',
                   art: StatusArt.fehler,
                   auswaehlbar: true,
                 ),

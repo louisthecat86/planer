@@ -7,6 +7,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 
 /// Dialog zum Anlegen oder Bearbeiten eines Custom-Parameters.
 ///
@@ -140,7 +141,7 @@ class _CustomParameterEditorDialogState
     } catch (e) {
       if (mounted) {
         setState(() {
-          _saveError = 'Speichern fehlgeschlagen: $e';
+          _saveError = 'Speichern fehlgeschlagen: ${fehlerText(e)}';
           _isSaving = false;
         });
       }

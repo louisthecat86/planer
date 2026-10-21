@@ -169,7 +169,7 @@ void main() {
       expect(e.warnungen.any((t) => t.contains('Speck')), isTrue);
     });
 
-    test('Bindegewebe über dem Grenzwert senkt nur den Fleischanteil', () {
+    test('Bindegewebe über dem Grenzwert steht als eigene Zutat da', () {
       // Eiweiß 16 %, Kollagen 40 % davon = 6,4 %.
       // MAXCOL = 25 × (16 − 6,4) / 75 = 3,2 → EXCOL 3,2 → EXCT 14,8 %.
       // Fett 20 % bleibt unter MAXFAT = 30 × (100 − 14,8 − 20) / 70.
@@ -180,8 +180,16 @@ void main() {
       expect(p.kollagenVerhaeltnis, closeTo(40, 1e-9));
       expect(p.ueberschussBindegewebeKg, closeTo(14.8, 1e-9));
       expect(p.fettUeberGrenze, isFalse);
-      expect(e.zutatenliste, 'Schweinefleisch (85,2 %)');
-      expect(e.warnungen.any((t) => t.contains('Bindegewebe')), isTrue);
+      // LMIV Anhang VII Teil B Nr. 17: Der Überschuss wird genannt (F16).
+      expect(
+        e.zutatenliste,
+        'Schweinefleisch (85,2 %), Schweinebindegewebe (14,8 %)',
+      );
+      expect(e.fleischanteilProzent, closeTo(85.2, 1e-9));
+      expect(
+        e.warnungen.any((t) => t.contains('„Schweinebindegewebe"')),
+        isTrue,
+      );
     });
 
     test('Fett und Bindegewebe zugleich: beide zählen', () {
@@ -196,7 +204,11 @@ void main() {
       expect(p.ueberschussBindegewebeKg, closeTo(12.95, 1e-9));
       expect(p.ueberschussFettKg, closeTo(19.8357, 1e-3));
       expect(p.fleischKg, closeTo(67.2143, 1e-3));
-      expect(e.zutatenliste, 'Schweinefleisch (67,2 %), Speck (19,8 %)');
+      expect(
+        e.zutatenliste,
+        'Schweinefleisch (67,2 %), Speck (19,8 %), '
+        'Schweinebindegewebe (13,0 %)',
+      );
     });
 
     test('Bindegewebe gemittelt nach Fleischeiweiß, nur wo ein Wert steht',

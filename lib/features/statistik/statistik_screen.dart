@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart' show CapacityStatus;
@@ -63,7 +64,7 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen> {
         padding: const EdgeInsets.all(14),
         children: [
           HinweisBox(
-            '$fehler',
+            fehlerText(fehler),
             art: StatusArt.fehler,
             titel: 'Statistik konnte nicht geladen werden',
             auswaehlbar: true,

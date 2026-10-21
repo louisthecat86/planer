@@ -8,6 +8,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 
 // ---------------------------------------------------------------------------
@@ -105,7 +106,7 @@ class ParameterGrenzenScreen extends ConsumerWidget {
           padding: const EdgeInsets.all(14),
           children: [
             HinweisBox(
-              'Fehler: $e',
+              'Fehler: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),
@@ -509,7 +510,7 @@ class _GrenzeEditorDialogState extends ConsumerState<_GrenzeEditorDialog> {
           kontexte.when(
             loading: () => const LinearProgressIndicator(),
             error: (e, _) => HinweisBox(
-              'Anlagen konnten nicht geladen werden: $e',
+              'Anlagen konnten nicht geladen werden: ${fehlerText(e)}',
               art: StatusArt.fehler,
               auswaehlbar: true,
             ),

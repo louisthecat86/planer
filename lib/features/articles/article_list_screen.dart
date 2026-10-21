@@ -11,6 +11,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../bedarf/bedarf_screen.dart';
 import 'article_info_editor_dialog.dart';
 import 'artikel_luecken.dart';
@@ -358,7 +359,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
           ),
           const SizedBox(width: 8),
           // Die Hauptaktion der Seite steht oben rechts in der Kopfleiste —
-          // wie „Produkt planen" im Board. Ein schwebender Knopf verdeckte
+          // wie „Artikel planen" im Board. Ein schwebender Knopf verdeckte
           // unten rechts die letzte Zeile der Liste.
           if (schmal)
             IconButton(
@@ -387,7 +388,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
               )
             : _buildBody(context, articles, bedarfKg),
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: $e')),
+        error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       ),
     );
   }

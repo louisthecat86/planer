@@ -10,6 +10,7 @@ import '../constants/artikel_merkmale.dart';
 import '../constants/parameter_namen.dart';
 import '../constants/product_groups.dart';
 import '../database/database.dart';
+import '../utils/fehler_text.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis
@@ -373,7 +374,9 @@ class StammdatenExportService {
           abtLetzte: abtLetzte,
         );
       } catch (e) {
-        warnungen.add('Artikel ${a['nummer']}: Blatt übersprungen ($e).');
+        warnungen.add(
+          'Artikel ${a['nummer']}: Blatt übersprungen (${fehlerText(e)}).',
+        );
       }
     }
 

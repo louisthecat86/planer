@@ -68,7 +68,7 @@ extension _UmbauAusfuehren on Kettenbau {
       return;
     } catch (e) {
       messenger.showSnackBar(
-        SnackBar(content: Text('Umbau fehlgeschlagen: $e')),
+        SnackBar(content: Text('Umbau fehlgeschlagen: ${fehlerText(e)}')),
       );
       container.invalidate(productStepsProvider(productId));
       return;

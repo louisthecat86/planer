@@ -24,6 +24,14 @@ const String kEntwicklungDatenschluessel = '${kEntwicklungPraefix}schluessel';
 /// Entsperren mit dem Passwort ausgepackt und eingespielt.
 const String kEntwicklungAusstehend = '${kEntwicklungPraefix}ausstehend';
 
+/// Der DeepL-Schlüssel für englische Spezifikationen.
+const String kEntwicklungDeeplSchluessel = '${kEntwicklungPraefix}deepl';
+
+/// Einstellungen der Produktentwicklung, die nur diesem Rechner gehören:
+/// Kein Backup nimmt sie mit, und ein eingespieltes Backup lässt sie
+/// stehen. Nur „Zurücksetzen" der Produktentwicklung löscht sie.
+const Set<String> kEntwicklungNurLokal = {kEntwicklungDeeplSchluessel};
+
 /// Ob [schluessel] eine Einstellung der Produktentwicklung ist.
 bool istEntwicklungsSchluessel(String schluessel) =>
     schluessel.startsWith(kEntwicklungPraefix);

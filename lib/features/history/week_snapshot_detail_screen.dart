@@ -12,6 +12,7 @@ import '../../core/services/week_snapshot_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 
 const _wkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
@@ -184,7 +185,7 @@ class _WeekSnapshotDetailScreenState
                     label: 'Aufträge',
                   ),
                   Kennzahl(
-                    wert: '${kgGesamt.toStringAsFixed(0)} kg',
+                    wert: Format.kg(kgGesamt),
                     label: 'Menge',
                   ),
                   Kennzahl(
@@ -381,7 +382,7 @@ class _AuslastungsBalken extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  '${kg.toStringAsFixed(0)} kg · $anzahl Aufträge$zusatzText',
+                  '${Format.kg(kg)} · $anzahl Aufträge$zusatzText',
                   style: TextStyle(
                     fontSize: 11,
                     color: colors.onSurfaceVariant,
@@ -447,7 +448,7 @@ class _TagesBlock extends StatelessWidget {
               Text(
                 '${tasks.length} '
                 '${tasks.length == 1 ? 'Auftrag' : 'Aufträge'} · '
-                '${kg.toStringAsFixed(0)} kg · ${Zeit.kurz(minuten)}',
+                '${Format.kg(kg)} · ${Zeit.kurz(minuten)}',
                 style: TextStyle(
                   fontSize: 11.5,
                   color: colors.onSurfaceVariant,
@@ -515,7 +516,7 @@ class _TaskZeile extends StatelessWidget {
           SizedBox(
             width: 72,
             child: Text(
-              '${task.mengeKg.toStringAsFixed(0)} kg',
+              Format.kg(task.mengeKg),
               textAlign: TextAlign.right,
               style: zahl,
             ),

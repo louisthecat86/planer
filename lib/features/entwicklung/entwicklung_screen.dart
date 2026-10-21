@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import 'entwicklung_zugang.dart';
 import 'import/suite_import_dialog.dart';
+import 'projekte/datei_aktionen.dart';
+import 'projekte/projekte_ansicht.dart';
 import 'rezepturen/rezepturen_ansicht.dart';
+import 'werkzeuge/werkzeuge_ansicht.dart';
 import 'zutaten/zutaten_ansicht.dart';
 
 /// Produktentwicklung: Projekte, Rezepturen und Zutaten — hinter einem
@@ -46,6 +50,8 @@ class EntwicklungScreen extends ConsumerWidget {
               icon: const Icon(Icons.lock_outline),
               onPressed: () {
                 ref.read(entwicklungEntsperrtProvider.notifier).state = false;
+                // Zum Öffnen entschlüsselte Dateien wieder wegräumen.
+                entwicklungTempLeeren();
               },
             ),
             const SizedBox(width: 8),
@@ -61,20 +67,10 @@ class EntwicklungScreen extends ConsumerWidget {
         ),
         body: const TabBarView(
           children: [
-            _Folgt(
-              icon: Icons.folder_open_outlined,
-              titel: 'Projekte',
-              text: 'Entwicklungen je Kunde mit Verlauf, Checklisten, '
-                  'Dateien, Sensorik und HACCP — und der Freigabe als '
-                  'Artikel im Planer.',
-            ),
+            ProjekteAnsicht(),
             RezepturenAnsicht(),
             ZutatenAnsicht(),
-            _Folgt(
-              icon: Icons.calculate_outlined,
-              titel: 'Werkzeuge',
-              text: 'Reverser und Fleischanteil-Optimierer.',
-            ),
+            WerkzeugeAnsicht(),
           ],
         ),
       ),
@@ -158,7 +154,8 @@ class _SperreState extends ConsumerState<_Sperre> {
       if (!mounted) return;
       setState(() {
         _rechnet = false;
-        _fehler = 'Die Produktentwicklung ließ sich nicht öffnen: $e';
+        _fehler = 'Die Produktentwicklung ließ sich nicht öffnen: '
+            '${fehlerText(e)}';
       });
       return;
     }
@@ -198,7 +195,8 @@ class _SperreState extends ConsumerState<_Sperre> {
       if (!mounted) return;
       setState(() {
         _rechnet = false;
-        _fehler = 'Das Passwort konnte nicht gespeichert werden: $e';
+        _fehler = 'Das Passwort konnte nicht gespeichert werden: '
+            '${fehlerText(e)}';
       });
       return;
     }
@@ -227,28 +225,34 @@ class _SperreState extends ConsumerState<_Sperre> {
   @override
   Widget build(BuildContext context) {
     final gesetzt = ref.watch(entwicklungPasswortGesetztProvider);
+    // Gleich mit abfragen — sonst stünde der Hinweis auf ein wartendes
+    // Backup erst ein Bild nach der Abfrage da.
+    final wartet =
+        ref.watch(entwicklungBackupWartetProvider).valueOrNull ?? false;
     return gesetzt.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
           child: HinweisBox(
-            '$e',
+            fehlerText(e),
             art: StatusArt.fehler,
             titel: 'Der Zugang konnte nicht geprüft werden',
             auswaehlbar: true,
           ),
         ),
       ),
-      data: (ja) => _abfrage(context, neu: !ja),
+      data: (ja) => _abfrage(context, neu: !ja, backupWartet: ja && wartet),
     );
   }
 
-  Widget _abfrage(BuildContext context, {required bool neu}) {
+  Widget _abfrage(
+    BuildContext context, {
+    required bool neu,
+    required bool backupWartet,
+  }) {
     final theme = Theme.of(context);
     final fehler = _fehler;
-    final backupWartet =
-        !neu && (ref.watch(entwicklungBackupWartetProvider).valueOrNull ?? false);
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -455,33 +459,6 @@ enum EntwicklungsReiter {
 final entwicklungReiterProvider =
     StateProvider<EntwicklungsReiter>((ref) => EntwicklungsReiter.projekte);
 
-/// Ein Teil, der mit einer der nächsten Lieferungen kommt.
-class _Folgt extends StatelessWidget {
-  const _Folgt({required this.icon, required this.titel, required this.text});
-
-  final IconData icon;
-  final String titel;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 520),
-          child: Bereich(
-            titel: titel,
-            icon: icon,
-            aktionen: const [StatusMarke('folgt')],
-            child: Text(text),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Passwort ändern
 // ---------------------------------------------------------------------------
@@ -531,7 +508,7 @@ class _PasswortAendernDialogState extends State<_PasswortAendernDialog> {
       if (!mounted) return;
       setState(() {
         _rechnet = false;
-        _fehler = 'Das Passwort konnte nicht geändert werden: $e';
+        _fehler = 'Das Passwort konnte nicht geändert werden: ${fehlerText(e)}';
       });
       return;
     }

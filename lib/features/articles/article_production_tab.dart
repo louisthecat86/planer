@@ -15,7 +15,7 @@ class _ProductionTab extends ConsumerWidget {
 
     return histAsync.when(
       loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text('Fehler: $e')),
+      error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       data: (rows) {
         if (rows.isEmpty) {
           return const Center(
@@ -477,11 +477,11 @@ class _LeistungsdatenDialogState
       .fold<int>(0, (sum, s) => sum + s.basisMitarbeiter);
 
   String _kgProStunde(int i) {
-    final kg = double.tryParse(_menge[i].text.replaceAll(',', '.'));
+    final kg = Format.lies(_menge[i].text);
     final min = _zeitMin[i];
     if (kg == null || kg <= 0 || min == null || min <= 0) return '—';
     final kgh = kg / (min / 60);
-    return '${kgh.toStringAsFixed(0)} kg/h';
+    return '${Format.zahl(kgh)} kg/h';
   }
 
   bool _istLeer(int i) => _menge[i].text.trim().isEmpty && _zeitMin[i] == null;
@@ -568,7 +568,7 @@ class _LeistungsdatenDialogState
       if (mounted) {
         setState(() => _busy = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Speichern fehlgeschlagen: $e')),
+          SnackBar(content: Text('Speichern fehlgeschlagen: ${fehlerText(e)}')),
         );
       }
       return;

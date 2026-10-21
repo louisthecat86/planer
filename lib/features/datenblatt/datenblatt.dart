@@ -14,6 +14,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
         kQuelleAuftragsbestand,
         ladeBedarfsPlanung,
         restBezuege;
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/pdf_text.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show berechneSchrittPlan, ermittleAusbeute;
@@ -450,7 +451,9 @@ Future<void> druckeDatenblaetterMitMeldung(
     messenger.showSnackBar(
       SnackBar(
         duration: const Duration(seconds: 8),
-        content: Text('Das Datenblatt ließ sich nicht erstellen. ($e)'),
+        content: Text(
+          'Das Datenblatt ließ sich nicht erstellen. (${fehlerText(e)})',
+        ),
       ),
     );
   }

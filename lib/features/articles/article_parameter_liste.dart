@@ -168,7 +168,7 @@ class _PlattenSchemaBereich extends ConsumerWidget {
         ),
       ),
       error: (e, _) => Text(
-        'Schema-Fehler: $e',
+        'Die Parameter-Vorlage ließ sich nicht laden: ${fehlerText(e)}',
         style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
       ),
     );
@@ -273,8 +273,9 @@ class _Trennzeilen extends StatelessWidget {
   }
 }
 
-String _fmtZahl(double v) =>
-    v == v.roundToDouble() ? v.toInt().toString() : v.toStringAsFixed(1);
+/// Für das Eingabefeld: mit Komma, ohne Nullen am Ende — und ohne auf
+/// eine Stelle zu runden, sonst änderte schon das Speichern den Wert.
+String _fmtZahl(double v) => Format.eingabe(v, nachkomma: 3);
 
 // ---------------------------------------------------------------------------
 // Parameter-Liste
@@ -570,7 +571,7 @@ class _ParameterListe extends ConsumerWidget {
         child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
       ),
       error: (e, _) => Text(
-        'Parameter-Fehler: $e',
+        'Die Parameter ließen sich nicht laden: ${fehlerText(e)}',
         style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
       ),
     );

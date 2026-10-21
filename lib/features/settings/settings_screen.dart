@@ -16,6 +16,8 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
+import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../board/board_providers.dart';
 
@@ -204,7 +206,7 @@ class _AbteilungskapazitaetenSheetState
     for (final a in Abteilung.values) {
       final minuten = werte[a.dbValue] ?? kStandardKapazitaetMinuten;
       _stunden[a.dbValue] = TextEditingController(
-        text: (minuten / 60).toStringAsFixed(1).replaceAll('.0', ''),
+        text: Format.eingabe(minuten / 60),
       );
     }
     if (mounted) setState(() => _laden = false);
@@ -221,9 +223,7 @@ class _AbteilungskapazitaetenSheetState
   Future<void> _speichere() async {
     final werte = <String, double>{};
     for (final a in Abteilung.values) {
-      final stunden = double.tryParse(
-        _stunden[a.dbValue]!.text.replaceAll(',', '.'),
-      );
+      final stunden = Format.lies(_stunden[a.dbValue]!.text);
       if (stunden == null || stunden <= 0 || stunden > 24) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${a.anzeigeName}: 0 bis 24 Stunden')),
@@ -576,7 +576,9 @@ class _GefahrenZoneState extends ConsumerState<_GefahrenZone> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Zurücksetzen fehlgeschlagen: $e')),
+        SnackBar(
+          content: Text('Zurücksetzen fehlgeschlagen: ${fehlerText(e)}'),
+        ),
       );
     } finally {
       if (mounted) setState(() => _busy = false);

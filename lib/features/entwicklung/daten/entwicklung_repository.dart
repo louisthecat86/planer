@@ -7,6 +7,8 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
+import '../entwicklung_format.dart';
+import '../projekte/projekt_modell.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
 
@@ -283,21 +285,57 @@ class EntwicklungRepository {
   }
 
   /// Schließt einen Entwurf ab: Er wird mit allen Zutatendaten
-  /// eingefroren.
+  /// eingefroren. Gehört die Rezeptur zu einem Projekt, steht der Stand
+  /// danach auch in dessen Verlauf.
   Future<void> versionAbschliessen(String id) async {
     await _nurEntwurf(id);
     final eingabe = await rechenRezeptur(id);
-    if (eingabe == null) throw StateError('Den Stand gibt es nicht.');
-    await (_db.update(_db.entwicklungRezepturVersionen)
-          ..where((v) => v.id.equals(id)))
-        .write(
-      EntwicklungRezepturVersionenCompanion(
-        status: const Value(VersionStatus.abgeschlossen),
-        stand: Value(jsonEncode(eingabe.toJson())),
-        abgeschlossenAm: Value(DateTime.now()),
-        updatedAt: Value(DateTime.now()),
-      ),
-    );
+    final v = await version(id);
+    if (eingabe == null || v == null) {
+      throw StateError('Den Stand gibt es nicht.');
+    }
+    final projektId = (await rezeptur(v.rezepturId))?.projektId;
+    final jetzt = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.entwicklungRezepturVersionen)
+            ..where((v) => v.id.equals(id)))
+          .write(
+        EntwicklungRezepturVersionenCompanion(
+          status: const Value(VersionStatus.abgeschlossen),
+          stand: Value(jsonEncode(eingabe.toJson())),
+          abgeschlossenAm: Value(jetzt),
+          updatedAt: Value(jetzt),
+        ),
+      );
+      if (projektId == null) return;
+      final e = berechne(eingabe);
+      await _db.into(_db.entwicklungProjektEintraege).insert(
+            EntwicklungProjektEintraegeCompanion.insert(
+              id: _uuid.v4(),
+              projektId: projektId,
+              art: EintragArt.rezeptur.schluessel,
+              titel: 'Rezepturstand ${v.nummer} abgeschlossen',
+              datum: DateTime(jetzt.year, jetzt.month, jetzt.day),
+              status: Value(EintragStatus.erledigt.schluessel),
+              beschreibung: Value(v.bezeichnung),
+              versionId: Value(id),
+              aenderungen: Value(
+                texteZuJson([
+                  'Endgewicht ${mengeText(e.endgewichtKg)} kg aus '
+                      '${mengeText(e.eingesetztKg)} kg',
+                  eingabe.positionen.length == 1
+                      ? '1 Zeile'
+                      : '${eingabe.positionen.length} Zeilen',
+                  if (e.fleischanteilProzent > 0)
+                    'Fleischanteil ${prozentText(e.fleischanteilProzent)}',
+                ]),
+              ),
+            ),
+          );
+      await (_db.update(_db.entwicklungProjekte)
+            ..where((p) => p.id.equals(projektId)))
+          .write(EntwicklungProjekteCompanion(updatedAt: Value(jetzt)));
+    });
   }
 
   /// Löscht einen Entwurf mit seinen Zeilen.
@@ -416,20 +454,41 @@ class EntwicklungRepository {
       }
     }
     final kopf = await rezeptur(v.rezepturId);
+    final zeilen = await _rechenZeilen(v, unterwegs);
+    return RechenRezeptur(
+      id: v.rezepturId,
+      name: kopf?.name ?? '',
+      positionen: [for (final z in zeilen) z.position],
+      verlustProzent: v.verlustProzent,
+      fettVerlustProzent: v.fettVerlustProzent,
+      verlustart: Verlustart.aus(v.verlustArt),
+    );
+  }
+
+  /// Die Zeilen eines Stands aus Katalog und Unterrezepturen von heute,
+  /// mit der ID der Zeile — in der Reihenfolge des Rechenkerns. Zeilen,
+  /// deren Zutat oder Unterrezeptur fehlt, fehlen auch hier.
+  Future<List<({String id, RechenPosition position})>> _rechenZeilen(
+    RezepturVersion v,
+    Set<String> unterwegs,
+  ) async {
     final weiter = {...unterwegs, v.rezepturId};
-    final liste = <RechenPosition>[];
-    for (final p in await positionen(versionId)) {
+    final liste = <({String id, RechenPosition position})>[];
+    for (final p in await positionen(v.id)) {
       final zutatId = p.zutatId;
       final unterId = p.unterrezepturId;
       if (zutatId != null) {
         final z = await zutat(zutatId);
         if (z == null) continue;
         liste.add(
-          RechenPosition.zutat(
-            rechenZutatAus(z),
-            mengeKg: p.mengeKg,
-            quidPflicht: p.quidPflicht,
-            etikettName: p.etikettName,
+          (
+            id: p.id,
+            position: RechenPosition.zutat(
+              rechenZutatAus(z),
+              mengeKg: p.mengeKg,
+              quidPflicht: p.quidPflicht,
+              etikettName: p.etikettName,
+            ),
           ),
         );
       } else if (unterId != null) {
@@ -449,24 +508,100 @@ class EntwicklungRepository {
         }
         if (unter == null) continue;
         liste.add(
-          RechenPosition.unterrezeptur(
-            unter,
-            mengeKg: p.mengeKg,
-            quidPflicht: p.quidPflicht,
-            etikettName: p.etikettName,
+          (
+            id: p.id,
+            position: RechenPosition.unterrezeptur(
+              unter,
+              mengeKg: p.mengeKg,
+              quidPflicht: p.quidPflicht,
+              etikettName: p.etikettName,
+            ),
           ),
         );
       }
     }
-    return RechenRezeptur(
-      id: v.rezepturId,
-      name: kopf?.name ?? '',
-      positionen: liste,
-      verlustProzent: v.verlustProzent,
-      fettVerlustProzent: v.fettVerlustProzent,
-      verlustart: Verlustart.aus(v.verlustArt),
-    );
+    return liste;
   }
+
+  /// Setzt die Mengen eines Entwurfs: [mengenKg] je Zeile, in der
+  /// Reihenfolge des Rechenkerns (wie [rechenRezeptur] sie liefert).
+  Future<void> mengenSetzen(String versionId, List<double> mengenKg) async {
+    await _nurEntwurf(versionId);
+    final v = (await version(versionId))!;
+    final zeilen = await _rechenZeilen(v, const <String>{});
+    if (zeilen.length != mengenKg.length) {
+      throw StateError(
+        'Die Zeilen des Stands haben sich inzwischen geändert — bitte noch '
+        'einmal öffnen.',
+      );
+    }
+    final jetzt = DateTime.now();
+    await _db.batch((b) {
+      for (var i = 0; i < zeilen.length; i++) {
+        b.update(
+          _db.entwicklungRezepturPositionen,
+          EntwicklungRezepturPositionenCompanion(
+            mengeKg: Value(mengenKg[i] < 0 ? 0 : mengenKg[i]),
+            updatedAt: Value(jetzt),
+          ),
+          where: (p) => p.id.equals(zeilen[i].id),
+        );
+      }
+    });
+  }
+
+  /// Legt einen neuen Stand als Kopie von [vorlageId] an und setzt darin
+  /// [mengenKg] (wie bei [mengenSetzen]). Alles oder nichts. Gibt die ID
+  /// des neuen Stands zurück.
+  Future<String> standMitMengen(
+    String rezepturId,
+    String vorlageId,
+    List<double> mengenKg, {
+    String? bezeichnung,
+  }) =>
+      _db.transaction(() async {
+        final id = await versionAnlegen(
+          rezepturId,
+          vorlageId: vorlageId,
+          bezeichnung: bezeichnung,
+        );
+        await mengenSetzen(id, mengenKg);
+        return id;
+      });
+
+  /// Legt eine Rezeptur mit einem ersten Entwurf aus [zeilen] an — etwa
+  /// aus der Rückrechnung. Gibt die ID der Rezeptur zurück.
+  Future<String> rezepturMitZeilen({
+    required String name,
+    required List<({String zutatId, double mengeKg})> zeilen,
+    String? beschreibung,
+    double verlustProzent = 0,
+    double fettVerlustProzent = 0,
+    String verlustArt = 'trocknung',
+  }) =>
+      _db.transaction(() async {
+        final id = await rezepturAnlegen(
+          name: name,
+          beschreibung: beschreibung,
+        );
+        final v = (await neuesteVersion(id))!;
+        await versionAendern(
+          v.id,
+          EntwicklungRezepturVersionenCompanion(
+            verlustProzent: Value(verlustProzent),
+            fettVerlustProzent: Value(fettVerlustProzent),
+            verlustArt: Value(verlustArt),
+          ),
+        );
+        for (final z in zeilen) {
+          await positionHinzufuegen(
+            v.id,
+            zutatId: z.zutatId,
+            mengeKg: z.mengeKg,
+          );
+        }
+        return id;
+      });
 
   /// Ein Zeichen bei jeder Änderung an Zutaten oder Rezepturen — Ergebnisse
   /// rechnen dann neu, auch wenn sich nur eine Unterrezeptur geändert hat.

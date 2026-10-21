@@ -17,6 +17,7 @@ import '../../core/services/stammdaten_import_service.dart';
 import '../../core/services/maschinen_katalog_excel_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../articles/article_detail_providers.dart';
 import '../articles/article_list_screen.dart';
 import '../entwicklung/entwicklung_zugang.dart'
@@ -91,7 +92,7 @@ class _DataManagementScreenState
     } catch (e) {
       if (mounted) {
         setState(() {
-          _statusMessage = 'Fehler beim Laden: $e';
+          _statusMessage = 'Fehler beim Laden: ${fehlerText(e)}';
           _statusFehler = true;
         });
       }
@@ -208,7 +209,11 @@ class _DataManagementScreenState
       Future.delayed(const Duration(seconds: 5), _ladeUebersicht);
     } catch (e) {
       if (mounted) setState(() => _importFortschritt = null);
-      _setBusy(false, msg: 'Import-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Import fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -230,7 +235,7 @@ class _DataManagementScreenState
     } catch (e) {
       _setBusy(
         false,
-        msg: 'Ordner konnte nicht gesetzt werden: $e',
+        msg: 'Ordner konnte nicht gesetzt werden: ${fehlerText(e)}',
         fehler: true,
       );
     }
@@ -258,7 +263,7 @@ class _DataManagementScreenState
     } catch (e) {
       _setBusy(
         false,
-        msg: 'Katalog-Export fehlgeschlagen: $e',
+        msg: 'Katalog-Export fehlgeschlagen: ${fehlerText(e)}',
         fehler: true,
       );
     }
@@ -319,7 +324,7 @@ class _DataManagementScreenState
     } catch (e) {
       _setBusy(
         false,
-        msg: 'Katalog-Import fehlgeschlagen: $e',
+        msg: 'Katalog-Import fehlgeschlagen: ${fehlerText(e)}',
         fehler: true,
       );
     }
@@ -364,7 +369,11 @@ class _DataManagementScreenState
         setState(() => _importWarnungen = result.warnungen);
       }
     } catch (e) {
-      _setBusy(false, msg: 'Export-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Export fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -385,7 +394,11 @@ class _DataManagementScreenState
         msg: 'Backup gespeichert: ${pfad.split(Platform.pathSeparator).last}',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Backup-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Backup fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -404,7 +417,11 @@ class _DataManagementScreenState
         msg: 'Backup gespeichert: ${pfad.split(Platform.pathSeparator).last}',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Backup-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Backup fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -441,7 +458,11 @@ class _DataManagementScreenState
         msg: 'Backup vom ${info.formattedTimestamp} wiederhergestellt',
       );
     } catch (e) {
-      _setBusy(false, msg: 'Restore-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Wiederherstellen fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -474,7 +495,11 @@ class _DataManagementScreenState
 
       _setBusy(false, msg: 'Backup wiederhergestellt');
     } catch (e) {
-      _setBusy(false, msg: 'Restore-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Wiederherstellen fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 
@@ -493,7 +518,11 @@ class _DataManagementScreenState
       await _ladeUebersicht();
       _setBusy(false, msg: 'Backup gelöscht');
     } catch (e) {
-      _setBusy(false, msg: 'Lösch-Fehler: $e', fehler: true);
+      _setBusy(
+        false,
+        msg: 'Löschen fehlgeschlagen: ${fehlerText(e)}',
+        fehler: true,
+      );
     }
   }
 

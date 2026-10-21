@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
+import '../../../core/utils/fehler_text.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../rechenkern/rechen_modell.dart';
@@ -197,7 +198,7 @@ class _ZutatDialogState extends ConsumerState<ZutatDialog> {
       if (!mounted) return;
       setState(() {
         _speichert = false;
-        _fehler = 'Speichern fehlgeschlagen: $e';
+        _fehler = 'Speichern fehlgeschlagen: ${fehlerText(e)}';
       });
     }
   }

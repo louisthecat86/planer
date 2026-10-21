@@ -14,6 +14,7 @@ import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_import_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/fehler_text.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
 import '../auftragsbestand/auftragsbestand_screen.dart'
     show auftragsbestandProvider;
@@ -146,7 +147,9 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     } on FormatException catch (e) {
       if (mounted) setState(() => _fehler = e.message);
     } catch (e) {
-      if (mounted) setState(() => _fehler = 'Einlesen fehlgeschlagen: $e');
+      if (mounted) {
+        setState(() => _fehler = 'Einlesen fehlgeschlagen: ${fehlerText(e)}');
+      }
     } finally {
       if (mounted) setState(() => _fortschritt = null);
     }
@@ -260,7 +263,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
         SnackBar(
           duration: const Duration(seconds: 8),
           content: Text(
-            'Übernehmen fehlgeschlagen — es wurde nichts gespeichert. ($e)',
+            'Übernehmen fehlgeschlagen — es wurde nichts gespeichert. '
+            '(${fehlerText(e)})',
           ),
         ),
       );

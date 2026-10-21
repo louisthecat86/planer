@@ -89,7 +89,7 @@ final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
 });
 
 // ---------------------------------------------------------------------------
-// Produkt planen: Schritt-Plan berechnen + Tasks erzeugen
+// Artikel planen: Schritt-Plan berechnen + Aufträge erzeugen
 // ---------------------------------------------------------------------------
 
 /// dbValue der Bratstraße — für diese Abteilung kommt die realistische Dauer

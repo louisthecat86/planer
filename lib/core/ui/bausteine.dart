@@ -294,13 +294,18 @@ class StatusMarke extends StatelessWidget {
           Icon(symbol, size: 13, color: vorne),
           const SizedBox(width: 4),
         ],
-        Text(
-          text,
-          maxLines: 1,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: FontWeight.w600,
-            color: vorne,
+        // Flexible: In einer schmalen Spalte wird der Text mit „…"
+        // gekürzt, statt über den Rand zu laufen.
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: vorne,
+            ),
           ),
         ),
       ],

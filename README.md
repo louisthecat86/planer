@@ -1,147 +1,144 @@
 # Produktions Planer
 
-Offline-first **Produktionsplaner für den Fleischbereich**. Läuft als Desktop-App
-(Windows/Linux/macOS) und als Android-APK (Tablet) aus einer einzigen
-Flutter-Codebase.
+Desktop-App für die **Produktionsplanung in der Fleischverarbeitung** —
+für Windows, Linux und macOS aus einer Flutter-Codebasis. Alles liegt in
+einer lokalen SQLite-Datenbank: kein Server, kein Konto, keine Cloud.
 
-Das Ziel: Die Abteilungen sollen jeden Arbeitstag möglichst gut ausgelastet
-sein (Richtwert 8 h pro Abteilung). Aus den hinterlegten Produktions-Schritten
-und ihren Zeiten erzeugt die App einen übersichtlichen, per Drag & Drop
-bedienbaren Wochen- und Tagesplan.
-
-## Das Konzept in einer Schleife
+Das Ziel: Jede Abteilung ist an jedem Arbeitstag gut ausgelastet, und jeder
+Auftrag hat eine realistische Dauer. Die Dauer kommt aus hinterlegten
+Leistungsdaten oder aus den erfassten Produktionen — mit jeder Erfassung wird
+die Planung genauer. Das ist Statistik, keine KI: Mittelwerte, die sich
+nachrechnen lassen.
 
 ```
-Excel-Vorlage (v3)  ──Import──▶  Stammdaten (Produkte, Schritte, Anlagen, Parameter)
-                                        │
-                                  Schritte werden zu Tasks
-                                        ▼
-                          Planungsboard (Abteilungen × Tage, je 8 h, Drag & Drop)
-                                        │
-                                   Ausführung
-                                        ▼
-                          Ist-Erfassung ──▶ Mittelwerte neu ──┐
-                                        │                      │
-                                   Lernschleife ◀──────────────┘
-                                        ▼
-                          Ausgabe: Excel-Export · Backup · Drucken
+Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
+ ├─ Auftragsbestand ──▶ Bedarf         Anlagen, Parameter, Leistungsdaten)
+ └─ Artikelübersicht ─▶ Artikel                     │
+                           │                        │
+                           ▼                        ▼
+                  Planungsvorschlag ──▶ Planungsboard (Abteilungen × Tage)
+                                                    │
+                                                    ▼
+                                      Produktionserfassung (Ist)
+                                                    │
+                     Wochen-Historie · Statistik ◀──┴──▶ genauere Dauer
 ```
 
-Die Zeit-Schätzungen sind **Statistik, keine KI**: `basis_*`-Werte sind
-gleitende Mittelwerte aus echten `production_runs`. Mit jedem erfassten
-Auftrag wird die Planung genauer.
+## Bereiche
 
-## Bedien-Bereiche (Screens)
+| Gruppe      | Bereich               | Wofür                                                                                       |
+| ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
+|             | Übersicht             | Der heutige Tag: Aufträge und Auslastung aller Abteilungen, „Artikel planen"                 |
+| Planen      | Bedarf                | Offene Bedarfe; geplant ist, was an verknüpften Aufträgen im Board steht                     |
+|             | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
+|             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise ins Board           |
+|             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
+| Auswerten   | Produktionserfassung  | Ist-Mengen und -Zeiten je Produktion: Verlust, kg/h; die Kette im Board wird erledigt        |
+|             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
+|             | Statistik             | Engpässe, Zeitverteilung, Planerfüllung, Ausbeute, Leistung, Lücken in den Stammdaten        |
+| Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
+|             | Navision-Artikel      | Artikelübersicht aus Navision abgleichen: neue Artikel und Allergene übernehmen              |
+|             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
+| Entwickeln  | Produktentwicklung    | Projekte, Rezepturen und Zutaten — hinter einem eigenen Passwort (siehe unten)               |
+|             | Einstellungen         | Kapazität je Abteilung, Darstellung, Stammdaten-Mappe, Backups, Zurücksetzen                 |
 
-| Bereich            | Zweck                                                            |
-| ------------------ | ---------------------------------------------------------------- |
-| Heute              | Tagesübersicht, Auslastung aller Abteilungen auf einen Blick     |
-| Planungsboard      | Herzstück — Wochenboard (Abteilungen × Tage) und Tagesübersicht  |
-| Artikel            | Produkte und Prozessschritte verwalten                           |
-| Daten              | Excel-Import/-Export, Backup/Restore, Speicherort                |
-| Einstellungen      | Kapazität pro Abteilung, Personalplanung                         |
+Im Board zeigt jede Abteilung je Tag einen Balken bis zu ihrer Kapazität
+(grau = frei, grün = gut gefüllt, rot = überbucht). Erledigtes wird grün:
+Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
+ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
+Aufgaben" für alles, was nicht aus einem Artikel kommt.
 
-Das Wochenboard zeigt pro Abteilung und Tag einen Kapazitätsbalken bis 8 h
-(grau = Platz frei, grün = gut gefüllt, rot = überbucht). Die Tagesübersicht
-stellt jede Aufgabe als Zeitbalken dar — je länger die Dauer, desto höher die
-Karte, der leere Platz unten zeigt die freie Zeit. Beide Ansichten lassen sich
-als A4-PDF drucken (Artikel, Menge, Dauer je Abteilung).
+Die acht Abteilungen sind ein Dart-Enum in
+`lib/core/constants/abteilungen.dart`: Zerlegung, Wurstküche,
+Kutterabteilung, Bratstraße, Schneideabteilung, Verpackung, Verpackung Tef1,
+Verpackung Tef2.
 
-Erledigtes ist grün: Karten lassen sich abhaken, und sobald eine Produktion
-erfasst ist, wird ihre ganze Kette automatisch grün (zugeordnet über Artikel
-und Starttag der Kette, wie in der Produktionserfassung). Unter ihren Anlagen
-hat jede Abteilung eine Zeile „Sonstige Aufgaben" für alles, was nicht aus der
-Planung eines Artikels kommt — mit + je Tag, abhakbar und per Ziehen auf einen
-anderen Tag verschiebbar.
+## Produktentwicklung
 
-Im Artikel steht der Prozess als Kette: die Stationen (Abteilungen)
-untereinander, ihre Anlagen von links nach rechts. Anlagen und ganze Stationen
-lassen sich ziehen — auch aus dem Katalog an jede Stelle der Kette. Eine Anlage
-kann bei einem Artikel für eine andere Abteilung arbeiten (etwa ein Gerät der
-Zerlegung an der Bratstraße); im Katalog bleibt sie in ihrer Abteilung. Jede
-Station zeigt, womit die Planung ihre Dauer rechnet: hinterlegte
-Leistungsdaten, der Ø der erfassten Produktionen oder „Leistung fehlt".
+Ein eigener Bereich für die Entwicklung neuer Produkte. Er ist mit einem
+eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
+(`entwicklung_*`), Anhänge und Vorlagen verschlüsselt (ChaCha20-Poly1305).
 
-## Excel-Vorlage (v3) — das Datenfundament
+- **Projekte** mit Stammdaten, Zielen (Fett, Eiweiß, aw), Checklisten,
+  Verlauf mit Kommentaren, Prozess mit Versionen, HACCP-Gefahrenanalyse mit
+  Codex-Entscheidungsbaum, Fließdiagramm, Sensorik und Dateien.
+- **Rezepturen** in Ständen (Entwurf oder abgeschlossen): Zutatenliste
+  nach LMIV mit hervorgehobenen Allergenen, Fleischanteil (QUID), Verlust,
+  Nährwerte je 100 g gerundet, Vergleich zweier Stände.
+- **Zutaten-Katalog** mit Nährwerten, Allergenen, Tierart, Bindegewebe und
+  Unterzutaten.
+- **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil auf
+  ein Ziel einstellen, Entwicklung in Zahlen.
+- **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
+  Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
+- **Spezifikation** (Excel) aus einer eigenen Vorlage mit Platzhaltern wie
+  `{{zutaten}}`, auf Deutsch oder Englisch (Texte auf Wunsch über DeepL), und
+  ein **Projektbericht** als PDF.
+- Übernahme aus der Development-Suite (ZIP oder JSON).
 
-Die Stammdaten werden in der **v3-Vorlage** gesammelt und importiert. Aufbau:
+Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
+in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine
+Firmenangaben.
 
-- `Übersicht` — Artikelnummer + Bezeichnung aller Produkte
-- `Anlagen-Katalog` — Referenz für die Anlagen-Dropdowns (Name, Abteilung, Hilfetext)
-- 12 Produktgruppen-Blaupausen (Brühwurst, Rohwurst, …) als Vorlagen
-- Ein Sheet pro Artikel (benannt nach Artikelnummer). Spalte A = Zeilen-Labels,
-  Spalten B..K = bis zu **10 Prozessschritte**. Pro Schritt: Abteilung,
-  Prozessschritt, Anlage, Personen, Menge, Zeit, danach anlagenspezifische
-  Parameter-Blöcke sowie ein Block `ZUSÄTZLICHE PARAMETER` und `HISTORISCHE DATEN`.
+## Daten und Sicherung
 
-Beim Import wird die Original-Datei **byte-genau in `app_settings` gespeichert**.
-Der Export schreibt die aktuellen DB-Werte zurück in genau diese Datei, sodass
-Formatierung, Farben, Dropdowns und der Anlagen-Katalog vollständig erhalten
-bleiben (ZIP/XML-Manipulation, kein Neu-Erzeugen). **Diese Vorlage ist die
-verbindliche Basis und darf nicht durch ein neu generiertes Format ersetzt werden.**
+- **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 32.
+- **Backups** (`.planerbackup`) liegen im Ordner `backups` unter den
+  Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
+  App automatisch (höchstens einmal je Minute, die letzten 30 bleiben) und beim
+  Beenden. Vor jedem Wiederherstellen schreibt sie den aktuellen Stand weg.
+  Ältere Backup-Versionen (ab 1.0) lassen sich weiter einspielen.
+- **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
+  lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
+  Der DeepL-Schlüssel bleibt auf dem Rechner und geht nie ins Backup.
+- **Stammdaten-Mappe** (Excel): wird bei jedem Export frisch aus der
+  Datenbank gebaut — Blätter „Anlagen", „Steckbriefe" und je Artikel eines.
+  In Excel bearbeitet, lässt sie sich wieder einlesen. Den Maschinen-Katalog
+  gibt es zusätzlich als eigene Mappe.
 
-## Datenmodell
+### Tabellen
 
-Lokale SQLite-Datenbank via [drift](https://drift.simonbinder.eu/), aktuell
-**Schema v5**. Kern-Tabellen:
+| Bereich            | Tabellen                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------ |
+| Stammdaten         | `products`, `product_steps`, `product_step_parameters`, `machines`, `machine_parameter_defs`, `parameter_grenzen`, `zusatzzeiten`, `raw_materials`, `product_raw_materials`, `raw_material_batches` |
+| Planung            | `production_tasks`, `task_dependencies`, `demands`, `tagesaufgaben`, `auftragsbestand_artikel`, `auftragsbestand_positionen` (dazu je `…_vorher` für den Vergleich) |
+| Ist und Archiv     | `production_runs`, `production_history`, `week_snapshots`                                                    |
+| Sonstiges          | `app_settings`, `order_list_items`                                                                           |
+| Produktentwicklung | `entwicklung_zutaten`, `entwicklung_rezepturen`, `entwicklung_rezeptur_versionen`, `entwicklung_rezeptur_positionen`, `entwicklung_projekte`, `entwicklung_projekt_eintraege`, `entwicklung_dateien`, `entwicklung_datei_inhalte`, `entwicklung_fliessdiagramme` |
 
-- `products` — Produkt-Stammdaten inkl. gruppenspezifischer Felder
-- `product_steps` — Prozessschritte (Abteilung, Reihenfolge 1..10, Anlage,
-  Zeit/Personen, lernende `basis_*`-Werte)
-- `product_step_parameters` — flexible Parameter pro Schritt (Standard + Custom)
-- `machines` — Anlagen-Katalog
-- `raw_materials`, `product_raw_materials`, `raw_material_batches` — Rohwaren + HACCP-Chargen
-- `production_tasks` — geplante Aufträge auf dem Board
-- `production_runs` — Ist-Erfassung (Futter für die Lernlogik)
-- `task_dependencies` — Abhängigkeiten zwischen Tasks
-- `app_settings` — u. a. die zuletzt importierte Excel-Datei
-- `order_list_items` — Wochen-Bestellliste (MRP, spätere Phase)
-
-Die 7 Abteilungen sind ein Dart-Enum (`lib/core/constants/abteilungen.dart`):
-Zerlegung, Wurstküche, Kutterabteilung, Bratstraße, Schneideabteilung,
-Verpackung, Verpackung Tef1.
-
-## Roadmap
-
-| Stufe | Inhalt                                                              | Status     |
-| ----- | ------------------------------------------------------------------- | ---------- |
-| 0     | Repo aufräumen (Altlasten, Dubletten), README ehrlich               | in Arbeit  |
-| 1     | Stammdaten fertig — Schritte verwalten (hinzufügen/löschen/sortieren) | offen      |
-| 2     | Boards bauen — Wochenboard + Tagesübersicht + Drucken               | offen      |
-| 3     | Lernschleife schließen — Ist-Erfassung verdrahten                   | offen      |
-
-## Architektur-Prinzipien
-
-- **Offline-first**: ohne Internet voll funktionsfähig; Backup ist das zentrale Sicherungsmodell.
-- **UUIDs statt Auto-Increment**: vermeidet Kollisionen bei späterem Sync/Import.
-- **Soft-Delete überall**: `deleted_at IS NULL`-Filter in jeder Query.
-- **`updated_at` diszipliniert** in der Repository-Schicht manuell setzen (kein DB-Trigger, bleibt portabel/testbar).
-- **Format-bewahrender Excel-Export**: in die importierte Originaldatei zurückschreiben, nicht neu erzeugen.
-- **Lernlogik = Statistik**: Mittelwerte/Standardabweichung aus `production_runs`, nachvollziehbar.
-- **drift + Riverpod**: lokale DB + State-Management.
-
-## Entwicklungs-Setup
+## Entwickeln
 
 ```bash
 flutter pub get
 
-# Code-Generierung (drift, riverpod) — PFLICHT vor dem ersten Build
+# drift-Code erzeugen — vor dem ersten Build und nach jeder Änderung
+# an den Tabellen unter lib/core/database/tables/
 dart run build_runner build --delete-conflicting-outputs
 
-# Starten
-flutter run -d linux        # Desktop Linux
-flutter run -d windows      # Desktop Windows
-flutter run -d <device-id>  # Android Tablet
+flutter run -d windows      # oder: -d linux, -d macos
 
-# Qualität
-flutter analyze             # muss sauber durchlaufen (strikte Lints)
+flutter analyze             # muss ohne Befund durchlaufen
 flutter test
 ```
 
-Nach Änderungen an den Tabellen-Dateien unter `lib/core/database/tables/`
-**immer** erneut `dart run build_runner build --delete-conflicting-outputs`
-ausführen, sonst ist `database.g.dart` veraltet.
+`lib/core` enthält Datenbank, Dienste, Konstanten und gemeinsame Bausteine,
+`lib/features/<bereich>` je Bereich die Oberfläche. Die Lints sind streng
+(u. a. `require_trailing_commas`, `prefer_const_constructors`,
+`strict-casts`).
 
-Die CI (`.github/workflows/`) führt Analyse, Codegen, Tests sowie Android- und
-Desktop-Builds aus. Lints sind streng (u. a. `require_trailing_commas`,
-`prefer_const_constructors`).
+Die CI (`.github/workflows/desktop_build.yml`) läuft bei jedem Push und Pull
+Request auf `main`: Codegen, Analyse und Tests mit Flutter 3.41.6, danach
+Release-Builds für Linux, Windows und macOS als herunterladbare ZIPs.
+
+## Grundsätze
+
+- **Offline:** Die App funktioniert ohne Netz; Backups sind das
+  Sicherungsmodell.
+- **UUIDs statt fortlaufender Nummern**, **Soft-Delete** (`deleted_at`) und
+  `updated_at`, gesetzt in der Repository-Schicht.
+- **Nachvollziehbare Zahlen:** Dauer, Verlust und Leistung sind Mittelwerte
+  aus erfassten Produktionen oder hinterlegte Werte — nie geschätzt.
+- **Öffentliches Repository:** keine echten Kunden-, Auftrags- oder
+  Rezepturdaten und keine Firmenvorlagen. Tests arbeiten ausschließlich mit
+  erfundenen Daten.

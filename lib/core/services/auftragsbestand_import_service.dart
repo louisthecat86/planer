@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:drift/drift.dart';
 
 import '../database/database.dart';
+import '../utils/fehler_text.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Gelesener Bericht — reine Daten, ohne Datenbankbezug
@@ -314,7 +315,9 @@ class AuftragsbestandImportService {
     try {
       archiv = ZipDecoder().decodeBytes(bytes);
     } catch (e) {
-      throw FormatException('Die Datei ließ sich nicht öffnen: $e');
+      throw FormatException(
+        'Die Datei ließ sich nicht öffnen: ${fehlerText(e)}',
+      );
     }
 
     String? inhalt(String name) {

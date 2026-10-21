@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/entwicklung.dart';
 import 'package:produktion_planer/core/database/database.dart';
@@ -23,6 +24,10 @@ import 'helpers/test_db.dart';
 /// `sicherungAnlegen: false` ist in den Tests nötig, weil die
 /// Sicherungskopie in den Backup-Ordner schreiben würde.
 void main() {
+  // Zwei Datenbanken zugleich sind hier Absicht (der „andere Rechner") —
+  // jede mit eigenem Speicher, also ohne die Gefahr, vor der drift warnt.
+  driftRuntimeOptions.dontWarnAboutMultipleDatabases = true;
+
   late AppDatabase db;
   late Directory tempDir;
 
@@ -433,6 +438,25 @@ void main() {
         nachher[kEntwicklungDatenschluessel],
         vorher[kEntwicklungDatenschluessel],
       );
+    });
+
+    test('der DeepL-Schlüssel bleibt auf diesem Rechner', () async {
+      await zugangFuer(db).festlegen('geheim123');
+      await zutat(db, 'z1', 'Geheimgewürz Nr. 7');
+      await setze(kEntwicklungDeeplSchluessel, 'schluessel-alt:fx');
+      final pfad = await sichern(db);
+      // Im Backup steht er nicht — weder offen noch im Entwicklungsteil.
+      expect(await File(pfad).readAsString(), isNot(contains('schluessel-alt')));
+
+      await setze(kEntwicklungDeeplSchluessel, 'schluessel-neu:fx');
+      await BackupService.importBackup(pfad, db, sicherungAnlegen: false);
+
+      // Das Einspielen ersetzt die Einstellungen der Entwicklung, lässt
+      // aber den Schlüssel dieses Rechners stehen.
+      expect(await zutaten(db), ['Geheimgewürz Nr. 7']);
+      final werte = await einstellungen(db);
+      expect(werte[kEntwicklungDeeplSchluessel], 'schluessel-neu:fx');
+      expect(await zugangFuer(db).pruefen('geheim123'), isTrue);
     });
 
     test('ein Teil im ersten Format zählt wie keiner', () async {

@@ -82,6 +82,36 @@ abstract final class Format {
   static String prozent(double anteil, {int nachkomma = 1}) =>
       '${zahl(anteil * 100, nachkomma: nachkomma)} %';
 
+  /// Eine Zahl für ein Eingabefeld: mit Komma, ohne Tausenderpunkt und
+  /// ohne Nullen am Ende — „1250,5", „7,5", „8". Leer für unendliche
+  /// Werte.
+  static String eingabe(num wert, {int nachkomma = 2}) {
+    if (!wert.isFinite) return '';
+    var text = wert.toStringAsFixed(nachkomma);
+    if (text.contains('.')) {
+      text = text.replaceFirst(RegExp(r'\.?0+$'), '');
+    }
+    if (text == '-0') text = '0';
+    return text.replaceAll('.', ',');
+  }
+
+  /// Liest eine Zahl aus einem Eingabefeld — mit Komma oder Punkt, auch
+  /// mit Tausenderpunkten („12.500" ist 12500, „1.250,5" ist 1250,5).
+  /// null bei leerem oder unlesbarem Text.
+  static double? lies(String text) {
+    var t = text.trim().replaceAll(' ', '').replaceAll('\u00a0', '');
+    if (t.isEmpty) return null;
+    if (t.contains(',')) {
+      // Komma ist das Dezimalzeichen, Punkte trennen Tausender.
+      t = t.replaceAll('.', '').replaceAll(',', '.');
+    } else if (RegExp(r'^-?[1-9]\d{0,2}(\.\d{3})+$').hasMatch(t)) {
+      // „12.500" — deutsch geschriebene Tausender, kein Dezimalpunkt.
+      t = t.replaceAll('.', '');
+    }
+    final wert = double.tryParse(t);
+    return wert == null || !wert.isFinite ? null : wert;
+  }
+
   // ── Daten ───────────────────────────────────────────────────────────
 
   /// „08.10.2026"
