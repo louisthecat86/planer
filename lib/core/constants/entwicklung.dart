@@ -27,10 +27,16 @@ const String kEntwicklungAusstehend = '${kEntwicklungPraefix}ausstehend';
 /// Der DeepL-Schlüssel für englische Spezifikationen.
 const String kEntwicklungDeeplSchluessel = '${kEntwicklungPraefix}deepl';
 
+/// Das Kürzel dessen, der an diesem Rechner Spezifikationen erstellt.
+const String kEntwicklungKuerzel = '${kEntwicklungPraefix}kuerzel';
+
 /// Einstellungen der Produktentwicklung, die nur diesem Rechner gehören:
 /// Kein Backup nimmt sie mit, und ein eingespieltes Backup lässt sie
 /// stehen. Nur „Zurücksetzen" der Produktentwicklung löscht sie.
-const Set<String> kEntwicklungNurLokal = {kEntwicklungDeeplSchluessel};
+const Set<String> kEntwicklungNurLokal = {
+  kEntwicklungDeeplSchluessel,
+  kEntwicklungKuerzel,
+};
 
 /// Ob [schluessel] eine Einstellung der Produktentwicklung ist.
 bool istEntwicklungsSchluessel(String schluessel) =>

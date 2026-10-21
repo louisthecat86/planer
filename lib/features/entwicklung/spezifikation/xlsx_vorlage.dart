@@ -1,17 +1,19 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
-
-import '../../../core/utils/fehler_text.dart';
+import 'xlsx_blatt.dart';
 
 // Platzhalter in einer Excel-Mappe ersetzen, ohne die Mappe neu zu bauen.
 //
 // Eine .xlsx ist ein ZIP mit XML. Texte stehen meist in
-// xl/sharedStrings.xml, manchmal direkt in der Zelle („inlineStr"). Nur
-// diese Texte werden geändert — Formatierung, verbundene Zellen, Bilder
-// und Formeln der Vorlage bleiben unberührt.
+// xl/sharedStrings.xml, manchmal direkt in der Zelle („inlineStr"), dazu
+// in Kopf- und Fußzeilen. Nur diese Texte werden geändert — Formatierung,
+// verbundene Zellen, Bilder und Formeln der Vorlage bleiben unberührt.
 //
+// Steht ein Platzhalter allein in einer Zelle unter einem Kontroll-
+// kästchen, setzt sein Wert das Häkchen: „X" hakt an, leer nimmt den Haken
+// weg; die Zelle selbst bleibt dann leer.
+//
+// Ein Platzhalter in einem formatierten Textstück behält dessen Format.
 // Hat Excel einen Platzhalter beim Bearbeiten in mehrere Formatierungs-
 // stücke zerlegt („{{zu" fett, „taten}}" normal), wird der ganze Text der
 // Zelle zusammengesetzt und ohne diese Stücke neu geschrieben.
@@ -20,12 +22,16 @@ import '../../../core/utils/fehler_text.dart';
 /// innen erlaubt.
 final RegExp kPlatzhalterMuster = RegExp(r'\{\{\s*([A-Za-z0-9_.]+)\s*\}\}');
 
+/// Ein Platzhalter allein in einer Zelle.
+final RegExp _allein = RegExp(r'^\s*\{\{\s*([A-Za-z0-9_.]+)\s*\}\}\s*$');
+
 /// Das Ergebnis: die neue Mappe und was dabei auffiel.
 class VorlageErgebnis {
   const VorlageErgebnis({
     required this.bytes,
     required this.ersetzt,
     required this.unbekannt,
+    this.kaestchen = 0,
   });
 
   final Uint8List bytes;
@@ -35,46 +41,35 @@ class VorlageErgebnis {
 
   /// Platzhalter in der Vorlage, die die App nicht kennt — wohl Tippfehler.
   final Set<String> unbekannt;
+
+  /// Wie viele Kontrollkästchen angehakt wurden.
+  final int kaestchen;
 }
 
 final RegExp _si = RegExp(r'<si>(.*?)</si>', dotAll: true);
 final RegExp _is = RegExp(r'<is>(.*?)</is>', dotAll: true);
-final RegExp _t = RegExp(r'<t(?:\s[^>]*)?>(.*?)</t>|<t(?:\s[^>]*)?/>', dotAll: true);
 
-String _unescape(String s) => s
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'")
-    .replaceAllMapped(
-      RegExp('&#(x?)([0-9A-Fa-f]+);'),
-      (m) => String.fromCharCode(
-        int.parse(m[2]!, radix: m[1]!.isEmpty ? 10 : 16),
-      ),
-    )
-    .replaceAll('&amp;', '&');
-
-String _escape(String s) => s
-    .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
-
-/// Der Text eines <si>- oder <is>-Inhalts: alle <t> hintereinander.
-String _textAus(String inhalt) =>
-    [for (final m in _t.allMatches(inhalt)) _unescape(m[1] ?? '')].join();
-
-/// Die Platzhalter in einer Vorlage.
+/// Die Platzhalter in einer Vorlage — in Zellen, Kopf- und Fußzeilen.
+/// Wirft [FormatException], wenn [xlsx] keine Excel-Mappe ist.
 Set<String> platzhalterIn(Uint8List xlsx) {
+  final mappe = XlsxMappe.lesen(xlsx);
   final gefunden = <String>{};
-  for (final datei in _textDateien(_oeffne(xlsx))) {
-    final xml = utf8.decode(datei.inhalt, allowMalformed: true);
-    for (final muster in [_si, _is]) {
-      for (final m in muster.allMatches(xml)) {
-        for (final p in kPlatzhalterMuster.allMatches(_textAus(m[1]!))) {
-          gefunden.add(p[1]!);
-        }
-      }
+  void sammle(String text) {
+    for (final p in kPlatzhalterMuster.allMatches(text)) {
+      gefunden.add(p[1]!);
+    }
+  }
+
+  for (final roh in mappe.geteilteRoh) {
+    sammle(textAusBlock(roh));
+  }
+  for (final pfad in mappe.blattPfade) {
+    final xml = mappe.text(pfad) ?? '';
+    for (final m in _is.allMatches(xml)) {
+      sammle(textAusBlock(m[1]!));
+    }
+    for (final m in kKopfFuss.allMatches(xml)) {
+      sammle(xmlUnescape(m[2]!));
     }
   }
   return gefunden;
@@ -84,80 +79,124 @@ Set<String> platzhalterIn(Uint8List xlsx) {
 /// [werte]. Unbekannte bleiben stehen und werden gemeldet. Wirft
 /// [FormatException], wenn [xlsx] keine Excel-Mappe ist.
 VorlageErgebnis vorlageFuellen(Uint8List xlsx, Map<String, String> werte) {
-  final archiv = _oeffne(xlsx);
+  final mappe = XlsxMappe.lesen(xlsx);
   final ersetzt = <String>{};
   final unbekannt = <String>{};
 
-  String ersetze(String text) => text.replaceAllMapped(kPlatzhalterMuster, (m) {
-        final name = m[1]!;
-        final wert = werte[name];
-        if (wert == null) {
-          unbekannt.add(name);
-          return m[0]!;
-        }
-        ersetzt.add(name);
-        return wert;
-      });
-
-  String block(String tag, Match m) {
-    final inhalt = m[1]!;
-    final text = _textAus(inhalt);
-    if (!kPlatzhalterMuster.hasMatch(text)) return m[0]!;
-    return '<$tag><t xml:space="preserve">${_escape(ersetze(text))}</t></$tag>';
-  }
-
-  final neu = Archive();
-  final aendern = {for (final d in _textDateien(archiv)) d.name};
-  for (final datei in archiv.files) {
-    if (!datei.isFile) continue;
-    final roh = datei.content;
-    if (roh is! List<int>) continue;
-    var inhalt = Uint8List.fromList(roh);
-    if (aendern.contains(datei.name)) {
-      var xml = utf8.decode(inhalt, allowMalformed: true);
-      xml = xml.replaceAllMapped(_si, (m) => block('si', m));
-      xml = xml.replaceAllMapped(_is, (m) => block('is', m));
-      inhalt = Uint8List.fromList(utf8.encode(xml));
+  String? wertVon(String name) {
+    final wert = werte[name];
+    if (wert == null) {
+      unbekannt.add(name);
+    } else {
+      ersetzt.add(name);
     }
-    neu.addFile(ArchiveFile(datei.name, inhalt.length, inhalt));
+    return wert;
   }
-  final gepackt = ZipEncoder().encode(neu);
-  if (gepackt == null) {
-    throw const FormatException('Die Mappe ließ sich nicht packen.');
+
+  String ersetze(String text) =>
+      text.replaceAllMapped(kPlatzhalterMuster, (m) => wertVon(m[1]!) ?? m[0]!);
+
+  String block(String tag, String inhalt, String ganz) {
+    final text = textAusBlock(inhalt);
+    if (!kPlatzhalterMuster.hasMatch(text)) return ganz;
+    // Jeder Platzhalter liegt ganz in einem Textstück: dort ersetzen, das
+    // Format der Stücke bleibt.
+    final stuecke = kTextElement.allMatches(inhalt).toList();
+    final inStuecken = stuecke.fold<int>(
+      0,
+      (n, s) =>
+          n + kPlatzhalterMuster.allMatches(xmlUnescape(s[1] ?? '')).length,
+    );
+    if (inStuecken == kPlatzhalterMuster.allMatches(text).length) {
+      final neu = inhalt.replaceAllMapped(kTextElement, (s) {
+        final alt = xmlUnescape(s[1] ?? '');
+        if (!kPlatzhalterMuster.hasMatch(alt)) return s[0]!;
+        return '<t xml:space="preserve">${xmlEscape(ersetze(alt))}</t>';
+      });
+      return '<$tag>$neu</$tag>';
+    }
+    return '<$tag><t xml:space="preserve">${xmlEscape(ersetze(text))}</t>'
+        '</$tag>';
   }
+
+  var kaestchen = 0;
+  for (final pfad in mappe.blattPfade) {
+    final blatt = XlsxBlatt(mappe, pfad);
+    var xml = mappe.text(pfad) ?? '';
+
+    // Platzhalter unter Kontrollkästchen setzen den Haken.
+    for (final z in blatt.zellen) {
+      final m = _allein.firstMatch(z.text);
+      if (m == null) continue;
+      final unter = blatt.kaestchenIn(blatt.bereichVon(z.zeile, z.spalte));
+      if (unter.isEmpty) continue;
+      final wert = wertVon(m[1]!);
+      if (wert == null) continue;
+      final an = wert.trim().isNotEmpty;
+      for (final k in unter) {
+        final vml = mappe.text(k.vmlPfad);
+        if (vml != null) {
+          mappe.schreibe(k.vmlPfad, vmlKaestchenSetzen(vml, k.nummer, an: an));
+        }
+        final propPfad = k.ctrlPropPfad;
+        final prop = propPfad == null ? null : mappe.text(propPfad);
+        if (propPfad != null && prop != null) {
+          mappe.schreibe(propPfad, ctrlPropSetzen(prop, an: an));
+        }
+        if (an) kaestchen++;
+      }
+      xml = zelleLeeren(xml, z.ref);
+    }
+
+    xml = xml.replaceAllMapped(_is, (m) => block('is', m[1]!, m[0]!));
+    xml = xml.replaceAllMapped(kKopfFuss, (m) {
+      final alt = xmlUnescape(m[2]!);
+      if (!kPlatzhalterMuster.hasMatch(alt)) return m[0]!;
+      return '<${m[1]}>${xmlEscape(kopfFussErsetzen(alt, wertVon))}'
+          '</${m[1]}>';
+    });
+    mappe.schreibe(pfad, xml);
+  }
+
+  final geteilt = mappe.text('xl/sharedStrings.xml');
+  if (geteilt != null) {
+    mappe.schreibe(
+      'xl/sharedStrings.xml',
+      geteilt.replaceAllMapped(_si, (m) => block('si', m[1]!, m[0]!)),
+    );
+  }
+
   return VorlageErgebnis(
-    bytes: Uint8List.fromList(gepackt),
+    bytes: mappe.packen(),
     ersetzt: ersetzt,
     unbekannt: unbekannt,
+    kaestchen: kaestchen,
   );
 }
 
-Archive _oeffne(Uint8List xlsx) {
-  final istZip = xlsx.length > 3 && xlsx[0] == 0x50 && xlsx[1] == 0x4b;
-  if (!istZip) {
-    throw const FormatException('Die Vorlage ist keine Excel-Mappe (.xlsx).');
+/// Ersetzt die Platzhalter in einer Kopf- oder Fußzeile. Dort leitet „&"
+/// einen Steuercode ein („&P" Seite, „&8" Schriftgröße): Ein „&" im Wert
+/// wird verdoppelt, und beginnt ein Wert mit einer Ziffer direkt hinter
+/// einer Schriftgröße, kommt ein Leerzeichen dazwischen.
+String kopfFussErsetzen(String text, String? Function(String name) wert) {
+  final aus = StringBuffer();
+  var bis = 0;
+  for (final m in kPlatzhalterMuster.allMatches(text)) {
+    aus.write(text.substring(bis, m.start));
+    bis = m.end;
+    final w = wert(m[1]!);
+    if (w == null) {
+      aus.write(m[0]);
+      continue;
+    }
+    var neu = w.replaceAll('&', '&&');
+    final davor = text.substring(0, m.start);
+    if (RegExp(r'(^|[^&])&\d+$').hasMatch(davor) &&
+        RegExp(r'^\d').hasMatch(neu)) {
+      neu = ' $neu';
+    }
+    aus.write(neu);
   }
-  final Archive archiv;
-  try {
-    archiv = ZipDecoder().decodeBytes(xlsx);
-  } catch (e) {
-    throw FormatException(
-      'Die Vorlage ließ sich nicht öffnen: ${fehlerText(e)}',
-    );
-  }
-  if (archiv.findFile('xl/workbook.xml') == null) {
-    throw const FormatException('Die Vorlage ist keine Excel-Mappe (.xlsx).');
-  }
-  return archiv;
+  aus.write(text.substring(bis));
+  return aus.toString();
 }
-
-/// Die XML-Dateien, in denen Texte stehen können.
-List<({String name, List<int> inhalt})> _textDateien(Archive archiv) => [
-      for (final d in archiv.files)
-        if (d.isFile &&
-            (d.name == 'xl/sharedStrings.xml' ||
-                (d.name.startsWith('xl/worksheets/') &&
-                    d.name.endsWith('.xml'))))
-          if (d.content case final List<int> inhalt)
-            (name: d.name, inhalt: inhalt),
-    ];

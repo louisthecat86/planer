@@ -13,12 +13,18 @@ import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import '../rechenkern/rechenkern.dart';
 import 'deepl.dart';
+import 'spez_angaben.dart';
 import 'spezifikation_werte.dart';
+import 'vorlage_einrichten.dart';
 import 'xlsx_vorlage.dart';
 
 // Spezifikationen aus der eigenen Excel-Vorlage erstellen. Die Vorlagen
 // (je eine deutsche und eine englische) liegen verschlüsselt bei den
 // Entwicklungsdateien und wandern so ins Backup — im Code steht keine.
+//
+// Eine Vorlage ohne Platzhalter — das Formblatt, wie es in der Firma
+// liegt — richtet die App beim Speichern selbst ein
+// (vorlage_einrichten.dart).
 
 /// Die IDs der Vorlagen unter den Entwicklungsdateien.
 String spezVorlageId(SpezSprache s) => 'vorlage.spezifikation.${s.name}';
@@ -32,6 +38,18 @@ typedef Uebersetzer = Future<List<String>> Function(
   String schluessel,
 );
 
+/// Was beim Speichern einer Vorlage herauskam.
+class VorlageGespeichert {
+  const VorlageGespeichert({required this.platzhalter, this.einrichtung});
+
+  /// Die Platzhalter der gespeicherten Vorlage.
+  final Set<String> platzhalter;
+
+  /// Was die App selbst eingerichtet hat — null, wenn die Vorlage schon
+  /// Platzhalter hatte.
+  final EinrichtenErgebnis? einrichtung;
+}
+
 /// Was beim Erstellen herauskam.
 class SpezifikationErgebnis {
   const SpezifikationErgebnis({
@@ -41,6 +59,8 @@ class SpezifikationErgebnis {
     this.unbekannt = const {},
     this.uebersetzt = false,
     this.uebersetzungsFehler,
+    this.kaestchen = 0,
+    this.hinweise = const [],
   });
 
   final Uint8List bytes;
@@ -58,6 +78,70 @@ class SpezifikationErgebnis {
   /// Warum nicht übersetzt wurde — null, wenn es klappte oder nicht
   /// gewünscht war.
   final String? uebersetzungsFehler;
+
+  /// Wie viele Kontrollkästchen angehakt wurden.
+  final int kaestchen;
+
+  /// Was in der Vorlage keinen Platz fand — etwa ein Allergen ohne Zeile.
+  final List<String> hinweise;
+}
+
+/// Was in der Vorlage keinen Platz findet: Allergene ohne Zeile, mehr
+/// Hilfsstoffe oder Produkthinweise als Plätze.
+List<String> spezPlatzHinweise({
+  required Set<String> platzhalter,
+  required RezepturErgebnis ergebnis,
+  required SpezAngaben angaben,
+}) {
+  final hinweise = <String>[];
+  // Allergene: nur wenn die Vorlage eine Allergentabelle hat.
+  final tabelle = platzhalter.any(
+    (p) => p.startsWith('allergen.') && p.endsWith('.ja'),
+  );
+  if (tabelle && !platzhalter.contains('allergene')) {
+    final ohneZeile = [
+      for (final a in ergebnis.allergene.keys)
+        if (!platzhalter.contains('allergen.$a.ja'))
+          allergenName(a, SpezSprache.de),
+    ];
+    if (ohneZeile.isNotEmpty) {
+      hinweise.add(
+        'Die Rezeptur enthält ${ohneZeile.join(', ')} — die Vorlage hat dafür '
+        'keine Zeile in der Allergentabelle.',
+      );
+    }
+  }
+  int plaetze(RegExp muster) {
+    var n = 0;
+    for (final p in platzhalter) {
+      final m = muster.firstMatch(p);
+      if (m != null) {
+        final i = int.parse(m[1]!);
+        if (i > n) n = i;
+      }
+    }
+    return n;
+  }
+
+  final hilfsstoffe = ergebnis.verarbeitungshilfsstoffe.length;
+  final hilfsPlaetze = plaetze(RegExp(r'^hilfsstoff\.(\d+)\.name$'));
+  if (hilfsPlaetze > 0 && hilfsstoffe > hilfsPlaetze) {
+    hinweise.add(
+      'Die Rezeptur hat $hilfsstoffe Verarbeitungshilfsstoffe, die Vorlage '
+      'Platz für $hilfsPlaetze — die übrigen fehlen.',
+    );
+  }
+  final zeilen = angaben.hinweisZeilen.length;
+  final hinweisPlaetze = plaetze(RegExp(r'^hinweis\.(\d+)$'));
+  if (hinweisPlaetze > 0 &&
+      zeilen > hinweisPlaetze &&
+      !platzhalter.contains('hinweise')) {
+    hinweise.add(
+      'Es gibt $zeilen Produkthinweise, die Vorlage hat Platz für '
+      '$hinweisPlaetze — die übrigen fehlen.',
+    );
+  }
+  return hinweise;
 }
 
 /// Vorlagen verwalten und Spezifikationen erstellen.
@@ -79,21 +163,38 @@ class SpezifikationDienst {
   Future<EntwicklungsDatei?> vorlage(SpezSprache s) =>
       _dateien.datei(spezVorlageId(s));
 
-  /// Speichert eine Vorlage und gibt ihre Platzhalter zurück. Wirft
-  /// [FormatException], wenn sie keine Excel-Mappe ist.
-  Future<Set<String>> vorlageSpeichern(
+  /// Der Inhalt der gespeicherten Vorlage — so, wie die App sie füllt.
+  Future<Uint8List?> vorlageInhalt(SpezSprache s) =>
+      _dateien.lesen(spezVorlageId(s));
+
+  /// Speichert eine Vorlage. Hat sie noch keine Platzhalter, richtet die
+  /// App sie selbst ein. Wirft [FormatException], wenn sie keine
+  /// Excel-Mappe ist.
+  Future<VorlageGespeichert> vorlageSpeichern(
     SpezSprache s,
     String name,
     Uint8List bytes,
   ) async {
-    final platzhalter = platzhalterIn(bytes);
+    var inhalt = bytes;
+    EinrichtenErgebnis? einrichtung;
+    if (platzhalterIn(bytes).isEmpty) {
+      final e = vorlageEinrichten(bytes);
+      if (e.felder.isNotEmpty) {
+        einrichtung = e;
+        inhalt = e.bytes;
+      }
+    }
+    final platzhalter = platzhalterIn(inhalt);
     await _dateien.speichern(
       id: spezVorlageId(s),
       name: name,
-      inhalt: bytes,
+      inhalt: inhalt,
       mimeTyp: kXlsxMime,
     );
-    return platzhalter;
+    return VorlageGespeichert(
+      platzhalter: platzhalter,
+      einrichtung: einrichtung,
+    );
   }
 
   Future<void> vorlageLoeschen(SpezSprache s) =>
@@ -167,30 +268,38 @@ class SpezifikationDienst {
         erledigt: true,
       );
 
-  Future<String?> deeplSchluessel() async {
+  Future<String?> _einstellung(String schluessel) async {
     final zeile = await (_db.select(_db.appSettings)
-          ..where((s) => s.key.equals(kEntwicklungDeeplSchluessel)))
+          ..where((s) => s.key.equals(schluessel)))
         .getSingleOrNull();
     final t = zeile?.value.trim();
     return t == null || t.isEmpty ? null : t;
   }
 
-  /// Hinterlegt den DeepL-Schlüssel — leer löscht ihn.
-  Future<void> deeplSpeichern(String? schluessel) async {
-    final t = schluessel?.trim() ?? '';
+  Future<void> _einstellungSpeichern(String schluessel, String? wert) async {
+    final t = wert?.trim() ?? '';
     if (t.isEmpty) {
-      await (_db.delete(_db.appSettings)
-            ..where((s) => s.key.equals(kEntwicklungDeeplSchluessel)))
+      await (_db.delete(_db.appSettings)..where((s) => s.key.equals(schluessel)))
           .go();
       return;
     }
     await _db.into(_db.appSettings).insertOnConflictUpdate(
-          AppSettingsCompanion.insert(
-            key: kEntwicklungDeeplSchluessel,
-            value: t,
-          ),
+          AppSettingsCompanion.insert(key: schluessel, value: t),
         );
   }
+
+  Future<String?> deeplSchluessel() => _einstellung(kEntwicklungDeeplSchluessel);
+
+  /// Hinterlegt den DeepL-Schlüssel — leer löscht ihn.
+  Future<void> deeplSpeichern(String? schluessel) =>
+      _einstellungSpeichern(kEntwicklungDeeplSchluessel, schluessel);
+
+  /// Das Kürzel dessen, der an diesem Rechner Spezifikationen erstellt.
+  Future<String?> kuerzel() => _einstellung(kEntwicklungKuerzel);
+
+  /// Merkt sich das Kürzel — leer löscht es.
+  Future<void> kuerzelSpeichern(String? kuerzel) =>
+      _einstellungSpeichern(kEntwicklungKuerzel, kuerzel);
 
   /// Erstellt die Spezifikation des Stands [versionId] in [sprache].
   /// Wirft [StateError], wenn Vorlage oder Stand fehlen.
@@ -200,6 +309,7 @@ class SpezifikationDienst {
     required SpezSprache sprache,
     bool uebersetzen = true,
     DateTime? datum,
+    String? kuerzel,
   }) async {
     final vorlage = await _dateien.lesen(spezVorlageId(sprache));
     if (vorlage == null) {
@@ -220,9 +330,11 @@ class SpezifikationDienst {
               ..where((p) => p.id.equals(artikelId))
               ..where((p) => p.deletedAt.isNull()))
             .getSingleOrNull();
+    final angaben = SpezAngaben.aus(projekt.spezifikation);
+    final ergebnis = berechne(eingabe);
     final quelle = SpezifikationsQuelle(
       projektName: projekt.name,
-      ergebnis: berechne(eingabe),
+      ergebnis: ergebnis,
       verlustProzent: eingabe.wirksamerVerlust,
       artikelnummer: artikel?.artikelnummer ?? projekt.artikelnummer,
       bezeichnung: artikel?.artikelbezeichnung,
@@ -231,6 +343,8 @@ class SpezifikationDienst {
       haltbarkeitTage: artikel?.haltbarkeitTage,
       aw: projekt.grenzeAw,
       sensorik: Sensorik.aus(projekt.sensorik),
+      angaben: angaben,
+      kuerzel: kuerzel,
     );
     var werte = spezifikationsWerte(
       quelle,
@@ -278,6 +392,12 @@ class SpezifikationDienst {
       unbekannt: gefuellt.unbekannt,
       uebersetzt: uebersetzt,
       uebersetzungsFehler: fehler,
+      kaestchen: gefuellt.kaestchen,
+      hinweise: spezPlatzHinweise(
+        platzhalter: platzhalterIn(vorlage),
+        ergebnis: ergebnis,
+        angaben: angaben,
+      ),
     );
   }
 }
@@ -295,10 +415,30 @@ final spezVorlageProvider =
   (ref, s) => ref.watch(spezifikationDienstProvider).vorlage(s),
 );
 
+/// Die Platzhalter der gespeicherten Vorlage je Sprache.
+final spezVorlagePlatzhalterProvider =
+    FutureProvider.autoDispose.family<Set<String>, SpezSprache>(
+  (ref, s) async {
+    ref.watch(spezVorlageProvider(s));
+    final inhalt = await ref.watch(spezifikationDienstProvider).vorlageInhalt(s);
+    if (inhalt == null) return const {};
+    try {
+      return platzhalterIn(inhalt);
+    } on FormatException {
+      return const {};
+    }
+  },
+);
+
 /// Ob auf diesem Rechner ein DeepL-Schlüssel hinterlegt ist.
 final deeplHinterlegtProvider = FutureProvider.autoDispose<bool>(
   (ref) async =>
       await ref.watch(spezifikationDienstProvider).deeplSchluessel() != null,
+);
+
+/// Das Kürzel dieses Rechners.
+final spezKuerzelProvider = FutureProvider.autoDispose<String?>(
+  (ref) => ref.watch(spezifikationDienstProvider).kuerzel(),
 );
 
 /// Die Rezepturstände eines Projekts zur Auswahl.

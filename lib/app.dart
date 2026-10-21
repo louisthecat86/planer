@@ -22,6 +22,7 @@ import 'features/navision/navision_import_screen.dart';
 import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
+import 'features/entwicklung/entwicklung_auto_sperre.dart';
 import 'features/entwicklung/entwicklung_screen.dart';
 import 'features/entwicklung/projekte/projekt_screen.dart';
 import 'features/entwicklung/rezepturen/rezeptur_screen.dart';
@@ -387,7 +388,12 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
       // Die MediaQuery-Größe wird passend mitgesetzt, damit auch Widgets,
       // die sich auf MediaQuery.size stützen, dieselbe kleinere Fläche sehen.
       builder: (context, child) {
-        final safe = child ?? const SizedBox.shrink();
+        // Die Produktentwicklung sperrt sich nach 15 Minuten ohne Eingabe;
+        // offene Fenster über ihr gehen dabei zu.
+        final safe = EntwicklungAutoSperre(
+          fensterSchliessen: () => _entwicklungsFensterSchliessen(router),
+          child: child ?? const SizedBox.shrink(),
+        );
         final scale = ref.watch(uiScaleProvider);
         if (scale == 1.0) return safe;
         final mq = MediaQuery.of(context);
@@ -408,4 +414,11 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
   }
 }
 
-
+/// Schließt Dialoge und Menüs, wenn gerade eine Seite der
+/// Produktentwicklung zu sehen ist — vor dem automatischen Sperren.
+void _entwicklungsFensterSchliessen(GoRouter router) {
+  final ort = router.routerDelegate.currentConfiguration.uri.path;
+  if (!ort.startsWith('/entwicklung')) return;
+  router.routerDelegate.navigatorKey.currentState
+      ?.popUntil((route) => route is! PopupRoute);
+}

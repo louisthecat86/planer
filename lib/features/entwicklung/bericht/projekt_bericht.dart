@@ -10,6 +10,7 @@ import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
 import '../haccp/haccp_modell.dart';
 import '../haccp/prozess_modell.dart';
+import '../projekte/fliessdiagramm_dateien.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechenkern.dart';
@@ -28,6 +29,7 @@ class ProjektBericht {
     this.verlauf = const [],
     this.bild,
     this.artikel,
+    this.fliessdiagramm,
   });
 
   final EntwicklungsProjekt projekt;
@@ -44,6 +46,11 @@ class ProjektBericht {
   final Uint8List? bild;
 
   final Product? artikel;
+
+  /// Das Fließdiagramm mit Bezeichnung und Stand seines PDFs, etwa
+  /// „FD_011 · Schnitzel paniert · Stand 31.07.2026" — null: nur die
+  /// Kennung aus dem Projekt.
+  final String? fliessdiagramm;
 }
 
 /// Lädt alles für den Bericht: den freigegebenen Stand, sonst den
@@ -117,7 +124,26 @@ Future<ProjektBericht> berichtLaden(
     verlauf: verlauf,
     bild: bild,
     artikel: artikel,
+    fliessdiagramm: await _fliessdiagrammText(db, projekt.fliessdiagramm),
   );
+}
+
+/// Kennung, Bezeichnung und der Stand des neuesten PDFs.
+Future<String?> _fliessdiagrammText(AppDatabase db, String? fdId) async {
+  if (fdId == null || fdId.isEmpty) return null;
+  final fd = await (db.select(db.entwicklungFliessdiagramme)
+        ..where((f) => f.id.equals(fdId)))
+      .getSingleOrNull();
+  final dateien = await (db.select(db.entwicklungDateien)
+        ..where((d) => d.id.like('$kFdDateiPraefix%')))
+      .get();
+  DateTime? stand;
+  for (final d in dateien) {
+    final f = fdAusDateiId(d.id);
+    if (f == null || f.fdId != fdId) continue;
+    if (stand == null || f.stand.isAfter(stand)) stand = f.stand;
+  }
+  return fdText(fdId, bezeichnung: fd?.bezeichnung, stand: stand);
 }
 
 const PdfColor _grau = PdfColors.grey700;
@@ -303,7 +329,7 @@ Future<Uint8List> baueProjektPdf(
         // ── Stammdaten ────────────────────────────────────────────────
         _abschnitt('Stammdaten'),
         _zeilen([
-          ('Fließdiagramm', p.fliessdiagramm ?? ''),
+          ('Fließdiagramm', b.fliessdiagramm ?? p.fliessdiagramm ?? ''),
           ('Neuer Prozess', p.neuerProzess ? 'ja' : 'nein'),
           (
             'Neue Zutaten',

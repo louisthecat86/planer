@@ -17,19 +17,24 @@ import '../rechenkern/naehrwert_rundung.dart';
 import '../rezepturen/rezeptur_screen.dart' show TextFeld;
 import '../rezepturen/rezepturen_ansicht.dart';
 import '../spezifikation/spezifikation_dialog.dart';
+import '../spezifikation/spezifikation_reiter.dart';
+import 'datei_aktionen.dart' show dateiOeffnen;
+import 'fliessdiagramm_dienst.dart';
 import 'fliessdiagramme_dialog.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_verlauf.dart';
 
-/// Die Reiter einer Projektseite.
+/// Die Reiter einer Projektseite — vorn der Verlauf mit dem Zeitstrahl:
+/// Wer ein Projekt öffnet, sieht zuerst, wie es sich entwickelt hat (F21).
 enum ProjektReiter {
-  uebersicht('Übersicht'),
   verlauf('Verlauf'),
+  uebersicht('Übersicht'),
   prozess('Prozess'),
   haccp('HACCP'),
   sensorik('Sensorik'),
+  spezifikation('Spezifikation'),
   dateien('Dateien');
 
   const ProjektReiter(this.label);
@@ -58,7 +63,8 @@ Future<void> projektSpeichern(
 
 String? _oderNull(String t) => t.trim().isEmpty ? null : t.trim();
 
-/// Ein Projekt: Übersicht, Verlauf, Prozess, HACCP, Sensorik und Dateien.
+/// Ein Projekt: Verlauf, Übersicht, Prozess, HACCP, Sensorik,
+/// Spezifikation und Dateien.
 class ProjektScreen extends ConsumerWidget {
   const ProjektScreen({super.key, required this.projektId});
 
@@ -186,11 +192,12 @@ class ProjektScreen extends ConsumerWidget {
                 )
               : TabBarView(
                   children: [
-                    ProjektUebersicht(projekt: p),
                     ProjektVerlauf(projekt: p),
+                    ProjektUebersicht(projekt: p),
                     ProjektProzess(projekt: p),
                     ProjektHaccp(projekt: p),
                     ProjektSensorik(projekt: p),
+                    ProjektSpezifikation(projekt: p),
                     ProjektDateien(projekt: p),
                   ],
                 ),
@@ -281,6 +288,8 @@ class ProjektStammdaten extends ConsumerWidget {
     final diagramme = ref.watch(fliessdiagrammeProvider).valueOrNull ??
         const <Fliessdiagramm>[];
     final fd = p.fliessdiagramm ?? '';
+    final fdPdfs = ref.watch(fliessdiagrammFassungenProvider).valueOrNull?[fd];
+    final pdf = fdPdfs?.firstOrNull;
     final fdWahl = <String, String>{
       '': '— keins —',
       for (final f in diagramme)
@@ -372,7 +381,10 @@ class ProjektStammdaten extends ConsumerWidget {
                   key: ValueKey('fd-$fd-${fdWahl.length}-${fdWahl[fd]}'),
                   initialValue: fd,
                   isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Fließdiagramm'),
+                  decoration: InputDecoration(
+                    labelText: 'Fließdiagramm',
+                    helperText: fdPdfHinweis(fdPdfs),
+                  ),
                   items: [
                     for (final MapEntry(:key, :value) in fdWahl.entries)
                       DropdownMenuItem(
@@ -389,6 +401,17 @@ class ProjektStammdaten extends ConsumerWidget {
                     );
                   },
                 ),
+              ),
+              IconButton(
+                tooltip: fd.isEmpty
+                    ? 'Kein Fließdiagramm gewählt'
+                    : pdf == null
+                        ? 'Zu $fd gibt es noch kein PDF'
+                        : 'Fließdiagramm öffnen',
+                icon: const Icon(Icons.picture_as_pdf_outlined),
+                onPressed: pdf == null
+                    ? null
+                    : () => dateiOeffnen(context, ref, pdf.datei),
               ),
               IconButton(
                 tooltip: 'Fließdiagramme pflegen',

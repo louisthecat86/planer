@@ -9,6 +9,9 @@ import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/datei_aktionen.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dateien.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dienst.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramme_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_screen.dart';
@@ -364,6 +367,23 @@ void main() {
           ),
         ]),
       ),
+      fliessdiagrammFassungenProvider.overrideWith(
+        (ref) => Stream.value({
+          'FD_011': [
+            for (final stand in [DateTime(2026, 7, 31), DateTime(2026, 6, 15)])
+              (
+                stand: stand,
+                datei: EntwicklungsDatei(
+                  id: fdDateiId('FD_011', stand),
+                  name: 'FD_011 Testware.pdf',
+                  mimeTyp: 'application/pdf',
+                  groesse: 4096,
+                  createdAt: zeit,
+                ),
+              ),
+          ],
+        }),
+      ),
       alleVersionenProvider.overrideWith((ref) => Stream.value([v1])),
       freigabeUebersichtProvider.overrideWith(
         (ref, id) async => const FreigabeUebersicht(),
@@ -414,8 +434,12 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       // Der Reiter baut sich erst im letzten Bild auf; seine Daten kommen
-      // danach — ein Bild mehr, damit sie dastehen.
-      await tester.pump();
+      // danach — und was aus ihnen gerechnet wird (die Rezeptur, dann ihr
+      // Ergebnis für den Vergleich mit dem Ziel), noch ein paar Bilder
+      // später.
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
     }
 
     testWidgets('Projekte: aktive Liste, Archiv und Suche', (tester) async {
@@ -455,12 +479,18 @@ void main() {
       await tester.pump();
 
       expect(find.text('Schnitzel Wiener Art · Muster GmbH'), findsOneWidget);
+      // Ein Projekt öffnet mit dem Verlauf (F21).
+      expect(find.byType(Zeitstrahl), findsOneWidget);
+      await reiter(tester, 'Übersicht');
       expect(bereich('Stammdaten'), findsOneWidget);
       expect(bereich('Checkliste', '1 von 8'), findsOneWidget);
       expect(bereich('Etikett (LMIV)', '0 von 12'), findsOneWidget);
       expect(bereich('Rezepturen', '1'), findsOneWidget);
       expect(find.text('Stand 1 · abgeschlossen'), findsOneWidget);
       expect(find.text('FD_011 · Bratstraße paniert'), findsOneWidget);
+      // Das PDF des Fließdiagramms: Stand und Öffnen.
+      expect(find.text('PDF · Stand 31.07.2026 · 2 Fassungen'), findsOneWidget);
+      expect(find.byTooltip('Fließdiagramm öffnen'), findsOneWidget);
       // Die Rezeptur hat mehr Fett als das Ziel erlaubt.
       expect(find.textContaining('über dem Ziel'), findsOneWidget);
     });
@@ -518,6 +548,8 @@ void main() {
         theme: AppTheme.dark(),
       );
       await tester.pump();
+      expect(find.byType(Zeitstrahl), findsOneWidget);
+      await reiter(tester, 'Übersicht');
       expect(bereich('Stammdaten'), findsOneWidget);
       await reiter(tester, 'Verlauf');
       expect(find.byType(Zeitstrahl), findsOneWidget);
@@ -525,6 +557,109 @@ void main() {
       await tester.tap(find.byTooltip('Liste'));
       await tester.pump();
       expect(find.text('passt so'), findsOneWidget);
+    });
+  });
+
+  group('Fließdiagramme', () {
+    final zeit = DateTime(2026, 10, 16);
+    Fliessdiagramm fd(int i) => Fliessdiagramm(
+          id: 'FD_${i.toString().padLeft(3, '0')}',
+          bezeichnung: 'Testware $i',
+          sortierung: i,
+          createdAt: zeit,
+          updatedAt: zeit,
+        );
+    FdFassung fassung(String fdId, DateTime stand) => (
+          stand: stand,
+          datei: EntwicklungsDatei(
+            id: fdDateiId(fdId, stand),
+            name: '$fdId Testware.pdf',
+            mimeTyp: 'application/pdf',
+            groesse: 4096,
+            createdAt: zeit,
+          ),
+        );
+
+    Future<void> zeige(
+      WidgetTester tester, {
+      List<Fliessdiagramm>? liste,
+      ThemeData? theme,
+    }) async {
+      tester.view.physicalSize = const Size(1200, 1400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            fliessdiagrammeProvider.overrideWith(
+              (ref) => Stream.value(
+                liste ?? [for (var i = 1; i <= 10; i++) fd(i)],
+              ),
+            ),
+            fliessdiagrammFassungenProvider.overrideWith(
+              (ref) => Stream.value({
+                'FD_001': [
+                  fassung('FD_001', DateTime(2026, 7, 31)),
+                  fassung('FD_001', DateTime(2026, 6, 15)),
+                ],
+                'FD_002': [fassung('FD_002', DateTime(2026, 6, 18))],
+              }),
+            ),
+          ],
+          child: MaterialApp(
+            theme: theme ?? AppTheme.light(),
+            home: const Scaffold(body: FliessdiagrammeDialog()),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    testWidgets('PDFs mit Stand, ältere Fassungen im Menü', (tester) async {
+      await zeige(tester);
+      expect(find.text('PDFs einlesen…'), findsOneWidget);
+      expect(find.text('PDF · Stand 31.07.2026 · 2 Fassungen'), findsOneWidget);
+      expect(find.text('PDF · Stand 18.06.2026'), findsOneWidget);
+      // Öffnen geht nur, wo es ein PDF gibt.
+      final offen = tester
+          .widgetList<IconButton>(
+            find.widgetWithIcon(IconButton, Icons.picture_as_pdf_outlined),
+          )
+          .where((k) => k.onPressed != null);
+      expect(offen, hasLength(2));
+
+      await tester.tap(find.byTooltip('Mehr zu FD_001'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Fassung vom 15.06.2026 öffnen'), findsOneWidget);
+      expect(find.text('PDF hinzufügen…'), findsOneWidget);
+      expect(find.text('Nach oben'), findsNothing);
+      expect(find.text('Nach unten'), findsOneWidget);
+      expect(find.text('Löschen'), findsOneWidget);
+    });
+
+    testWidgets('ab neun Fließdiagrammen eine Suche', (tester) async {
+      await zeige(tester, theme: AppTheme.dark());
+      final suche = find.byKey(const ValueKey('fd-suche'));
+      expect(suche, findsOneWidget);
+      expect(find.text('Kennung oder Bezeichnung suchen'), findsOneWidget);
+      await tester.enterText(suche, 'testware 10');
+      await tester.pump();
+      expect(find.text('FD_010'), findsOneWidget);
+      expect(find.text('FD_001'), findsNothing);
+
+      await tester.enterText(suche, 'gibt es nicht');
+      await tester.pump();
+      expect(find.text('Nichts gefunden.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('leer: ein Hinweis, keine Suche', (tester) async {
+      await zeige(tester, liste: const []);
+      expect(find.textContaining('Noch keine Fließdiagramme'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fd-suche')), findsNothing);
+      expect(find.text('PDFs einlesen…'), findsOneWidget);
     });
   });
 }

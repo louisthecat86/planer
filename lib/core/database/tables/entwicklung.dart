@@ -242,6 +242,10 @@ class EntwicklungProjekte extends Table {
   /// JSON: Gefahrenanalyse (FMEA) und Lenkungspunkte (CCP).
   TextColumn get haccp => text().nullable()();
 
+  /// JSON: Angaben für die Spezifikation — Toleranz, Lagerung,
+  /// Haltbarkeit, Produkthinweise, Spuren und Verpackung.
+  TextColumn get spezifikation => text().nullable()();
+
   /// Der Artikel im Planer (products.id), sobald freigegeben.
   TextColumn get artikelId => text().nullable()();
 

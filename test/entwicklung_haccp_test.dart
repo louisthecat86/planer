@@ -13,6 +13,7 @@ import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_ansicht.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dienst.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramme_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_screen.dart';
@@ -422,6 +423,8 @@ void main() {
                 .overrideWith((ref, id) => Stream.value(const [])),
             fliessdiagrammeProvider
                 .overrideWith((ref) => Stream.value(const [])),
+            fliessdiagrammFassungenProvider
+                .overrideWith((ref) => Stream.value(const {})),
             alleVersionenProvider.overrideWith((ref) => Stream.value(const [])),
             freigabeUebersichtProvider.overrideWith(
               (ref, id) async => const FreigabeUebersicht(),

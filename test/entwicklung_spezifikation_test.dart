@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
+import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/bericht/projekt_bericht.dart';
 import 'package:produktion_planer/features/entwicklung/daten/dateien.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
@@ -22,8 +23,10 @@ import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/beispielvorlage.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/deepl.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_reiter.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_vorlage.dart';
 
@@ -122,7 +125,11 @@ void main() {
         ],
       );
 
-  SpezifikationsQuelle quelle({bool mitHilfsstoff = true}) =>
+  SpezifikationsQuelle quelle({
+    bool mitHilfsstoff = true,
+    SpezAngaben angaben = const SpezAngaben(),
+    String? kuerzel,
+  }) =>
       SpezifikationsQuelle(
         projektName: 'Frikadelle Testart',
         ergebnis: berechne(frikadelle(mitHilfsstoff: mitHilfsstoff)),
@@ -136,6 +143,8 @@ void main() {
           geschmack: 'würzig, leicht pfeffrig',
           gewicht: '80 g',
         ),
+        angaben: angaben,
+        kuerzel: kuerzel,
       );
 
   final datum = DateTime(2026, 3, 5);
@@ -237,6 +246,120 @@ void main() {
       ]) {
         expect(texte.containsKey(k), isFalse, reason: k);
       }
+    });
+
+    const angaben = SpezAngaben(
+      toleranz: '± 2,5',
+      lagerung: 'gekühlt',
+      haltbarkeit: '21',
+      hinweise: 'Erst durcherhitzen.\n\nNicht wieder einfrieren.',
+      spuren: {'senf', 'gluten'},
+      verpackung: Verpackung(
+        um: {'e2_kiste', 'karton_klein'},
+        karton: 'bedruckt',
+        umFuellung: 'gewogen',
+        umNetto: '5,0',
+        einzel: {'seitenfaltenbeutel'},
+        atmosphaere: 'schutzgas',
+        einzelFuellung: 'gezaehlt',
+        stueckzahl: '10',
+        einzelMaterial: 'PA/PE',
+      ),
+    );
+
+    test('die Angaben des Projekts: Kürzel, Haltbarkeit, Hinweise, Spuren',
+        () {
+      final w = spezifikationsWerte(
+        quelle(angaben: angaben, kuerzel: ' TE '),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(w['kuerzel'], 'TE');
+      // Die Angabe im Projekt geht vor die des Artikels; eine Zahl sind Tage.
+      expect(w['haltbarkeit'], '21 Tage');
+      expect(w['toleranz'], '± 2,5');
+      expect(w['lagerung'], 'gekühlt');
+      expect(w['hinweise'], 'Erst durcherhitzen.\nNicht wieder einfrieren.');
+      expect(w['hinweis.1'], 'Erst durcherhitzen.');
+      expect(w['hinweis.2'], 'Nicht wieder einfrieren.');
+      expect(w['hinweis.3'], '');
+      // Enthaltenes zählt nicht als Spur.
+      expect(w['allergen.gluten.ja'], 'X');
+      expect(w['allergen.gluten.spuren'], '');
+      expect(w['allergen.gluten.nein'], '');
+      expect(w['allergen.senf.ja'], '');
+      expect(w['allergen.senf.spuren'], 'X');
+      expect(w['allergen.senf.nein'], '');
+      expect(w['allergen.eier.nein'], 'X');
+      expect(w['allergen.eier.spuren'], '');
+
+      final text = spezifikationsWerte(
+        quelle(angaben: angaben.kopie(haltbarkeit: '12 Monate bei -18 °C')),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(text['haltbarkeit'], '12 Monate bei -18 °C');
+      expect(text['kuerzel'], '');
+    });
+
+    test('die Verpackung: Kreuze und Werte, englisch mit Dezimalpunkt', () {
+      final w = spezifikationsWerte(
+        quelle(angaben: angaben),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(w['verpackung.um.e2_kiste'], 'X');
+      expect(w['verpackung.um.karton_klein'], 'X');
+      expect(w['verpackung.um.karton_gross'], '');
+      expect(w['verpackung.um.bedruckt'], 'X');
+      expect(w['verpackung.um.neutral'], '');
+      expect(w['verpackung.um.gewogen'], 'X');
+      expect(w['verpackung.um.egalisiert'], '');
+      expect(w['verpackung.um.netto'], '5,0');
+      expect(w['verpackung.um.tara'], '');
+      expect(w['verpackung.einzel.seitenfaltenbeutel'], 'X');
+      expect(w['verpackung.einzel.beutel'], '');
+      expect(w['verpackung.einzel.schutzgas'], 'X');
+      expect(w['verpackung.einzel.vakuum'], '');
+      expect(w['verpackung.einzel.gezaehlt'], 'X');
+      expect(w['verpackung.einzel.stueckzahl'], '10');
+      expect(w['verpackung.einzel.material'], 'PA/PE');
+
+      final en = spezifikationsWerte(
+        quelle(angaben: angaben),
+        sprache: SpezSprache.en,
+        datum: datum,
+      );
+      expect(en['haltbarkeit'], '21 days');
+      expect(en['toleranz'], '± 2.5');
+      expect(en['verpackung.um.netto'], '5.0');
+      expect(en['sensorik.gewicht'], '80 g');
+    });
+
+    test('Kreuze und was übersetzt wird', () {
+      expect(istKreuzPlatzhalter('allergen.senf.spuren'), isTrue);
+      expect(istKreuzPlatzhalter('allergen.senf.nein'), isTrue);
+      expect(istKreuzPlatzhalter('allergen.senf.quelle'), isFalse);
+      expect(istKreuzPlatzhalter('verpackung.einzel.vakuum'), isTrue);
+      expect(istKreuzPlatzhalter('verpackung.einzel.material'), isFalse);
+      expect(istKreuzPlatzhalter('kuerzel'), isFalse);
+      final texte = uebersetzbareTexte({
+        'lagerung': 'gekühlt',
+        'haltbarkeit': '21 Tage',
+        'toleranz': '± 5',
+        'hinweis.1': 'Erst durcherhitzen.',
+        'hinweise': 'Erst durcherhitzen.',
+        'verpackung.einzel.material': 'Folie',
+        'verpackung.einzel.vakuum': 'X',
+        'verpackung.um.tara': '850',
+        'kuerzel': 'TE',
+      });
+      expect(texte.keys.toSet(), {
+        'lagerung',
+        'hinweis.1',
+        'hinweise',
+        'verpackung.einzel.material',
+      });
     });
   });
 
@@ -493,12 +616,14 @@ void main() {
     test('deutsch: Vorlage speichern, füllen, ablegen, abhaken', () async {
       final a = await anlegen();
       final d = dienst();
-      final platzhalter = await d.vorlageSpeichern(
+      final gespeichert = await d.vorlageSpeichern(
         SpezSprache.de,
         'Unsere Spezifikation.xlsx',
         beispielvorlage(),
       );
-      expect(platzhalter.length, kSpezifikationPlatzhalter.length);
+      expect(gespeichert.platzhalter.length, kSpezifikationPlatzhalter.length);
+      // Mit Platzhaltern wird nichts eingerichtet.
+      expect(gespeichert.einrichtung, isNull);
       final vorlage = (await d.vorlage(SpezSprache.de))!;
       expect(vorlage.name, 'Unsere Spezifikation.xlsx');
       // Eine Vorlage gehört zu keinem Projekt.
@@ -827,6 +952,10 @@ void main() {
               (ref, s) async =>
                   mitVorlage && s == SpezSprache.de ? vorlage : null,
             ),
+            spezVorlagePlatzhalterProvider.overrideWith(
+              (ref, s) async => const <String>{},
+            ),
+            spezKuerzelProvider.overrideWith((ref) async => null),
             deeplHinterlegtProvider.overrideWith((ref) async => schluessel),
           ],
           child: MaterialApp(
@@ -919,6 +1048,175 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('{{artikelnummer}}'), findsOneWidget);
       expect(find.text('{{allergen.gluten.ja}}'), findsOneWidget);
+    });
+  });
+
+  group('Reiter Spezifikation', () {
+    final zeit = DateTime(2026, 10, 20);
+    final rezeptur = Rezeptur(
+      id: 'r1',
+      name: 'Frikadelle Testart',
+      projektId: 'p1',
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    final staende = [
+      FreigabeStand(
+        rezeptur: rezeptur,
+        version: RezepturVersion(
+          id: 'v1',
+          rezepturId: 'r1',
+          nummer: 1,
+          status: VersionStatus.abgeschlossen,
+          verlustProzent: 10,
+          fettVerlustProzent: 0,
+          verlustArt: 'garen',
+          createdAt: zeit,
+          updatedAt: zeit,
+        ),
+      ),
+    ];
+    final vorlage = EntwicklungsDatei(
+      id: spezVorlageId(SpezSprache.de),
+      name: 'Formblatt.xlsx',
+      mimeTyp: kXlsxMime,
+      groesse: 2048,
+      createdAt: zeit,
+    );
+    EntwicklungsProjekt projekt({String? spezifikation}) => EntwicklungsProjekt(
+          id: 'p1',
+          name: 'Frikadelle Testart',
+          status: ProjektStatus.entwicklung.schluessel,
+          neuerProzess: false,
+          neueZutaten: false,
+          freigabeVersionId: 'v1',
+          sensorik: const Sensorik(gewicht: '80 g').alsJson(),
+          spezifikation: spezifikation,
+          createdAt: zeit,
+          updatedAt: zeit,
+        );
+
+    Future<void> zeige(
+      WidgetTester tester,
+      EntwicklungsProjekt p, {
+      Size groesse = const Size(1400, 1000),
+      ThemeData? theme,
+    }) async {
+      tester.view.physicalSize = groesse;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            spezStaendeProvider.overrideWith((ref, id) async => staende),
+            spezVorlageProvider.overrideWith(
+              (ref, s) async => s == SpezSprache.de ? vorlage : null,
+            ),
+            spezVorlagePlatzhalterProvider.overrideWith(
+              (ref, s) async => s == SpezSprache.de
+                  ? const {'artikelnummer', 'kuerzel', 'zutaten'}
+                  : const <String>{},
+            ),
+            spezKuerzelProvider.overrideWith((ref) async => 'TE'),
+            deeplHinterlegtProvider.overrideWith((ref) async => false),
+          ],
+          child: MaterialApp(
+            theme: theme ?? AppTheme.light(),
+            home: Scaffold(body: ProjektSpezifikation(projekt: p)),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+    }
+
+    ButtonStyleButton knopf(WidgetTester tester, String text) =>
+        tester.widget<ButtonStyleButton>(
+          find.ancestor(
+            of: find.text(text),
+            matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+          ),
+        );
+
+    Finder bereich(String titel) => find.byWidgetPredicate(
+          (w) => w is BereichKopf && w.titel == titel,
+        );
+
+    testWidgets('breit: Erstellen oben, Angaben und Verpackung daneben',
+        (tester) async {
+      const angaben = SpezAngaben(
+        toleranz: '± 5',
+        spuren: {'senf'},
+        verpackung: Verpackung(um: {'e2_kiste'}, atmosphaere: 'vakuum'),
+      );
+      await zeige(tester, projekt(spezifikation: angaben.alsJson()));
+      expect(bereich('Spezifikation erstellen'), findsOneWidget);
+      expect(
+        find.text('Frikadelle Testart · Stand 1 · freigegeben'),
+        findsOneWidget,
+      );
+      // Deutsch hat eine Vorlage, Englisch noch nicht.
+      expect(knopf(tester, 'Deutsch erstellen…').enabled, isTrue);
+      expect(knopf(tester, 'Englisch erstellen…').enabled, isFalse);
+      expect(
+        find.text('Vorlage Deutsch: Formblatt.xlsx · 3 Felder'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Vorlage Englisch: noch keine'), findsOneWidget);
+      // Das Kürzel dieses Rechners steht schon da.
+      expect(find.widgetWithText(TextField, 'TE'), findsOneWidget);
+
+      expect(find.text('± 5'), findsOneWidget);
+      expect(find.text('80 g'), findsOneWidget);
+      bool gewaehlt(String label) =>
+          tester.widget<FilterChip>(find.widgetWithText(FilterChip, label))
+              .selected;
+      expect(gewaehlt('Senf'), isTrue);
+      expect(gewaehlt('Gluten'), isFalse);
+      expect(gewaehlt('E2-Kiste'), isTrue);
+      expect(gewaehlt('Karton groß'), isFalse);
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Vakuum'))
+            .selected,
+        isTrue,
+      );
+      // Angaben und Verpackung stehen nebeneinander.
+      expect(
+        tester.getTopLeft(bereich('Verpackung')).dx,
+        greaterThan(tester.getTopLeft(bereich('Angaben')).dx + 300),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('schmal und dunkel: untereinander, ohne Überlauf',
+        (tester) async {
+      await zeige(
+        tester,
+        projekt(),
+        groesse: const Size(700, 1200),
+        theme: AppTheme.dark(),
+      );
+      expect(tester.takeException(), isNull);
+      expect(bereich('Angaben'), findsOneWidget);
+      // Untereinander: die Verpackung unter den Angaben.
+      expect(
+        tester.getTopLeft(bereich('Angaben')).dx,
+        tester.getTopLeft(bereich('Spezifikation erstellen')).dx,
+      );
+      await tester.scrollUntilVisible(
+        find.text('Einzelverpackung'),
+        300,
+        scrollable: find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pump();
+      expect(find.text('Einzelverpackung'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

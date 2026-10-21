@@ -127,6 +127,7 @@ Uint8List beispielvorlage() {
 
   final spez = _VorlagenBlatt('Spezifikation')
     ..schreibe(['Produktspezifikation', '', '', p('gueltig_ab')], stil: 2)
+    ..schreibe(['', '', 'Kürzel', p('kuerzel')])
     ..leer()
     ..schreibe(['Artikelnummer', p('artikelnummer')])
     ..schreibe(['Bezeichnung', p('bezeichnung')])
@@ -135,6 +136,8 @@ Uint8List beispielvorlage() {
     ..schreibe(['Rezepturstand', p('stand')])
     ..schreibe(['Verlust', p('verlust')])
     ..schreibe(['Haltbarkeit', p('haltbarkeit')])
+    ..schreibe(['Lagerung', p('lagerung')])
+    ..schreibe(['Toleranz Stückgewicht', p('toleranz')])
     ..schreibe(['aw-Wert', p('aw')])
     ..leer()
     ..schreibe(['Zutaten', p('zutaten')]);
@@ -160,6 +163,12 @@ Uint8List beispielvorlage() {
     ..schreibe(['Stückgewicht', p('sensorik.gewicht')])
     ..schreibe(['Zubereitung', p('sensorik.zubereitung')])
     ..leer()
+    ..schreibe(['Produkthinweise', p('hinweise')], stil: 1);
+  for (var i = 1; i <= kHinweisPlaetze; i++) {
+    spez.schreibe(['Hinweis $i', p('hinweis.$i')]);
+  }
+  spez
+    ..leer()
     ..schreibe(['Nährwerte je 100 g'], stil: 1)
     ..schreibe(['Energie', p('naehrwert.energie')])
     ..schreibe(['Energie (kJ)', p('naehrwert.energie_kj')])
@@ -174,14 +183,23 @@ Uint8List beispielvorlage() {
     ..schreibe(['Eiweiß (g)', p('naehrwert.eiweiss')])
     ..schreibe(['Salz (g)', p('naehrwert.salz')])
     ..leer()
-    ..schreibe(['Allergen', 'ja', 'nein', 'aus'], stil: 1);
+    ..schreibe(['Allergen', 'ja', 'nein', 'Spuren', 'aus'], stil: 1);
   for (final a in kSpezAllergene) {
     spez.schreibe([
       allergenName(a, SpezSprache.de),
       p('allergen.$a.ja'),
       p('allergen.$a.nein'),
+      p('allergen.$a.spuren'),
       p('allergen.$a.quelle'),
     ]);
+  }
+  spez
+    ..leer()
+    ..schreibe(['Verpackung'], stil: 1);
+  for (final x in kSpezifikationPlatzhalter) {
+    if (x.name.startsWith('verpackung.')) {
+      spez.schreibe([x.erklaerung, p(x.name)]);
+    }
   }
 
   // Die Liste aller Platzhalter — ohne Klammern, sonst würden sie beim
@@ -259,7 +277,7 @@ Uint8List beispielvorlage() {
   );
   datei(
     'xl/worksheets/sheet1.xml',
-    spez.xml(const {1: 34, 2: 48, 3: 12, 4: 40}),
+    spez.xml(const {1: 34, 2: 48, 3: 12, 4: 14, 5: 40}),
   );
   datei('xl/worksheets/sheet2.xml', liste.xml(const {1: 36, 2: 60}));
   datei('xl/styles.xml', _styles);

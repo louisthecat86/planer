@@ -19336,6 +19336,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
   late final GeneratedColumn<String> haccp = GeneratedColumn<String>(
       'haccp', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _spezifikationMeta =
+      const VerificationMeta('spezifikation');
+  @override
+  late final GeneratedColumn<String> spezifikation = GeneratedColumn<String>(
+      'spezifikation', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _artikelIdMeta =
       const VerificationMeta('artikelId');
   @override
@@ -19400,6 +19406,7 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
         prozess,
         prozessHistorie,
         haccp,
+        spezifikation,
         artikelId,
         freigabeVersionId,
         freigegebenAm,
@@ -19533,6 +19540,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
       context.handle(
           _haccpMeta, haccp.isAcceptableOrUnknown(data['haccp']!, _haccpMeta));
     }
+    if (data.containsKey('spezifikation')) {
+      context.handle(
+          _spezifikationMeta,
+          spezifikation.isAcceptableOrUnknown(
+              data['spezifikation']!, _spezifikationMeta));
+    }
     if (data.containsKey('artikel_id')) {
       context.handle(_artikelIdMeta,
           artikelId.isAcceptableOrUnknown(data['artikel_id']!, _artikelIdMeta));
@@ -19614,6 +19627,8 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           DriftSqlType.string, data['${effectivePrefix}prozess_historie']),
       haccp: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}haccp']),
+      spezifikation: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}spezifikation']),
       artikelId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}artikel_id']),
       freigabeVersionId: attachedDatabase.typeMapping.read(
@@ -19680,6 +19695,10 @@ class EntwicklungsProjekt extends DataClass
   /// JSON: Gefahrenanalyse (FMEA) und Lenkungspunkte (CCP).
   final String? haccp;
 
+  /// JSON: Angaben für die Spezifikation — Toleranz, Lagerung,
+  /// Haltbarkeit, Produkthinweise, Spuren und Verpackung.
+  final String? spezifikation;
+
   /// Der Artikel im Planer (products.id), sobald freigegeben.
   final String? artikelId;
 
@@ -19712,6 +19731,7 @@ class EntwicklungsProjekt extends DataClass
       this.prozess,
       this.prozessHistorie,
       this.haccp,
+      this.spezifikation,
       this.artikelId,
       this.freigabeVersionId,
       this.freigegebenAm,
@@ -19776,6 +19796,9 @@ class EntwicklungsProjekt extends DataClass
     }
     if (!nullToAbsent || haccp != null) {
       map['haccp'] = Variable<String>(haccp);
+    }
+    if (!nullToAbsent || spezifikation != null) {
+      map['spezifikation'] = Variable<String>(spezifikation);
     }
     if (!nullToAbsent || artikelId != null) {
       map['artikel_id'] = Variable<String>(artikelId);
@@ -19850,6 +19873,9 @@ class EntwicklungsProjekt extends DataClass
           : Value(prozessHistorie),
       haccp:
           haccp == null && nullToAbsent ? const Value.absent() : Value(haccp),
+      spezifikation: spezifikation == null && nullToAbsent
+          ? const Value.absent()
+          : Value(spezifikation),
       artikelId: artikelId == null && nullToAbsent
           ? const Value.absent()
           : Value(artikelId),
@@ -19896,6 +19922,7 @@ class EntwicklungsProjekt extends DataClass
       prozess: serializer.fromJson<String?>(json['prozess']),
       prozessHistorie: serializer.fromJson<String?>(json['prozessHistorie']),
       haccp: serializer.fromJson<String?>(json['haccp']),
+      spezifikation: serializer.fromJson<String?>(json['spezifikation']),
       artikelId: serializer.fromJson<String?>(json['artikelId']),
       freigabeVersionId:
           serializer.fromJson<String?>(json['freigabeVersionId']),
@@ -19931,6 +19958,7 @@ class EntwicklungsProjekt extends DataClass
       'prozess': serializer.toJson<String?>(prozess),
       'prozessHistorie': serializer.toJson<String?>(prozessHistorie),
       'haccp': serializer.toJson<String?>(haccp),
+      'spezifikation': serializer.toJson<String?>(spezifikation),
       'artikelId': serializer.toJson<String?>(artikelId),
       'freigabeVersionId': serializer.toJson<String?>(freigabeVersionId),
       'freigegebenAm': serializer.toJson<DateTime?>(freigegebenAm),
@@ -19963,6 +19991,7 @@ class EntwicklungsProjekt extends DataClass
           Value<String?> prozess = const Value.absent(),
           Value<String?> prozessHistorie = const Value.absent(),
           Value<String?> haccp = const Value.absent(),
+          Value<String?> spezifikation = const Value.absent(),
           Value<String?> artikelId = const Value.absent(),
           Value<String?> freigabeVersionId = const Value.absent(),
           Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -20002,6 +20031,8 @@ class EntwicklungsProjekt extends DataClass
             ? prozessHistorie.value
             : this.prozessHistorie,
         haccp: haccp.present ? haccp.value : this.haccp,
+        spezifikation:
+            spezifikation.present ? spezifikation.value : this.spezifikation,
         artikelId: artikelId.present ? artikelId.value : this.artikelId,
         freigabeVersionId: freigabeVersionId.present
             ? freigabeVersionId.value
@@ -20055,6 +20086,9 @@ class EntwicklungsProjekt extends DataClass
           ? data.prozessHistorie.value
           : this.prozessHistorie,
       haccp: data.haccp.present ? data.haccp.value : this.haccp,
+      spezifikation: data.spezifikation.present
+          ? data.spezifikation.value
+          : this.spezifikation,
       artikelId: data.artikelId.present ? data.artikelId.value : this.artikelId,
       freigabeVersionId: data.freigabeVersionId.present
           ? data.freigabeVersionId.value
@@ -20093,6 +20127,7 @@ class EntwicklungsProjekt extends DataClass
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
+          ..write('spezifikation: $spezifikation, ')
           ..write('artikelId: $artikelId, ')
           ..write('freigabeVersionId: $freigabeVersionId, ')
           ..write('freigegebenAm: $freigegebenAm, ')
@@ -20127,6 +20162,7 @@ class EntwicklungsProjekt extends DataClass
         prozess,
         prozessHistorie,
         haccp,
+        spezifikation,
         artikelId,
         freigabeVersionId,
         freigegebenAm,
@@ -20160,6 +20196,7 @@ class EntwicklungsProjekt extends DataClass
           other.prozess == this.prozess &&
           other.prozessHistorie == this.prozessHistorie &&
           other.haccp == this.haccp &&
+          other.spezifikation == this.spezifikation &&
           other.artikelId == this.artikelId &&
           other.freigabeVersionId == this.freigabeVersionId &&
           other.freigegebenAm == this.freigegebenAm &&
@@ -20192,6 +20229,7 @@ class EntwicklungProjekteCompanion
   final Value<String?> prozess;
   final Value<String?> prozessHistorie;
   final Value<String?> haccp;
+  final Value<String?> spezifikation;
   final Value<String?> artikelId;
   final Value<String?> freigabeVersionId;
   final Value<DateTime?> freigegebenAm;
@@ -20222,6 +20260,7 @@ class EntwicklungProjekteCompanion
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
+    this.spezifikation = const Value.absent(),
     this.artikelId = const Value.absent(),
     this.freigabeVersionId = const Value.absent(),
     this.freigegebenAm = const Value.absent(),
@@ -20253,6 +20292,7 @@ class EntwicklungProjekteCompanion
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
+    this.spezifikation = const Value.absent(),
     this.artikelId = const Value.absent(),
     this.freigabeVersionId = const Value.absent(),
     this.freigegebenAm = const Value.absent(),
@@ -20285,6 +20325,7 @@ class EntwicklungProjekteCompanion
     Expression<String>? prozess,
     Expression<String>? prozessHistorie,
     Expression<String>? haccp,
+    Expression<String>? spezifikation,
     Expression<String>? artikelId,
     Expression<String>? freigabeVersionId,
     Expression<DateTime>? freigegebenAm,
@@ -20318,6 +20359,7 @@ class EntwicklungProjekteCompanion
       if (prozess != null) 'prozess': prozess,
       if (prozessHistorie != null) 'prozess_historie': prozessHistorie,
       if (haccp != null) 'haccp': haccp,
+      if (spezifikation != null) 'spezifikation': spezifikation,
       if (artikelId != null) 'artikel_id': artikelId,
       if (freigabeVersionId != null) 'freigabe_version_id': freigabeVersionId,
       if (freigegebenAm != null) 'freigegeben_am': freigegebenAm,
@@ -20351,6 +20393,7 @@ class EntwicklungProjekteCompanion
       Value<String?>? prozess,
       Value<String?>? prozessHistorie,
       Value<String?>? haccp,
+      Value<String?>? spezifikation,
       Value<String?>? artikelId,
       Value<String?>? freigabeVersionId,
       Value<DateTime?>? freigegebenAm,
@@ -20381,6 +20424,7 @@ class EntwicklungProjekteCompanion
       prozess: prozess ?? this.prozess,
       prozessHistorie: prozessHistorie ?? this.prozessHistorie,
       haccp: haccp ?? this.haccp,
+      spezifikation: spezifikation ?? this.spezifikation,
       artikelId: artikelId ?? this.artikelId,
       freigabeVersionId: freigabeVersionId ?? this.freigabeVersionId,
       freigegebenAm: freigegebenAm ?? this.freigegebenAm,
@@ -20461,6 +20505,9 @@ class EntwicklungProjekteCompanion
     if (haccp.present) {
       map['haccp'] = Variable<String>(haccp.value);
     }
+    if (spezifikation.present) {
+      map['spezifikation'] = Variable<String>(spezifikation.value);
+    }
     if (artikelId.present) {
       map['artikel_id'] = Variable<String>(artikelId.value);
     }
@@ -20510,6 +20557,7 @@ class EntwicklungProjekteCompanion
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
+          ..write('spezifikation: $spezifikation, ')
           ..write('artikelId: $artikelId, ')
           ..write('freigabeVersionId: $freigabeVersionId, ')
           ..write('freigegebenAm: $freigegebenAm, ')
@@ -32832,6 +32880,7 @@ typedef $$EntwicklungProjekteTableCreateCompanionBuilder
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
+  Value<String?> spezifikation,
   Value<String?> artikelId,
   Value<String?> freigabeVersionId,
   Value<DateTime?> freigegebenAm,
@@ -32864,6 +32913,7 @@ typedef $$EntwicklungProjekteTableUpdateCompanionBuilder
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
+  Value<String?> spezifikation,
   Value<String?> artikelId,
   Value<String?> freigabeVersionId,
   Value<DateTime?> freigegebenAm,
@@ -32952,6 +33002,9 @@ class $$EntwicklungProjekteTableFilterComposer
 
   ColumnFilters<String> get haccp => $composableBuilder(
       column: $table.haccp, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get spezifikation => $composableBuilder(
+      column: $table.spezifikation, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get artikelId => $composableBuilder(
       column: $table.artikelId, builder: (column) => ColumnFilters(column));
@@ -33055,6 +33108,10 @@ class $$EntwicklungProjekteTableOrderingComposer
   ColumnOrderings<String> get haccp => $composableBuilder(
       column: $table.haccp, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get spezifikation => $composableBuilder(
+      column: $table.spezifikation,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get artikelId => $composableBuilder(
       column: $table.artikelId, builder: (column) => ColumnOrderings(column));
 
@@ -33151,6 +33208,9 @@ class $$EntwicklungProjekteTableAnnotationComposer
   GeneratedColumn<String> get haccp =>
       $composableBuilder(column: $table.haccp, builder: (column) => column);
 
+  GeneratedColumn<String> get spezifikation => $composableBuilder(
+      column: $table.spezifikation, builder: (column) => column);
+
   GeneratedColumn<String> get artikelId =>
       $composableBuilder(column: $table.artikelId, builder: (column) => column);
 
@@ -33222,6 +33282,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
+            Value<String?> spezifikation = const Value.absent(),
             Value<String?> artikelId = const Value.absent(),
             Value<String?> freigabeVersionId = const Value.absent(),
             Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -33253,6 +33314,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,
+            spezifikation: spezifikation,
             artikelId: artikelId,
             freigabeVersionId: freigabeVersionId,
             freigegebenAm: freigegebenAm,
@@ -33284,6 +33346,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
+            Value<String?> spezifikation = const Value.absent(),
             Value<String?> artikelId = const Value.absent(),
             Value<String?> freigabeVersionId = const Value.absent(),
             Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -33315,6 +33378,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,
+            spezifikation: spezifikation,
             artikelId: artikelId,
             freigabeVersionId: freigabeVersionId,
             freigegebenAm: freigegebenAm,

@@ -210,6 +210,47 @@ Future<GewaehlteDatei?> dateiWaehlen(
   return (name: datei.name, inhalt: bytes);
 }
 
+/// Lässt Dateien mit den [endungen] wählen (etwa `['pdf', 'zip']`) und
+/// liest sie. Leer bei Abbruch; was sich nicht lesen ließ, fehlt — mit
+/// einer Meldung.
+Future<List<GewaehlteDatei>> dateienWaehlen(
+  BuildContext context, {
+  required String titel,
+  required List<String> endungen,
+  bool mehrere = true,
+}) async {
+  final gewaehlt = await FilePicker.pickFiles(
+    dialogTitle: titel,
+    type: FileType.custom,
+    allowedExtensions: endungen,
+    allowMultiple: mehrere,
+    withData: true,
+  );
+  if (gewaehlt == null) return const [];
+  final ergebnis = <GewaehlteDatei>[];
+  final fehlt = <String>[];
+  for (final datei in gewaehlt.files) {
+    var bytes = datei.bytes;
+    final pfad = datei.path;
+    if (bytes == null && pfad != null) {
+      try {
+        bytes = await File(pfad).readAsBytes();
+      } on FileSystemException {
+        bytes = null;
+      }
+    }
+    if (bytes == null) {
+      fehlt.add(datei.name);
+    } else {
+      ergebnis.add((name: datei.name, inhalt: bytes));
+    }
+  }
+  if (fehlt.isNotEmpty && context.mounted) {
+    _melde(context, 'Nicht lesbar: ${fehlt.join(', ')}');
+  }
+  return ergebnis;
+}
+
 /// Speichert eine gewählte Datei verschlüsselt und gibt ihre ID zurück.
 Future<String> dateiAblegen(
   WidgetRef ref,

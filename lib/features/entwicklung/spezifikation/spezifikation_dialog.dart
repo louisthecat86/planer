@@ -9,6 +9,7 @@ import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
+import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../freigabe/freigabe.dart' show FreigabeStand;
 import '../projekte/datei_aktionen.dart' show groesseText;
@@ -17,17 +18,19 @@ import 'spezifikation_dienst.dart';
 import 'spezifikation_werte.dart';
 
 // Das Fenster „Spezifikation erstellen": Rezepturstand und Sprache wählen,
-// die eigene Excel-Vorlage hinterlegen, für Englisch auf Wunsch mit DeepL
-// übersetzen — dann wird die gefüllte Mappe gespeichert.
+// die eigene Excel-Vorlage hinterlegen (die App richtet ein Formblatt
+// selbst ein), für Englisch auf Wunsch mit DeepL übersetzen — dann wird
+// die gefüllte Mappe gespeichert.
 
 /// Öffnet das Fenster für [projekt].
 Future<void> spezifikationOeffnen(
   BuildContext context,
-  EntwicklungsProjekt projekt,
-) =>
+  EntwicklungsProjekt projekt, {
+  SpezSprache sprache = SpezSprache.de,
+}) =>
     showDialog<void>(
       context: context,
-      builder: (_) => SpezifikationDialog(projekt: projekt),
+      builder: (_) => SpezifikationDialog(projekt: projekt, sprache: sprache),
     );
 
 /// Hängt [endung] an, wenn der Speichern-Dialog es nicht tat.
@@ -61,10 +64,137 @@ String? spezStandVorschlag(
   return staende.first.version.id;
 }
 
+/// Was nach dem Einrichten einer Vorlage gemeldet wird.
+String einrichtungsText(SpezSprache sprache, VorlageGespeichert g) {
+  final e = g.einrichtung;
+  final bekannt = {for (final p in kSpezifikationPlatzhalter) p.name};
+  final unbekannt = g.platzhalter.difference(bekannt).toList()..sort();
+  if (e != null) {
+    final felder = g.platzhalter.length;
+    return [
+      'Die Vorlage für ${sprache.label} ist eingerichtet: $felder '
+          '${felder == 1 ? 'Feld' : 'Felder'} erkannt'
+          '${e.kaestchen > 0 ? ', davon ${e.kaestchen} Kontrollkästchen' : ''}.',
+      if (e.fehlend.isNotEmpty)
+        'Nicht gefunden: ${e.fehlend.join(', ')} — diese Platzhalter kannst '
+            'du von Hand eintragen (Vorlage als Datei speichern, in Excel '
+            'ergänzen, wieder wählen).',
+    ].join('\n');
+  }
+  if (g.platzhalter.isEmpty) {
+    return 'Die Vorlage für ${sprache.label} ist gespeichert, aber die App '
+        'hat darin nichts erkannt — es würde nichts gefüllt. Schreib in die '
+        'Zellen Platzhalter wie {{artikelnummer}}; die Beispielvorlage zeigt '
+        'alle.';
+  }
+  if (unbekannt.isNotEmpty) {
+    return 'Die Vorlage für ${sprache.label} ist gespeichert: '
+        '${g.platzhalter.length - unbekannt.length} Platzhalter erkannt. '
+        'Diese kennt die App nicht (Tippfehler?): '
+        '${unbekannt.map((n) => '{{$n}}').join(', ')}';
+  }
+  return 'Die Vorlage für ${sprache.label} ist gespeichert: '
+      '${g.platzhalter.length} Platzhalter erkannt.';
+}
+
+/// Eine Meldung mit ihrer Art.
+typedef SpezMeldung = ({String text, StatusArt art});
+
+/// Erstellt die Spezifikation, lässt den Ort wählen und speichert sie;
+/// legt sie auf Wunsch bei den Projektdateien ab und hakt die Checkliste
+/// ab. Gibt die Meldung zurück — null, wenn das Speichern abgebrochen
+/// wurde.
+Future<SpezMeldung?> spezifikationErstellenUndSpeichern(
+  WidgetRef ref, {
+  required EntwicklungsProjekt projekt,
+  required String versionId,
+  required SpezSprache sprache,
+  required bool uebersetzen,
+  bool ablegen = true,
+  DateTime? datum,
+  String? kuerzel,
+}) async {
+  // Alles von `ref` vorab: Wer während des Speicherns den Reiter wechselt,
+  // hat das Fenster dann schon geschlossen.
+  final dienst = ref.read(spezifikationDienstProvider);
+  final sicherung = ref.read(autoBackupTriggerProvider);
+  try {
+    final k = kuerzel?.trim() ?? '';
+    if (k != (ref.read(spezKuerzelProvider).valueOrNull ?? '')) {
+      await dienst.kuerzelSpeichern(k);
+      if (ref.context.mounted) ref.invalidate(spezKuerzelProvider);
+    }
+    final e = await dienst.erstellen(
+      projekt: projekt,
+      versionId: versionId,
+      sprache: sprache,
+      uebersetzen: uebersetzen,
+      datum: datum,
+      kuerzel: k,
+    );
+    final pfad = await FilePicker.saveFile(
+      dialogTitle: 'Spezifikation (${sprache.label}) speichern',
+      fileName: e.dateiname,
+      type: FileType.custom,
+      allowedExtensions: ['xlsx'],
+    );
+    if (pfad == null) return null;
+    final ziel = mitEndung(pfad, '.xlsx');
+    await File(ziel).writeAsBytes(e.bytes, flush: true);
+    if (ablegen) {
+      await dienst.ablegen(
+        projekt: projekt,
+        versionId: versionId,
+        sprache: sprache,
+        ergebnis: e,
+      );
+    }
+    await dienst.abhaken(projekt.id);
+    sicherung.fireDebounced(reason: 'Spezifikation');
+    final hinweise = [
+      'Gespeicherte Datei: $ziel',
+      '${e.ersetzt} Felder gefüllt'
+          '${e.kaestchen > 0 ? ', ${e.kaestchen} Kästchen angekreuzt' : ''}.',
+      if (e.uebersetzt)
+        'Die Texte sind mit DeepL übersetzt — bitte prüfen, besonders die '
+            'Zutatenliste mit den hervorgehobenen Allergenen.',
+      if (e.uebersetzungsFehler case final fehler?) fehler,
+      ...e.hinweise,
+      if (e.unbekannt.isNotEmpty)
+        'Diese Platzhalter kennt die App nicht, sie stehen noch in der '
+            'Mappe: ${(e.unbekannt.toList()..sort()).map((n) => '{{$n}}').join(', ')}',
+      if (ablegen) 'Bei den Projektdateien abgelegt und im Verlauf vermerkt.',
+      '„Spezifikation erstellt" ist in der Checkliste abgehakt.',
+    ];
+    return (
+      text: hinweise.join('\n'),
+      art: e.unbekannt.isEmpty &&
+              e.uebersetzungsFehler == null &&
+              e.hinweise.isEmpty
+          ? StatusArt.ok
+          : StatusArt.warnung,
+    );
+  } on StateError catch (e) {
+    return (text: e.message, art: StatusArt.fehler);
+  } catch (e) {
+    return (
+      text: 'Die Spezifikation ließ sich nicht erstellen: ${fehlerText(e)}',
+      art: StatusArt.fehler,
+    );
+  }
+}
+
 class SpezifikationDialog extends ConsumerStatefulWidget {
-  const SpezifikationDialog({super.key, required this.projekt});
+  const SpezifikationDialog({
+    super.key,
+    required this.projekt,
+    this.sprache = SpezSprache.de,
+  });
 
   final EntwicklungsProjekt projekt;
+
+  /// Die Sprache, mit der das Fenster aufgeht.
+  final SpezSprache sprache;
 
   @override
   ConsumerState<SpezifikationDialog> createState() =>
@@ -73,14 +203,23 @@ class SpezifikationDialog extends ConsumerStatefulWidget {
 
 class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
   String? _versionId;
-  SpezSprache _sprache = SpezSprache.de;
+  late SpezSprache _sprache = widget.sprache;
   bool _uebersetzen = true;
   bool _ablegen = true;
   bool _laeuft = false;
   String? _meldung;
   StatusArt _meldungArt = StatusArt.info;
+  DateTime _datum = DateUtils.dateOnly(DateTime.now());
+  final _kuerzel = TextEditingController();
+  bool _kuerzelGeladen = false;
 
   SpezifikationDienst get _dienst => ref.read(spezifikationDienstProvider);
+
+  @override
+  void dispose() {
+    _kuerzel.dispose();
+    super.dispose();
+  }
 
   void _melde(String text, [StatusArt art = StatusArt.info]) {
     if (!mounted) return;
@@ -113,35 +252,18 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
         _melde('Die gewählte Datei ließ sich nicht lesen.', StatusArt.fehler);
         return;
       }
-      final platzhalter =
-          await _dienst.vorlageSpeichern(sprache, datei.name, bytes);
+      final g = await _dienst.vorlageSpeichern(sprache, datei.name, bytes);
       ref.invalidate(spezVorlageProvider(sprache));
+      ref.invalidate(spezVorlagePlatzhalterProvider(sprache));
       _sicherungAnstossen('Spezifikationsvorlage');
       final bekannt = {for (final p in kSpezifikationPlatzhalter) p.name};
-      final unbekannt = platzhalter.difference(bekannt).toList()..sort();
-      if (platzhalter.isEmpty) {
-        _melde(
-          'Die Vorlage für ${sprache.label} ist gespeichert, enthält aber '
-          'keine Platzhalter — es würde nichts gefüllt. Schreib in die '
-          'Zellen Platzhalter wie {{artikelnummer}}; die Beispielvorlage '
-          'zeigt alle.',
-          StatusArt.warnung,
-        );
-      } else if (unbekannt.isNotEmpty) {
-        _melde(
-          'Die Vorlage für ${sprache.label} ist gespeichert: '
-          '${platzhalter.length - unbekannt.length} Platzhalter erkannt. '
-          'Diese kennt die App nicht (Tippfehler?): '
-          '${unbekannt.map((n) => '{{$n}}').join(', ')}',
-          StatusArt.warnung,
-        );
-      } else {
-        _melde(
-          'Die Vorlage für ${sprache.label} ist gespeichert: '
-          '${platzhalter.length} Platzhalter erkannt.',
-          StatusArt.ok,
-        );
-      }
+      final gut = g.platzhalter.isNotEmpty &&
+          g.platzhalter.difference(bekannt).isEmpty &&
+          (g.einrichtung?.fehlend.isEmpty ?? true);
+      _melde(
+        einrichtungsText(sprache, g),
+        gut ? StatusArt.ok : StatusArt.warnung,
+      );
     } on FormatException catch (e) {
       _melde(e.message, StatusArt.fehler);
     } catch (e) {
@@ -178,11 +300,44 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     try {
       await _dienst.vorlageLoeschen(sprache);
       ref.invalidate(spezVorlageProvider(sprache));
+      ref.invalidate(spezVorlagePlatzhalterProvider(sprache));
       _sicherungAnstossen('Spezifikationsvorlage');
       _melde('Die Vorlage für ${sprache.label} ist entfernt.');
     } catch (e) {
       _melde(
         'Die Vorlage ließ sich nicht entfernen: ${fehlerText(e)}',
+        StatusArt.fehler,
+      );
+    }
+  }
+
+  /// Speichert die Vorlage, wie die App sie füllt — mit den Platzhaltern
+  /// zum Nachsehen oder Ergänzen in Excel.
+  Future<void> _vorlageAlsDatei(EntwicklungsDatei d) async {
+    try {
+      final inhalt = await _dienst.vorlageInhalt(_sprache);
+      if (inhalt == null) {
+        _melde('Der Inhalt der Vorlage fehlt.', StatusArt.fehler);
+        return;
+      }
+      final pfad = await FilePicker.saveFile(
+        dialogTitle: 'Vorlage mit Platzhaltern speichern',
+        fileName: d.name,
+        type: FileType.custom,
+        allowedExtensions: ['xlsx'],
+      );
+      if (pfad == null) return;
+      final ziel = mitEndung(pfad, '.xlsx');
+      await File(ziel).writeAsBytes(inhalt, flush: true);
+      _melde(
+        'Gespeichert: $ziel\nDie Platzhalter stehen in den Zellen, unter den '
+        'Kontrollkästchen und in der Kopfzeile. Was fehlt, trägst du in Excel '
+        'ein und wählst die Vorlage dann wieder.',
+        StatusArt.ok,
+      );
+    } catch (e) {
+      _melde(
+        'Die Vorlage ließ sich nicht speichern: ${fehlerText(e)}',
         StatusArt.fehler,
       );
     }
@@ -238,6 +393,16 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     }
   }
 
+  Future<void> _datumWaehlen() async {
+    final gewaehlt = await showDatePicker(
+      context: context,
+      initialDate: _datum,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (gewaehlt != null && mounted) setState(() => _datum = gewaehlt);
+  }
+
   Future<void> _erstellen() async {
     final staende =
         ref.read(spezStaendeProvider(widget.projekt.id)).valueOrNull ??
@@ -245,81 +410,29 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     final versionId = _versionId ??
         spezStandVorschlag(staende, widget.projekt.freigabeVersionId);
     if (versionId == null) return;
-    final sprache = _sprache;
-    final ablegen = _ablegen;
     final hinterlegt = ref.read(deeplHinterlegtProvider).valueOrNull ?? false;
     setState(() {
       _laeuft = true;
       _meldung = null;
     });
-    try {
-      final e = await _dienst.erstellen(
-        projekt: widget.projekt,
-        versionId: versionId,
-        sprache: sprache,
-        uebersetzen: _uebersetzen && hinterlegt,
-      );
-      final pfad = await FilePicker.saveFile(
-        dialogTitle: 'Spezifikation (${sprache.label}) speichern',
-        fileName: e.dateiname,
-        type: FileType.custom,
-        allowedExtensions: ['xlsx'],
-      );
-      if (pfad == null) {
-        if (mounted) setState(() => _laeuft = false);
-        return;
+    final m = await spezifikationErstellenUndSpeichern(
+      ref,
+      projekt: widget.projekt,
+      versionId: versionId,
+      sprache: _sprache,
+      uebersetzen: _uebersetzen && hinterlegt,
+      ablegen: _ablegen,
+      datum: _datum,
+      kuerzel: _kuerzel.text,
+    );
+    if (!mounted) return;
+    setState(() {
+      _laeuft = false;
+      if (m != null) {
+        _meldung = m.text;
+        _meldungArt = m.art;
       }
-      final ziel = mitEndung(pfad, '.xlsx');
-      await File(ziel).writeAsBytes(e.bytes, flush: true);
-      if (ablegen) {
-        await _dienst.ablegen(
-          projekt: widget.projekt,
-          versionId: versionId,
-          sprache: sprache,
-          ergebnis: e,
-        );
-      }
-      await _dienst.abhaken(widget.projekt.id);
-      _sicherungAnstossen('Spezifikation');
-      final hinweise = [
-        'Gespeichert: $ziel',
-        '${e.ersetzt} Platzhalter gefüllt.',
-        if (e.uebersetzt)
-          'Die Texte sind mit DeepL übersetzt — bitte prüfen, besonders die '
-              'Zutatenliste mit den hervorgehobenen Allergenen.',
-        if (e.uebersetzungsFehler case final fehler?) fehler,
-        if (sprache == SpezSprache.en && !hinterlegt)
-          'Ohne DeepL-Schlüssel sind die Texte deutsch geblieben.',
-        if (e.unbekannt.isNotEmpty)
-          'Diese Platzhalter kennt die App nicht, sie stehen noch in der '
-              'Mappe: ${(e.unbekannt.toList()..sort()).map((n) => '{{$n}}').join(', ')}',
-        if (ablegen) 'Bei den Projektdateien abgelegt und im Verlauf vermerkt.',
-        '„Spezifikation erstellt" ist in der Checkliste abgehakt.',
-      ];
-      if (!mounted) return;
-      setState(() {
-        _laeuft = false;
-        _meldung = hinweise.join('\n');
-        _meldungArt = e.unbekannt.isEmpty && e.uebersetzungsFehler == null
-            ? StatusArt.ok
-            : StatusArt.warnung;
-      });
-    } on StateError catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _laeuft = false;
-        _meldung = e.message;
-        _meldungArt = StatusArt.fehler;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _laeuft = false;
-        _meldung = 'Die Spezifikation ließ sich nicht erstellen: '
-            '${fehlerText(e)}';
-        _meldungArt = StatusArt.fehler;
-      });
-    }
+    });
   }
 
   @override
@@ -329,7 +442,15 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     final freigegeben = widget.projekt.freigabeVersionId;
     final staende = ref.watch(spezStaendeProvider(widget.projekt.id));
     final vorlage = ref.watch(spezVorlageProvider(_sprache));
+    final felder =
+        ref.watch(spezVorlagePlatzhalterProvider(_sprache)).valueOrNull ??
+            const <String>{};
     final hinterlegt = ref.watch(deeplHinterlegtProvider).valueOrNull ?? false;
+    final kuerzel = ref.watch(spezKuerzelProvider);
+    if (!_kuerzelGeladen && kuerzel.hasValue) {
+      _kuerzelGeladen = true;
+      _kuerzel.text = kuerzel.value ?? '';
+    }
     final alle = staende.valueOrNull ?? const <FreigabeStand>[];
     final versionId = _versionId ?? spezStandVorschlag(alle, freigegeben);
     final kann =
@@ -386,22 +507,46 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
                       ),
               ),
               const SizedBox(height: 16),
-              Row(
+              Wrap(
+                spacing: 16,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Text('Sprache', style: theme.textTheme.bodyMedium),
-                  const SizedBox(width: 16),
-                  SegmentedButton<SpezSprache>(
-                    segments: [
-                      for (final s in SpezSprache.values)
-                        ButtonSegment(value: s, label: Text(s.label)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('Sprache', style: theme.textTheme.bodyMedium),
+                      const SizedBox(width: 16),
+                      SegmentedButton<SpezSprache>(
+                        segments: [
+                          for (final s in SpezSprache.values)
+                            ButtonSegment(value: s, label: Text(s.label)),
+                        ],
+                        selected: {_sprache},
+                        onSelectionChanged: _laeuft
+                            ? null
+                            : (auswahl) => setState(() {
+                                  _sprache = auswahl.first;
+                                  _meldung = null;
+                                }),
+                      ),
                     ],
-                    selected: {_sprache},
-                    onSelectionChanged: _laeuft
-                        ? null
-                        : (auswahl) => setState(() {
-                              _sprache = auswahl.first;
-                              _meldung = null;
-                            }),
+                  ),
+                  SizedBox(
+                    width: 120,
+                    child: TextField(
+                      controller: _kuerzel,
+                      enabled: !_laeuft,
+                      decoration: const InputDecoration(
+                        labelText: 'Kürzel',
+                        hintText: 'z. B. MM',
+                      ),
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _laeuft ? null : _datumWaehlen,
+                    icon: const Icon(Icons.event_outlined, size: 18),
+                    label: Text('gültig ab ${Format.datum(_datum)}'),
                   ),
                 ],
               ),
@@ -419,47 +564,77 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
                   art: StatusArt.fehler,
                   auswaehlbar: true,
                 ),
-                data: (d) => Row(
+                data: (d) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(
-                      d == null
-                          ? Icons.upload_file_outlined
-                          : Icons.description_outlined,
-                      size: 20,
-                      color: grau,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        d == null
-                            ? 'Noch keine Vorlage für ${_sprache.label} '
-                                'gewählt.'
-                            : '${d.name} · ${groesseText(d.groesse)}',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: d == null ? grau : null,
+                    Row(
+                      children: [
+                        Icon(
+                          d == null
+                              ? Icons.upload_file_outlined
+                              : Icons.description_outlined,
+                          size: 20,
+                          color: grau,
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            d == null
+                                ? 'Noch keine Vorlage für ${_sprache.label} '
+                                    'gewählt.'
+                                : '${d.name} · ${groesseText(d.groesse)}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: d == null ? grau : null,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _laeuft ? null : _vorlageWaehlen,
+                          child: Text(
+                            d == null ? 'Vorlage wählen…' : 'Ersetzen…',
+                          ),
+                        ),
+                        if (d != null) ...[
+                          IconButton(
+                            tooltip: 'Vorlage mit Platzhaltern als Datei '
+                                'speichern',
+                            icon: const Icon(Icons.download_outlined),
+                            onPressed:
+                                _laeuft ? null : () => _vorlageAlsDatei(d),
+                          ),
+                          IconButton(
+                            tooltip: 'Vorlage entfernen',
+                            icon: const Icon(Icons.delete_outline),
+                            onPressed: _laeuft ? null : _vorlageEntfernen,
+                          ),
+                        ],
+                      ],
                     ),
-                    TextButton(
-                      onPressed: _laeuft ? null : _vorlageWaehlen,
-                      child: Text(d == null ? 'Vorlage wählen…' : 'Ersetzen…'),
-                    ),
-                    if (d != null)
-                      IconButton(
-                        tooltip: 'Vorlage entfernen',
-                        icon: const Icon(Icons.delete_outline),
-                        onPressed: _laeuft ? null : _vorlageEntfernen,
+                    if (d != null && felder.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 28),
+                        child: Text(
+                          '${felder.length} '
+                          '${felder.length == 1 ? 'Feld' : 'Felder'} '
+                          'eingerichtet',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: grau,
+                          ),
+                        ),
                       ),
                   ],
                 ),
               ),
               const SizedBox(height: 6),
               const HinweisBox(
-                'Die Vorlage ist eure eigene Spezifikation als Excel-Mappe. '
-                'In die Zellen, die gefüllt werden sollen, kommen Platzhalter '
-                'wie {{artikelnummer}} oder {{naehrwert.fett}} — alle stehen '
-                'unten und in der Beispielvorlage. Formatierung, Logo und '
-                'Aufbau bleiben, wie sie sind. Die Vorlage liegt '
+                'Die Vorlage ist eure eigene Spezifikation als Excel-Mappe — '
+                'etwa das Formblatt, wie es in der Qualitätssicherung liegt. '
+                'Die App erkennt die Beschriftungen (Artikelnummer, Zutaten, '
+                'Nährwerte, Allergene mit ja/nein/Spuren, Verpackung …) und '
+                'richtet die Vorlage selbst ein; Kontrollkästchen hakt sie an. '
+                'Eigene Platzhalter wie {{artikelnummer}} gehen auch — alle '
+                'stehen unten und in der Beispielvorlage. Formatierung, Logo '
+                'und Aufbau bleiben, wie sie sind. Die Vorlage liegt '
                 'verschlüsselt bei der Produktentwicklung und wandert mit '
                 'ins Backup.',
               ),
@@ -485,9 +660,10 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
                         title: const Text('Texte mit DeepL übersetzen'),
                         subtitle: Text(
                           hinterlegt
-                              ? 'Bezeichnung, Zutatenliste, Sensorik und '
-                                  'Hilfsstoffe. Zahlen, Daten und Allergen-'
-                                  'namen schreibt die App selbst englisch.'
+                              ? 'Bezeichnung, Zutatenliste, Sensorik, '
+                                  'Lagerung, Hinweise und Hilfsstoffe. '
+                                  'Zahlen, Daten, Kreuze und Allergennamen '
+                                  'schreibt die App selbst englisch.'
                               : 'Ohne DeepL-Schlüssel bleiben die Texte '
                                   'deutsch; Zahlen, Daten und Allergennamen '
                                   'sind trotzdem englisch.',

@@ -61,7 +61,14 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 
 - **Projekte** mit Stammdaten, Zielen (Fett, Eiweiß, aw), Checklisten,
   Verlauf mit Kommentaren, Prozess mit Versionen, HACCP-Gefahrenanalyse mit
-  Codex-Entscheidungsbaum, Fließdiagramm, Sensorik und Dateien.
+  Codex-Entscheidungsbaum, Fließdiagramm, Sensorik, Spezifikation und
+  Dateien.
+- **Fließdiagramme** als PDF: einzeln oder als ZIP einlesen — Kennung,
+  Bezeichnung und Stand kommen aus dem Dateinamen
+  („FD_001 Bezeichnung 260615.pdf", „_" steht für „/"; Namen aus einem
+  Windows-ZIP werden richtig gelesen). Jede Fassung bleibt, es gilt die
+  neueste; im Projekt lässt sich das PDF öffnen, der Projektbericht nennt
+  seinen Stand.
 - **Rezepturen** in Ständen (Entwurf oder abgeschlossen): Zutatenliste
   nach LMIV mit hervorgehobenen Allergenen, Fleischanteil (QUID), Verlust,
   Nährwerte je 100 g gerundet, Vergleich zweier Stände.
@@ -71,9 +78,15 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   ein Ziel einstellen, Entwicklung in Zahlen.
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
-- **Spezifikation** (Excel) aus einer eigenen Vorlage mit Platzhaltern wie
-  `{{zutaten}}`, auf Deutsch oder Englisch (Texte auf Wunsch über DeepL), und
-  ein **Projektbericht** als PDF.
+- **Spezifikation** (Excel) auf Knopfdruck auf Deutsch oder Englisch
+  (Texte auf Wunsch über DeepL): Das eigene Formblatt wird in der App
+  gewählt und dabei selbst eingerichtet — die App erkennt die Beschriftungen
+  (Artikelnummer, Zutaten, Nährwerte, Allergene mit ja/nein/Spuren,
+  Verpackung …), setzt Platzhalter wie `{{zutaten}}` und hakt
+  Kontrollkästchen an. Was nicht aus Rezeptur oder Sensorik kommt (Toleranz,
+  Lagerung, Haltbarkeit, Produkthinweise, Spuren, Verpackung, Kürzel), steht
+  im Reiter „Spezifikation" des Projekts. Dazu ein **Projektbericht** als
+  PDF.
 - Übernahme aus der Development-Suite (ZIP oder JSON).
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
@@ -83,7 +96,7 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 32.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 33.
 - **Backups** (`.planerbackup`) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute, die letzten 30 bleiben) und beim

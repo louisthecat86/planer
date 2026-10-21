@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/entwicklung.dart';
@@ -10,6 +11,7 @@ import 'package:produktion_planer/core/services/entwicklung_sicherung.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/utils/krypto.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
+import 'package:produktion_planer/features/entwicklung/entwicklung_auto_sperre.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
@@ -239,10 +241,16 @@ void main() {
   });
 
   group('Seite', () {
-    Future<void> zeige(WidgetTester tester, _Speicher speicher) async {
+    Future<void> zeige(
+      WidgetTester tester,
+      _Speicher speicher, {
+      bool autoGesperrt = false,
+    }) async {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            if (autoGesperrt)
+              entwicklungAutoGesperrtProvider.overrideWith((ref) => true),
             entwicklungZugangProvider.overrideWithValue(
               EntwicklungZugang(
                 speicher,
@@ -337,6 +345,27 @@ void main() {
       expect(offen(), findsNothing);
     });
 
+    testWidgets('nach der automatischen Sperre steht es dabei', (tester) async {
+      final speicher = _Speicher()
+        ..werte[kEntwicklungPasswortSchluessel] = _datensatz('geheim123');
+      await zeige(tester, speicher, autoGesperrt: true);
+      await warte(tester);
+
+      expect(find.text('Gesperrt'), findsOneWidget);
+      expect(find.text('Automatisch gesperrt'), findsOneWidget);
+
+      await tester.enterText(feld('Passwort'), 'geheim123');
+      await tester.tap(find.text('Öffnen'));
+      await warte(tester);
+      expect(offen(), findsOneWidget);
+
+      // Von Hand gesperrt: ohne den Hinweis.
+      await tester.tap(find.byTooltip('Sperren'));
+      await warte(tester);
+      expect(find.text('Gesperrt'), findsOneWidget);
+      expect(find.text('Automatisch gesperrt'), findsNothing);
+    });
+
     testWidgets('ein wartendes Backup wird angekündigt', (tester) async {
       final speicher = _Speicher()
         ..werte[kEntwicklungPasswortSchluessel] = _datensatz('geheim123')
@@ -378,6 +407,66 @@ void main() {
       expect(speicher.werte, isEmpty);
       expect(speicher.geloescht, isTrue);
       expect(find.text('Passwort festlegen'), findsOneWidget);
+    });
+  });
+
+  group('Automatische Sperre (F20)', () {
+    testWidgets('nach 15 Minuten ohne Eingabe zu — Klick und Taste zählen',
+        (tester) async {
+      var zeit = DateTime(2026, 10, 21, 8);
+      var fensterZu = 0;
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: MaterialApp(
+            home: EntwicklungAutoSperre(
+              takt: const Duration(seconds: 10),
+              jetzt: () => zeit,
+              fensterSchliessen: () => fensterZu++,
+              child: const Scaffold(body: Center(child: Text('Planung'))),
+            ),
+          ),
+        ),
+      );
+      bool offen() => container.read(entwicklungEntsperrtProvider);
+      Future<void> warten(Duration ruhe) async {
+        zeit = zeit.add(ruhe);
+        await tester.pump(const Duration(seconds: 11));
+      }
+
+      // Gesperrt bleibt gesperrt — dann gibt es nichts zu tun.
+      await warten(const Duration(hours: 1));
+      expect(fensterZu, 0);
+
+      container.read(entwicklungEntsperrtProvider.notifier).state = true;
+      await tester.pump();
+      await warten(const Duration(minutes: 10));
+      expect(offen(), isTrue);
+
+      // Ein Klick setzt die Zeit zurück …
+      await tester.tap(find.text('Planung'));
+      await warten(const Duration(minutes: 14));
+      expect(offen(), isTrue);
+
+      // … eine Taste auch.
+      await tester.sendKeyEvent(LogicalKeyboardKey.shiftLeft);
+      await warten(const Duration(minutes: 14));
+      expect(offen(), isTrue);
+
+      // Eine Viertelstunde ohne Eingabe: gesperrt, Fenster zu.
+      await warten(const Duration(minutes: 2));
+      expect(offen(), isFalse);
+      expect(container.read(entwicklungAutoGesperrtProvider), isTrue);
+      expect(fensterZu, 1);
+
+      // Wieder offen: Der Hinweis geht weg, die Zeit läuft von vorn.
+      container.read(entwicklungEntsperrtProvider.notifier).state = true;
+      await tester.pump();
+      expect(container.read(entwicklungAutoGesperrtProvider), isFalse);
+      await warten(const Duration(minutes: 14));
+      expect(offen(), isTrue);
     });
   });
 }

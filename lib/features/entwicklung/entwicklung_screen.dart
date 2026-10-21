@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
+import 'entwicklung_auto_sperre.dart';
 import 'entwicklung_zugang.dart';
 import 'import/suite_import_dialog.dart';
 import 'projekte/datei_aktionen.dart';
@@ -15,7 +16,8 @@ import 'zutaten/zutaten_ansicht.dart';
 /// eigenen Passwort.
 ///
 /// Gesperrt zeigt die Seite nur die Passwortabfrage — beim ersten Mal das
-/// Festlegen. Offen bleibt sie, bis jemand sperrt oder die App schließt.
+/// Festlegen. Offen bleibt sie, bis jemand sperrt, eine Viertelstunde
+/// niemand etwas eingibt (EntwicklungAutoSperre) oder die App schließt.
 class EntwicklungScreen extends ConsumerWidget {
   const EntwicklungScreen({super.key});
 
@@ -50,6 +52,8 @@ class EntwicklungScreen extends ConsumerWidget {
               icon: const Icon(Icons.lock_outline),
               onPressed: () {
                 ref.read(entwicklungEntsperrtProvider.notifier).state = false;
+                ref.read(entwicklungAutoGesperrtProvider.notifier).state =
+                    false;
                 // Zum Öffnen entschlüsselte Dateien wieder wegräumen.
                 entwicklungTempLeeren();
               },
@@ -272,9 +276,18 @@ class _SperreState extends ConsumerState<_Sperre> {
                           '$kPasswortMindestlaenge Zeichen.'
                       : 'Mit deinem Passwort öffnest du die '
                           'Produktentwicklung. Sie bleibt offen, bis du sie '
-                          'sperrst oder die App schließt.',
+                          'sperrst, ${kEntwicklungSperreNach.inMinutes} '
+                          'Minuten nichts eingibst oder die App schließt.',
                   style: theme.textTheme.bodyMedium,
                 ),
+                if (!neu && ref.watch(entwicklungAutoGesperrtProvider)) ...[
+                  const SizedBox(height: 12),
+                  HinweisBox(
+                    'Nach ${kEntwicklungSperreNach.inMinutes} Minuten ohne '
+                    'Eingabe hat sich die Produktentwicklung selbst gesperrt.',
+                    titel: 'Automatisch gesperrt',
+                  ),
+                ],
                 if (backupWartet) ...[
                   const SizedBox(height: 12),
                   const HinweisBox(
