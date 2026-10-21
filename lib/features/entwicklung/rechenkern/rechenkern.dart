@@ -23,10 +23,12 @@ import 'rechen_modell.dart';
 //   („Calculation of Meat Content", Abschnitt 8).
 // * Allergene werden nur in ganzen Wortteilen hervorgehoben.
 //
-// Über dem Grenzwert stehen Fett und Bindegewebe als eigene Zutaten mit
-// Menge in der Liste — „Speck" bzw. „…fett" und „…bindegewebe" — und
-// senken den Fleischanteil (LMIV Anhang VII Teil B Nr. 17). Die Suite
-// nannte das Bindegewebe nicht; seit F16 steht es da.
+// Über dem Grenzwert stehen Fett und Bindegewebe als eigene Zutaten in
+// der Liste — „Speck" bzw. „…fett" und „…bindegewebe" — und senken den
+// Fleischanteil (LMIV Anhang VII Teil B Nr. 17). Die Suite nannte das
+// Bindegewebe nicht; seit F16 steht es da. Eine Mengenangabe bekommen
+// beide nicht (F19): Vorgeschrieben ist sie nicht, und üblich ist sie
+// auch nicht — QUID gilt dem Fleisch.
 
 /// Energie je Gramm (LMIV Anhang XIV).
 const double _kjJeGrammFett = 37;
@@ -244,7 +246,7 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
         _Zeile(
           name: art.fettName,
           masseKg: pruefung.ueberschussFettKg,
-          quid: true,
+          quid: false,
         ),
       );
       warnungen.add(
@@ -260,7 +262,7 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
         _Zeile(
           name: art.bindegewebeName,
           masseKg: pruefung.ueberschussBindegewebeKg,
-          quid: true,
+          quid: false,
         ),
       );
       warnungen.add(

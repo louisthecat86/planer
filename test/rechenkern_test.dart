@@ -161,7 +161,8 @@ void main() {
       // 100 kg mit 40 % Fett, Grenze Schwein 30 %:
       // 100 × (40 − 30) / 70 = 14,29 kg Speck, 85,71 kg Fleisch.
       final e = berechne(rezeptur([z(schwein(fett: 40, eiweiss: 14), 100)]));
-      expect(e.zutatenliste, 'Schweinefleisch (85,7 %), Speck (14,3 %)');
+      // Der Überschuss ohne Mengenangabe — QUID gilt dem Fleisch (F19).
+      expect(e.zutatenliste, 'Schweinefleisch (85,7 %), Speck');
       final p = e.tierarten.single;
       expect(p.ueberschussFettKg, closeTo(14.2857, 1e-3));
       expect(p.bindegewebeUeberGrenze, isFalse);
@@ -181,10 +182,7 @@ void main() {
       expect(p.ueberschussBindegewebeKg, closeTo(14.8, 1e-9));
       expect(p.fettUeberGrenze, isFalse);
       // LMIV Anhang VII Teil B Nr. 17: Der Überschuss wird genannt (F16).
-      expect(
-        e.zutatenliste,
-        'Schweinefleisch (85,2 %), Schweinebindegewebe (14,8 %)',
-      );
+      expect(e.zutatenliste, 'Schweinefleisch (85,2 %), Schweinebindegewebe');
       expect(e.fleischanteilProzent, closeTo(85.2, 1e-9));
       expect(
         e.warnungen.any((t) => t.contains('„Schweinebindegewebe"')),
@@ -204,10 +202,10 @@ void main() {
       expect(p.ueberschussBindegewebeKg, closeTo(12.95, 1e-9));
       expect(p.ueberschussFettKg, closeTo(19.8357, 1e-3));
       expect(p.fleischKg, closeTo(67.2143, 1e-3));
+      // Absteigend nach Gewicht: 19,8 kg Speck vor 12,95 kg Bindegewebe.
       expect(
         e.zutatenliste,
-        'Schweinefleisch (67,2 %), Speck (19,8 %), '
-        'Schweinebindegewebe (13,0 %)',
+        'Schweinefleisch (67,2 %), Speck, Schweinebindegewebe',
       );
     });
 
@@ -249,8 +247,7 @@ void main() {
       );
       expect(
         e.zutatenliste,
-        'Schweinefleisch (50,0 %), Putenfleisch (47,1 %), '
-        'Putenfett (2,9 %)',
+        'Schweinefleisch (50,0 %), Putenfleisch (47,1 %), Putenfett',
       );
     });
 
