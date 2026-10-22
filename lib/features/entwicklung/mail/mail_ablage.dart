@@ -120,7 +120,7 @@ class MailAblage {
       art: EintragArt.datei,
       titel: datei.name,
       datum: DateTime(heute.year, heute.month, heute.day),
-      status: EintragStatus.erhalten,
+      status: EintragStatus.erledigt,
       dateiId: dateiId,
     );
   }
@@ -186,7 +186,7 @@ class MailAblage {
       datum: tag,
       benutzer: absender,
       beschreibung: beschreibung.isEmpty ? null : beschreibung,
-      status: EintragStatus.erhalten,
+      status: EintragStatus.erledigt,
       dateiId: dateiId,
       aenderungen: anhaenge,
     );

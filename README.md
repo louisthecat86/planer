@@ -62,7 +62,13 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 - **Projekte** mit Stammdaten, Zielen (Fett, Eiweiß, aw), Checklisten,
   Verlauf mit Kommentaren, Prozess mit Versionen, HACCP-Gefahrenanalyse mit
   Codex-Entscheidungsbaum, Fließdiagramm, Sensorik, Spezifikation und
-  Dateien.
+  Dateien. Die Projekt-Checkliste rechnet sich selbst: Rezeptur (ein
+  abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit Werten),
+  Spezifikation, Prozess, Sensorik (Aussehen, Geruch, Geschmack,
+  Konsistenz) und Artikel (Freigabe) sieht die App dem Projekt an — von
+  Hand bleiben nur Etikett und Navision; Liste, Übersicht, Zahlen und
+  Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
+  (antippen schaltet um).
 - **Fließdiagramme** als PDF: einzeln oder als ZIP einlesen — Kennung,
   Bezeichnung und Stand kommen aus dem Dateinamen
   („FD_001 Bezeichnung 260615.pdf", „_" steht für „/"; Namen aus einem
@@ -111,7 +117,9 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Produkthinweise, Spuren, Verpackung, Kürzel), steht im Reiter
   „Spezifikation" des Projekts — dort zeigt eine Vorschau, was mit dem
   gewählten Stand hineinkommt, und was noch fehlt. Dazu ein
-  **Projektbericht** als PDF.
+  **Projektbericht** als PDF mit Checklisten und dem Entwicklungsweg
+  (Stationen mit Grund, Änderungen, Kennzahlen und Rückmeldungen, Phasen,
+  Freigabe).
 - Übernahme aus der Development-Suite (ZIP oder JSON).
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden

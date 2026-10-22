@@ -73,11 +73,9 @@ enum EintragArt {
   }
 }
 
-/// Stand eines Eintrags.
+/// Stand eines Eintrags: Ist noch etwas zu tun oder nicht (F24)?
 enum EintragStatus {
   offen('offen', 'offen'),
-  erhalten('erhalten', 'erhalten'),
-  ok('ok', 'in Ordnung'),
   erledigt('erledigt', 'erledigt');
 
   const EintragStatus(this.schluessel, this.label);
@@ -85,16 +83,20 @@ enum EintragStatus {
   final String schluessel;
   final String label;
 
+  /// Der andere Status — zum Umschalten.
+  EintragStatus get umgekehrt =>
+      this == EintragStatus.offen ? EintragStatus.erledigt : EintragStatus.offen;
+
+  /// Liest den Status. Frühere Werte — „erhalten" und „in Ordnung" (auch
+  /// aus der Suite) — gelten als erledigt: Zu tun ist dort nichts mehr.
   static EintragStatus aus(String? text) {
     switch (text?.trim().toLowerCase()) {
       case 'erledigt':
       case 'completed':
-        return EintragStatus.erledigt;
       case 'erhalten':
       case 'received':
-        return EintragStatus.erhalten;
       case 'ok':
-        return EintragStatus.ok;
+        return EintragStatus.erledigt;
       default:
         return EintragStatus.offen;
     }
@@ -104,7 +106,8 @@ enum EintragStatus {
 /// Ein Punkt einer Checkliste: Schlüssel im JSON und Text.
 typedef CheckPunkt = ({String schluessel, String label});
 
-/// Die Projekt-Checkliste — was bis zur Freigabe erledigt sein muss.
+/// Die Projekt-Checkliste — was bis zur Freigabe erledigt sein muss. Die
+/// meisten Punkte rechnet die App selbst (projekt_checkliste.dart).
 const List<CheckPunkt> kProjektCheckliste = [
   (schluessel: 'artikelAngelegt', label: 'Artikel angelegt'),
   (schluessel: 'rezepturErstellt', label: 'Rezeptur erstellt'),

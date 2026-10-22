@@ -53,8 +53,7 @@ final verlaufFilterProvider =
 /// Die Farbe eines Eintragsstatus.
 StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
       EintragStatus.offen => StatusArt.warnung,
-      EintragStatus.erhalten => StatusArt.info,
-      EintragStatus.ok || EintragStatus.erledigt => StatusArt.ok,
+      EintragStatus.erledigt => StatusArt.ok,
     };
 
 /// Der Verlauf eines Projekts: Meilensteine, Rezepturstände, Mails,
@@ -333,6 +332,20 @@ class EintragKarte extends ConsumerWidget {
     }
   }
 
+  /// Schaltet zwischen offen und erledigt um.
+  Future<void> _umschalten(BuildContext context, WidgetRef ref) async {
+    final neu = EintragStatus.aus(eintrag.status).umgekehrt;
+    try {
+      await ref.read(projektRepositoryProvider).eintragStatusSetzen(
+            eintrag.id,
+            neu,
+          );
+      ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Eintrag');
+    } catch (e) {
+      if (context.mounted) _fehler(context, e);
+    }
+  }
+
   Future<void> _kommentieren(BuildContext context, WidgetRef ref) async {
     final kommentar = await showDialog<Kommentar>(
       context: context,
@@ -447,7 +460,15 @@ class EintragKarte extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      StatusMarke(status.label, art: eintragStatusArt(status)),
+                      StatusMarke(
+                        status.label,
+                        key: const ValueKey('eintrag-status-umschalten'),
+                        art: eintragStatusArt(status),
+                        hinweis: status == EintragStatus.offen
+                            ? 'Antippen: erledigt'
+                            : 'Antippen: wieder offen',
+                        onTap: () => _umschalten(context, ref),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -546,16 +567,32 @@ class EintragKarte extends ConsumerWidget {
                 switch (wahl) {
                   case 'bearbeiten':
                     _bearbeiten(context, ref);
+                  case 'umschalten':
+                    _umschalten(context, ref);
                   case 'kommentieren':
                     _kommentieren(context, ref);
                   case 'loeschen':
                     _loeschen(context, ref);
                 }
               },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'kommentieren', child: Text('Kommentieren')),
-                PopupMenuItem(value: 'bearbeiten', child: Text('Bearbeiten')),
-                PopupMenuItem(value: 'loeschen', child: Text('Löschen')),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: 'umschalten',
+                  child: Text(
+                    status == EintragStatus.offen
+                        ? 'Als erledigt markieren'
+                        : 'Wieder auf offen setzen',
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'kommentieren',
+                  child: Text('Kommentieren'),
+                ),
+                const PopupMenuItem(
+                  value: 'bearbeiten',
+                  child: Text('Bearbeiten'),
+                ),
+                const PopupMenuItem(value: 'loeschen', child: Text('Löschen')),
               ],
             ),
           ],
@@ -805,17 +842,24 @@ class _EintragDialogState extends State<EintragDialog> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: DropdownButtonFormField<EintragStatus>(
-                      initialValue: _status,
-                      isExpanded: true,
-                      decoration: const InputDecoration(labelText: 'Status'),
-                      items: [
-                        for (final s in EintragStatus.values)
-                          DropdownMenuItem(value: s, child: Text(s.label)),
+                    child: SegmentedButton<EintragStatus>(
+                      key: const ValueKey('eintrag-status'),
+                      showSelectedIcon: false,
+                      // Ohne Symbole: So passen beide auch ins schmale
+                      // Fenster.
+                      segments: const [
+                        ButtonSegment(
+                          value: EintragStatus.offen,
+                          label: Text('offen'),
+                        ),
+                        ButtonSegment(
+                          value: EintragStatus.erledigt,
+                          label: Text('erledigt'),
+                        ),
                       ],
-                      onChanged: (s) {
-                        if (s != null) setState(() => _status = s);
-                      },
+                      selected: {_status},
+                      onSelectionChanged: (s) =>
+                          setState(() => _status = s.first),
                     ),
                   ),
                 ],

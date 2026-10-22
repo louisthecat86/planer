@@ -463,7 +463,9 @@ void main() {
         ProjektStatus.entwicklung,
         angelegt: DateTime.utc(2026, 1, 10),
         geaendert: DateTime.utc(2026, 9, 1),
-        erledigt: {'rezepturErstellt', 'naehrwerteErstellt', 'unbekannt'},
+        // Rezeptur und Nährwerte rechnet die App selbst (F25) — ein alter
+        // Haken zählt dort nicht, das Etikett schon.
+        erledigt: {'naehrwerteErstellt', 'etikettErstellt', 'unbekannt'},
       ),
       projekt(
         'p2',
@@ -531,8 +533,13 @@ void main() {
       // p2 hat einen Eintrag vom 15.10., p1 ruht seit dem 1.9.
       expect([for (final p in s.aktive) p.projekt.id], ['p2', 'p1']);
       final p1 = s.aktive.last;
+      // Rezeptur (Stand 1 abgeschlossen) und Etikett — die Nährwerte nicht:
+      // Der Stand hat kein eingefrorenes JSON.
       expect(p1.erledigt, 2);
       expect(p1.punkte, kProjektCheckliste.length);
+      expect(p1.checkliste.text, '2 von ${kProjektCheckliste.length}');
+      expect(p1.checkliste.punkt('rezepturErstellt')!.erledigt, isTrue);
+      expect(p1.checkliste.punkt('naehrwerteErstellt')!.erledigt, isFalse);
       expect(p1.staende, 2);
       expect([for (final p in s.ruhend(jetzt)) p.projekt.id], ['p1']);
     });
@@ -711,7 +718,10 @@ void main() {
       expect(find.text('Fleischanteil einstellen'), findsOneWidget);
       expect(find.text('Entwicklung in Zahlen'), findsOneWidget);
       expect(find.text('Schnitzel Wiener Art'), findsOneWidget);
-      expect(find.text('0/${kProjektCheckliste.length}'), findsOneWidget);
+      expect(
+        find.text('0 von ${kProjektCheckliste.length}'),
+        findsOneWidget,
+      );
       expect(
         find.text('Alle Zutaten haben Nährwerte und Allergene.'),
         findsOneWidget,

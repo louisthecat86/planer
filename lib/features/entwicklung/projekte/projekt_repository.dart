@@ -225,6 +225,13 @@ class ProjektRepository {
             ..where((e) => e.id.equals(id)))
           .write(daten.copyWith(updatedAt: Value(DateTime.now())));
 
+  /// Setzt einen Eintrag auf offen oder erledigt.
+  Future<void> eintragStatusSetzen(String id, EintragStatus status) =>
+      eintragAendern(
+        id,
+        EntwicklungProjektEintraegeCompanion(status: Value(status.schluessel)),
+      );
+
   Future<void> eintragLoeschen(String id) =>
       (_db.delete(_db.entwicklungProjektEintraege)
             ..where((e) => e.id.equals(id)))

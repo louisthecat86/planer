@@ -1,5 +1,6 @@
 import '../../../core/database/database.dart';
 import '../daten/entwicklung_repository.dart';
+import '../projekte/projekt_checkliste.dart';
 import '../projekte/projekt_modell.dart';
 
 // Die Produktentwicklung in Zahlen: wo die Projekte stehen, wie lange es
@@ -13,17 +14,19 @@ const int kRuhendNachTagen = 30;
 class ProjektFortschritt {
   const ProjektFortschritt({
     required this.projekt,
-    required this.erledigt,
-    required this.punkte,
+    required this.checkliste,
     required this.staende,
     required this.letzteAktivitaet,
   });
 
   final EntwicklungsProjekt projekt;
 
+  /// Die Projekt-Checkliste — gezählt wie überall.
+  final ProjektCheckStand checkliste;
+
   /// Erledigte Punkte der Projekt-Checkliste.
-  final int erledigt;
-  final int punkte;
+  int get erledigt => checkliste.erledigt;
+  int get punkte => checkliste.anzahl;
 
   /// Rezepturstände des Projekts.
   final int staende;
@@ -32,7 +35,7 @@ class ProjektFortschritt {
   /// Rezepturen.
   final DateTime letzteAktivitaet;
 
-  double get anteil => punkte == 0 ? 0 : erledigt / punkte;
+  double get anteil => checkliste.anteil;
 }
 
 /// Ein Monat im Verlauf.
@@ -175,10 +178,11 @@ EntwicklungsStatistik entwicklungsStatistik({
     aktive.add(
       ProjektFortschritt(
         projekt: p,
-        erledigt: checklisteAus(p.checkliste)
-            .where((k) => kProjektCheckliste.any((c) => c.schluessel == k))
-            .length,
-        punkte: kProjektCheckliste.length,
+        checkliste: projektCheckStand(
+          projekt: p,
+          rezepturen: rezepturenJeProjekt[p.id] ?? const <Rezeptur>[],
+          versionen: staende,
+        ),
         staende: staende.length,
         letzteAktivitaet: letzte,
       ),

@@ -15,6 +15,7 @@ import '../import/suite_import_dialog.dart';
 import '../mail/mail.dart';
 import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart' show dateienWaehlen, groesseText;
+import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 
@@ -149,6 +150,7 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final projekte = ref.watch(projekteProvider);
+    final checklisten = ref.watch(projektChecklistenProvider);
     return projekte.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Padding(
@@ -297,6 +299,7 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                                       itemCount: treffer.length,
                                       itemBuilder: (_, i) => _Zeile(
                                         projekt: treffer[i],
+                                        checkliste: checklisten?[treffer[i].id],
                                         breit: breit,
                                       ),
                                     ),
@@ -376,9 +379,16 @@ class _Kopf extends StatelessWidget {
 }
 
 class _Zeile extends StatelessWidget {
-  const _Zeile({required this.projekt, required this.breit});
+  const _Zeile({
+    required this.projekt,
+    required this.checkliste,
+    required this.breit,
+  });
 
   final EntwicklungsProjekt projekt;
+
+  /// Wie die Checkliste steht — null, solange sie noch rechnet.
+  final ProjektCheckStand? checkliste;
   final bool breit;
 
   @override
@@ -388,9 +398,6 @@ class _Zeile extends StatelessWidget {
     final stil = theme.textTheme.bodyMedium;
     final p = projekt;
     final status = ProjektStatus.aus(p.status);
-    final erledigt = checklisteAus(p.checkliste)
-        .where((s) => kProjektCheckliste.any((c) => c.schluessel == s))
-        .length;
     final idee = p.produktidee?.trim();
     final unterzeile = [
       if (!breit && (p.kunde ?? '').trim().isNotEmpty) p.kunde!.trim(),
@@ -475,7 +482,8 @@ class _Zeile extends StatelessWidget {
                 SizedBox(
                   width: _Spalten.checkliste,
                   child: Text(
-                    '$erledigt / ${kProjektCheckliste.length}',
+                    checkliste?.text ?? '…',
+                    maxLines: 1,
                     textAlign: TextAlign.right,
                     style: stil?.copyWith(color: grau),
                   ),

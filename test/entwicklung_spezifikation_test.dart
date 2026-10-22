@@ -835,7 +835,63 @@ void main() {
           lessThan(titel.indexOf('Verkostung 0')),
         );
         expect(Haccp.aus(projekt.haccp).gefahren.single.risiko, 6);
+        // Die Checkliste rechnet sich selbst — wie in der Übersicht:
+        // Rezeptur und Nährwerte aus Stand 1, der Prozess hat noch keine
+        // Werte, der Sensorik fehlt das meiste.
+        final check = b.checkliste!;
+        expect(check.text, '2 von 8');
+        expect(
+          check.punkt('prozessErstellt')!.text,
+          'Noch keine Werte eingetragen',
+        );
+        expect(
+          check.punkt('sensorikErstellt')!.text,
+          'Fehlt: Aussehen, Geruch und Konsistenz',
+        );
+        // Stand 2 ist in Arbeit, Stand 1 eine Station mit Kennzahlen.
+        expect([for (final x in b.inArbeit) x.version.id], [a.v2]);
+        expect(b.kennzahlen.keys, [a.v1]);
 
+        final pdf = await baueProjektPdf(b, gedrucktAm: datum);
+        expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
+      });
+
+      test('Entwicklungsweg: Stationen, Kennzahlen, Phasen, in Arbeit',
+          () async {
+        final a = await anlegen();
+        final rezepturId = (await rezepte.version(a.v1))!.rezepturId;
+        // Stand 2 mit weniger Mehl, dann ein dritter Entwurf.
+        await rezepte.mengenSetzen(a.v2, [90, 10]);
+        await rezepte.versionAbschliessen(a.v2, grund: 'Weniger Mehl');
+        final v3 = await rezepte.versionAnlegen(rezepturId, vorlageId: a.v2);
+        // Eine offene Rückmeldung zu Stand 1, dann die Validierung.
+        await projekte.eintragAnlegen(
+          projektId: a.projekt.id,
+          art: EintragArt.email,
+          titel: 'Rückmeldung Kunde',
+          datum: DateTime.now(),
+          versionId: a.v1,
+          beschreibung: 'Zu mehlig. ' * 600,
+        );
+        await projekte.statusAendern(a.projekt.id, ProjektStatus.validierung);
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+
+        final b = await berichtLaden(db, dateien, projekt);
+        expect(b.kennzahlen.keys, unorderedEquals([a.v1, a.v2]));
+        // Die erste Station ohne Änderung, die zweite gegen die erste.
+        expect(b.kennzahlen[a.v1]!.every((k) => k.aenderung == null), isTrue);
+        final fett =
+            b.kennzahlen[a.v2]!.firstWhere((k) => k.label == 'Fett');
+        expect(fett.aenderung, startsWith('+'));
+        expect(b.inArbeit.single.version.id, v3);
+        expect(b.inArbeit.single.rezeptur, 'Frikadelle Testart');
+        expect(b.versionen.keys, containsAll([a.v1, a.v2, v3]));
+        expect(
+          b.checkliste!.punkt('rezepturErstellt')!.text,
+          'Frikadelle Testart · Stand 2 abgeschlossen',
+        );
+
+        // Die lange Rückmeldung läuft eingerückt über die Seite hinaus.
         final pdf = await baueProjektPdf(b, gedrucktAm: datum);
         expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
       });

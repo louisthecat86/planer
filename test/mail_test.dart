@@ -291,7 +291,8 @@ void main() {
       expect(e.titel, 'AW: Anfrage Frikadelle für den Grill');
       expect(e.datum, DateTime(2026, 10, 6));
       expect(e.benutzer, 'Müller, Hans');
-      expect(e.status, EintragStatus.erhalten.schluessel);
+      // Eine Mail ist erledigt, sobald sie da ist (F24).
+      expect(e.status, EintragStatus.erledigt.schluessel);
       expect(e.beschreibung, contains('gut gewürzt'));
       expect(texteAus(e.aenderungen), ['Anhang: Spezifikation Grüße.pdf (9 B)']);
       // Die Mail selbst zum Öffnen, der Anhang bei den Dateien.

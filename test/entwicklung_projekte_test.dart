@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 // `show Value`: drift bringt eine eigene Klasse `Column` mit.
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -95,7 +97,7 @@ void main() {
         titel: 'Rückmeldung Kunde',
         datum: DateTime(2026, 3, 5),
         benutzer: 'Entwicklung',
-        status: EintragStatus.erhalten,
+        status: EintragStatus.erledigt,
         ziel: 'KW 12',
         aenderungen: ['Würzung milder'],
       );
@@ -280,6 +282,22 @@ void main() {
       createdAt: zeit,
       updatedAt: zeit,
     );
+    const zutat = RechenZutat(
+      id: 'z1',
+      name: 'Schweineschulter S3',
+      istFleisch: true,
+      tierart: Tierart.schwein,
+      naehrwerte: Naehrwerte(fett: 22, eiweiss: 18),
+    );
+    const eingabe = RechenRezeptur(
+      id: 'r1',
+      name: 'Schnitzel Wiener Art',
+      verlustProzent: 10,
+      verlustart: Verlustart.garen,
+      positionen: [RechenPosition.zutat(zutat, mengeKg: 10)],
+    );
+    // Abgeschlossen — eingefroren mit allen Zutatendaten (daraus rechnet
+    // die Checkliste die Nährwerte).
     final v1 = RezepturVersion(
       id: 'v1',
       rezepturId: 'r1',
@@ -288,6 +306,8 @@ void main() {
       verlustProzent: 10,
       fettVerlustProzent: 0,
       verlustArt: 'garen',
+      stand: jsonEncode(eingabe.toJson()),
+      abgeschlossenAm: zeit,
       createdAt: zeit,
       updatedAt: zeit,
     );
@@ -339,14 +359,6 @@ void main() {
       eintrag('e1', EintragArt.meilenstein, 'Projekt angelegt'),
     ];
 
-    const zutat = RechenZutat(
-      id: 'z1',
-      name: 'Schweineschulter S3',
-      istFleisch: true,
-      tierart: Tierart.schwein,
-      naehrwerte: Naehrwerte(fett: 22, eiweiss: 18),
-    );
-
     final overrides = [
       projekteProvider.overrideWith((ref) => Stream.value([p1, p2, p3])),
       projektProvider.overrideWith((ref, id) => Stream.value(p1)),
@@ -357,6 +369,8 @@ void main() {
       projektRezepturenProvider.overrideWith(
         (ref, id) => Stream.value([rezeptur]),
       ),
+      // Alle Rezepturen — für die Checklisten der Projektliste.
+      rezepturenProvider.overrideWith((ref) => Stream.value([rezeptur])),
       fliessdiagrammeProvider.overrideWith(
         (ref) => Stream.value([
           Fliessdiagramm(
@@ -389,15 +403,7 @@ void main() {
       freigabeUebersichtProvider.overrideWith(
         (ref, id) async => const FreigabeUebersicht(),
       ),
-      rechenRezepturProvider.overrideWith(
-        (ref, id) async => const RechenRezeptur(
-          id: 'r1',
-          name: 'Schnitzel Wiener Art',
-          verlustProzent: 10,
-          verlustart: Verlustart.garen,
-          positionen: [RechenPosition.zutat(zutat, mengeKg: 10)],
-        ),
-      ),
+      rechenRezepturProvider.overrideWith((ref, id) async => eingabe),
     ];
 
     Finder bereich(String titel, [String? untertitel]) =>
@@ -450,7 +456,11 @@ void main() {
       expect(find.text('Bratwurst fein'), findsOneWidget);
       expect(find.text('Altprojekt'), findsNothing);
       expect(find.text('Muster GmbH'), findsOneWidget);
-      expect(find.text('1 / 8'), findsNWidgets(2));
+      // Die Checkliste rechnet sich selbst (F25): beim Schnitzel Artikel
+      // (früher abgehakt), Rezeptur und Nährwerte aus Stand 1, bei der
+      // Bratwurst ohne Rezeptur nur der Artikel.
+      expect(find.text('3 von 8'), findsOneWidget);
+      expect(find.text('1 von 8'), findsOneWidget);
 
       await tester.tap(find.text('Archiv (1)'));
       await tester.pump();
@@ -484,7 +494,23 @@ void main() {
       expect(find.byType(Zeitstrahl), findsOneWidget);
       await reiter(tester, 'Übersicht');
       expect(bereich('Stammdaten'), findsOneWidget);
-      expect(bereich('Checkliste', '1 von 8'), findsOneWidget);
+      expect(bereich('Checkliste', '3 von 8'), findsOneWidget);
+      expect(
+        find.text('Schnitzel Wiener Art · Stand 1 abgeschlossen'),
+        findsOneWidget,
+      );
+      expect(find.text('Stand 1: alle Zutaten mit Nährwerten'), findsOneWidget);
+      expect(find.text('Früher von Hand abgehakt'), findsOneWidget);
+      expect(
+        find.text('Fehlt: Geruch, Geschmack und Konsistenz'),
+        findsOneWidget,
+      );
+      // Von Hand nur Etikett und Navision.
+      expect(find.text('von Hand'), findsNWidgets(2));
+      expect(
+        find.byKey(const ValueKey('check-etikettErstellt')),
+        findsOneWidget,
+      );
       expect(bereich('Etikett (LMIV)', '0 von 12'), findsOneWidget);
       expect(bereich('Rezepturen', '1'), findsOneWidget);
       expect(find.text('Stand 1 · abgeschlossen'), findsOneWidget);
@@ -527,6 +553,30 @@ void main() {
       expect(find.text('Datenblatt.pdf'), findsOneWidget);
       expect(find.text('Rezepturstand 1 öffnen'), findsOneWidget);
       expect(find.text('3 Einträge'), findsOneWidget);
+
+      // Nur noch offen oder erledigt — antippen schaltet um (F24).
+      expect(find.byTooltip('Antippen: wieder offen'), findsWidgets);
+      await tester.tap(find.byTooltip('Mehr').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Wieder auf offen setzen'), findsOneWidget);
+      await tester.tap(find.text('Bearbeiten'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final wahl = find.byKey(const ValueKey('eintrag-status'));
+      expect(wahl, findsOneWidget);
+      expect(
+        find.descendant(of: wahl, matching: find.text('erledigt')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: wahl, matching: find.text('offen')),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Abbrechen'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(wahl, findsNothing);
 
       await reiter(tester, 'Dateien');
       expect(find.text('Datenblatt.pdf'), findsOneWidget);

@@ -330,7 +330,7 @@ class _ProjektZeile extends StatelessWidget {
             SizedBox(
               width: 140,
               child: Tooltip(
-                message: 'Checkliste: ${p.erledigt} von ${p.punkte} erledigt',
+                message: 'Checkliste: ${p.checkliste.text} erledigt',
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(3),
                   child: LinearProgressIndicator(
@@ -345,7 +345,7 @@ class _ProjektZeile extends StatelessWidget {
             SizedBox(
               width: 70,
               child: Text(
-                '${p.erledigt}/${p.punkte}',
+                p.checkliste.text,
                 textAlign: TextAlign.right,
                 style: theme.textTheme.bodySmall?.copyWith(color: grau),
               ),

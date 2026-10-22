@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
+import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/ablage.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
@@ -22,6 +23,7 @@ import '../spezifikation/spezifikation_reiter.dart';
 import 'datei_aktionen.dart' show dateiOeffnen;
 import 'fliessdiagramm_dienst.dart';
 import 'fliessdiagramme_dialog.dart';
+import 'projekt_checkliste.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -641,7 +643,8 @@ class _Notizen extends ConsumerWidget {
   }
 }
 
-/// Die Projekt- oder die Etiketten-Checkliste zum Abhaken.
+/// Die Projekt-Checkliste — sechs Punkte rechnet die App selbst, Etikett
+/// und Navision hakt man ab (F25) — oder die Etiketten-Checkliste.
 class ProjektCheckliste extends ConsumerWidget {
   const ProjektCheckliste({
     super.key,
@@ -654,41 +657,165 @@ class ProjektCheckliste extends ConsumerWidget {
   /// true: die Pflichtangaben des Etiketts, sonst die Projekt-Checkliste.
   final bool etikett;
 
+  Future<void> _haken(
+    WidgetRef ref,
+    String schluessel, {
+    required bool erledigt,
+  }) async {
+    await ref.read(projektRepositoryProvider).checklistePunkt(
+          projekt.id,
+          schluessel: schluessel,
+          erledigt: erledigt,
+          etikett: etikett,
+        );
+    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Checkliste');
+  }
+
+  Widget _hakenZeile(
+    WidgetRef ref,
+    CheckPunkt c, {
+    required bool erledigt,
+    String? untertitel,
+  }) =>
+      CheckboxListTile(
+        key: ValueKey('check-${c.schluessel}'),
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: erledigt,
+        title: Text(c.label),
+        subtitle: untertitel == null ? null : Text(untertitel),
+        onChanged: (v) => _haken(ref, c.schluessel, erledigt: v ?? false),
+      );
+
+  /// Wohin ein Punkt führt: in den Reiter, in dem er entsteht, oder in die
+  /// Rezeptur — null, wenn er nirgendwohin führt.
+  VoidCallback? _ziel(BuildContext context, CheckStand c) {
+    void reiter(ProjektReiter r) =>
+        DefaultTabController.maybeOf(context)?.animateTo(r.index);
+    final rezeptur = c.rezepturId;
+    return switch (c.punkt.schluessel) {
+      'prozessErstellt' => () => reiter(ProjektReiter.prozess),
+      'sensorikErstellt' => () => reiter(ProjektReiter.sensorik),
+      'spezifikationErstellt' => () => reiter(ProjektReiter.spezifikation),
+      'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
+          oeffneRezeptur(context, rezeptur),
+      _ => null,
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final punkte = etikett ? kEtikettCheckliste : kProjektCheckliste;
-    final erledigt = checklisteAus(
-      etikett ? projekt.etikettCheckliste : projekt.checkliste,
-    );
-    final anzahl = punkte.where((c) => erledigt.contains(c.schluessel)).length;
-    return Bereich(
-      titel: etikett ? 'Etikett (LMIV)' : 'Checkliste',
-      icon: etikett ? Icons.label_outline : Icons.checklist,
-      untertitel: '$anzahl von ${punkte.length}',
-      innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
-      child: Column(
+    if (etikett) {
+      final erledigt = checklisteAus(projekt.etikettCheckliste);
+      final anzahl = kEtikettCheckliste
+          .where((c) => erledigt.contains(c.schluessel))
+          .length;
+      return Bereich(
+        titel: 'Etikett (LMIV)',
+        icon: Icons.label_outline,
+        untertitel: '$anzahl von ${kEtikettCheckliste.length}',
+        innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+        child: Column(
+          children: [
+            for (final c in kEtikettCheckliste)
+              _hakenZeile(ref, c, erledigt: erledigt.contains(c.schluessel)),
+          ],
+        ),
+      );
+    }
+
+    final theme = Theme.of(context);
+    final rezepturen = ref.watch(projektRezepturenProvider(projekt.id));
+    final versionen = ref.watch(alleVersionenProvider);
+    final r = rezepturen.valueOrNull;
+    final v = versionen.valueOrNull;
+    final stand = r == null || v == null
+        ? null
+        : projektCheckStand(projekt: projekt, rezepturen: r, versionen: v);
+    final Widget inhalt;
+    if (stand != null) {
+      inhalt = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final c in punkte)
-            CheckboxListTile(
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              controlAffinity: ListTileControlAffinity.leading,
-              value: erledigt.contains(c.schluessel),
-              title: Text(c.label),
-              onChanged: (v) async {
-                await ref.read(projektRepositoryProvider).checklistePunkt(
-                      projekt.id,
-                      schluessel: c.schluessel,
-                      erledigt: v ?? false,
-                      etikett: etikett,
-                    );
-                ref
-                    .read(autoBackupTriggerProvider)
-                    .fireDebounced(reason: 'Checkliste');
-              },
+          for (final c in stand.punkte)
+            if (c.vonHand)
+              _hakenZeile(
+                ref,
+                c.punkt,
+                erledigt: c.erledigt,
+                untertitel: 'von Hand',
+              )
+            else
+              _AutoPunkt(stand: c, onTap: _ziel(context, c)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
+            child: Text(
+              'Die App hakt die Punkte selbst ab, sobald das Projekt sie '
+              'erfüllt — von Hand nur Etikett und Navision.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
             ),
+          ),
         ],
+      );
+    } else if (rezepturen.hasError || versionen.hasError) {
+      inhalt = Padding(
+        padding: const EdgeInsets.all(12),
+        child: Text(
+          'Die Checkliste ließ sich nicht rechnen: '
+          '${fehlerText(rezepturen.error ?? versionen.error ?? '')}',
+        ),
+      );
+    } else {
+      inhalt = const Padding(
+        padding: EdgeInsets.all(12),
+        child: LinearProgressIndicator(),
+      );
+    }
+    return Bereich(
+      titel: 'Checkliste',
+      icon: Icons.checklist,
+      untertitel: stand?.text,
+      innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
+      child: inhalt,
+    );
+  }
+}
+
+/// Ein Punkt, den die App selbst abhakt: Haken oder Kreis, dazu woran sie
+/// es sieht oder was noch fehlt; antippen führt dorthin, wo er entsteht.
+class _AutoPunkt extends StatelessWidget {
+  const _AutoPunkt({required this.stand, this.onTap});
+
+  final CheckStand stand;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final text = stand.text;
+    return ListTile(
+      key: ValueKey('check-${stand.punkt.schluessel}'),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      leading: Tooltip(
+        message: stand.erledigt
+            ? 'Erledigt — die App hat es abgehakt'
+            : 'Offen — die App hakt es ab, sobald es erfüllt ist',
+        child: Icon(
+          stand.erledigt ? Icons.check_circle : Icons.radio_button_unchecked,
+          size: 22,
+          color: stand.erledigt
+              ? AppFarben.von(context).ok
+              : theme.colorScheme.onSurfaceVariant,
+        ),
       ),
+      title: Text(stand.punkt.label),
+      subtitle: text == null ? null : Text(text),
+      trailing: onTap == null ? null : const Icon(Icons.chevron_right, size: 18),
+      onTap: onTap,
     );
   }
 }

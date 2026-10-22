@@ -10,14 +10,20 @@ import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
 import '../haccp/haccp_modell.dart';
 import '../haccp/prozess_modell.dart';
+import '../projekte/entwicklungsstrang.dart';
 import '../projekte/fliessdiagramm_dateien.dart';
+import '../projekte/projekt_checkliste.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechenkern.dart';
 
 // Der Projektbericht als PDF: Stammdaten, Rezeptur mit Zutatenliste und
-// Nährwerten, Sensorik, Prozess, HACCP, Checklisten und Verlauf — zum
+// Nährwerten, Sensorik, Prozess, HACCP, Checklisten und der
+// Entwicklungsweg — von der Idee über jede Station bis zur Freigabe. Zum
 // Weitergeben oder Ablegen.
+
+/// Ein Stand, der gerade in Arbeit ist.
+typedef InArbeit = ({String rezeptur, RezepturVersion version});
 
 /// Was im Bericht steht.
 class ProjektBericht {
@@ -30,6 +36,10 @@ class ProjektBericht {
     this.bild,
     this.artikel,
     this.fliessdiagramm,
+    this.checkliste,
+    this.versionen = const {},
+    this.kennzahlen = const {},
+    this.inArbeit = const [],
   });
 
   final EntwicklungsProjekt projekt;
@@ -51,6 +61,20 @@ class ProjektBericht {
   /// „FD_011 · Schnitzel paniert · Stand 31.07.2026" — null: nur die
   /// Kennung aus dem Projekt.
   final String? fliessdiagramm;
+
+  /// Die Projekt-Checkliste, wie sie gerade steht — null: aus dem Projekt
+  /// allein gerechnet (ohne Rezepturen).
+  final ProjektCheckStand? checkliste;
+
+  /// Die Rezepturstände, um die es im Verlauf geht, nach ID.
+  final Map<String, RezepturVersion> versionen;
+
+  /// Je Station (Stand-ID) die Kennzahlen mit der Änderung zum vorigen
+  /// Stand derselben Rezeptur.
+  final Map<String, List<WegKennzahl>> kennzahlen;
+
+  /// Stände, die noch nicht abgeschlossen sind — der älteste zuerst.
+  final List<InArbeit> inArbeit;
 }
 
 /// Lädt alles für den Bericht: den freigegebenen Stand, sonst den
@@ -116,6 +140,49 @@ Future<ProjektBericht> berichtLaden(
       : await (db.select(db.products)..where((p) => p.id.equals(artikelId)))
           .getSingleOrNull();
 
+  // Der Entwicklungsweg: die Stände seiner Stationen und Phasen — auch
+  // solche, deren Rezeptur nicht mehr zum Projekt gehört.
+  final versionenNachId = {for (final v in versionen) v.id: v};
+  final weg = entwicklungsweg(verlauf);
+  final stationen = weg.whereType<WegStation>().toList();
+  for (final id in {
+    for (final s in stationen) s.versionId,
+    for (final w in weg.whereType<WegPhase>())
+      if (w.eintrag.versionId case final id?) id,
+  }) {
+    if (versionenNachId.containsKey(id)) continue;
+    final v = await repo.version(id);
+    if (v != null) versionenNachId[id] = v;
+  }
+  // Die Kennzahlen jeder Station mit der Änderung zur vorigen Station
+  // derselben Rezeptur — wie in der Ansicht „Entwicklungsweg".
+  final ergebnisse = <String, RezepturErgebnis>{};
+  for (final s in stationen) {
+    final e = await repo.rechenRezeptur(s.versionId);
+    if (e != null) ergebnisse[s.versionId] = berechne(e);
+  }
+  final kennzahlen = <String, List<WegKennzahl>>{};
+  final letzte = <String, String>{};
+  for (final s in stationen) {
+    final rezepturId = versionenNachId[s.versionId]?.rezepturId;
+    final davor = rezepturId == null ? null : letzte[rezepturId];
+    final neu = ergebnisse[s.versionId];
+    if (neu != null) {
+      kennzahlen[s.versionId] = wegKennzahlen(
+        neu,
+        vorher: davor == null ? null : ergebnisse[davor],
+      );
+    }
+    if (rezepturId != null) letzte[rezepturId] = s.versionId;
+  }
+  final stationIds = {for (final s in stationen) s.versionId};
+  final namen = {for (final r in rezepturen) r.id: r.name};
+  final inArbeit = <InArbeit>[
+    for (final v in versionen)
+      if (v.status == VersionStatus.entwurf && !stationIds.contains(v.id))
+        (rezeptur: namen[v.rezepturId] ?? '', version: v),
+  ]..sort((a, b) => a.version.updatedAt.compareTo(b.version.updatedAt));
+
   return ProjektBericht(
     projekt: projekt,
     rezepturName: rezeptur?.name,
@@ -125,6 +192,14 @@ Future<ProjektBericht> berichtLaden(
     bild: bild,
     artikel: artikel,
     fliessdiagramm: await _fliessdiagrammText(db, projekt.fliessdiagramm),
+    checkliste: projektCheckStand(
+      projekt: projekt,
+      rezepturen: rezepturen,
+      versionen: versionen,
+    ),
+    versionen: versionenNachId,
+    kennzahlen: kennzahlen,
+    inArbeit: inArbeit,
   );
 }
 
@@ -204,7 +279,8 @@ pw.Widget _text(String text, {double groesse = 9, PdfColor? farbe}) =>
     );
 
 /// Ein Absatz, der über das Seitenende hinauslaufen darf — nur direkt in
-/// der Seite, nicht in Zeilen, Spalten oder Tabellen.
+/// der Seite (auch eingerückt in einem Padding), nicht in Zeilen, Spalten
+/// oder Tabellen.
 pw.Widget _fliesstext(String text) => pw.Text(
       pdfText(text),
       style: const pw.TextStyle(fontSize: 9),
@@ -239,6 +315,186 @@ pw.ImageProvider? _bildAus(Uint8List? bytes) {
   }
 }
 
+/// Die Farbe einer Phase.
+PdfColor _phasenFarbe(ProjektStatus s) => switch (s) {
+      ProjektStatus.entwicklung => PdfColors.blue800,
+      ProjektStatus.validierung => PdfColors.orange800,
+      ProjektStatus.produktion => PdfColors.green800,
+      ProjektStatus.archiviert => PdfColors.grey700,
+    };
+
+/// Die Farbe der Stationen — wie die Rezepturstände im Zeitstrahl.
+const PdfColor _stationFarbe = PdfColor.fromInt(0xFF7E3FB8);
+
+/// Ein Eintrag des Verlaufs: Kopfzeile, Beschreibung, Änderungen und
+/// Kommentare; offene Einträge sind markiert. [einzug] rückt ihn unter
+/// seine Station.
+List<pw.Widget> _eintrag(ProjektEintrag e, {double einzug = 0}) {
+  pw.Widget eingerueckt(pw.Widget w) => einzug == 0
+      ? w
+      : pw.Padding(padding: pw.EdgeInsets.only(left: einzug), child: w);
+  final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
+  final beschreibung = e.beschreibung?.trim() ?? '';
+  return [
+    eingerueckt(
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 4),
+        child: pw.Text(
+          pdfText(
+            '${Format.datum(e.datum)} · ${EintragArt.aus(e.art).label} · '
+            '${e.titel}${offen ? ' (offen)' : ''}',
+          ),
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        ),
+      ),
+    ),
+    if (beschreibung.isNotEmpty) eingerueckt(_fliesstext(beschreibung)),
+    for (final a in texteAus(e.aenderungen))
+      eingerueckt(_text('- $a', groesse: 8, farbe: _grau)),
+    for (final k in Kommentar.listeAus(e.kommentare))
+      eingerueckt(
+        _text(
+          '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
+          groesse: 8,
+          farbe: _grau,
+        ),
+      ),
+  ];
+}
+
+/// Der Entwicklungsweg — von oben nach unten: die Idee mit dem, was vor
+/// dem ersten Stand geschah, dann jede Station (ein abgeschlossener
+/// Rezepturstand) mit Grund, Änderungen, Kennzahlen und dem, was danach
+/// kam, dazwischen die Wechsel der Phase; am Ende, was in Arbeit ist.
+List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
+  final p = b.projekt;
+  final kunde = p.kunde?.trim() ?? '';
+  final widgets = <pw.Widget>[];
+  final weg = entwicklungsweg(b.verlauf);
+  for (final punkt in weg) {
+    switch (punkt) {
+      case WegAnfang(:final eintraege):
+        widgets.add(
+          pw.Text(
+            pdfText(
+              [
+                'Idee und Anfrage',
+                'seit ${Format.datum(p.createdAt)}',
+                if (kunde.isNotEmpty) kunde,
+              ].join(' · '),
+            ),
+            style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+          ),
+        );
+        for (final e in eintraege) {
+          widgets.addAll(_eintrag(e, einzug: 10));
+        }
+      case WegStation():
+        final e = punkt.eintrag;
+        final beschreibung = e.beschreibung?.trim() ?? '';
+        final kennzahlen = b.kennzahlen[punkt.versionId] ?? const [];
+        widgets.addAll([
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 10),
+            child: pw.Text(
+              pdfText('Station ${punkt.nummer} · ${e.titel}'),
+              style: pw.TextStyle(
+                fontSize: 10.5,
+                fontWeight: pw.FontWeight.bold,
+                color: _stationFarbe,
+              ),
+            ),
+          ),
+          _text(
+            [
+              Format.datum(e.datum),
+              if (p.freigabeVersionId == punkt.versionId) 'freigegeben',
+            ].join(' · '),
+            groesse: 8,
+            farbe: _grau,
+          ),
+          if (beschreibung.isNotEmpty) _fliesstext(beschreibung),
+          for (final a in texteAus(e.aenderungen)) _text('- $a', groesse: 8.5),
+          if (kennzahlen.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 3),
+              child: _text(
+                [
+                  for (final k in kennzahlen)
+                    '${k.label} ${k.wert}'
+                        '${k.aenderung == null ? '' : ' (${k.aenderung})'}',
+                ].join(' · '),
+                groesse: 8,
+                farbe: _grau,
+              ),
+            ),
+          for (final k in Kommentar.listeAus(e.kommentare))
+            _text(
+              '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
+              groesse: 8,
+              farbe: _grau,
+            ),
+        ]);
+        if (punkt.rueckmeldungen.isNotEmpty) {
+          widgets.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 4),
+              child: _text('Danach', groesse: 8, farbe: _grau),
+            ),
+          );
+          for (final r in punkt.rueckmeldungen) {
+            widgets.addAll(_eintrag(r, einzug: 10));
+          }
+        }
+      case WegPhase():
+        final e = punkt.eintrag;
+        final stand = b.versionen[e.versionId]?.nummer;
+        widgets.add(
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 10),
+            child: pw.Text(
+              pdfText(
+                [
+                  e.titel,
+                  if (stand != null) 'Stand $stand',
+                  Format.datum(e.datum),
+                ].join(' · '),
+              ),
+              style: pw.TextStyle(
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+                color: _phasenFarbe(punkt.status),
+              ),
+            ),
+          ),
+        );
+        for (final a in texteAus(e.aenderungen)) {
+          widgets.add(_text('- $a', groesse: 8, farbe: _grau));
+        }
+    }
+  }
+  if (!weg.any((w) => w is WegStation)) {
+    widgets.add(
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 8),
+        child: _text('Noch kein abgeschlossener Stand.', farbe: _grau),
+      ),
+    );
+  }
+  for (final a in b.inArbeit) {
+    widgets.add(
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: 8),
+        child: _text(
+          'In Arbeit: ${a.rezeptur} · Stand ${a.version.nummer} (Entwurf)',
+          farbe: _grau,
+        ),
+      ),
+    );
+  }
+  return widgets;
+}
+
 /// Baut den Bericht als PDF.
 Future<Uint8List> baueProjektPdf(
   ProjektBericht b, {
@@ -263,8 +519,11 @@ Future<Uint8List> baueProjektPdf(
   final sensorik = Sensorik.aus(p.sensorik);
   final prozess = Prozessparameter.aus(p.prozess);
   final haccp = Haccp.aus(p.haccp);
-  final erledigt = checklisteAus(p.checkliste);
+  final checkliste = b.checkliste ??
+      projektCheckStand(projekt: p, rezepturen: const [], versionen: const []);
   final etikett = checklisteAus(p.etikettCheckliste);
+  final etikettErledigt =
+      kEtikettCheckliste.where((c) => etikett.contains(c.schluessel)).length;
   final status = ProjektStatus.aus(p.status);
 
   doc.addPage(
@@ -472,21 +731,35 @@ Future<Uint8List> baueProjektPdf(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Expanded(
+              flex: 3,
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  for (final c in kProjektCheckliste)
+                  _text(
+                    'Projekt · ${checkliste.text} erledigt',
+                    farbe: _grau,
+                  ),
+                  pw.SizedBox(height: 2),
+                  for (final c in checkliste.punkte)
                     _text(
-                      '${erledigt.contains(c.schluessel) ? '[x]' : '[ ]'} '
-                      '${c.label}',
+                      '${c.erledigt ? '[x]' : '[ ]'} ${c.punkt.label}'
+                      '${c.vonHand ? ' (von Hand)' : c.text == null ? '' : ': ${c.text}'}',
                     ),
                 ],
               ),
             ),
+            pw.SizedBox(width: 12),
             pw.Expanded(
+              flex: 2,
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
+                  _text(
+                    'Etikett (LMIV) · $etikettErledigt von '
+                    '${kEtikettCheckliste.length} erledigt',
+                    farbe: _grau,
+                  ),
+                  pw.SizedBox(height: 2),
                   for (final c in kEtikettCheckliste)
                     _text(
                       '${etikett.contains(c.schluessel) ? '[x]' : '[ ]'} '
@@ -498,35 +771,10 @@ Future<Uint8List> baueProjektPdf(
           ],
         ),
 
-        // ── Verlauf ───────────────────────────────────────────────────
-        if (b.verlauf.isNotEmpty) ...[
-          _abschnitt('Verlauf'),
-          for (final v in b.verlauf) ...[
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 4),
-              child: pw.Text(
-                pdfText(
-                  '${Format.datum(v.datum)} · '
-                  '${EintragArt.aus(v.art).label} · ${v.titel} '
-                  '(${EintragStatus.aus(v.status).label})',
-                ),
-                style: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            ),
-            if ((v.beschreibung ?? '').trim().isNotEmpty)
-              _fliesstext(v.beschreibung!.trim()),
-            for (final a in texteAus(v.aenderungen))
-              _text('- $a', groesse: 8, farbe: _grau),
-            for (final k in Kommentar.listeAus(v.kommentare))
-              _text(
-                '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
-                groesse: 8,
-                farbe: _grau,
-              ),
-          ],
+        // ── Entwicklungsweg ───────────────────────────────────────────
+        if (b.verlauf.isNotEmpty || b.inArbeit.isNotEmpty) ...[
+          _abschnitt('Entwicklungsweg'),
+          ..._entwicklungsweg(b),
         ],
       ],
     ),
