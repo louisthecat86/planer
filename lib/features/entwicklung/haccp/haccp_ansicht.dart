@@ -324,9 +324,9 @@ class _PunktZeile extends StatelessWidget {
     final grau = theme.colorScheme.onSurfaceVariant;
     final l = punkt;
     final antworten = [
-      for (final f in const ['f1', 'f2', 'f3', 'f4'])
-        if (l.antworten[f] != null)
-          'F${f.substring(1)} ${l.antworten[f]! ? 'Ja' : 'Nein'}',
+      for (final f in kEntscheidungsbaum.values)
+        if (l.antworten[f.schluessel] case final a?)
+          '${f.kurz} ${a ? 'Ja' : 'Nein'}',
     ];
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 6),
@@ -660,38 +660,6 @@ class HaccpErgebnis {
   final Lenkungspunkt? lenkungspunkt;
 }
 
-/// Das Ende eines Wegs durch den Baum.
-enum BaumEnde {
-  ccp,
-  keinCcp,
-  anpassen;
-
-  static BaumEnde? aus(String ziel) => switch (ziel) {
-        'ergebnis:CCP' => BaumEnde.ccp,
-        'ergebnis:KP' => BaumEnde.keinCcp,
-        'ergebnis:ANPASSEN' => BaumEnde.anpassen,
-        _ => null,
-      };
-}
-
-/// Geht den Entscheidungsbaum mit [antworten] (Frage → Ja/Nein) ab. Gibt
-/// die nächste offene Frage zurück oder, wenn der Weg zu Ende ist, das
-/// Ergebnis.
-({String? frage, BaumEnde? ende}) baumWeg(Map<String, bool> antworten) {
-  var schluessel = 'f1';
-  for (var i = 0; i < 10; i++) {
-    final frage = kEntscheidungsbaum[schluessel];
-    if (frage == null) return (frage: null, ende: BaumEnde.keinCcp);
-    final antwort = antworten[schluessel];
-    if (antwort == null) return (frage: schluessel, ende: null);
-    final ziel = antwort ? frage.ja : frage.nein;
-    final ende = BaumEnde.aus(ziel);
-    if (ende != null) return (frage: null, ende: ende);
-    schluessel = ziel;
-  }
-  return (frage: null, ende: BaumEnde.keinCcp);
-}
-
 enum _Stufen { gefahr, baum, lenkung }
 
 /// Der Assistent: Gefahr bewerten, bei hohem Risiko den Entscheidungsbaum
@@ -748,6 +716,14 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
     });
   }
 
+  /// Nach dem Modifizieren: die Prüfung beginnt wieder bei Frage 1.
+  void _neuPruefen() {
+    setState(() {
+      _antworten.clear();
+      _stufe = _Stufen.baum;
+    });
+  }
+
   void _zurueck() {
     setState(() {
       if (_stufe == _Stufen.lenkung && _risiko >= kRisikoHoch) {
@@ -773,6 +749,7 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
     Lenkungspunkt? punkt;
     if (_risiko >= kRisikoHoch) {
       final ende = baumWeg(_antwortMap).ende;
+      final lenkung = _massnahmen.text.trim();
       punkt = Lenkungspunkt(
         id: _uuid.v4(),
         schritt: _schritt.text.trim(),
@@ -780,7 +757,11 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
         art: _art,
         antworten: _antwortMap,
         ergebnis: ende == BaumEnde.ccp ? Lenkungsart.ccp : Lenkungsart.cp,
-        lenkung: _massnahmen.text.trim(),
+        // Wer erst modifizieren muss, sieht das am Lenkungspunkt.
+        lenkung: ende == BaumEnde.modifizieren && lenkung.isEmpty
+            ? 'Schritt, Verfahren oder Produkt modifizieren — danach neu '
+                'prüfen.'
+            : lenkung,
       );
     }
     Navigator.of(context).pop(HaccpErgebnis(gefahr, punkt));
@@ -857,6 +838,7 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
+                  '${kEntscheidungsbaum[f]!.nummer}: '
                   '${kEntscheidungsbaum[f]!.text}  →  ${a ? 'Ja' : 'Nein'}',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
@@ -870,9 +852,18 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
                 color: theme.colorScheme.surfaceContainerHighest,
                 borderRadius: AppMasse.ecken,
               ),
-              child: Text(
-                frage.text,
-                style: theme.textTheme.titleSmall,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    frage.nummer,
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(frage.text, style: theme.textTheme.titleSmall),
+                ],
               ),
             ),
             const SizedBox(height: 12),
@@ -917,15 +908,16 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
                         'und Korrekturmaßnahmen festlegen.',
                     StatusArt.fehler,
                   ),
-                BaumEnde.anpassen => (
-                    'Schritt, Prozess oder Produkt anpassen und die Gefahr '
-                        'danach neu bewerten. Bis dahin steht er als '
+                BaumEnde.modifizieren => (
+                    'Schritt, Verfahren oder Produkt modifizieren — danach '
+                        'beginnt die Prüfung wieder bei Frage 1. Wer jetzt '
+                        'übernimmt, hat die Gefahr bis dahin als '
                         'Lenkungspunkt (CP) in der Liste.',
                     StatusArt.warnung,
                   ),
                 _ => (
-                    'Kein CCP: Die Gefahr wird an diesem Schritt als '
-                        'Lenkungspunkt (CP) beherrscht.',
+                    'Lenkungspunkt (CP): Die Gefahr wird an diesem Schritt '
+                        'beherrscht.',
                     StatusArt.warnung,
                   ),
               };
@@ -933,7 +925,18 @@ class _HaccpAssistentState extends State<HaccpAssistent> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            HinweisBox(text, art: art, titel: 'Ergebnis'),
+            HinweisBox(
+              text,
+              art: art,
+              titel: 'Ergebnis',
+              aktion: hoch && ende == BaumEnde.modifizieren
+                  ? TextButton.icon(
+                      onPressed: _neuPruefen,
+                      icon: const Icon(Icons.replay, size: 16),
+                      label: const Text('Neu prüfen'),
+                    )
+                  : null,
+            ),
             const SizedBox(height: 12),
             TextField(
               controller: _massnahmen,

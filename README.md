@@ -61,20 +61,33 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 
 - **Projekte** mit Stammdaten, Zielen (Fett, Eiweiß, aw), Checklisten,
   Verlauf mit Kommentaren, Prozess mit Versionen, HACCP-Gefahrenanalyse mit
-  Codex-Entscheidungsbaum, Fließdiagramm, Sensorik, Spezifikation und
-  Dateien. Die Projekt-Checkliste rechnet sich selbst: Rezeptur (ein
-  abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit Werten),
-  Spezifikation, Prozess, Sensorik (Aussehen, Geruch, Geschmack,
+  Entscheidungsbaum, Fließdiagramm, Sensorik, Spezifikation und Dateien.
+  Über jedem Reiter steht der **Projektkopf**: die Phase (Entwicklung ›
+  Validierung › Produktion — antippen wechselt nach einer Rückfrage, der
+  Wechsel steht als Meilenstein im Verlauf), der Fortschritt der
+  Checkliste, „Als Nächstes" mit dem Weg dorthin und die offenen Einträge
+  im Verlauf. Spezifikation, Etikett und Projektbericht stehen oben unter
+  „Erstellen", Umbenennen, Archivieren (und Wiederaufnehmen) und Löschen
+  im Menü daneben. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
+  (ein abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit
+  Werten), Spezifikation, Prozess, Sensorik (Aussehen, Geruch, Geschmack,
   Konsistenz) und Artikel (Freigabe) sieht die App dem Projekt an — von
   Hand bleiben nur Etikett und Navision; Liste, Übersicht, Zahlen und
   Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
   (antippen schaltet um).
-- **Fließdiagramme** als PDF: einzeln oder als ZIP einlesen — Kennung,
-  Bezeichnung und Stand kommen aus dem Dateinamen
-  („FD_001 Bezeichnung 260615.pdf", „_" steht für „/"; Namen aus einem
-  Windows-ZIP werden richtig gelesen). Jede Fassung bleibt, es gilt die
-  neueste; im Projekt lässt sich das PDF öffnen, der Projektbericht nennt
-  seinen Stand.
+- **HACCP-Entscheidungsbaum** wie im HACCP-Konzept: Frage 1 (Kontroll-
+  maßnahmen vorhanden?) mit Zusatzfrage (Kontrolle hier aus
+  Sicherheitsgründen nötig? ja → Schritt, Verfahren oder Produkt
+  modifizieren und neu prüfen, nein → CP), Frage 2 (eliminiert oder
+  reduziert dieser Schritt die Gefahr? ja → CCP), Frage 3 (Kontamination
+  oder Anstieg möglich? nein → CP), Frage 4 (ein späterer Schritt? ja →
+  CP, nein → CCP).
+- **Fließdiagramme** als Auswahlliste: Kennung und Bezeichnung (etwa
+  „FD_101 · Testware paniert"), einmal als Liste eingefügt
+  (je Zeile Kennung und Bezeichnung, getrennt durch Tabulator, Semikolon
+  oder Leerzeichen). Im Projekt wird das passende ausgewählt; die
+  Diagramme selbst pflegt die Qualitätssicherung, PDFs liegen nicht in der
+  App. Die Liste gehört zu den Entwicklungsdaten und steht nicht im Code.
 - **Rezepturen** in Ständen (Entwurf oder abgeschlossen): Zutatenliste
   nach LMIV mit hervorgehobenen Allergenen, Fleischanteil (QUID), Verlust,
   Nährwerte je 100 g gerundet, Vergleich zweier Stände.

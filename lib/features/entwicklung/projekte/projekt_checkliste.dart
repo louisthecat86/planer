@@ -21,6 +21,18 @@ import 'projekt_repository.dart' show projekteProvider;
 /// Die Punkte, die man von Hand abhakt — die übrigen rechnet die App.
 const Set<String> kChecklisteVonHand = {'etikettErstellt', 'navisionAngelegt'};
 
+/// Was für einen offenen Punkt zu tun ist — für „Als Nächstes".
+const Map<String, String> kCheckAufgabe = {
+  'rezepturErstellt': 'Rezeptur erstellen',
+  'naehrwerteErstellt': 'Nährwerte vervollständigen',
+  'sensorikErstellt': 'Sensorik beschreiben',
+  'prozessErstellt': 'Prozess beschreiben',
+  'spezifikationErstellt': 'Spezifikation erstellen',
+  'etikettErstellt': 'Etikett erstellen und abhaken',
+  'artikelAngelegt': 'Als Artikel freigeben',
+  'navisionAngelegt': 'In Navision anlegen und abhaken',
+};
+
 /// Ein Punkt der Projekt-Checkliste, wie er gerade steht.
 class CheckStand {
   const CheckStand({
@@ -60,7 +72,15 @@ class ProjektCheckStand {
 
   CheckStand? punkt(String schluessel) =>
       punkte.where((p) => p.punkt.schluessel == schluessel).firstOrNull;
+
+  /// Der erste offene Punkt in der Reihenfolge der Arbeit — null, wenn
+  /// alles erledigt ist.
+  CheckStand? get naechster => punkte.where((p) => !p.erledigt).firstOrNull;
 }
+
+/// Was für [c] zu tun ist: „Sensorik beschreiben".
+String checkAufgabe(CheckStand c) =>
+    kCheckAufgabe[c.punkt.schluessel] ?? c.punkt.label;
 
 /// Was ein abgeschlossener Stand über seine Nährwerte sagt: ob er Mengen
 /// hat und welche Zutaten ohne Nährwerte sind.

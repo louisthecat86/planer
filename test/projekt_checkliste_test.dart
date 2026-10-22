@@ -169,6 +169,72 @@ void main() {
       expect(text(s, 'etikettErstellt'), isNull);
     });
 
+    test('als Nächstes: der erste offene Punkt in Arbeitsreihenfolge', () {
+      final neu = projektCheckStand(
+        projekt: projekt(),
+        rezepturen: const [],
+        versionen: const [],
+      );
+      // Die Reihenfolge, in der gearbeitet wird.
+      expect([for (final p in neu.punkte) checkAufgabe(p)], [
+        'Rezeptur erstellen',
+        'Nährwerte vervollständigen',
+        'Sensorik beschreiben',
+        'Prozess beschreiben',
+        'Spezifikation erstellen',
+        'Etikett erstellen und abhaken',
+        'Als Artikel freigeben',
+        'In Navision anlegen und abhaken',
+      ]);
+      expect(neu.naechster!.punkt.schluessel, 'rezepturErstellt');
+
+      // Rezeptur und Nährwerte aus einem abgeschlossenen Stand: weiter
+      // mit der Sensorik.
+      final weiter = projektCheckStand(
+        projekt: projekt(),
+        rezepturen: [rezeptur('r1')],
+        versionen: [stand('v1')],
+      );
+      expect(weiter.naechster!.punkt.schluessel, 'sensorikErstellt');
+
+      // Ein übersprungener Punkt kommt zuerst: Navision ist abgehakt, das
+      // Etikett noch nicht.
+      final luecke = projektCheckStand(
+        projekt: projekt(
+          artikelId: 'a1',
+          freigegebenAm: zeit,
+          haken: {'navisionAngelegt'},
+          sensorik: const Sensorik(
+            aussehen: 'a',
+            geruch: 'g',
+            geschmack: 's',
+            konsistenz: 'k',
+          ),
+          prozess: const Prozessparameter(
+            abschnitte: [
+              ProzessAbschnitt(
+                id: 'garen',
+                titel: 'Garen',
+                felder: [
+                  ProzessFeld(id: 'kern', label: 'Kerntemperatur', wert: '72'),
+                ],
+              ),
+            ],
+          ).alsJson(),
+        ),
+        rezepturen: [rezeptur('r1')],
+        versionen: [stand('v1')],
+      );
+      expect(
+        [
+          for (final p in luecke.punkte)
+            if (!p.erledigt) p.punkt.schluessel,
+        ],
+        ['spezifikationErstellt', 'etikettErstellt'],
+      );
+      expect(luecke.naechster!.punkt.schluessel, 'spezifikationErstellt');
+    });
+
     test('von Hand zählen nur Etikett und Navision', () {
       final s = projektCheckStand(
         projekt: projekt(

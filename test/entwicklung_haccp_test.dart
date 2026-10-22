@@ -13,7 +13,6 @@ import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_ansicht.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
-import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dienst.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramme_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_screen.dart';
@@ -116,32 +115,47 @@ void main() {
   });
 
   group('Entscheidungsbaum', () {
-    test('alle Wege nach dem Codex-Baum', () {
+    test('alle Wege wie im HACCP-Konzept', () {
       expect(baumWeg(const {}).frage, 'f1');
       expect(baumWeg(const {'f1': true}).frage, 'f2');
+      // Frage 2 ja: CCP.
       expect(baumWeg(const {'f1': true, 'f2': true}).ende, BaumEnde.ccp);
       expect(baumWeg(const {'f1': true, 'f2': false}).frage, 'f3');
+      // Frage 3 nein: CP.
       expect(
         baumWeg(const {'f1': true, 'f2': false, 'f3': false}).ende,
-        BaumEnde.keinCcp,
+        BaumEnde.cp,
       );
+      // Frage 4 ja: CP, nein: CCP.
       expect(
         baumWeg(const {'f1': true, 'f2': false, 'f3': true, 'f4': true}).ende,
-        BaumEnde.keinCcp,
+        BaumEnde.cp,
       );
       expect(
         baumWeg(const {'f1': true, 'f2': false, 'f3': true, 'f4': false}).ende,
         BaumEnde.ccp,
       );
+      // Frage 1 nein: die Zusatzfrage — ja: modifizieren, nein: CP.
       expect(baumWeg(const {'f1': false}).frage, 'f1b');
       expect(
         baumWeg(const {'f1': false, 'f1b': true}).ende,
-        BaumEnde.anpassen,
+        BaumEnde.modifizieren,
       );
       expect(
         baumWeg(const {'f1': false, 'f1b': false}).ende,
-        BaumEnde.keinCcp,
+        BaumEnde.cp,
       );
+      expect(
+        [for (final f in kEntscheidungsbaum.values) f.nummer],
+        ['Frage 1', 'Zusatzfrage zu Frage 1', 'Frage 2', 'Frage 3', 'Frage 4'],
+      );
+      expect(
+        [for (final f in kEntscheidungsbaum.values) f.kurz],
+        ['F1', 'F1 Zusatz', 'F2', 'F3', 'F4'],
+      );
+      // Frühere Ziele gelten weiter.
+      expect(BaumEnde.aus('ergebnis:KP'), BaumEnde.cp);
+      expect(BaumEnde.aus('ergebnis:ANPASSEN'), BaumEnde.modifizieren);
     });
 
     test('Risiko: gering, mittel, hoch', () {
@@ -215,6 +229,62 @@ void main() {
       expect(punkt.lenkung, 'Prüfkörper je Schicht');
     });
 
+    testWidgets('modifizieren: neu prüfen beginnt wieder bei Frage 1',
+        (tester) async {
+      HaccpErgebnis? ergebnis;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                onPressed: () async {
+                  ergebnis = await showDialog<HaccpErgebnis>(
+                    context: context,
+                    builder: (_) => const HaccpAssistent(),
+                  );
+                },
+                child: const Text('los'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('los'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Gefahr'),
+        'Listerien',
+      );
+      await tester.tap(find.text('3 · schwer'));
+      await tester.tap(find.text('2 · möglich'));
+      await tester.tap(find.text('Weiter'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Frage 1'), findsOneWidget);
+      await tester.tap(find.text('Nein'));
+      await tester.pumpAndSettle();
+      expect(find.text('Zusatzfrage zu Frage 1'), findsOneWidget);
+      expect(find.text(kEntscheidungsbaum['f1b']!.text), findsOneWidget);
+      await tester.tap(find.text('Ja'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('modifizieren'), findsOneWidget);
+
+      // Nach der Änderung: wieder bei Frage 1, diesmal bis zum CCP.
+      await tester.tap(find.text('Neu prüfen'));
+      await tester.pumpAndSettle();
+      expect(find.text(kEntscheidungsbaum['f1']!.text), findsOneWidget);
+      await tester.tap(find.text('Ja'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Ja'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Kritischer Lenkungspunkt'), findsOneWidget);
+      await tester.tap(find.text('Übernehmen'));
+      await tester.pumpAndSettle();
+      expect(ergebnis!.lenkungspunkt!.ergebnis, Lenkungsart.ccp);
+      expect(ergebnis!.lenkungspunkt!.antworten, {'f1': true, 'f2': true});
+    });
+
     testWidgets('geringes Risiko braucht keinen Lenkungspunkt',
         (tester) async {
       HaccpErgebnis? ergebnis;
@@ -255,11 +325,11 @@ void main() {
   group('Fließdiagramme', () {
     test('eine eingefügte Liste wird gelesen', () {
       final liste = fliessdiagrammeAusText(
-        'FD_001 Fließdiagramm Gewürze\n'
+        'FD_001 Testware A\n'
         '\n'
-        'FD_002;Auftauen\n'
-        'FD_003\tTeilstücke\n'
-        'FD_004 – Rohe Produkte\n'
+        'FD_002;Testware B\n'
+        'FD_003\tTestware C\n'
+        'FD_004 – Testware D\n'
         'FD_005\n'
         'FD_001 doppelt\n',
       );
@@ -270,10 +340,10 @@ void main() {
         'FD_004',
         'FD_005',
       ]);
-      expect(liste[0].bezeichnung, 'Fließdiagramm Gewürze');
-      expect(liste[1].bezeichnung, 'Auftauen');
-      expect(liste[2].bezeichnung, 'Teilstücke');
-      expect(liste[3].bezeichnung, 'Rohe Produkte');
+      expect(liste[0].bezeichnung, 'Testware A');
+      expect(liste[1].bezeichnung, 'Testware B');
+      expect(liste[2].bezeichnung, 'Testware C');
+      expect(liste[3].bezeichnung, 'Testware D');
       expect(liste[4].bezeichnung, 'FD_005');
     });
 
@@ -375,6 +445,13 @@ void main() {
           ergebnis: Lenkungsart.ccp,
           lenkung: 'Prüfkörper je Schicht',
         ),
+        // Frage 1 nein, Zusatzfrage nein: CP.
+        Lenkungspunkt(
+          id: 'l2',
+          schritt: 'Verpacken',
+          antworten: {'f1': false, 'f1b': false},
+          ergebnis: Lenkungsart.cp,
+        ),
       ],
     );
 
@@ -423,8 +500,6 @@ void main() {
                 .overrideWith((ref, id) => Stream.value(const [])),
             fliessdiagrammeProvider
                 .overrideWith((ref) => Stream.value(const [])),
-            fliessdiagrammFassungenProvider
-                .overrideWith((ref) => Stream.value(const {})),
             alleVersionenProvider.overrideWith((ref) => Stream.value(const [])),
             freigabeUebersichtProvider.overrideWith(
               (ref, id) async => const FreigabeUebersicht(),
@@ -493,9 +568,13 @@ void main() {
       expect(find.text('Metalldetektion'), findsOneWidget);
       expect(find.text('CCP'), findsOneWidget);
       expect(find.textContaining('F1 Ja · F2 Ja'), findsOneWidget);
+      // Die Zusatzfrage steht mit in der Zeile.
+      expect(find.text('Verpacken'), findsOneWidget);
+      expect(find.textContaining('F1 Nein · F1 Zusatz Nein'), findsOneWidget);
+      expect(find.text('CP'), findsOneWidget);
       expect(
         find.byWidgetPredicate(
-          (w) => w is BereichKopf && w.untertitel == '1 CCP · 0 CP',
+          (w) => w is BereichKopf && w.untertitel == '1 CCP · 1 CP',
         ),
         findsOneWidget,
       );

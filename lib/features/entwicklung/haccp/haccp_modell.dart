@@ -3,9 +3,10 @@ import 'dart:convert';
 // Gefahrenanalyse (FMEA) und Lenkungspunkte eines Projekts.
 //
 // In der Datenbank steht beides als ein JSON-Text (EntwicklungProjekte.
-// haccp). Die Entscheidung, ob ein Schritt ein kritischer Lenkungspunkt
-// ist, folgt dem Codex-Entscheidungsbaum mit vier Fragen
-// (CAC/RCP 1-1969, Anhang).
+// haccp). Ob ein Schritt ein kritischer Lenkungspunkt (CCP) oder ein
+// Lenkungspunkt (CP) ist, entscheidet der Entscheidungsbaum mit vier
+// Fragen und einer Zusatzfrage zu Frage 1 — im Wortlaut des
+// HACCP-Konzepts.
 
 /// Art einer Gefahr.
 enum Gefahrenart {
@@ -276,50 +277,113 @@ int _stufe(Object? wert) {
 
 /// Eine Frage des Baums.
 class BaumFrage {
-  const BaumFrage(this.schluessel, this.text, this.ja, this.nein);
+  const BaumFrage(
+    this.schluessel,
+    this.text,
+    this.ja,
+    this.nein, {
+    required this.nummer,
+    required this.kurz,
+  });
 
   final String schluessel;
   final String text;
 
+  /// Wie die Frage im HACCP-Konzept heißt: „Frage 1" …
+  final String nummer;
+
+  /// Kurz für die Liste der Lenkungspunkte: „F1", „F1 Zusatz" …
+  final String kurz;
+
   /// Nächste Frage oder Ergebnis bei Ja bzw. Nein: ein Fragenschlüssel
-  /// oder `ergebnis:CCP`, `ergebnis:KP`, `ergebnis:ANPASSEN`.
+  /// oder `ergebnis:CCP`, `ergebnis:CP`, `ergebnis:MODIFIZIEREN`.
   final String ja;
   final String nein;
 }
 
-/// Die Fragen des Codex-Entscheidungsbaums.
+/// Die Fragen des Entscheidungsbaums.
 const Map<String, BaumFrage> kEntscheidungsbaum = {
   'f1': BaumFrage(
     'f1',
-    'Gibt es für die Gefahr vorbeugende Maßnahmen?',
+    'Sind Kontrollmaßnahmen für die identifizierte Gefahr vorhanden?',
     'f2',
     'f1b',
+    nummer: 'Frage 1',
+    kurz: 'F1',
   ),
   'f1b': BaumFrage(
     'f1b',
-    'Ist eine Beherrschung an diesem Schritt für die Sicherheit nötig?',
-    'ergebnis:ANPASSEN',
-    'ergebnis:KP',
+    'Ist eine Kontrolle aus Sicherheitsgründen an dieser Stelle '
+        'erforderlich?',
+    'ergebnis:MODIFIZIEREN',
+    'ergebnis:CP',
+    nummer: 'Zusatzfrage zu Frage 1',
+    kurz: 'F1 Zusatz',
   ),
   'f2': BaumFrage(
     'f2',
-    'Ist der Schritt eigens dafür da, die Gefahr zu beseitigen oder auf ein '
-        'annehmbares Maß zu senken?',
+    'Wird die Gefahr durch diesen Schritt eliminiert oder auf ein '
+        'annehmbares Niveau reduziert?',
     'ergebnis:CCP',
     'f3',
+    nummer: 'Frage 2',
+    kurz: 'F2',
   ),
   'f3': BaumFrage(
     'f3',
-    'Kann eine Verunreinigung mit der Gefahr über das annehmbare Maß '
-        'hinausgehen oder darauf ansteigen?',
+    'Ist eine Kontamination möglich bzw. kann sich die Gefahr auf ein nicht '
+        'akzeptables Maß erhöhen?',
     'f4',
-    'ergebnis:KP',
+    'ergebnis:CP',
+    nummer: 'Frage 3',
+    kurz: 'F3',
   ),
   'f4': BaumFrage(
     'f4',
-    'Beseitigt ein späterer Schritt die Gefahr oder senkt sie auf ein '
-        'annehmbares Maß?',
-    'ergebnis:KP',
+    'Wird die Gefahr durch einen späteren Schritt eliminiert oder auf ein '
+        'annehmbares Niveau reduziert?',
+    'ergebnis:CP',
     'ergebnis:CCP',
+    nummer: 'Frage 4',
+    kurz: 'F4',
   ),
 };
+
+/// Wohin ein Weg durch den Baum führt.
+enum BaumEnde {
+  /// Kritischer Lenkungspunkt.
+  ccp,
+
+  /// Lenkungspunkt.
+  cp,
+
+  /// Schritt, Verfahren oder Produkt modifizieren — danach beginnt die
+  /// Prüfung wieder bei Frage 1.
+  modifizieren;
+
+  static BaumEnde? aus(String ziel) => switch (ziel) {
+        'ergebnis:CCP' => BaumEnde.ccp,
+        // „KP" stand früher für den Ausgang ohne CCP.
+        'ergebnis:CP' || 'ergebnis:KP' => BaumEnde.cp,
+        'ergebnis:MODIFIZIEREN' || 'ergebnis:ANPASSEN' => BaumEnde.modifizieren,
+        _ => null,
+      };
+}
+
+/// Geht den Entscheidungsbaum mit [antworten] (Frage → Ja/Nein) ab. Gibt
+/// die nächste offene Frage zurück oder, wenn der Weg zu Ende ist, das
+/// Ergebnis.
+({String? frage, BaumEnde? ende}) baumWeg(Map<String, bool> antworten) {
+  var schluessel = 'f1';
+  for (var i = 0; i < 10; i++) {
+    final frage = kEntscheidungsbaum[schluessel];
+    if (frage == null) return (frage: null, ende: BaumEnde.cp);
+    final antwort = antworten[schluessel];
+    if (antwort == null) return (frage: schluessel, ende: null);
+    final ziel = antwort ? frage.ja : frage.nein;
+    final ende = BaumEnde.aus(ziel);
+    if (ende != null) return (frage: null, ende: ende);
+    schluessel = ziel;
+  }
+  return (frage: null, ende: BaumEnde.cp);
+}

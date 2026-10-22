@@ -106,17 +106,18 @@ enum EintragStatus {
 /// Ein Punkt einer Checkliste: Schlüssel im JSON und Text.
 typedef CheckPunkt = ({String schluessel, String label});
 
-/// Die Projekt-Checkliste — was bis zur Freigabe erledigt sein muss. Die
-/// meisten Punkte rechnet die App selbst (projekt_checkliste.dart).
+/// Die Projekt-Checkliste — was bis zur Freigabe erledigt sein muss, in
+/// der Reihenfolge der Arbeit. Die meisten Punkte rechnet die App selbst
+/// (projekt_checkliste.dart).
 const List<CheckPunkt> kProjektCheckliste = [
-  (schluessel: 'artikelAngelegt', label: 'Artikel angelegt'),
   (schluessel: 'rezepturErstellt', label: 'Rezeptur erstellt'),
-  (schluessel: 'etikettErstellt', label: 'Etikett erstellt'),
   (schluessel: 'naehrwerteErstellt', label: 'Nährwerte berechnet'),
-  (schluessel: 'spezifikationErstellt', label: 'Spezifikation erstellt'),
-  (schluessel: 'prozessErstellt', label: 'Prozess beschrieben'),
-  (schluessel: 'navisionAngelegt', label: 'In Navision angelegt'),
   (schluessel: 'sensorikErstellt', label: 'Sensorik beschrieben'),
+  (schluessel: 'prozessErstellt', label: 'Prozess beschrieben'),
+  (schluessel: 'spezifikationErstellt', label: 'Spezifikation erstellt'),
+  (schluessel: 'etikettErstellt', label: 'Etikett erstellt'),
+  (schluessel: 'artikelAngelegt', label: 'Artikel angelegt'),
+  (schluessel: 'navisionAngelegt', label: 'In Navision angelegt'),
 ];
 
 /// Die Etiketten-Checkliste — die Pflichtangaben nach LMIV Art. 9.

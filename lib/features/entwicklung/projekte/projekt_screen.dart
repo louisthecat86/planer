@@ -12,6 +12,7 @@ import '../../../core/utils/fehler_text.dart';
 import '../bericht/bericht_drucken.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
+import '../etikett/etikett_dialog.dart';
 import '../freigabe/freigabe_ansicht.dart';
 import '../haccp/haccp_ansicht.dart';
 import '../haccp/prozess_ansicht.dart';
@@ -20,11 +21,12 @@ import '../rezepturen/rezeptur_screen.dart' show TextFeld;
 import '../rezepturen/rezepturen_ansicht.dart';
 import '../spezifikation/spezifikation_dialog.dart';
 import '../spezifikation/spezifikation_reiter.dart';
-import 'datei_aktionen.dart' show dateiOeffnen;
-import 'fliessdiagramm_dienst.dart';
+import '../spezifikation/spezifikation_werte.dart' show SpezSprache;
+import 'entwicklungsstrang.dart' show phaseVorDemArchiv;
 import 'fliessdiagramme_dialog.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_dateien.dart';
+import 'projekt_kopf.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_verlauf.dart';
@@ -43,6 +45,39 @@ enum ProjektReiter {
   const ProjektReiter(this.label);
 
   final String label;
+}
+
+/// Springt auf der Projektseite zum Reiter [r].
+void projektReiterZeigen(BuildContext context, ProjektReiter r) =>
+    DefaultTabController.maybeOf(context)?.animateTo(r.index);
+
+/// Wohin ein Punkt der Checkliste führt: in den Reiter, in dem er
+/// entsteht, oder in die Rezeptur — null, wenn er in der Übersicht selbst
+/// erledigt wird (Freigabe, Etikett, Navision).
+VoidCallback? checkpunktZiel(BuildContext context, CheckStand c) {
+  final rezeptur = c.rezepturId;
+  return switch (c.punkt.schluessel) {
+    'prozessErstellt' => () =>
+        projektReiterZeigen(context, ProjektReiter.prozess),
+    'sensorikErstellt' => () =>
+        projektReiterZeigen(context, ProjektReiter.sensorik),
+    'spezifikationErstellt' => () =>
+        projektReiterZeigen(context, ProjektReiter.spezifikation),
+    'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
+        oeffneRezeptur(context, rezeptur),
+    _ => null,
+  };
+}
+
+/// Führt zu einem Punkt der Checkliste — ohne eigenes Ziel in die
+/// Übersicht, wo er abgehakt oder freigegeben wird.
+void checkpunktOeffnen(BuildContext context, CheckStand c) {
+  final ziel = checkpunktZiel(context, c);
+  if (ziel != null) {
+    ziel();
+  } else {
+    projektReiterZeigen(context, ProjektReiter.uebersicht);
+  }
 }
 
 /// Speichert eine Änderung am Projekt; Fehler erscheinen unten.
@@ -147,11 +182,50 @@ class ProjektScreen extends ConsumerWidget {
     if (context.mounted) Navigator.of(context).maybePop();
   }
 
+  /// Das Etikett des Stands, um den es gerade geht: des freigegebenen,
+  /// sonst des zuletzt abgeschlossenen, sonst des neuesten Entwurfs.
+  void _etikett(BuildContext context, WidgetRef ref, EntwicklungsProjekt p) {
+    final rezepturen =
+        ref.read(projektRezepturenProvider(p.id)).valueOrNull ?? const [];
+    final ids = {for (final r in rezepturen) r.id};
+    final staende = [
+      for (final v in ref.read(alleVersionenProvider).valueOrNull ??
+          const <RezepturVersion>[])
+        if (ids.contains(v.rezepturId)) v,
+    ];
+    DateTime zeit(RezepturVersion v) => v.abgeschlossenAm ?? v.updatedAt;
+    final abgeschlossen = staende
+        .where((v) => v.status == VersionStatus.abgeschlossen)
+        .toList()
+      ..sort((a, b) => zeit(b).compareTo(zeit(a)));
+    final entwuerfe = staende
+        .where((v) => v.status != VersionStatus.abgeschlossen)
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final stand =
+        staende.where((v) => v.id == p.freigabeVersionId).firstOrNull ??
+            abgeschlossen.firstOrNull ??
+            entwuerfe.firstOrNull;
+    if (stand == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Noch keine Rezeptur — in der Übersicht unter „Rezepturen" '
+            'anlegen.',
+          ),
+        ),
+      );
+      return;
+    }
+    etikettZeigen(context, stand.id);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final projekt = ref.watch(projektProvider(projektId));
     final p = projekt.valueOrNull;
     final kunde = p?.kunde?.trim();
+    final theme = Theme.of(context);
     return DefaultTabController(
       length: ProjektReiter.values.length,
       child: Scaffold(
@@ -165,37 +239,114 @@ class ProjektScreen extends ConsumerWidget {
           ),
           actions: [
             if (p != null) ...[
-              IconButton(
-                tooltip: 'Spezifikation (Excel)',
-                icon: const Icon(Icons.table_view_outlined),
-                onPressed: () => spezifikationOeffnen(context, p),
+              PopupMenuButton<VoidCallback>(
+                key: const ValueKey('projekt-erstellen'),
+                tooltip: 'Spezifikation, Etikett oder Projektbericht',
+                onSelected: (aktion) => aktion(),
+                itemBuilder: (_) => [
+                  PopupMenuItem(
+                    value: () => spezifikationOeffnen(context, p),
+                    child: const ListTile(
+                      leading: Icon(Icons.table_view_outlined),
+                      title: Text('Spezifikation (Deutsch)…'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: () => spezifikationOeffnen(
+                      context,
+                      p,
+                      sprache: SpezSprache.en,
+                    ),
+                    child: const ListTile(
+                      leading: Icon(Icons.translate),
+                      title: Text('Spezifikation (Englisch)…'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: () => _etikett(context, ref, p),
+                    child: const ListTile(
+                      leading: Icon(Icons.label_outline),
+                      title: Text('Etikett…'),
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: () => projektberichtDrucken(context, ref, p),
+                    child: const ListTile(
+                      leading: Icon(Icons.picture_as_pdf_outlined),
+                      title: Text('Projektbericht (PDF)…'),
+                    ),
+                  ),
+                ],
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.file_open_outlined, size: 20),
+                      const SizedBox(width: 6),
+                      Text('Erstellen', style: theme.textTheme.labelLarge),
+                      const Icon(Icons.arrow_drop_down),
+                    ],
+                  ),
+                ),
               ),
-              IconButton(
-                tooltip: 'Projektbericht (PDF)',
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                onPressed: () => projektberichtDrucken(context, ref, p),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                tooltip: 'Umbenennen',
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () => _umbenennen(context, ref, p),
-              ),
-              IconButton(
-                tooltip: 'Projekt löschen',
-                icon: const Icon(Icons.delete_outline),
-                onPressed: () => _loeschen(context, ref, p),
+              PopupMenuButton<VoidCallback>(
+                key: const ValueKey('projekt-mehr'),
+                tooltip: 'Umbenennen, archivieren oder löschen',
+                onSelected: (aktion) => aktion(),
+                itemBuilder: (_) {
+                  final archiviert =
+                      ProjektStatus.aus(p.status) == ProjektStatus.archiviert;
+                  return [
+                    PopupMenuItem(
+                      value: () => _umbenennen(context, ref, p),
+                      child: const ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Umbenennen…'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: () => phaseWechseln(
+                        context,
+                        ref,
+                        p,
+                        archiviert
+                            ? phaseVorDemArchiv(
+                                ref
+                                        .read(projektEintraegeProvider(p.id))
+                                        .valueOrNull ??
+                                    const [],
+                              )
+                            : ProjektStatus.archiviert,
+                      ),
+                      child: ListTile(
+                        leading: Icon(
+                          archiviert
+                              ? Icons.unarchive_outlined
+                              : Icons.archive_outlined,
+                        ),
+                        title: Text(
+                          archiviert ? 'Wieder aufnehmen…' : 'Archivieren…',
+                        ),
+                      ),
+                    ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      value: () => _loeschen(context, ref, p),
+                      child: const ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Projekt löschen…'),
+                      ),
+                    ),
+                  ];
+                },
               ),
             ],
             const SizedBox(width: 8),
           ],
-          bottom: TabBar(
-            isScrollable: true,
-            tabAlignment: TabAlignment.start,
-            tabs: [
-              for (final r in ProjektReiter.values) Tab(text: r.label),
-            ],
-          ),
         ),
         body: projekt.when(
           skipLoadingOnReload: true,
@@ -213,23 +364,45 @@ class ProjektScreen extends ConsumerWidget {
               ? const Center(
                   child: LeerHinweis('Dieses Projekt gibt es nicht mehr.'),
                 )
-              // Mails (auch direkt aus Outlook) und Dateien lassen sich auf
-              // jeden Reiter ziehen — sie kommen in den Verlauf.
-              : AblageZone(
-                  hinweis: 'Mail oder Datei loslassen — kommt in den Verlauf',
-                  onAbgelegt: (dateien) =>
-                      projektAblage(context, ref, p.id, dateien),
-                  child: TabBarView(
-                    children: [
-                      ProjektVerlauf(projekt: p),
-                      ProjektUebersicht(projekt: p),
-                      ProjektProzess(projekt: p),
-                      ProjektHaccp(projekt: p),
-                      ProjektSensorik(projekt: p),
-                      ProjektSpezifikation(projekt: p),
-                      ProjektDateien(projekt: p),
-                    ],
-                  ),
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Auf jedem Reiter: Phase, Fortschritt, was als Nächstes
+                    // kommt.
+                    ProjektKopf(projekt: p),
+                    Material(
+                      color: theme.colorScheme.surface,
+                      child: TabBar(
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
+                        tabs: [
+                          for (final r in ProjektReiter.values)
+                            Tab(text: r.label),
+                        ],
+                      ),
+                    ),
+                    // Mails (auch direkt aus Outlook) und Dateien lassen sich
+                    // auf jeden Reiter ziehen — sie kommen in den Verlauf.
+                    Expanded(
+                      child: AblageZone(
+                        hinweis:
+                            'Mail oder Datei loslassen — kommt in den Verlauf',
+                        onAbgelegt: (dateien) =>
+                            projektAblage(context, ref, p.id, dateien),
+                        child: TabBarView(
+                          children: [
+                            ProjektVerlauf(projekt: p),
+                            ProjektUebersicht(projekt: p),
+                            ProjektProzess(projekt: p),
+                            ProjektHaccp(projekt: p),
+                            ProjektSensorik(projekt: p),
+                            ProjektSpezifikation(projekt: p),
+                            ProjektDateien(projekt: p),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
         ),
       ),
@@ -314,16 +487,12 @@ class ProjektStammdaten extends ConsumerWidget {
     final p = projekt;
     void speichern(EntwicklungProjekteCompanion daten) =>
         projektSpeichern(context, ref, p.id, daten);
-    final status = ProjektStatus.aus(p.status);
     final diagramme = ref.watch(fliessdiagrammeProvider).valueOrNull ??
         const <Fliessdiagramm>[];
     final fd = p.fliessdiagramm ?? '';
-    final fdPdfs = ref.watch(fliessdiagrammFassungenProvider).valueOrNull?[fd];
-    final pdf = fdPdfs?.firstOrNull;
     final fdWahl = <String, String>{
       '': '— keins —',
-      for (final f in diagramme)
-        f.id: f.bezeichnung == f.id ? f.id : '${f.id} · ${f.bezeichnung}',
+      for (final f in diagramme) f.id: fdText(f.id, bezeichnung: f.bezeichnung),
       if (fd.isNotEmpty && !diagramme.any((f) => f.id == fd)) fd: fd,
     };
     const abstand = SizedBox(height: 10);
@@ -338,24 +507,6 @@ class ProjektStammdaten extends ConsumerWidget {
             spacing: 12,
             runSpacing: 10,
             children: [
-              SizedBox(
-                width: 200,
-                child: DropdownButtonFormField<ProjektStatus>(
-                  key: ValueKey('status-${p.status}'),
-                  initialValue: status,
-                  isExpanded: true,
-                  decoration: const InputDecoration(labelText: 'Status'),
-                  items: [
-                    for (final s in ProjektStatus.values)
-                      DropdownMenuItem(value: s, child: Text(s.label)),
-                  ],
-                  onChanged: (s) {
-                    if (s != null && s != status) {
-                      projektStatusAendern(context, ref, p.id, s);
-                    }
-                  },
-                ),
-              ),
               SizedBox(
                 width: 240,
                 child: TextFeld(
@@ -404,23 +555,24 @@ class ProjektStammdaten extends ConsumerWidget {
           abstand,
           Row(
             children: [
+              // Tippen sucht in Kennung und Bezeichnung.
               Expanded(
-                child: DropdownButtonFormField<String>(
+                child: DropdownMenu<String>(
                   key: ValueKey('fd-$fd-${fdWahl.length}-${fdWahl[fd]}'),
-                  initialValue: fd,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    labelText: 'Fließdiagramm',
-                    helperText: fdPdfHinweis(fdPdfs),
-                  ),
-                  items: [
+                  initialSelection: fd,
+                  expandedInsets: EdgeInsets.zero,
+                  enableFilter: true,
+                  requestFocusOnTap: true,
+                  menuHeight: 360,
+                  label: const Text('Fließdiagramm'),
+                  helperText: diagramme.isEmpty
+                      ? 'Noch keine Liste — rechts daneben anlegen'
+                      : null,
+                  dropdownMenuEntries: [
                     for (final MapEntry(:key, :value) in fdWahl.entries)
-                      DropdownMenuItem(
-                        value: key,
-                        child: Text(value, overflow: TextOverflow.ellipsis),
-                      ),
+                      DropdownMenuEntry(value: key, label: value),
                   ],
-                  onChanged: (wahl) {
+                  onSelected: (wahl) {
                     if (wahl == null || wahl == fd) return;
                     speichern(
                       EntwicklungProjekteCompanion(
@@ -431,18 +583,7 @@ class ProjektStammdaten extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                tooltip: fd.isEmpty
-                    ? 'Kein Fließdiagramm gewählt'
-                    : pdf == null
-                        ? 'Zu $fd gibt es noch kein PDF'
-                        : 'Fließdiagramm öffnen',
-                icon: const Icon(Icons.picture_as_pdf_outlined),
-                onPressed: pdf == null
-                    ? null
-                    : () => dateiOeffnen(context, ref, pdf.datei),
-              ),
-              IconButton(
-                tooltip: 'Fließdiagramme pflegen',
+                tooltip: 'Liste der Fließdiagramme bearbeiten',
                 icon: const Icon(Icons.edit_note),
                 onPressed: () => showDialog<void>(
                   context: context,
@@ -688,22 +829,6 @@ class ProjektCheckliste extends ConsumerWidget {
         onChanged: (v) => _haken(ref, c.schluessel, erledigt: v ?? false),
       );
 
-  /// Wohin ein Punkt führt: in den Reiter, in dem er entsteht, oder in die
-  /// Rezeptur — null, wenn er nirgendwohin führt.
-  VoidCallback? _ziel(BuildContext context, CheckStand c) {
-    void reiter(ProjektReiter r) =>
-        DefaultTabController.maybeOf(context)?.animateTo(r.index);
-    final rezeptur = c.rezepturId;
-    return switch (c.punkt.schluessel) {
-      'prozessErstellt' => () => reiter(ProjektReiter.prozess),
-      'sensorikErstellt' => () => reiter(ProjektReiter.sensorik),
-      'spezifikationErstellt' => () => reiter(ProjektReiter.spezifikation),
-      'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
-          oeffneRezeptur(context, rezeptur),
-      _ => null,
-    };
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (etikett) {
@@ -747,7 +872,7 @@ class ProjektCheckliste extends ConsumerWidget {
                 untertitel: 'von Hand',
               )
             else
-              _AutoPunkt(stand: c, onTap: _ziel(context, c)),
+              _AutoPunkt(stand: c, onTap: checkpunktZiel(context, c)),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
             child: Text(

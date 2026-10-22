@@ -11,8 +11,7 @@ import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/datei_aktionen.dart';
-import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dateien.dart';
-import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_dienst.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramm_liste.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/fliessdiagramme_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
@@ -256,7 +255,7 @@ void main() {
           artikelnummer: '4711',
           status: status.schluessel,
           produktidee: 'Paniertes Schnitzel aus der Oberschale',
-          fliessdiagramm: 'FD_011',
+          fliessdiagramm: 'FD_101',
           neuerProzess: true,
           neueZutaten: false,
           zielFett: 12,
@@ -359,52 +358,41 @@ void main() {
       eintrag('e1', EintragArt.meilenstein, 'Projekt angelegt'),
     ];
 
-    final overrides = [
-      projekteProvider.overrideWith((ref) => Stream.value([p1, p2, p3])),
-      projektProvider.overrideWith((ref, id) => Stream.value(p1)),
-      projektEintraegeProvider.overrideWith(
-        (ref, id) => Stream.value(eintraege),
-      ),
-      projektDateienProvider.overrideWith((ref, id) => Stream.value([datei])),
-      projektRezepturenProvider.overrideWith(
-        (ref, id) => Stream.value([rezeptur]),
-      ),
-      // Alle Rezepturen — für die Checklisten der Projektliste.
-      rezepturenProvider.overrideWith((ref) => Stream.value([rezeptur])),
-      fliessdiagrammeProvider.overrideWith(
-        (ref) => Stream.value([
-          Fliessdiagramm(
-            id: 'FD_011',
-            bezeichnung: 'Bratstraße paniert',
-            sortierung: 0,
-            createdAt: zeit,
-            updatedAt: zeit,
+    /// [seite]: das Projekt der Projektseite, sonst das Schnitzel;
+    /// [verlauf]: seine Einträge, sonst die drei oben.
+    List<Override> overrides({
+      EntwicklungsProjekt? seite,
+      List<ProjektEintrag>? verlauf,
+    }) =>
+        [
+          projekteProvider.overrideWith((ref) => Stream.value([p1, p2, p3])),
+          projektProvider.overrideWith((ref, id) => Stream.value(seite ?? p1)),
+          projektEintraegeProvider.overrideWith(
+            (ref, id) => Stream.value(verlauf ?? eintraege),
           ),
-        ]),
-      ),
-      fliessdiagrammFassungenProvider.overrideWith(
-        (ref) => Stream.value({
-          'FD_011': [
-            for (final stand in [DateTime(2026, 7, 31), DateTime(2026, 6, 15)])
-              (
-                stand: stand,
-                datei: EntwicklungsDatei(
-                  id: fdDateiId('FD_011', stand),
-                  name: 'FD_011 Testware.pdf',
-                  mimeTyp: 'application/pdf',
-                  groesse: 4096,
-                  createdAt: zeit,
-                ),
+          projektDateienProvider.overrideWith((ref, id) => Stream.value([datei])),
+          projektRezepturenProvider.overrideWith(
+            (ref, id) => Stream.value([rezeptur]),
+          ),
+          // Alle Rezepturen — für die Checklisten der Projektliste.
+          rezepturenProvider.overrideWith((ref) => Stream.value([rezeptur])),
+          fliessdiagrammeProvider.overrideWith(
+            (ref) => Stream.value([
+              Fliessdiagramm(
+                id: 'FD_101',
+                bezeichnung: 'Testware paniert',
+                sortierung: 0,
+                createdAt: zeit,
+                updatedAt: zeit,
               ),
-          ],
-        }),
-      ),
-      alleVersionenProvider.overrideWith((ref) => Stream.value([v1])),
-      freigabeUebersichtProvider.overrideWith(
-        (ref, id) async => const FreigabeUebersicht(),
-      ),
-      rechenRezepturProvider.overrideWith((ref, id) async => eingabe),
-    ];
+            ]),
+          ),
+          alleVersionenProvider.overrideWith((ref) => Stream.value([v1])),
+          freigabeUebersichtProvider.overrideWith(
+            (ref, id) async => const FreigabeUebersicht(),
+          ),
+          rechenRezepturProvider.overrideWith((ref, id) async => eingabe),
+        ];
 
     Finder bereich(String titel, [String? untertitel]) =>
         find.byWidgetPredicate(
@@ -419,13 +407,15 @@ void main() {
       Widget seite, {
       Size groesse = const Size(1400, 900),
       ThemeData? theme,
+      EntwicklungsProjekt? projekt,
+      List<ProjektEintrag>? verlauf,
     }) async {
       tester.view.physicalSize = groesse;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: overrides,
+          overrides: overrides(seite: projekt, verlauf: verlauf),
           child: MaterialApp(
             theme: theme ?? AppTheme.light(),
             home: Scaffold(body: seite),
@@ -514,12 +504,154 @@ void main() {
       expect(bereich('Etikett (LMIV)', '0 von 12'), findsOneWidget);
       expect(bereich('Rezepturen', '1'), findsOneWidget);
       expect(find.text('Stand 1 · abgeschlossen'), findsOneWidget);
-      expect(find.text('FD_011 · Bratstraße paniert'), findsOneWidget);
-      // Das PDF des Fließdiagramms: Stand und Öffnen.
-      expect(find.text('PDF · Stand 31.07.2026 · 2 Fassungen'), findsOneWidget);
-      expect(find.byTooltip('Fließdiagramm öffnen'), findsOneWidget);
+      // Das Fließdiagramm: nur die Auswahl aus der Liste, kein PDF.
+      expect(find.text('FD_101 · Testware paniert'), findsOneWidget);
+      expect(
+        find.byTooltip('Liste der Fließdiagramme bearbeiten'),
+        findsOneWidget,
+      );
       // Die Rezeptur hat mehr Fett als das Ziel erlaubt.
       expect(find.textContaining('über dem Ziel'), findsOneWidget);
+    });
+
+    Future<void> bilder(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+    }
+
+    testWidgets('Projektkopf: Phase, Fortschritt und was als Nächstes kommt',
+        (tester) async {
+      final offen = ProjektEintrag(
+        id: 'e4',
+        projektId: 'p1',
+        art: EintragArt.notiz.schluessel,
+        titel: 'Muster anfragen',
+        datum: zeit,
+        status: EintragStatus.offen.schluessel,
+        createdAt: zeit,
+        updatedAt: zeit,
+      );
+      await zeige(
+        tester,
+        const ProjektScreen(projektId: 'p1'),
+        verlauf: [...eintraege, offen],
+      );
+      final kopf = find.byKey(const ValueKey('projekt-kopf'));
+      expect(kopf, findsOneWidget);
+      // Der Kopf steht über jedem Reiter — hier über dem Verlauf.
+      expect(find.byType(Zeitstrahl), findsOneWidget);
+      expect(
+        find.descendant(of: kopf, matching: find.text('3 von 8')),
+        findsOneWidget,
+      );
+      expect(find.text('Als Nächstes: Sensorik beschreiben'), findsOneWidget);
+      expect(find.text('1 offener Eintrag im Verlauf'), findsOneWidget);
+
+      // „Als Nächstes" führt dorthin, wo es zu tun ist …
+      await tester.tap(find.text('Als Nächstes: Sensorik beschreiben'));
+      await bilder(tester);
+      expect(bereich('Sensorik'), findsOneWidget);
+      expect(find.byType(Zeitstrahl), findsNothing);
+      // … die offenen Einträge in den Verlauf.
+      await tester.tap(find.text('1 offener Eintrag im Verlauf'));
+      await bilder(tester);
+      expect(find.byType(Zeitstrahl), findsOneWidget);
+
+      // Die aktuelle Phase lässt sich nicht antippen, eine andere fragt
+      // erst nach.
+      await tester.tap(find.byKey(const ValueKey('phase-validierung')));
+      await bilder(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('phase-entwicklung')));
+      await bilder(tester);
+      expect(find.text('Zurück in die Entwicklung?'), findsOneWidget);
+      expect(find.textContaining('als Meilenstein im Verlauf'), findsOneWidget);
+      await tester.tap(find.text('Abbrechen'));
+      await bilder(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('phase-produktion')));
+      await bilder(tester);
+      expect(find.text('In Produktion setzen?'), findsOneWidget);
+      await tester.tap(find.text('Abbrechen'));
+      await bilder(tester);
+
+      // Was sich aus dem Projekt erstellen lässt — in einem Menü.
+      await tester.tap(find.byKey(const ValueKey('projekt-erstellen')));
+      await bilder(tester);
+      for (final t in const [
+        'Spezifikation (Deutsch)…',
+        'Spezifikation (Englisch)…',
+        'Etikett…',
+        'Projektbericht (PDF)…',
+      ]) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      await tester.tapAt(const Offset(5, 5));
+      await bilder(tester);
+      expect(find.text('Etikett…'), findsNothing);
+
+      // Der Rest im Menü daneben; Archivieren fragt nach.
+      await tester.tap(find.byKey(const ValueKey('projekt-mehr')));
+      await bilder(tester);
+      expect(find.text('Umbenennen…'), findsOneWidget);
+      expect(find.text('Projekt löschen…'), findsOneWidget);
+      await tester.tap(find.text('Archivieren…'));
+      await bilder(tester);
+      expect(find.text('Projekt archivieren?'), findsOneWidget);
+      await tester.tap(find.text('Abbrechen'));
+      await bilder(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Projektkopf archiviert: wieder aufnehmen', (tester) async {
+      await zeige(
+        tester,
+        const ProjektScreen(projektId: 'p3'),
+        projekt: p3,
+        verlauf: [
+          ProjektEintrag(
+            id: 'w1',
+            projektId: 'p3',
+            art: EintragArt.meilenstein.schluessel,
+            titel: 'Archiviert',
+            datum: zeit,
+            status: EintragStatus.erledigt.schluessel,
+            wert: 'status:validierung>archiviert',
+            createdAt: zeit,
+            updatedAt: zeit,
+          ),
+        ],
+      );
+      expect(find.text('Phase · archiviert'), findsOneWidget);
+      // Archiviert ruhen die Phasen, bis es weitergeht.
+      await tester.tap(find.byKey(const ValueKey('phase-entwicklung')));
+      await bilder(tester);
+      expect(find.byType(AlertDialog), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('kopf-wieder-aufnehmen')));
+      await bilder(tester);
+      expect(find.text('Projekt wieder aufnehmen?'), findsOneWidget);
+      // Weiter in der Phase vor dem Archiv.
+      expect(
+        find.textContaining('in der Phase „Validierung" weiter'),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithText(FilledButton, 'Wieder aufnehmen'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Abbrechen'));
+      await bilder(tester);
+
+      await tester.tap(find.byKey(const ValueKey('projekt-mehr')));
+      await bilder(tester);
+      expect(find.text('Wieder aufnehmen…'), findsOneWidget);
+      expect(find.text('Archivieren…'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Projektseite: Verlauf, Dateien und Sensorik',
@@ -648,21 +780,11 @@ void main() {
           createdAt: zeit,
           updatedAt: zeit,
         );
-    FdFassung fassung(String fdId, DateTime stand) => (
-          stand: stand,
-          datei: EntwicklungsDatei(
-            id: fdDateiId(fdId, stand),
-            name: '$fdId Testware.pdf',
-            mimeTyp: 'application/pdf',
-            groesse: 4096,
-            createdAt: zeit,
-          ),
-        );
-
     Future<void> zeige(
       WidgetTester tester, {
       List<Fliessdiagramm>? liste,
       ThemeData? theme,
+      List<String> altePdfs = const [],
     }) async {
       tester.view.physicalSize = const Size(1200, 1400);
       tester.view.devicePixelRatio = 1;
@@ -675,14 +797,8 @@ void main() {
                 liste ?? [for (var i = 1; i <= 10; i++) fd(i)],
               ),
             ),
-            fliessdiagrammFassungenProvider.overrideWith(
-              (ref) => Stream.value({
-                'FD_001': [
-                  fassung('FD_001', DateTime(2026, 7, 31)),
-                  fassung('FD_001', DateTime(2026, 6, 15)),
-                ],
-                'FD_002': [fassung('FD_002', DateTime(2026, 6, 18))],
-              }),
+            fliessdiagrammAltePdfsProvider.overrideWith(
+              (ref) => Stream.value(altePdfs),
             ),
           ],
           child: MaterialApp(
@@ -695,27 +811,29 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('PDFs mit Stand, ältere Fassungen im Menü', (tester) async {
+    testWidgets('nur die Liste — ohne PDFs; Menü zum Ordnen', (tester) async {
       await zeige(tester);
-      expect(find.text('PDFs einlesen…'), findsOneWidget);
-      expect(find.text('PDF · Stand 31.07.2026 · 2 Fassungen'), findsOneWidget);
-      expect(find.text('PDF · Stand 18.06.2026'), findsOneWidget);
-      // Öffnen geht nur, wo es ein PDF gibt.
-      final offen = tester
-          .widgetList<IconButton>(
-            find.widgetWithIcon(IconButton, Icons.picture_as_pdf_outlined),
-          )
-          .where((k) => k.onPressed != null);
-      expect(offen, hasLength(2));
+      expect(find.text('FD_001'), findsOneWidget);
+      expect(find.textContaining('pflegt die Qualitätssicherung'), findsOneWidget);
+      expect(find.textContaining('PDF'), findsNothing);
+      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsNothing);
 
       await tester.tap(find.byTooltip('Mehr zu FD_001'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
-      expect(find.text('Fassung vom 15.06.2026 öffnen'), findsOneWidget);
-      expect(find.text('PDF hinzufügen…'), findsOneWidget);
       expect(find.text('Nach oben'), findsNothing);
       expect(find.text('Nach unten'), findsOneWidget);
       expect(find.text('Löschen'), findsOneWidget);
+    });
+
+    testWidgets('PDFs aus einer früheren Version lassen sich entfernen',
+        (tester) async {
+      await zeige(
+        tester,
+        altePdfs: const ['fliessdiagramm:FD_001:2026-07-31'],
+      );
+      expect(find.textContaining('ein PDF von Fließdiagrammen'), findsOneWidget);
+      expect(find.text('Entfernen'), findsOneWidget);
     });
 
     testWidgets('ab neun Fließdiagrammen eine Suche', (tester) async {
@@ -734,11 +852,14 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('leer: ein Hinweis, keine Suche', (tester) async {
+    testWidgets('leer: Liste einfügen', (tester) async {
       await zeige(tester, liste: const []);
       expect(find.textContaining('Noch keine Fließdiagramme'), findsOneWidget);
       expect(find.byKey(const ValueKey('fd-suche')), findsNothing);
-      expect(find.text('PDFs einlesen…'), findsOneWidget);
+      await tester.tap(find.text('Liste einfügen'));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('fd-liste')), findsOneWidget);
+      expect(find.text('Übernehmen'), findsOneWidget);
     });
   });
 }

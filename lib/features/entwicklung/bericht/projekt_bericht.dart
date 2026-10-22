@@ -11,7 +11,7 @@ import '../daten/entwicklung_repository.dart';
 import '../haccp/haccp_modell.dart';
 import '../haccp/prozess_modell.dart';
 import '../projekte/entwicklungsstrang.dart';
-import '../projekte/fliessdiagramm_dateien.dart';
+import '../projekte/fliessdiagramm_liste.dart';
 import '../projekte/projekt_checkliste.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/naehrwert_rundung.dart';
@@ -57,9 +57,8 @@ class ProjektBericht {
 
   final Product? artikel;
 
-  /// Das Fließdiagramm mit Bezeichnung und Stand seines PDFs, etwa
-  /// „FD_011 · Schnitzel paniert · Stand 31.07.2026" — null: nur die
-  /// Kennung aus dem Projekt.
+  /// Das Fließdiagramm mit Bezeichnung, etwa „FD_011 · Schnitzel paniert"
+  /// — null: nur die Kennung aus dem Projekt.
   final String? fliessdiagramm;
 
   /// Die Projekt-Checkliste, wie sie gerade steht — null: aus dem Projekt
@@ -203,22 +202,13 @@ Future<ProjektBericht> berichtLaden(
   );
 }
 
-/// Kennung, Bezeichnung und der Stand des neuesten PDFs.
+/// Kennung und Bezeichnung des Fließdiagramms.
 Future<String?> _fliessdiagrammText(AppDatabase db, String? fdId) async {
   if (fdId == null || fdId.isEmpty) return null;
   final fd = await (db.select(db.entwicklungFliessdiagramme)
         ..where((f) => f.id.equals(fdId)))
       .getSingleOrNull();
-  final dateien = await (db.select(db.entwicklungDateien)
-        ..where((d) => d.id.like('$kFdDateiPraefix%')))
-      .get();
-  DateTime? stand;
-  for (final d in dateien) {
-    final f = fdAusDateiId(d.id);
-    if (f == null || f.fdId != fdId) continue;
-    if (stand == null || f.stand.isAfter(stand)) stand = f.stand;
-  }
-  return fdText(fdId, bezeichnung: fd?.bezeichnung, stand: stand);
+  return fdText(fdId, bezeichnung: fd?.bezeichnung);
 }
 
 const PdfColor _grau = PdfColors.grey700;

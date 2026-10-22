@@ -42,6 +42,21 @@ String statusMeilensteinTitel(ProjektStatus neu) => switch (neu) {
   );
 }
 
+/// Die Phase vor dem Archivieren — dort geht es beim Wiederaufnehmen
+/// weiter. Ohne Angabe im Verlauf: die Entwicklung.
+ProjektStatus phaseVorDemArchiv(Iterable<ProjektEintrag> eintraege) {
+  for (final e in zeitlichSortiert(eintraege).reversed) {
+    final w = statusWechsel(e);
+    if (w != null && w.neu == ProjektStatus.archiviert) {
+      final alt = w.alt;
+      return alt == null || alt == ProjektStatus.archiviert
+          ? ProjektStatus.entwicklung
+          : alt;
+    }
+  }
+  return ProjektStatus.entwicklung;
+}
+
 /// Ältester zuerst; bei gleichem Datum der früher angelegte.
 List<ProjektEintrag> zeitlichSortiert(Iterable<ProjektEintrag> eintraege) =>
     [...eintraege]..sort((a, b) {

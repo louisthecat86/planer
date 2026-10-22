@@ -180,6 +180,63 @@ void main() {
       );
 
   group('Phasen', () {
+    test('wieder aufnehmen: in der Phase vor dem Archiv', () {
+      // Ohne Statuswechsel im Verlauf: die Entwicklung.
+      expect(phaseVorDemArchiv(const []), ProjektStatus.entwicklung);
+      expect(
+        phaseVorDemArchiv([eintrag('n', EintragArt.notiz, tag: 1)]),
+        ProjektStatus.entwicklung,
+      );
+      final verlauf = [
+        eintrag(
+          'a',
+          EintragArt.meilenstein,
+          tag: 1,
+          wert: 'status:entwicklung>validierung',
+        ),
+        eintrag(
+          'c',
+          EintragArt.meilenstein,
+          tag: 5,
+          wert: 'status:produktion>archiviert',
+        ),
+        eintrag(
+          'b',
+          EintragArt.meilenstein,
+          tag: 3,
+          wert: 'status:validierung>produktion',
+        ),
+      ];
+      // Der letzte Wechsel ins Archiv zählt — egal, in welcher Reihenfolge
+      // die Einträge kommen.
+      expect(phaseVorDemArchiv(verlauf), ProjektStatus.produktion);
+      expect(
+        phaseVorDemArchiv([
+          ...verlauf,
+          eintrag(
+            'd',
+            EintragArt.meilenstein,
+            tag: 6,
+            wert: 'status:archiviert>validierung',
+          ),
+          eintrag(
+            'e',
+            EintragArt.meilenstein,
+            tag: 8,
+            wert: 'status:validierung>archiviert',
+          ),
+        ]),
+        ProjektStatus.validierung,
+      );
+      // Ein Wechsel ohne alten Status: die Entwicklung.
+      expect(
+        phaseVorDemArchiv([
+          eintrag('x', EintragArt.meilenstein, tag: 1, wert: 'status:archiviert'),
+        ]),
+        ProjektStatus.entwicklung,
+      );
+    });
+
     test('Statuswechsel festhalten und lesen', () {
       expect(
         statusWert(ProjektStatus.entwicklung, ProjektStatus.validierung),
