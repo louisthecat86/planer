@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,10 +7,14 @@ import 'package:go_router/go_router.dart';
 import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/theme/app_stil.dart';
+import '../../../core/ui/ablage.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../import/suite_import_dialog.dart';
+import '../mail/mail.dart';
+import '../mail/mail_ablage.dart';
+import 'datei_aktionen.dart' show dateienWaehlen, groesseText;
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 
@@ -76,6 +82,60 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
     await oeffneProjekt(context, id);
   }
 
+  /// Ein neues Projekt aus der ersten Mail unter [dateien] — gezogen oder
+  /// gewählt.
+  Future<void> _ausMail(List<AbgelegteDatei> dateien) async {
+    if (!mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final mails = [
+      for (final d in dateien)
+        if (alsMail(d.name, d.inhalt) case final m?) (mail: m, datei: d),
+    ];
+    if (mails.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Hier entsteht aus einer Mail (.msg oder .eml) ein neues '
+            'Projekt. Andere Dateien ziehst du in ein Projekt hinein.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (mails.length > 1) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${mails.length} Mails — das neue Projekt entsteht aus der '
+            'ersten; die übrigen ziehst du danach in das Projekt.',
+          ),
+        ),
+      );
+    }
+    // Das Fenster läuft für sich — das Ablegen ist damit fertig.
+    unawaited(_neuAusMail(mails.first));
+  }
+
+  Future<void> _neuAusMail(({Mail mail, AbgelegteDatei datei}) aus) async {
+    final id = await showDialog<String>(
+      context: context,
+      builder: (_) => NeuesProjektDialog(ausMail: aus),
+    );
+    if (id == null || !mounted) return;
+    await oeffneProjekt(context, id);
+  }
+
+  Future<void> _mailWaehlen() async {
+    final gewaehlt = await dateienWaehlen(
+      context,
+      titel: 'Mail wählen',
+      endungen: const ['msg', 'eml'],
+      mehrere: false,
+    );
+    if (gewaehlt.isEmpty || !mounted) return;
+    await _ausMail(gewaehlt);
+  }
+
   bool _passt(EntwicklungsProjekt p) {
     if (!_filter.passt(ProjektStatus.aus(p.status))) return false;
     final t = _text.trim().toLowerCase();
@@ -102,136 +162,154 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
       ),
       data: (alle) {
         final treffer = alle.where(_passt).toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-              child: Row(
-                children: [
-                  Flexible(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 420),
-                      child: TextField(
-                        controller: _suche,
-                        decoration: InputDecoration(
-                          hintText: 'Suche nach Projekt, Kunde oder '
-                              'Artikelnummer …',
-                          prefixIcon: const Icon(Icons.search, size: 18),
-                          suffixIcon: _text.isEmpty
-                              ? null
-                              : IconButton(
-                                  icon: const Icon(Icons.clear, size: 16),
-                                  tooltip: 'Suche leeren',
-                                  onPressed: () {
-                                    _suche.clear();
-                                    setState(() => _text = '');
-                                  },
-                                ),
-                        ),
-                        onChanged: (v) => setState(() => _text = v),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      '${treffer.length} von ${alle.length} Projekten',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: _neu,
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Neues Projekt'),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-              child: Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final f in ProjektFilter.values)
-                    ChoiceChip(
-                      label: Text(
-                        '${f.label} '
-                        '(${alle.where((p) => f.passt(ProjektStatus.aus(p.status))).length})',
-                      ),
-                      selected: _filter == f,
-                      onSelected: (_) => setState(() => _filter = f),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Material(
-                  color: theme.colorScheme.surface,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: AppMasse.ecken,
-                    side: BorderSide(color: theme.colorScheme.outline),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: LayoutBuilder(
-                    builder: (context, c) {
-                      final breit = c.maxWidth >= 860;
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _Kopf(breit: breit),
-                          Expanded(
-                            child: treffer.isEmpty
-                                ? Center(
-                                    child: LeerHinweis(
-                                      alle.isEmpty
-                                          ? 'Noch keine Projekte. Lege das '
-                                              'erste an — oder übernimm die '
-                                              'Projekte der alten Suite.'
-                                          : 'Keine Treffer.',
-                                      icon: alle.isEmpty
-                                          ? Icons.folder_open_outlined
-                                          : Icons.search_off,
-                                      aktion: alle.isEmpty
-                                          ? TextButton.icon(
-                                              onPressed: () =>
-                                                  suiteImportStarten(context),
-                                              icon: const Icon(
-                                                Icons.move_to_inbox_outlined,
-                                                size: 18,
-                                              ),
-                                              label: const Text(
-                                                'Aus der Suite übernehmen',
-                                              ),
-                                            )
-                                          : null,
-                                    ),
-                                  )
-                                : ListView.builder(
-                                    itemCount: treffer.length,
-                                    itemBuilder: (_, i) => _Zeile(
-                                      projekt: treffer[i],
-                                      breit: breit,
-                                    ),
+        return AblageZone(
+          hinweis: 'Mail loslassen — daraus wird ein neues Projekt',
+          onAbgelegt: _ausMail,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 420),
+                        child: TextField(
+                          controller: _suche,
+                          decoration: InputDecoration(
+                            hintText: 'Suche nach Projekt, Kunde oder '
+                                'Artikelnummer …',
+                            prefixIcon: const Icon(Icons.search, size: 18),
+                            suffixIcon: _text.isEmpty
+                                ? null
+                                : IconButton(
+                                    icon: const Icon(Icons.clear, size: 16),
+                                    tooltip: 'Suche leeren',
+                                    onPressed: () {
+                                      _suche.clear();
+                                      setState(() => _text = '');
+                                    },
                                   ),
                           ),
-                        ],
-                      );
-                    },
+                          onChanged: (v) => setState(() => _text = v),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        '${treffer.length} von ${alle.length} Projekten',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.right,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // Schmal nur das Symbol.
+                    if (MediaQuery.sizeOf(context).width < 760)
+                      IconButton.outlined(
+                        tooltip: 'Neues Projekt aus Mail',
+                        onPressed: _mailWaehlen,
+                        icon: const Icon(Icons.mail_outline, size: 18),
+                      )
+                    else
+                      OutlinedButton.icon(
+                        onPressed: _mailWaehlen,
+                        icon: const Icon(Icons.mail_outline, size: 18),
+                        label: const Text('Aus Mail…'),
+                      ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: _neu,
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Neues Projekt'),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final f in ProjektFilter.values)
+                      ChoiceChip(
+                        label: Text(
+                          '${f.label} '
+                          '(${alle.where((p) => f.passt(ProjektStatus.aus(p.status))).length})',
+                        ),
+                        selected: _filter == f,
+                        onSelected: (_) => setState(() => _filter = f),
+                      ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: Material(
+                    color: theme.colorScheme.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppMasse.ecken,
+                      side: BorderSide(color: theme.colorScheme.outline),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: LayoutBuilder(
+                      builder: (context, c) {
+                        final breit = c.maxWidth >= 860;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _Kopf(breit: breit),
+                            Expanded(
+                              child: treffer.isEmpty
+                                  ? Center(
+                                      child: LeerHinweis(
+                                        alle.isEmpty
+                                            ? 'Noch keine Projekte. Lege das '
+                                                'erste an — oder übernimm die '
+                                                'Projekte der alten Suite.'
+                                            : 'Keine Treffer.',
+                                        icon: alle.isEmpty
+                                            ? Icons.folder_open_outlined
+                                            : Icons.search_off,
+                                        aktion: alle.isEmpty
+                                            ? TextButton.icon(
+                                                onPressed: () =>
+                                                    suiteImportStarten(context),
+                                                icon: const Icon(
+                                                  Icons.move_to_inbox_outlined,
+                                                  size: 18,
+                                                ),
+                                                label: const Text(
+                                                  'Aus der Suite übernehmen',
+                                                ),
+                                              )
+                                            : null,
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      itemCount: treffer.length,
+                                      itemBuilder: (_, i) => _Zeile(
+                                        projekt: treffer[i],
+                                        breit: breit,
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );
@@ -422,7 +500,11 @@ class _Zeile extends StatelessWidget {
 /// Ein neues Projekt: Name, Kunde, Artikelnummer, Idee. Gibt die ID
 /// zurück.
 class NeuesProjektDialog extends ConsumerStatefulWidget {
-  const NeuesProjektDialog({super.key});
+  const NeuesProjektDialog({super.key, this.ausMail});
+
+  /// Die Mail, aus der das Projekt entsteht — sie füllt Name, Kunde und
+  /// Idee vor und steht danach mit ihren Anhängen im Verlauf.
+  final ({Mail mail, AbgelegteDatei datei})? ausMail;
 
   @override
   ConsumerState<NeuesProjektDialog> createState() =>
@@ -436,6 +518,18 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
   final _idee = TextEditingController();
   bool _speichert = false;
   String? _fehler;
+
+  @override
+  void initState() {
+    super.initState();
+    final m = widget.ausMail?.mail;
+    if (m != null) {
+      final v = projektVorschlag(m);
+      _name.text = v.name;
+      _kunde.text = v.kunde;
+      _idee.text = v.idee;
+    }
+  }
 
   @override
   void dispose() {
@@ -462,12 +556,22 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
       _fehler = null;
     });
     try {
-      final id = await ref.read(projektRepositoryProvider).projektAnlegen(
-            name: name,
-            kunde: _oderNull(_kunde),
-            artikelnummer: _oderNull(_nummer),
-            produktidee: _oderNull(_idee),
-          );
+      final aus = widget.ausMail;
+      final id = aus == null
+          ? await ref.read(projektRepositoryProvider).projektAnlegen(
+                name: name,
+                kunde: _oderNull(_kunde),
+                artikelnummer: _oderNull(_nummer),
+                produktidee: _oderNull(_idee),
+              )
+          : await ref.read(mailAblageProvider).projektAusMail(
+                mail: aus.mail,
+                datei: aus.datei,
+                name: name,
+                kunde: _oderNull(_kunde),
+                artikelnummer: _oderNull(_nummer),
+                produktidee: _oderNull(_idee),
+              );
       ref
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Projekt angelegt');
@@ -497,62 +601,69 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
           ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())))
         .take(6)
         .toList();
+    final aus = widget.ausMail;
     return AlertDialog(
-      title: const Text('Neues Projekt'),
+      title: Text(aus == null ? 'Neues Projekt' : 'Neues Projekt aus Mail'),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 460),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _name,
-              autofocus: true,
-              decoration: const InputDecoration(labelText: 'Projektname'),
-              onSubmitted: (_) => _anlegen(),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _kunde,
-              decoration: const InputDecoration(labelText: 'Kunde'),
-              onChanged: (_) => setState(() {}),
-            ),
-            if (vorschlaege.isNotEmpty) ...[
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final k in vorschlaege)
-                    ActionChip(
-                      label: Text(k),
-                      onPressed: () => setState(() => _kunde.text = k),
-                    ),
-                ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (aus != null) ...[
+                _MailZeile(mail: aus.mail),
+                const SizedBox(height: 12),
+              ],
+              TextField(
+                controller: _name,
+                autofocus: true,
+                decoration: const InputDecoration(labelText: 'Projektname'),
+                onSubmitted: (_) => _anlegen(),
               ),
-            ],
-            const SizedBox(height: 10),
-            TextField(
-              controller: _nummer,
-              decoration: const InputDecoration(labelText: 'Artikelnummer'),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _idee,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(labelText: 'Produktidee'),
-            ),
-            if (fehler != null) ...[
               const SizedBox(height: 10),
-              Text(
-                fehler,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.error,
-                ),
+              TextField(
+                controller: _kunde,
+                decoration: const InputDecoration(labelText: 'Kunde'),
+                onChanged: (_) => setState(() {}),
               ),
+              if (vorschlaege.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final k in vorschlaege)
+                      ActionChip(
+                        label: Text(k),
+                        onPressed: () => setState(() => _kunde.text = k),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nummer,
+                decoration: const InputDecoration(labelText: 'Artikelnummer'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _idee,
+                minLines: 2,
+                maxLines: aus == null ? 4 : 8,
+                decoration: const InputDecoration(labelText: 'Produktidee'),
+              ),
+              if (fehler != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  fehler,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [
@@ -565,6 +676,67 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
           child: const Text('Anlegen'),
         ),
       ],
+    );
+  }
+}
+
+/// Die Mail, aus der ein Projekt entsteht: Betreff, Absender, Datum und
+/// was mit ihr geschieht.
+class _MailZeile extends StatelessWidget {
+  const _MailZeile({required this.mail});
+
+  final Mail mail;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final m = mail;
+    final datum = m.datum;
+    final anhaenge = m.anhaenge.length;
+    final groesse = m.anhaenge.fold<int>(0, (s, a) => s + a.inhalt.length);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: AppMasse.ecken,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.mail_outline, size: 18, color: grau),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  mailTitel(m),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleSmall,
+                ),
+                Text(
+                  [
+                    if (m.von.isNotEmpty) m.von,
+                    if (datum != null) Format.datum(datum),
+                  ].join(' · '),
+                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  anhaenge == 0
+                      ? 'Die Mail kommt als Anfrage in den Verlauf.'
+                      : 'Die Mail kommt als Anfrage in den Verlauf, '
+                          '${anhaenge == 1 ? 'ihr Anhang' : 'ihre $anhaenge Anhänge'} '
+                          '(${groesseText(groesse)}) zu den Dateien.',
+                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

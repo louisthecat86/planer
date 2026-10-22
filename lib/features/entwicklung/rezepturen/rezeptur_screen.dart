@@ -12,10 +12,12 @@ import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
+import '../etikett/etikett_dialog.dart';
 import '../rechenkern/rechen_modell.dart';
 import 'fleischanteil_dialog.dart';
 import 'rezeptur_ergebnis_ansicht.dart';
 import 'rezepturen_ansicht.dart';
+import 'stand_abschliessen_dialog.dart';
 import 'versionsvergleich.dart';
 import 'zutat_auswahl_dialog.dart';
 
@@ -117,32 +119,29 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
   }
 
   Future<void> _abschliessen(RezepturVersion v) async {
-    final ja = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.lock_outline),
-        title: Text('Stand ${v.nummer} abschließen?'),
-        content: const Text(
-          'Der Stand wird mit allen Zutatendaten eingefroren: Spätere '
-          'Änderungen am Katalog oder an Unterrezepturen verschieben ihn '
-          'nicht mehr. Ändern lässt er sich danach nicht — für Änderungen '
-          'legst du einen neuen Stand an.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Abschließen'),
-          ),
-        ],
-      ),
-    );
-    if (ja != true) return;
+    final repo = _repo;
+    final List<String> aenderungen;
+    final RezepturVersion? vorher;
+    final bool imProjekt;
     try {
-      await _repo.versionAbschliessen(v.id);
+      aenderungen = await repo.standAenderungenVon(v.id);
+      vorher = await repo.vorigerStand(v);
+      imProjekt = (await repo.rezeptur(v.rezepturId))?.projektId != null;
+    } catch (e) {
+      await _fehler(e);
+      return;
+    }
+    if (!mounted) return;
+    final grund = await standAbschliessenFragen(
+      context,
+      version: v,
+      aenderungen: aenderungen,
+      vorherNummer: vorher?.nummer,
+      imProjekt: imProjekt,
+    );
+    if (grund == null) return;
+    try {
+      await repo.versionAbschliessen(v.id, grund: grund);
       _gesichert('Rezepturstand abgeschlossen');
     } catch (e) {
       await _fehler(e);
@@ -271,6 +270,7 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
             onNeu: () => _neuerStand(aktuell),
             onAbschliessen: () => _abschliessen(aktuell),
             onVergleichen: () => _vergleichen(liste, aktuell),
+            onEtikett: () => etikettZeigen(context, aktuell.id),
             onFleisch: () => _fleischanteil(aktuell),
             onLoeschen: liste.length > 1 &&
                     aktuell.status == VersionStatus.entwurf
@@ -345,6 +345,7 @@ class _StandLeiste extends StatelessWidget {
     required this.onAbschliessen,
     required this.onVergleichen,
     required this.onLoeschen,
+    this.onEtikett,
     this.onFleisch,
   });
 
@@ -355,6 +356,9 @@ class _StandLeiste extends StatelessWidget {
   final VoidCallback onAbschliessen;
   final VoidCallback onVergleichen;
   final VoidCallback? onLoeschen;
+
+  /// Das Etikett des Stands — null: kein Knopf.
+  final VoidCallback? onEtikett;
 
   /// „Fleischanteil einstellen" — null: kein Knopf.
   final VoidCallback? onFleisch;
@@ -417,6 +421,12 @@ class _StandLeiste extends StatelessWidget {
               onPressed: onVergleichen,
               icon: const Icon(Icons.compare_arrows, size: 18),
               label: const Text('Vergleichen'),
+            ),
+          if (onEtikett != null)
+            OutlinedButton.icon(
+              onPressed: onEtikett,
+              icon: const Icon(Icons.label_outline, size: 18),
+              label: const Text('Etikett'),
             ),
           if (onFleisch != null)
             OutlinedButton.icon(

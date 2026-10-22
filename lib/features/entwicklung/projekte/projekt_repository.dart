@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
 import '../daten/entwicklung_repository.dart' show nachName;
+import 'entwicklungsstrang.dart';
 import 'projekt_modell.dart';
 
 // Projekte der Produktentwicklung: Stammdaten, Verlauf, Dateien und die
@@ -80,6 +81,44 @@ class ProjektRepository {
   ) =>
       (_db.update(_db.entwicklungProjekte)..where((p) => p.id.equals(id)))
           .write(daten.copyWith(updatedAt: Value(DateTime.now())));
+
+  /// Ändert den Status eines Projekts und hält den Wechsel als Meilenstein
+  /// im Verlauf fest — daraus entstehen die Phasen auf dem Zeitstrahl.
+  Future<void> statusAendern(
+    String id,
+    ProjektStatus neu, {
+    DateTime? jetzt,
+  }) async {
+    final p = await projekt(id);
+    if (p == null) return;
+    final alt = ProjektStatus.aus(p.status);
+    if (alt == neu) return;
+    final zeit = jetzt ?? DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.entwicklungProjekte)
+            ..where((x) => x.id.equals(id)))
+          .write(
+        EntwicklungProjekteCompanion(
+          status: Value(neu.schluessel),
+          updatedAt: Value(zeit),
+        ),
+      );
+      await _db.into(_db.entwicklungProjektEintraege).insert(
+            EntwicklungProjektEintraegeCompanion.insert(
+              id: _uuid.v4(),
+              projektId: id,
+              art: EintragArt.meilenstein.schluessel,
+              titel: statusMeilensteinTitel(neu),
+              datum: DateTime(zeit.year, zeit.month, zeit.day),
+              status: Value(EintragStatus.erledigt.schluessel),
+              beschreibung: Value('Status vorher: ${alt.label}'),
+              wert: Value(statusWert(alt, neu)),
+              createdAt: Value(zeit),
+              updatedAt: Value(zeit),
+            ),
+          );
+    });
+  }
 
   /// Markiert ein Projekt als gelöscht. Seine Rezepturen bleiben — sie
   /// stehen danach ohne Projekt in der Liste.

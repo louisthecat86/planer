@@ -11,9 +11,12 @@ import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
+import '../etikett/etikett_dialog.dart';
 import '../haccp/prozess_modell.dart';
 import '../rezepturen/rezepturen_ansicht.dart';
 import 'datei_aktionen.dart';
+import 'entwicklungsstrang.dart';
+import 'entwicklungsweg_ansicht.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -23,12 +26,29 @@ import 'zeitstrahl.dart';
 /// die App schließt.
 final entwicklungNameProvider = StateProvider<String>((ref) => '');
 
-/// Wie der Verlauf aussieht: als Zeitstrahl oder als Liste der Karten.
-enum VerlaufAnsicht { zeitstrahl, liste }
+/// Die Stände der Rezepturen eines Projekts zur Auswahl („Zu Stand").
+final projektStandWahlenProvider =
+    Provider.autoDispose.family<List<StandWahl>, String>((ref, projektId) {
+  final rezepturen =
+      ref.watch(projektRezepturenProvider(projektId)).valueOrNull ??
+          const <Rezeptur>[];
+  final versionen =
+      ref.watch(alleVersionenProvider).valueOrNull ?? const <RezepturVersion>[];
+  return standWahlen(rezepturen, versionen);
+});
+
+/// Wie der Verlauf aussieht: als Zeitstrahl, als Entwicklungsweg (von
+/// der Idee über die Stände zum Artikel) oder als Liste der Karten.
+enum VerlaufAnsicht { zeitstrahl, entwicklungsweg, liste }
 
 /// Die gewählte Ansicht des Verlaufs — gilt, bis die App schließt.
 final verlaufAnsichtProvider =
     StateProvider<VerlaufAnsicht>((ref) => VerlaufAnsicht.zeitstrahl);
+
+/// Die Arten, die Zeitstrahl und Liste zeigen — gilt, bis die App
+/// schließt.
+final verlaufFilterProvider =
+    StateProvider<Set<EintragArt>>((ref) => EintragArt.values.toSet());
 
 /// Die Farbe eines Eintragsstatus.
 StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
@@ -38,8 +58,8 @@ StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
     };
 
 /// Der Verlauf eines Projekts: Meilensteine, Rezepturstände, Mails,
-/// Parameter, Dateien und Notizen — als Zeitstrahl (ältester links) oder
-/// als Liste (neuester zuerst).
+/// Parameter, Dateien und Notizen — als Zeitstrahl (ältester links), als
+/// Entwicklungsweg oder als Liste (neuester zuerst).
 class ProjektVerlauf extends ConsumerWidget {
   const ProjektVerlauf({super.key, required this.projekt});
 
@@ -48,7 +68,10 @@ class ProjektVerlauf extends ConsumerWidget {
   Future<void> _neu(BuildContext context, WidgetRef ref) async {
     final eingabe = await showDialog<EintragEingabe>(
       context: context,
-      builder: (_) => EintragDialog(name: ref.read(entwicklungNameProvider)),
+      builder: (_) => EintragDialog(
+        name: ref.read(entwicklungNameProvider),
+        staende: ref.read(projektStandWahlenProvider(projekt.id)),
+      ),
     );
     if (eingabe == null || !context.mounted) return;
     try {
@@ -66,6 +89,7 @@ class ProjektVerlauf extends ConsumerWidget {
             status: eingabe.status,
             ziel: eingabe.ziel,
             dateiId: dateiId,
+            versionId: eingabe.versionId,
           );
       if (eingabe.benutzer != null) {
         ref.read(entwicklungNameProvider.notifier).state = eingabe.benutzer!;
@@ -80,6 +104,8 @@ class ProjektVerlauf extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final eintraege = ref.watch(projektEintraegeProvider(projekt.id));
+    // Hält die Stände für „Zu Stand" bereit.
+    ref.watch(projektStandWahlenProvider(projekt.id));
     final dateien = {
       for (final d in ref.watch(projektDateienProvider(projekt.id)).valueOrNull ??
           const <EntwicklungsDatei>[])
@@ -104,6 +130,25 @@ class ProjektVerlauf extends ConsumerWidget {
       ),
       data: (liste) {
         final ansicht = ref.watch(verlaufAnsichtProvider);
+        final filter = ref.watch(verlaufFilterProvider);
+        // Die Arten, die vorkommen, mit ihrer Zahl — in fester Reihenfolge.
+        final arten = <EintragArt, int>{
+          for (final a in EintragArt.values)
+            if (liste.any((e) => EintragArt.aus(e.art) == a))
+              a: liste.where((e) => EintragArt.aus(e.art) == a).length,
+        };
+        final sichtbar = [
+          for (final e in liste)
+            if (filter.contains(EintragArt.aus(e.art))) e,
+        ];
+        final phasen =
+            statusJeEintrag(liste, ProjektStatus.aus(projekt.status));
+        // Die Phasen, die auf dem Zeitstrahl vorkommen, in ihrer Folge.
+        final legende = {
+          for (final a
+              in phasenAbschnitte(zeitlichSortiert(sichtbar), phasen))
+            a.status,
+        }.toList();
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
@@ -115,6 +160,11 @@ class ProjektVerlauf extends ConsumerWidget {
                       value: VerlaufAnsicht.zeitstrahl,
                       icon: Icon(Icons.timeline),
                       tooltip: 'Zeitstrahl',
+                    ),
+                    ButtonSegment(
+                      value: VerlaufAnsicht.entwicklungsweg,
+                      icon: Icon(Icons.route_outlined),
+                      tooltip: 'Entwicklungsweg',
                     ),
                     ButtonSegment(
                       value: VerlaufAnsicht.liste,
@@ -161,24 +211,61 @@ class ProjektVerlauf extends ConsumerWidget {
                 ),
               ],
             ),
+            if (ansicht != VerlaufAnsicht.entwicklungsweg &&
+                arten.length > 1) ...[
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final MapEntry(key: art, value: anzahl)
+                      in arten.entries)
+                    FilterChip(
+                      avatar: Icon(art.icon, size: 16),
+                      label: Text('${art.label} ($anzahl)'),
+                      selected: filter.contains(art),
+                      onSelected: (an) => ref
+                          .read(verlaufFilterProvider.notifier)
+                          .state = an
+                          ? {...filter, art}
+                          : (filter.toSet()..remove(art)),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             if (liste.isEmpty)
               const LeerHinweis(
                 'Noch keine Einträge.',
                 icon: Icons.history,
               )
-            else if (ansicht == VerlaufAnsicht.zeitstrahl)
-              Zeitstrahl(
+            else if (ansicht == VerlaufAnsicht.entwicklungsweg)
+              EntwicklungswegAnsicht(
+                projekt: projekt,
                 eintraege: liste,
+                versionen: versionen,
+              )
+            else if (sichtbar.isEmpty)
+              const LeerHinweis(
+                'Keine Einträge dieser Arten.',
+                icon: Icons.filter_alt_outlined,
+              )
+            else if (ansicht == VerlaufAnsicht.zeitstrahl) ...[
+              Zeitstrahl(
+                eintraege: sichtbar,
                 dateien: dateien,
+                versionen: versionen,
+                phasen: phasen,
                 onTippen: (e) => eintragZeigen(
                   context,
                   projektId: projekt.id,
                   eintragId: e.id,
                 ),
-              )
-            else
-              for (final e in liste)
+              ),
+              const SizedBox(height: 4),
+              PhasenLegende(phasen: legende),
+            ] else
+              for (final e in sichtbar)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: EintragKarte(
@@ -220,7 +307,10 @@ class EintragKarte extends ConsumerWidget {
   Future<void> _bearbeiten(BuildContext context, WidgetRef ref) async {
     final eingabe = await showDialog<EintragEingabe>(
       context: context,
-      builder: (_) => EintragDialog(eintrag: eintrag),
+      builder: (_) => EintragDialog(
+        eintrag: eintrag,
+        staende: ref.read(projektStandWahlenProvider(eintrag.projektId)),
+      ),
     );
     if (eingabe == null || !context.mounted) return;
     try {
@@ -234,6 +324,7 @@ class EintragKarte extends ConsumerWidget {
               beschreibung: Value(eingabe.beschreibung),
               status: Value(eingabe.status.schluessel),
               ziel: Value(eingabe.ziel),
+              versionId: Value(eingabe.versionId),
             ),
           );
       ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Eintrag');
@@ -302,6 +393,8 @@ class EintragKarte extends ConsumerWidget {
     final grau = theme.colorScheme.onSurfaceVariant;
     final e = eintrag;
     final art = EintragArt.aus(e.art);
+    // Hält die Stände für „Zu Stand" beim Bearbeiten bereit.
+    ref.watch(projektStandWahlenProvider(e.projektId));
     final status = EintragStatus.aus(e.status);
     final kopfzeile = [
       Format.datum(e.datum),
@@ -402,13 +495,25 @@ class EintragKarte extends ConsumerWidget {
                         ),
                       )
                     else
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => oeffneRezeptur(context, v.rezepturId),
-                          icon: const Icon(Icons.menu_book_outlined, size: 16),
-                          label: Text('Rezepturstand ${v.nummer} öffnen'),
-                        ),
+                      Wrap(
+                        spacing: 4,
+                        children: [
+                          TextButton.icon(
+                            onPressed: () =>
+                                oeffneRezeptur(context, v.rezepturId),
+                            icon: const Icon(
+                              Icons.menu_book_outlined,
+                              size: 16,
+                            ),
+                            label: Text('Rezepturstand ${v.nummer} öffnen'),
+                          ),
+                          if (art == EintragArt.rezeptur)
+                            TextButton.icon(
+                              onPressed: () => etikettZeigen(context, v.id),
+                              icon: const Icon(Icons.label_outline, size: 16),
+                              label: const Text('Etikett'),
+                            ),
+                        ],
                       ),
                   ],
                   if (d != null) ...[
@@ -521,6 +626,7 @@ class EintragEingabe {
     this.beschreibung,
     this.ziel,
     this.datei,
+    this.versionId,
   });
 
   final EintragArt art;
@@ -533,17 +639,28 @@ class EintragEingabe {
 
   /// Eine neu gewählte Datei — nur beim Anlegen.
   final GewaehlteDatei? datei;
+
+  /// Der Rezepturstand, zu dem der Eintrag gehört — null: zu keinem.
+  final String? versionId;
 }
 
 /// Neuer Eintrag oder Eintrag bearbeiten.
 class EintragDialog extends StatefulWidget {
-  const EintragDialog({super.key, this.eintrag, this.name = ''});
+  const EintragDialog({
+    super.key,
+    this.eintrag,
+    this.name = '',
+    this.staende = const [],
+  });
 
   /// Der Eintrag zum Bearbeiten — null: ein neuer.
   final ProjektEintrag? eintrag;
 
   /// Der Name, der beim neuen Eintrag vorbelegt ist.
   final String name;
+
+  /// Die Stände des Projekts für „Zu Stand".
+  final List<StandWahl> staende;
 
   @override
   State<EintragDialog> createState() => _EintragDialogState();
@@ -559,6 +676,9 @@ class _EintragDialogState extends State<EintragDialog> {
   late final TextEditingController _ziel;
   GewaehlteDatei? _datei;
   String? _fehler;
+
+  /// Der Stand, zu dem der Eintrag gehört — '' für keinen.
+  late String _stand = widget.eintrag?.versionId ?? '';
 
   /// Arten, die man von Hand anlegt — Rezepturstände und Parameter
   /// entstehen beim Abschließen bzw. Speichern von selbst.
@@ -632,6 +752,7 @@ class _EintragDialogState extends State<EintragDialog> {
         beschreibung: _oderNull(_beschreibung),
         ziel: _oderNull(_ziel),
         datei: _datei,
+        versionId: _stand.isEmpty ? null : _stand,
       ),
     );
   }
@@ -643,6 +764,7 @@ class _EintragDialogState extends State<EintragDialog> {
     final arten = _waehlbar.contains(_art) ? _waehlbar : [..._waehlbar, _art];
     final fehler = _fehler;
     final datei = _datei;
+    final staende = widget.staende;
     return AlertDialog(
       title: Text(neu ? 'Neuer Eintrag' : 'Eintrag bearbeiten'),
       content: ConstrainedBox(
@@ -719,6 +841,36 @@ class _EintragDialogState extends State<EintragDialog> {
                   ),
                 ],
               ),
+              // Ein Rezepturstand im Verlauf ist sein Stand selbst.
+              if (_art != EintragArt.rezeptur &&
+                  (staende.isNotEmpty || _stand.isNotEmpty)) ...[
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('eintrag-stand'),
+                  initialValue: _stand,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Zu Stand',
+                    helperText: 'Worauf sich der Eintrag bezieht — etwa die '
+                        'Rückmeldung zu einem Muster',
+                  ),
+                  items: [
+                    const DropdownMenuItem(value: '', child: Text('— keinem —')),
+                    for (final w in staende)
+                      DropdownMenuItem(
+                        value: w.versionId,
+                        child: Text(w.label, overflow: TextOverflow.ellipsis),
+                      ),
+                    if (_stand.isNotEmpty &&
+                        !staende.any((w) => w.versionId == _stand))
+                      DropdownMenuItem(
+                        value: _stand,
+                        child: const Text('ein Stand, der nicht mehr da ist'),
+                      ),
+                  ],
+                  onChanged: (v) => setState(() => _stand = v ?? ''),
+                ),
+              ],
               const SizedBox(height: 10),
               TextField(
                 controller: _beschreibung,

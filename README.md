@@ -72,6 +72,28 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 - **Rezepturen** in Ständen (Entwurf oder abgeschlossen): Zutatenliste
   nach LMIV mit hervorgehobenen Allergenen, Fleischanteil (QUID), Verlust,
   Nährwerte je 100 g gerundet, Vergleich zweier Stände.
+- **Entwicklungsstrang:** Beim Abschließen eines Stands fragt die App „Was
+  ist neu und warum?" und vergleicht selbst mit dem vorigen Stand (Zeilen,
+  Verlust, Fleischanteil, Nährwerte wie auf dem Etikett, Allergene,
+  Mengenangaben) — beides steht mit dem Namen der Rezeptur im Verlauf.
+  Statuswechsel (auch durch die Freigabe) werden zu Meilensteinen,
+  Einträge lassen sich einem Stand zuordnen („Zu Stand"). Der Zeitstrahl
+  zeigt die Stände als Stationen, zugeordnete Einträge mit einer Linie zu
+  ihrer Station, die Phasen als Band und filtert nach Art; die Ansicht
+  „Entwicklungsweg" führt von der Idee über jede Station (Grund,
+  Änderungen, Kennzahlen, Rückmeldungen) bis zur Freigabe.
+- **Mails im Projekt:** Eine Mail direkt aus Outlook (oder eine .msg/.eml
+  aus dem Explorer) auf ein Projekt ziehen — sie steht als E-Mail im
+  Verlauf (Betreff, Absender, Datum, Text, die Mail selbst zum Öffnen),
+  ihre Anhänge bei den Dateien; andere Dateien kommen als Datei in den
+  Verlauf. Auf die Projektliste gezogen, wird aus der Mail ein neues
+  Projekt (Name, Kunde und Anfrage vorbelegt). Ohne Ziehen: „Aus Mail…" in
+  der Projektliste, „Datei ablegen" im Verlauf. Die App liest .msg und
+  .eml selbst; das Ziehen nimmt unter Windows das Fenster entgegen
+  (`windows/runner/ablage_ziel.cpp`).
+- **Etikett je Stand:** Vorschau mit Zutatenliste, Spuren, Nährwerttabelle
+  und Hinweisen aus der Spezifikation, als Text kopieren oder als
+  PDF-Entwurf.
 - **Zutaten-Katalog** mit Nährwerten, Allergenen, Tierart, Bindegewebe und
   Unterzutaten.
 - **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil auf
@@ -83,10 +105,13 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   gewählt und dabei selbst eingerichtet — die App erkennt die Beschriftungen
   (Artikelnummer, Zutaten, Nährwerte, Allergene mit ja/nein/Spuren,
   Verpackung …), setzt Platzhalter wie `{{zutaten}}` und hakt
-  Kontrollkästchen an. Was nicht aus Rezeptur oder Sensorik kommt (Toleranz,
-  Lagerung, Haltbarkeit, Produkthinweise, Spuren, Verpackung, Kürzel), steht
-  im Reiter „Spezifikation" des Projekts. Dazu ein **Projektbericht** als
-  PDF.
+  Kontrollkästchen an; einer Vorlage, der Platzhalter fehlen, ergänzt sie
+  sie beim Erstellen. Was nicht aus Rezeptur oder Sensorik kommt
+  (Artikelnummer und -bezeichnung, Toleranz, Lagerung, Haltbarkeit,
+  Produkthinweise, Spuren, Verpackung, Kürzel), steht im Reiter
+  „Spezifikation" des Projekts — dort zeigt eine Vorschau, was mit dem
+  gewählten Stand hineinkommt, und was noch fehlt. Dazu ein
+  **Projektbericht** als PDF.
 - Übernahme aus der Development-Suite (ZIP oder JSON).
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden

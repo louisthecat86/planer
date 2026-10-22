@@ -9,6 +9,7 @@ import '../../../core/providers/database_provider.dart';
 import '../../whiteboard/whiteboard_provider.dart' show ausbeuteAusProduktionen;
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
+import '../projekte/entwicklungsstrang.dart' show statusWert;
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import '../rechenkern/rechen_modell.dart';
@@ -391,6 +392,11 @@ class FreigabeDienst {
 
       final checkliste = checklisteAus(projekt.checkliste)
         ..add('artikelAngelegt');
+      // Geht das Projekt damit in Produktion, hält der Meilenstein den
+      // Wechsel fest — wie ein Statuswechsel von Hand (Phasen im Verlauf).
+      final vorher = ProjektStatus.aus(
+        (await _projekte.projekt(projekt.id))?.status ?? projekt.status,
+      );
       await _projekte.projektAendern(
         projekt.id,
         EntwicklungProjekteCompanion(
@@ -417,6 +423,9 @@ class FreigabeDienst {
         aenderungen: geschrieben.isEmpty
             ? const ['Nichts geändert']
             : ['Geschrieben: ${geschrieben.join(', ')}'],
+        wert: vorher == ProjektStatus.produktion
+            ? null
+            : statusWert(vorher, ProjektStatus.produktion),
       );
     });
     return artikelId;

@@ -9,9 +9,12 @@ import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
+import 'entwicklungsstrang.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_verlauf.dart';
+
+export 'entwicklungsstrang.dart' show zeitlichSortiert;
 
 // Der Verlauf als Zeitstrahl — wie in der Development-Suite: eine Achse,
 // die Einträge vom ältesten links zum neuesten rechts gleichmäßig
@@ -19,6 +22,11 @@ import 'projekt_verlauf.dart';
 // damit sich die Beschriftungen nicht überdecken. Jede Art hat ihre
 // Farbe und ihr Symbol; darüberfahren zeigt das Wichtigste, antippen
 // öffnet den Eintrag.
+//
+// Der Entwicklungsstrang darauf: Die Rezepturstände sind Stationen auf
+// der Achse (mit ihrer Nummer), Einträge zu einem Stand hängen mit einer
+// Linie an ihrer Station, und die Achse trägt die Farbe der Phase — in
+// Entwicklung, Validierung, Produktion.
 
 /// Die Farbe einer Eintragsart auf dem Zeitstrahl.
 Color eintragFarbe(BuildContext context, EintragArt art) {
@@ -45,12 +53,16 @@ Color _auf(Color hinten) =>
         ? Colors.white
         : const Color(0xFF1B1B1B);
 
-/// Ältester zuerst; bei gleichem Datum der früher angelegte.
-List<ProjektEintrag> zeitlichSortiert(Iterable<ProjektEintrag> eintraege) =>
-    [...eintraege]..sort((a, b) {
-        final d = a.datum.compareTo(b.datum);
-        return d != 0 ? d : a.createdAt.compareTo(b.createdAt);
-      });
+/// Die Farbe einer Phase auf dem Zeitstrahl.
+Color phasenFarbe(BuildContext context, ProjektStatus status) {
+  final f = AppFarben.von(context);
+  return switch (status) {
+    ProjektStatus.entwicklung => f.info,
+    ProjektStatus.validierung => f.warnung,
+    ProjektStatus.produktion => f.ok,
+    ProjektStatus.archiviert => Theme.of(context).colorScheme.outline,
+  };
+}
 
 /// Wo ein Eintrag am Strahl hängt: oben oder unten, kurz oder lang — im
 /// Takt von vier, damit Nachbarn sich nicht in die Quere kommen.
@@ -66,6 +78,8 @@ class Zeitstrahl extends StatefulWidget {
     required this.eintraege,
     required this.onTippen,
     this.dateien = const {},
+    this.versionen = const {},
+    this.phasen = const {},
   });
 
   /// Die Einträge in beliebiger Reihenfolge.
@@ -73,6 +87,13 @@ class Zeitstrahl extends StatefulWidget {
 
   /// Angehängte Dateien nach ID — für die Vorschau beim Darüberfahren.
   final Map<String, EntwicklungsDatei> dateien;
+
+  /// Rezepturstände nach ID — für die Nummer der Stationen.
+  final Map<String, RezepturVersion> versionen;
+
+  /// Der Status, der bei jedem Eintrag galt (siehe [statusJeEintrag]) —
+  /// leer: kein Phasenband.
+  final Map<String, ProjektStatus> phasen;
 
   final void Function(ProjektEintrag eintrag) onTippen;
 
@@ -163,6 +184,8 @@ class _ZeitstrahlState extends State<Zeitstrahl> {
                     eintraege: sortiert,
                     breite: breite,
                     dateien: widget.dateien,
+                    versionen: widget.versionen,
+                    phasen: widget.phasen,
                     onTippen: widget.onTippen,
                   ),
                 ),
@@ -180,12 +203,16 @@ class _Strahl extends StatelessWidget {
     required this.eintraege,
     required this.breite,
     required this.dateien,
+    required this.versionen,
+    required this.phasen,
     required this.onTippen,
   });
 
   final List<ProjektEintrag> eintraege;
   final double breite;
   final Map<String, EntwicklungsDatei> dateien;
+  final Map<String, RezepturVersion> versionen;
+  final Map<String, ProjektStatus> phasen;
   final void Function(ProjektEintrag eintrag) onTippen;
 
   @override
@@ -194,6 +221,35 @@ class _Strahl extends StatelessWidget {
     const mitte = Zeitstrahl.haelfte;
     final linie = theme.colorScheme.outlineVariant;
     final n = eintraege.length;
+    double xVon(int i) => breite * (i + 1) / (n + 1);
+    double symbolMitte(int i) {
+      final platz = zeitstrahlPlatz(i);
+      final stiel = platz.lang ? Zeitstrahl.stielLang : Zeitstrahl.stielKurz;
+      return platz.oben
+          ? mitte - stiel - Zeitstrahl.symbol / 2
+          : mitte + stiel + Zeitstrahl.symbol / 2;
+    }
+
+    // Die Stationen: je Stand der erste Eintrag auf dem Strahl.
+    final station = <String, int>{};
+    for (var i = 0; i < n; i++) {
+      final e = eintraege[i];
+      if (istStation(e)) station.putIfAbsent(e.versionId!, () => i);
+    }
+    final standFarbe = eintragFarbe(context, EintragArt.rezeptur);
+    final bezuege = <({Offset von, Offset bis})>[
+      for (var i = 0; i < n; i++)
+        if (eintraege[i].versionId case final v?)
+          if (station[v] case final s? when s != i)
+            (
+              von: Offset(xVon(i), symbolMitte(i)),
+              bis: Offset(xVon(s), mitte),
+            ),
+    ];
+
+    final abschnitte = phasenAbschnitte(eintraege, phasen);
+    // Ein Abschnitt des Bands beginnt mitten zwischen zwei Einträgen.
+    double links(int von) => von == 0 ? 0 : (xVon(von - 1) + xVon(von)) / 2;
     final kinder = <Widget>[
       // Die Achse.
       Positioned(
@@ -208,6 +264,34 @@ class _Strahl extends StatelessWidget {
           ),
         ),
       ),
+      // Das Phasenband auf der Achse.
+      for (final (k, a) in abschnitte.indexed)
+        Positioned(
+          left: links(a.von),
+          width: (k == abschnitte.length - 1 ? breite : links(a.bis + 1)) -
+              links(a.von),
+          top: mitte - 4,
+          height: 8,
+          child: DecoratedBox(
+            key: ValueKey('phase-$k-${a.status.schluessel}'),
+            decoration: BoxDecoration(
+              color: phasenFarbe(context, a.status).withValues(alpha: 0.75),
+              borderRadius: AppMasse.ecken,
+            ),
+          ),
+        ),
+      // Die Linien von Einträgen zu ihrer Station.
+      if (bezuege.isNotEmpty)
+        Positioned.fill(
+          child: IgnorePointer(
+            child: CustomPaint(
+              painter: _BezugsMaler(
+                bezuege: bezuege,
+                farbe: standFarbe.withValues(alpha: 0.55),
+              ),
+            ),
+          ),
+        ),
     ];
     for (var i = 0; i < n; i++) {
       final e = eintraege[i];
@@ -215,8 +299,9 @@ class _Strahl extends StatelessWidget {
       final farbe = eintragFarbe(context, art);
       final platz = zeitstrahlPlatz(i);
       final stiel = platz.lang ? Zeitstrahl.stielLang : Zeitstrahl.stielKurz;
-      final x = breite * (i + 1) / (n + 1);
+      final x = xVon(i);
       final meilenstein = art == EintragArt.meilenstein;
+      final istStand = station[e.versionId] == i && istStation(e);
       kinder.addAll([
         // Der Stiel von der Achse zum Symbol.
         Positioned(
@@ -226,20 +311,33 @@ class _Strahl extends StatelessWidget {
           height: stiel,
           child: ColoredBox(color: linie),
         ),
-        // Der Punkt auf der Achse.
-        Positioned(
-          left: x - 8,
-          top: mitte - 8,
-          width: 16,
-          height: 16,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: meilenstein ? farbe : theme.colorScheme.outline,
-              border: Border.all(color: theme.colorScheme.surface, width: 2),
+        // Der Punkt auf der Achse — bei einem Stand die Station mit
+        // seiner Nummer.
+        if (istStand)
+          Positioned(
+            left: x - 13,
+            top: mitte - 13,
+            width: 26,
+            height: 26,
+            child: _Station(
+              nummer: versionen[e.versionId]?.nummer,
+              farbe: farbe,
+            ),
+          )
+        else
+          Positioned(
+            left: x - 8,
+            top: mitte - 8,
+            width: 16,
+            height: 16,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: meilenstein ? farbe : theme.colorScheme.outline,
+                border: Border.all(color: theme.colorScheme.surface, width: 2),
+              ),
             ),
           ),
-        ),
         // Das Symbol am Ende des Stiels.
         Positioned(
           left: x - Zeitstrahl.symbol / 2,
@@ -276,6 +374,113 @@ class _Strahl extends StatelessWidget {
     }
     return Stack(clipBehavior: Clip.none, children: kinder);
   }
+}
+
+/// Eine Station auf der Achse: ein Rezepturstand mit seiner Nummer.
+class _Station extends StatelessWidget {
+  const _Station({required this.nummer, required this.farbe});
+
+  final int? nummer;
+  final Color farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final n = nummer;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: farbe,
+        border: Border.all(color: theme.colorScheme.surface, width: 2),
+      ),
+      child: Center(
+        child: n == null
+            ? Icon(Icons.menu_book_outlined, size: 13, color: _auf(farbe))
+            : Text(
+                '$n',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: _auf(farbe),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+      ),
+    );
+  }
+}
+
+/// Die Legende des Phasenbands: die Phasen, die vorkommen, in ihrer
+/// Reihenfolge.
+class PhasenLegende extends StatelessWidget {
+  const PhasenLegende({super.key, required this.phasen});
+
+  final List<ProjektStatus> phasen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Wrap(
+      spacing: 14,
+      runSpacing: 4,
+      children: [
+        for (final p in phasen)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 18,
+                height: 6,
+                decoration: BoxDecoration(
+                  color: phasenFarbe(context, p).withValues(alpha: 0.75),
+                  borderRadius: AppMasse.ecken,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                p.label,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+/// Malt die Linien von Einträgen zu ihrer Station — gestrichelt, damit
+/// sie hinter den Stielen zurücktreten.
+class _BezugsMaler extends CustomPainter {
+  _BezugsMaler({required this.bezuege, required this.farbe});
+
+  final List<({Offset von, Offset bis})> bezuege;
+  final Color farbe;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stift = Paint()
+      ..color = farbe
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    const strich = 6.0;
+    const luecke = 4.0;
+    for (final b in bezuege) {
+      final weg = b.bis - b.von;
+      final laenge = weg.distance;
+      if (laenge < 1) continue;
+      final schritt = weg / laenge;
+      var t = 0.0;
+      while (t < laenge) {
+        final ende = math.min(t + strich, laenge);
+        canvas.drawLine(b.von + schritt * t, b.von + schritt * ende, stift);
+        t = ende + luecke;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_BezugsMaler alt) =>
+      alt.farbe != farbe || alt.bezuege != bezuege;
 }
 
 class _Symbol extends StatelessWidget {

@@ -27,6 +27,7 @@ import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angabe
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_reiter.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_vorschau.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_vorlage.dart';
 
@@ -1096,6 +1097,31 @@ void main() {
           updatedAt: zeit,
         );
 
+    /// Was die Vorschau zeigt: ohne Artikelnummer und Lagerung.
+    const vorschau = {
+      'stand': 'Stand 1',
+      'artikelnummer': '',
+      'bezeichnung': 'Frikadelle Testart',
+      'sensorik.gewicht': '80 g',
+      'toleranz': '± 5',
+      'zutaten': 'Schweinefleisch (80 %), Wasser, SENF, Speisesalz',
+      'fleischanteil': '80,0 %',
+      'allergene': 'Senf',
+      'allergen.sellerie.spuren': 'X',
+      'naehrwert.energie': '900 kJ / 215 kcal',
+      'naehrwert.fett': '16',
+      'naehrwert.gesaettigte_fettsaeuren': '6,0',
+      'naehrwert.kohlenhydrate': '1,0',
+      'naehrwert.zucker': '0,5',
+      'naehrwert.eiweiss': '15',
+      'naehrwert.salz': '1,8',
+      'hilfsstoff.1.name': 'Keine',
+      'hilfsstoff.1.quelle': '-',
+      'sensorik.aussehen': 'goldbraun',
+      'lagerung': '',
+      'haltbarkeit': '21 Tage',
+    };
+
     Future<void> zeige(
       WidgetTester tester,
       EntwicklungsProjekt p, {
@@ -1108,6 +1134,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            spezVorschauProvider.overrideWith((ref, a) async => vorschau),
             spezStaendeProvider.overrideWith((ref, id) async => staende),
             spezVorlageProvider.overrideWith(
               (ref, s) async => s == SpezSprache.de ? vorlage : null,
@@ -1185,6 +1212,43 @@ void main() {
       expect(
         tester.getTopLeft(bereich('Verpackung')).dx,
         greaterThan(tester.getTopLeft(bereich('Angaben')).dx + 300),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('die Vorschau: was hineinkommt, was fehlt', (tester) async {
+      await zeige(tester, projekt());
+      expect(bereich('Was in die Spezifikation kommt'), findsOneWidget);
+      expect(find.textContaining('mit Stand 1 · deutsch'), findsOneWidget);
+      Finder inVorschau(Finder f) =>
+          find.descendant(of: find.byType(SpezVorschau), matching: f);
+      expect(
+        inVorschau(
+          find.text('Schweinefleisch (80 %), Wasser, SENF, Speisesalz'),
+        ),
+        findsOneWidget,
+      );
+      expect(inVorschau(find.text('80 g · Toleranz ± 5')), findsOneWidget);
+      expect(
+        inVorschau(
+          find.textContaining('Energie 900 kJ / 215 kcal · Fett 16 g'),
+        ),
+        findsOneWidget,
+      );
+      expect(inVorschau(find.text('Keine')), findsOneWidget);
+      expect(inVorschau(find.text('Sellerie')), findsOneWidget);
+      expect(inVorschau(find.text('Optik: goldbraun')), findsOneWidget);
+      // Artikelnummer und Lagerung fehlen — mit dem Ort zum Eintragen.
+      expect(
+        inVorschau(find.text('fehlt — unten bei „Angaben" eintragen')),
+        findsNWidgets(2),
+      );
+      // Und dort stehen die Felder dafür.
+      expect(find.byKey(const ValueKey('spez-artikelnummer')), findsOneWidget);
+      expect(find.byKey(const ValueKey('spez-bezeichnung')), findsOneWidget);
+      expect(
+        find.text('leer: „Frikadelle Testart"'),
+        findsOneWidget,
       );
       expect(tester.takeException(), isNull);
     });

@@ -140,8 +140,38 @@ void main() {
       final schon = vorlageEinrichten(formblatt()).bytes;
       final e = vorlageEinrichten(schon);
       expect(e.schonEingerichtet, isTrue);
+      expect(e.ergaenzt, isFalse);
       expect(e.felder, isEmpty);
       expect(e.bytes, same(schon));
+    });
+
+    test('eine teils eingerichtete Vorlage wird ergänzt', () {
+      // Von Hand: der Fettgehalt an seinem Platz, neben der Bezeichnung
+      // bewusst der Projektname.
+      final teils = mitZellen(formblatt(), {
+        'H20': '{{naehrwert.fett}}',
+        'C6': '{{projekt}}',
+      });
+      final e = vorlageEinrichten(teils);
+      expect(e.vorhanden, {'naehrwert.fett', 'projekt'});
+      expect(e.ergaenzt, isTrue);
+      expect(e.schonEingerichtet, isFalse);
+      // Was fehlte, kommt dazu …
+      expect(e.felder['artikelnummer'], 'C5');
+      expect(e.felder['zutaten'], 'C8');
+      expect(e.felder['lagerung'], 'D24');
+      // … was schon da war, bleibt, wo es ist.
+      expect(e.felder.containsKey('naehrwert.fett'), isFalse);
+      expect(e.felder.containsKey('bezeichnung'), isFalse);
+      expect(e.fehlend, contains('bezeichnung'));
+      expect(e.fehlend, isNot(contains('naehrwert.fett')));
+      final blatt =
+          XlsxBlatt(XlsxMappe.lesen(e.bytes), 'xl/worksheets/sheet1.xml');
+      expect(blatt.zelle(5, 2)!.text, '{{projekt}}');
+      expect(blatt.zelle(19, 7)!.text, '{{naehrwert.fett}}');
+      expect(blatt.zelle(4, 2)!.text, '{{artikelnummer}}');
+      // Ein zweites Mal: nichts mehr zu tun.
+      expect(vorlageEinrichten(e.bytes).schonEingerichtet, isTrue);
     });
 
     test('keine Excel-Mappe: ein verständlicher Fehler', () {
@@ -341,6 +371,7 @@ void main() {
   group('Angaben des Projekts', () {
     test('JSON hin und zurück, leer ergibt null', () {
       const a = SpezAngaben(
+        bezeichnung: 'Frikadelle fein, gebraten',
         toleranz: '± 5',
         lagerung: 'gekühlt',
         haltbarkeit: '21',
@@ -360,6 +391,11 @@ void main() {
       );
       final zurueck = SpezAngaben.aus(a.alsJson());
       expect(zurueck.toJson(), a.toJson());
+      expect(zurueck.bezeichnung, 'Frikadelle fein, gebraten');
+      expect(
+        const SpezAngaben(bezeichnung: ' Nur sie ').alsJson(),
+        '{"bezeichnung":"Nur sie"}',
+      );
       expect(zurueck.hinweisZeilen, [
         'Erst durcherhitzen.',
         'Nicht wieder einfrieren.',
@@ -373,6 +409,87 @@ void main() {
         a.verpackung.kopie(karton: '').toJson().containsKey('karton'),
         isFalse,
       );
+    });
+  });
+
+  group('Lücken und Vorschau', () {
+    test('kein Platz, leer geblieben, Stand ohne Zutaten', () {
+      expect(
+        spezLuecken(
+          platzhalter: {
+            'artikelnummer',
+            'bezeichnung',
+            'zutaten',
+            'lagerung',
+            'haltbarkeit',
+          },
+          werte: {
+            'artikelnummer': 'T-1',
+            'bezeichnung': 'Testware',
+            'zutaten': 'Schweinefleisch',
+            'lagerung': 'kühl',
+            'haltbarkeit': '21 Tage',
+          },
+        ),
+        isEmpty,
+      );
+      expect(
+        spezLuecken(
+          platzhalter: {'artikelnummer', 'zutaten'},
+          werte: {'artikelnummer': ' ', 'zutaten': ''},
+        ),
+        [
+          'Die Vorlage hat keinen Platz für Artikelbezeichnung, '
+              'Lagerbedingungen und Haltbarkeit — trag dort Platzhalter wie '
+              '{{artikelnummer}} ein oder wähl sie unter „Vorlagen und '
+              'DeepL" noch einmal.',
+          'Leer geblieben: Artikelnummer — einzutragen im Reiter '
+              '„Spezifikation".',
+          'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt '
+              'leer.',
+        ],
+      );
+    });
+
+    test('Texte der Vorschau', () {
+      const w = {
+        'naehrwert.energie': '1050 kJ / 251 kcal',
+        'naehrwert.fett': '13',
+        'naehrwert.gesaettigte_fettsaeuren': '2,1',
+        'naehrwert.kohlenhydrate': '14',
+        'naehrwert.zucker': '0,8',
+        'naehrwert.eiweiss': '19',
+        'naehrwert.salz': '1,3',
+        'hilfsstoff.1.name': 'Siliziumdioxid',
+        'hilfsstoff.1.quelle': 'Gewürzmischung',
+        'hilfsstoff.2.name': 'Trennmittel',
+        'hilfsstoff.2.quelle': '',
+        'hilfsstoff.3.name': '',
+        'sensorik.aussehen': 'goldbraun',
+        'sensorik.geruch': ' ',
+        'sensorik.geschmack': 'würzig',
+        'allergen.senf.spuren': 'X',
+        'allergen.sellerie.spuren': '',
+      };
+      expect(
+        vorschauNaehrwerte(w),
+        'Energie 1050 kJ / 251 kcal · Fett 13 g · davon gesättigte '
+        'Fettsäuren 2,1 g · Kohlenhydrate 14 g · davon Zucker 0,8 g · '
+        'Eiweiß 19 g · Salz 1,3 g',
+      );
+      expect(
+        vorschauHilfsstoffe(w),
+        'Siliziumdioxid (aus Gewürzmischung), Trennmittel',
+      );
+      expect(
+        vorschauHilfsstoffe(
+          const {'hilfsstoff.1.name': 'Keine', 'hilfsstoff.1.quelle': '-'},
+        ),
+        'Keine',
+      );
+      expect(vorschauSensorik(w), 'Optik: goldbraun\nGeschmack: würzig');
+      expect(vorschauSensorik(const {}), isEmpty);
+      expect(vorschauSpuren(w), 'Senf');
     });
   });
 
@@ -432,6 +549,88 @@ void main() {
       );
       expect(noch.einrichtung, isNull);
       expect(noch.platzhalter, g.platzhalter);
+    });
+
+    test('erstellen: eine Vorlage von früher wird ergänzt, Lücken gemeldet',
+        () async {
+      // Eine Vorlage aus einer früheren Fassung: gespeichert, wie sie war —
+      // ohne Platzhalter.
+      await EntwicklungDateienDienst(db).speichern(
+        id: spezVorlageId(SpezSprache.de),
+        name: 'Formblatt.xlsx',
+        inhalt: formblatt(),
+        mimeTyp: kXlsxMime,
+      );
+      expect(
+        platzhalterIn((await dienst.vorlageInhalt(SpezSprache.de))!),
+        isEmpty,
+      );
+      final id = await projekte.projektAnlegen(name: 'Frikadelle Testart');
+      await projekte.projektAendern(
+        id,
+        EntwicklungProjekteCompanion(
+          spezifikation: Value(
+            const SpezAngaben(bezeichnung: 'Frikadelle fein, gebraten')
+                .alsJson(),
+          ),
+        ),
+      );
+      final rezeptur = await rezepte.rezepturAnlegen(
+        name: 'Frikadelle',
+        projektId: id,
+      );
+      final fleisch = await rezepte.zutatAnlegen(
+        const EntwicklungZutatenCompanion(
+          name: Value('Schweinefleisch'),
+          istFleisch: Value(true),
+          tierart: Value('schwein'),
+          fett: Value(20),
+          eiweiss: Value(18),
+        ),
+      );
+      final v = (await rezepte.neuesteVersion(rezeptur))!;
+      await rezepte.positionHinzufuegen(v.id, zutatId: fleisch, mengeKg: 10);
+
+      Future<SpezifikationErgebnis> erstellen() async => dienst.erstellen(
+            projekt: (await projekte.projekt(id))!,
+            versionId: v.id,
+            sprache: SpezSprache.de,
+            datum: DateTime(2026, 3, 5),
+          );
+
+      final e = await erstellen();
+      expect(
+        e.hinweise.first,
+        startsWith(
+          'Die Vorlage war noch nicht ganz eingerichtet — die App hat ',
+        ),
+      );
+      expect(
+        e.hinweise,
+        contains(
+          'Leer geblieben: Artikelnummer, Lagerbedingungen und Haltbarkeit — '
+          'einzutragen im Reiter „Spezifikation".',
+        ),
+      );
+      // Die eigene Bezeichnung — auch im Dateinamen.
+      expect(e.dateiname, 'Frikadelle fein_ gebraten_Spezifikation.xlsx');
+      final blatt =
+          XlsxBlatt(XlsxMappe.lesen(e.bytes), 'xl/worksheets/sheet1.xml');
+      expect(blatt.zelle(5, 2)!.text, 'Frikadelle fein, gebraten');
+      expect(blatt.zelle(7, 2)!.text, contains('Schweinefleisch'));
+      // Gemerkt: Die gespeicherte Vorlage hat jetzt ihre Platzhalter.
+      expect(
+        platzhalterIn((await dienst.vorlageInhalt(SpezSprache.de))!),
+        containsAll(['artikelnummer', 'bezeichnung', 'zutaten']),
+      );
+      expect((await dienst.vorlage(SpezSprache.de))!.name, 'Formblatt.xlsx');
+
+      // Beim nächsten Mal gibt es nichts mehr zu ergänzen.
+      final noch = await erstellen();
+      expect(
+        noch.hinweise.where((h) => h.startsWith('Die Vorlage war')),
+        isEmpty,
+      );
     });
 
     test('erstellen: Angaben, Kreuze, Kürzel und Hinweise', () async {
@@ -859,4 +1058,17 @@ Uint8List formblatt({bool englisch = false}) {
   neu('xl/drawings/vmlDrawing1.vml', vml.toString());
   neu('xl/styles.xml', '<styleSheet>unverändert</styleSheet>');
   return Uint8List.fromList(ZipEncoder().encode(archiv)!);
+}
+
+/// [xlsx] mit neuen Texten in einzelnen Zellen des ersten Blatts — etwa
+/// Platzhalter, die jemand von Hand eingetragen hat.
+Uint8List mitZellen(Uint8List xlsx, Map<String, String> zellen) {
+  final mappe = XlsxMappe.lesen(xlsx);
+  const pfad = 'xl/worksheets/sheet1.xml';
+  var xml = mappe.text(pfad)!;
+  for (final MapEntry(:key, :value) in zellen.entries) {
+    xml = zelleSetzen(xml, key, value);
+  }
+  mappe.schreibe(pfad, xml);
+  return mappe.packen();
 }

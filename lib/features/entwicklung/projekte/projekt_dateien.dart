@@ -10,8 +10,8 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/dateien.dart';
+import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart';
-import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 
 /// Wählt eine Datei und legt sie als Eintrag „Datei" in den Verlauf.
@@ -22,27 +22,39 @@ Future<void> dateiAlsEintrag(
 ) async {
   final datei = await dateiWaehlen(context);
   if (datei == null || !context.mounted) return;
+  final messenger = ScaffoldMessenger.of(context);
+  final ablage = ref.read(mailAblageProvider);
+  final sicherung = ref.read(autoBackupTriggerProvider);
   try {
-    final id = await dateiAblegen(ref, datei, projektId: projektId);
-    final heute = DateTime.now();
-    await ref.read(projektRepositoryProvider).eintragAnlegen(
-          projektId: projektId,
-          art: EintragArt.datei,
-          titel: datei.name,
-          datum: DateTime(heute.year, heute.month, heute.day),
-          status: EintragStatus.erhalten,
-          dateiId: id,
-        );
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Datei abgelegt');
-  } catch (e) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Die Datei ließ sich nicht ablegen: ${fehlerText(e)}'),
-        ),
-      );
+    // Eine Mail (.msg, .eml) kommt als E-Mail in den Verlauf.
+    final bericht = await ablage.ablegen(projektId, [datei]);
+    sicherung.fireDebounced(reason: 'Datei abgelegt');
+    if (bericht.mails > 0 || bericht.doppelt.isNotEmpty) {
+      messenger.showSnackBar(SnackBar(content: Text(bericht.text)));
     }
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Die Datei ließ sich nicht ablegen: ${fehlerText(e)}'),
+      ),
+    );
   }
+}
+
+/// Legt gezogene Dateien und Mails in den Verlauf des Projekts und sagt,
+/// was dort angekommen ist.
+Future<void> projektAblage(
+  BuildContext context,
+  WidgetRef ref,
+  String projektId,
+  List<AblageDatei> dateien,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final ablage = ref.read(mailAblageProvider);
+  final sicherung = ref.read(autoBackupTriggerProvider);
+  final bericht = await ablage.ablegen(projektId, dateien);
+  sicherung.fireDebounced(reason: 'Abgelegt');
+  messenger.showSnackBar(SnackBar(content: Text(bericht.text)));
 }
 
 /// Löscht eine Datei nach Rückfrage — auch aus Verlauf und Produktbild.

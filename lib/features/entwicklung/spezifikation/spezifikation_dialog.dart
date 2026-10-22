@@ -71,14 +71,22 @@ String einrichtungsText(SpezSprache sprache, VorlageGespeichert g) {
   final unbekannt = g.platzhalter.difference(bekannt).toList()..sort();
   if (e != null) {
     final felder = g.platzhalter.length;
+    final neu = e.felder.length;
     return [
-      'Die Vorlage für ${sprache.label} ist eingerichtet: $felder '
-          '${felder == 1 ? 'Feld' : 'Felder'} erkannt'
-          '${e.kaestchen > 0 ? ', davon ${e.kaestchen} Kontrollkästchen' : ''}.',
+      if (e.ergaenzt)
+        'Die Vorlage für ${sprache.label} ist gespeichert und ergänzt: $neu '
+            '${neu == 1 ? 'Feld' : 'Felder'} neu, zusammen $felder.'
+      else
+        'Die Vorlage für ${sprache.label} ist eingerichtet: $felder '
+            '${felder == 1 ? 'Feld' : 'Felder'} erkannt'
+            '${e.kaestchen > 0 ? ', davon ${e.kaestchen} Kontrollkästchen' : ''}.',
       if (e.fehlend.isNotEmpty)
         'Nicht gefunden: ${e.fehlend.join(', ')} — diese Platzhalter kannst '
             'du von Hand eintragen (Vorlage als Datei speichern, in Excel '
             'ergänzen, wieder wählen).',
+      if (unbekannt.isNotEmpty)
+        'Diese kennt die App nicht (Tippfehler?): '
+            '${unbekannt.map((n) => '{{$n}}').join(', ')}',
     ].join('\n');
   }
   if (g.platzhalter.isEmpty) {
@@ -132,6 +140,10 @@ Future<SpezMeldung?> spezifikationErstellenUndSpeichern(
       datum: datum,
       kuerzel: k,
     );
+    // Eine ergänzte Vorlage hat jetzt mehr Felder.
+    if (ref.context.mounted) {
+      ref.invalidate(spezVorlagePlatzhalterProvider(sprache));
+    }
     final pfad = await FilePicker.saveFile(
       dialogTitle: 'Spezifikation (${sprache.label}) speichern',
       fileName: e.dateiname,

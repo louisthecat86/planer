@@ -13,35 +13,43 @@ import 'xlsx_vorlage.dart';
 //
 // So bleibt das Formblatt, wie es ist: Logo, Kopf- und Fußzeile,
 // Rahmen und Kästchen. Was die App nicht erkennt, bleibt leer; dafür kann
-// man Platzhalter auch von Hand eintragen. Eine Vorlage, die schon
-// Platzhalter enthält, bleibt unberührt.
+// man Platzhalter auch von Hand eintragen. Platzhalter, die schon in der
+// Vorlage stehen, bleiben, wo sie sind — die App ergänzt nur, was fehlt,
+// und schreibt nie in eine Zelle, in der schon einer steht.
 
 /// Was beim Einrichten herauskam.
 class EinrichtenErgebnis {
   const EinrichtenErgebnis({
     required this.bytes,
     required this.felder,
-    this.schonEingerichtet = false,
+    this.vorhanden = const {},
   });
 
   /// Die Vorlage mit Platzhaltern.
   final Uint8List bytes;
 
-  /// Platzhalter → wo er steht, etwa „C5", „B66 (Kästchen)" oder
-  /// „Kopfzeile".
+  /// Die neu gesetzten Platzhalter → wo sie stehen, etwa „C5",
+  /// „B66 (Kästchen)" oder „Kopfzeile".
   final Map<String, String> felder;
 
-  /// Die Vorlage hatte schon Platzhalter und blieb, wie sie war.
-  final bool schonEingerichtet;
+  /// Die Platzhalter, die schon vorher in der Vorlage standen.
+  final Set<String> vorhanden;
+
+  /// Die Vorlage hatte schon Platzhalter, und es fehlte keiner, den die App
+  /// hätte setzen können — sie blieb, wie sie war.
+  bool get schonEingerichtet => vorhanden.isNotEmpty && felder.isEmpty;
+
+  /// Die Vorlage hatte schon Platzhalter, die App hat weitere ergänzt.
+  bool get ergaenzt => vorhanden.isNotEmpty && felder.isNotEmpty;
 
   /// Wie viele Platzhalter unter Kontrollkästchen liegen.
   int get kaestchen =>
       felder.values.where((o) => o.endsWith('(Kästchen)')).length;
 
-  /// Wichtige Felder, die nicht gefunden wurden.
+  /// Wichtige Felder, die weder vorher da waren noch gefunden wurden.
   List<String> get fehlend => [
         for (final f in kWichtigeFelder)
-          if (!felder.containsKey(f)) f,
+          if (!felder.containsKey(f) && !vorhanden.contains(f)) f,
       ];
 }
 
@@ -332,33 +340,48 @@ final RegExp _kopfArtikelnummer = RegExp(
 );
 
 /// Richtet [xlsx] ein: schreibt Platzhalter neben erkannte Beschriftungen
-/// und unter erkannte Kontrollkästchen. Wirft [FormatException], wenn
+/// und unter erkannte Kontrollkästchen — nur die, die noch nicht in der
+/// Mappe stehen, und nie in eine Zelle mit einem Platzhalter. Fehlt
+/// nichts, kommt [xlsx] unverändert zurück. Wirft [FormatException], wenn
 /// [xlsx] keine Excel-Mappe ist.
 EinrichtenErgebnis vorlageEinrichten(Uint8List xlsx) {
-  if (platzhalterIn(xlsx).isNotEmpty) {
-    return EinrichtenErgebnis(
-      bytes: xlsx,
-      felder: const {},
-      schonEingerichtet: true,
-    );
-  }
+  final vorhanden = platzhalterIn(xlsx);
   final mappe = XlsxMappe.lesen(xlsx);
   final felder = <String, String>{};
   for (final pfad in mappe.blattPfade) {
     final blatt = XlsxBlatt(mappe, pfad);
-    final neu = _Einrichten(blatt, felder).ausfuehren(mappe.text(pfad) ?? '');
+    final neu = _Einrichten(blatt, felder, vorhanden)
+        .ausfuehren(mappe.text(pfad) ?? '');
     mappe.schreibe(pfad, neu);
   }
-  return EinrichtenErgebnis(bytes: mappe.packen(), felder: felder);
+  if (felder.isEmpty) {
+    return EinrichtenErgebnis(
+      bytes: xlsx,
+      felder: const {},
+      vorhanden: vorhanden,
+    );
+  }
+  return EinrichtenErgebnis(
+    bytes: mappe.packen(),
+    felder: felder,
+    vorhanden: vorhanden,
+  );
 }
 
 class _Einrichten {
-  _Einrichten(this.blatt, this.felder);
+  _Einrichten(this.blatt, this.felder, this.vorhanden);
 
   final XlsxBlatt blatt;
 
   /// Was schon vergeben ist — über alle Blätter.
   final Map<String, String> felder;
+
+  /// Die Platzhalter, die schon vorher in der Mappe standen.
+  final Set<String> vorhanden;
+
+  /// Ob [name] schon einen Platz hat — vorher oder gerade eben.
+  bool _vergeben(String name) =>
+      felder.containsKey(name) || vorhanden.contains(name);
 
   /// Zelle → neuer Text.
   final Map<String, String> _setzen = {};
@@ -409,9 +432,11 @@ class _Einrichten {
   }
 
   void _feld(String name, Bereich ziel, {bool kaestchen = false}) {
-    if (felder.containsKey(name)) return;
+    if (_vergeben(name)) return;
     final ref = zellName(ziel.z1, ziel.s1);
     if (_setzen.containsKey(ref)) return;
+    // In einer Zelle mit Platzhalter steht schon, was dort hingehört.
+    if (_textIn(ziel).contains('{{')) return;
     _setzen[ref] = '{{$name}}';
     felder[name] = kaestchen ? '$ref (Kästchen)' : ref;
   }
@@ -641,13 +666,13 @@ class _Einrichten {
     for (final t in _texte) {
       final text = t.zelle.text;
       if (!_datumsMaske.hasMatch(text)) continue;
-      if (felder.containsKey('gueltig_ab')) break;
+      if (_vergeben('gueltig_ab')) break;
       final zeilen = text
           .replaceFirst(_datumsMaske, '{{gueltig_ab}}')
           .split('\n')
           .map((z) {
         final klein = z.trim().toLowerCase();
-        if (!_kuerzelZeilen.contains(klein) || felder.containsKey('kuerzel')) {
+        if (!_kuerzelZeilen.contains(klein) || _vergeben('kuerzel')) {
           return z;
         }
         felder['kuerzel'] = t.zelle.ref;

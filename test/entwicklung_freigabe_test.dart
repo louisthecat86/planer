@@ -10,6 +10,7 @@ import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe_ansicht.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/entwicklungsstrang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
@@ -206,6 +207,22 @@ void main() {
       );
       expect(e.versionId, a.versionId);
       expect(texteAus(e.aenderungen).single, contains('Allergene'));
+      // Der Schritt in die Produktion steht als Phase im Verlauf.
+      expect(
+        statusWechsel(e),
+        (alt: ProjektStatus.entwicklung, neu: ProjektStatus.produktion),
+      );
+
+      // Noch einmal freigegeben: schon in Produktion — kein Wechsel.
+      await dienst.freigeben(
+        projekt: projekt,
+        versionId: a.versionId,
+        werte: w,
+      );
+      final nochmal = (await projekte.eintraegeBeobachten(a.projekt.id).first)
+          .where((e) => e.titel == 'Freigegeben für Artikel A-100');
+      expect(nochmal, hasLength(1));
+      expect(statusWechsel(nochmal.single), isNull);
     });
 
     test('ein vorhandener Artikel bekommt nur die gewählten Felder',

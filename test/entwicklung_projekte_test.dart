@@ -163,7 +163,8 @@ void main() {
       final e = (await verlauf(id)).firstWhere(
         (e) => e.art == EintragArt.rezeptur.schluessel,
       );
-      expect(e.titel, 'Rezepturstand 1 abgeschlossen');
+      // Mit dem Namen der Rezeptur — ein Projekt kann mehrere haben.
+      expect(e.titel, 'Bratwurst fein · Stand 1');
       expect(e.versionId, v.id);
       expect(e.status, EintragStatus.erledigt.schluessel);
       expect(texteAus(e.aenderungen), contains('1 Zeile'));
@@ -537,6 +538,34 @@ void main() {
       await reiter(tester, 'Sensorik');
       expect(bereich('Sensorik'), findsOneWidget);
       expect(find.text('goldbraun'), findsOneWidget);
+    });
+
+    testWidgets('Projektseite: Filter und Entwicklungsweg im Verlauf',
+        (tester) async {
+      await zeige(tester, const ProjektScreen(projektId: 'p1'));
+      await reiter(tester, 'Verlauf');
+      final datei = find.widgetWithText(FilterChip, 'Datei (1)');
+      expect(datei, findsOneWidget);
+      expect(find.widgetWithText(FilterChip, 'Meilenstein (1)'), findsOneWidget);
+      // Ohne Dateien: der Eintrag mit dem Datenblatt fehlt.
+      await tester.tap(datei);
+      await tester.pump();
+      expect(find.text('Datenblatt erhalten'), findsNothing);
+      expect(find.text('3 Einträge'), findsOneWidget);
+      await tester.tap(datei);
+      await tester.pump();
+      expect(find.text('Datenblatt erhalten'), findsOneWidget);
+
+      // Der Entwicklungsweg: die Idee, der Stand als Station.
+      await tester.tap(find.byTooltip('Entwicklungsweg'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('Idee und Anfrage'), findsOneWidget);
+      expect(find.textContaining('Station 1 · '), findsOneWidget);
+      expect(find.text('Datenblatt erhalten'), findsOneWidget);
+      // Ohne Filter in dieser Ansicht.
+      expect(datei, findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Projektseite schmal und dunkel: kein Überlauf',

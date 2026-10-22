@@ -6,7 +6,7 @@ import 'package:produktion_planer/features/entwicklung/daten/entwicklung_reposit
 import 'package:produktion_planer/features/entwicklung/entwicklung_format.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
-import 'package:produktion_planer/features/entwicklung/rezepturen/versionsvergleich.dart';
+import 'package:produktion_planer/features/entwicklung/rezepturen/stand_vergleich.dart';
 
 import 'helpers/test_db.dart';
 

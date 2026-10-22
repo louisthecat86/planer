@@ -27,6 +27,11 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // Dateien und Mails, die auf das Fenster gezogen werden - auch direkt
+  // aus Outlook (ablage_ziel.h).
+  ablage_ = AblageZiel::Anmelden(flutter_controller_->view()->GetNativeWindow(),
+                                 flutter_controller_->engine()->messenger());
+
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();
   });
@@ -40,6 +45,10 @@ bool FlutterWindow::OnCreate() {
 }
 
 void FlutterWindow::OnDestroy() {
+  if (ablage_ != nullptr) {
+    ablage_->Abmelden();
+    ablage_ = nullptr;
+  }
   if (flutter_controller_) {
     flutter_controller_ = nullptr;
   }

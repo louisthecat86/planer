@@ -24,7 +24,9 @@ import 'xlsx_vorlage.dart';
 //
 // Eine Vorlage ohne Platzhalter — das Formblatt, wie es in der Firma
 // liegt — richtet die App beim Speichern selbst ein
-// (vorlage_einrichten.dart).
+// (vorlage_einrichten.dart); fehlen einer Vorlage Platzhalter, die die
+// App setzen kann, ergänzt sie sie — auch beim Erstellen, für Vorlagen,
+// die noch aus einer früheren Fassung stammen.
 
 /// Die IDs der Vorlagen unter den Entwicklungsdateien.
 String spezVorlageId(SpezSprache s) => 'vorlage.spezifikation.${s.name}';
@@ -45,8 +47,8 @@ class VorlageGespeichert {
   /// Die Platzhalter der gespeicherten Vorlage.
   final Set<String> platzhalter;
 
-  /// Was die App selbst eingerichtet hat — null, wenn die Vorlage schon
-  /// Platzhalter hatte.
+  /// Was die App selbst eingerichtet oder ergänzt hat — null, wenn es
+  /// nichts zu tun gab.
   final EinrichtenErgebnis? einrichtung;
 }
 
@@ -85,6 +87,50 @@ class SpezifikationErgebnis {
   /// Was in der Vorlage keinen Platz fand — etwa ein Allergen ohne Zeile.
   final List<String> hinweise;
 }
+
+/// Die Felder, die in keiner Spezifikation fehlen sollten — mit ihrem
+/// Namen für die Meldungen.
+const List<({String name, String label})> kSpezPflichtfelder = [
+  (name: 'artikelnummer', label: 'Artikelnummer'),
+  (name: 'bezeichnung', label: 'Artikelbezeichnung'),
+  (name: 'zutaten', label: 'Zutaten'),
+  (name: 'lagerung', label: 'Lagerbedingungen'),
+  (name: 'haltbarkeit', label: 'Haltbarkeit'),
+];
+
+/// Was von den Pflichtfeldern fehlt: in der Vorlage kein Platz dafür
+/// ([platzhalter]) oder leer geblieben ([werte]).
+List<String> spezLuecken({
+  required Set<String> platzhalter,
+  required Map<String, String> werte,
+}) {
+  final ohnePlatz = [
+    for (final f in kSpezPflichtfelder)
+      if (!platzhalter.contains(f.name)) f.label,
+  ];
+  bool leer(String name) =>
+      platzhalter.contains(name) && (werte[name]?.trim() ?? '').isEmpty;
+  final eintragen = [
+    for (final f in kSpezPflichtfelder)
+      if (f.name != 'zutaten' && leer(f.name)) f.label,
+  ];
+  return [
+    if (ohnePlatz.isNotEmpty)
+      'Die Vorlage hat keinen Platz für ${_liste(ohnePlatz)} — trag dort '
+          'Platzhalter wie {{artikelnummer}} ein oder wähl sie unter '
+          '„Vorlagen und DeepL" noch einmal.',
+    if (eintragen.isNotEmpty)
+      'Leer geblieben: ${_liste(eintragen)} — einzutragen im Reiter '
+          '„Spezifikation".',
+    if (leer('zutaten'))
+      'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt leer.',
+  ];
+}
+
+/// „A", „A und B", „A, B und C".
+String _liste(List<String> teile) => teile.length < 2
+    ? teile.join()
+    : '${teile.sublist(0, teile.length - 1).join(', ')} und ${teile.last}';
 
 /// Was in der Vorlage keinen Platz findet: Allergene ohne Zeile, mehr
 /// Hilfsstoffe oder Produkthinweise als Plätze.
@@ -167,23 +213,17 @@ class SpezifikationDienst {
   Future<Uint8List?> vorlageInhalt(SpezSprache s) =>
       _dateien.lesen(spezVorlageId(s));
 
-  /// Speichert eine Vorlage. Hat sie noch keine Platzhalter, richtet die
-  /// App sie selbst ein. Wirft [FormatException], wenn sie keine
-  /// Excel-Mappe ist.
+  /// Speichert eine Vorlage. Die App richtet sie selbst ein — oder
+  /// ergänzt, was fehlt, wenn sie schon Platzhalter hat. Wirft
+  /// [FormatException], wenn sie keine Excel-Mappe ist.
   Future<VorlageGespeichert> vorlageSpeichern(
     SpezSprache s,
     String name,
     Uint8List bytes,
   ) async {
-    var inhalt = bytes;
-    EinrichtenErgebnis? einrichtung;
-    if (platzhalterIn(bytes).isEmpty) {
-      final e = vorlageEinrichten(bytes);
-      if (e.felder.isNotEmpty) {
-        einrichtung = e;
-        inhalt = e.bytes;
-      }
-    }
+    final e = vorlageEinrichten(bytes);
+    final einrichtung = e.felder.isEmpty ? null : e;
+    final inhalt = e.bytes;
     final platzhalter = platzhalterIn(inhalt);
     await _dateien.speichern(
       id: spezVorlageId(s),
@@ -301,6 +341,65 @@ class SpezifikationDienst {
   Future<void> kuerzelSpeichern(String? kuerzel) =>
       _einstellungSpeichern(kEntwicklungKuerzel, kuerzel);
 
+  /// Woraus die Spezifikation des Stands [versionId] entsteht: Projekt,
+  /// Rezepturstand, Artikel (nach der Freigabe) und die Angaben im Reiter
+  /// „Spezifikation" — null, wenn es den Stand nicht gibt.
+  Future<SpezifikationsQuelle?> quelle({
+    required EntwicklungsProjekt projekt,
+    required String versionId,
+    String? kuerzel,
+  }) async {
+    final repo = EntwicklungRepository(_db);
+    final eingabe = await repo.rechenRezeptur(versionId);
+    final version = await repo.version(versionId);
+    if (eingabe == null || version == null) return null;
+    final artikelId = projekt.artikelId;
+    final artikel = artikelId == null
+        ? null
+        : await (_db.select(_db.products)
+              ..where((p) => p.id.equals(artikelId))
+              ..where((p) => p.deletedAt.isNull()))
+            .getSingleOrNull();
+    final angaben = SpezAngaben.aus(projekt.spezifikation);
+    final eigene = angaben.bezeichnung.trim();
+    final nummer = artikel?.artikelnummer ?? projekt.artikelnummer;
+    return SpezifikationsQuelle(
+      projektName: projekt.name,
+      ergebnis: berechne(eingabe),
+      verlustProzent: eingabe.wirksamerVerlust,
+      artikelnummer: nummer?.trim(),
+      bezeichnung: eigene.isNotEmpty ? eigene : artikel?.artikelbezeichnung,
+      kunde: projekt.kunde,
+      standNummer: version.nummer,
+      haltbarkeitTage: artikel?.haltbarkeitTage,
+      aw: projekt.grenzeAw,
+      sensorik: Sensorik.aus(projekt.sensorik),
+      angaben: angaben,
+      kuerzel: kuerzel,
+    );
+  }
+
+  /// Ergänzt die gespeicherte Vorlage um Platzhalter, die ihr fehlen —
+  /// etwa eine Vorlage aus einer früheren Fassung, die noch gar nicht
+  /// eingerichtet war — und merkt sie sich so. Null, wenn nichts fehlte.
+  Future<EinrichtenErgebnis?> _ergaenzen(SpezSprache s, Uint8List vorlage) async {
+    final EinrichtenErgebnis e;
+    try {
+      e = vorlageEinrichten(vorlage);
+    } on FormatException {
+      return null;
+    }
+    if (e.felder.isEmpty) return null;
+    final d = await this.vorlage(s);
+    await _dateien.speichern(
+      id: spezVorlageId(s),
+      name: d?.name ?? 'Vorlage ${s.label}.xlsx',
+      inhalt: e.bytes,
+      mimeTyp: kXlsxMime,
+    );
+    return e;
+  }
+
   /// Erstellt die Spezifikation des Stands [versionId] in [sprache].
   /// Wirft [StateError], wenn Vorlage oder Stand fehlen.
   Future<SpezifikationErgebnis> erstellen({
@@ -311,41 +410,24 @@ class SpezifikationDienst {
     DateTime? datum,
     String? kuerzel,
   }) async {
-    final vorlage = await _dateien.lesen(spezVorlageId(sprache));
+    var vorlage = await _dateien.lesen(spezVorlageId(sprache));
     if (vorlage == null) {
       throw StateError(
         'Für ${sprache.label} ist noch keine Vorlage gewählt.',
       );
     }
-    final repo = EntwicklungRepository(_db);
-    final eingabe = await repo.rechenRezeptur(versionId);
-    final version = await repo.version(versionId);
-    if (eingabe == null || version == null) {
-      throw StateError('Den Rezepturstand gibt es nicht.');
-    }
-    final artikelId = projekt.artikelId;
-    final artikel = artikelId == null
-        ? null
-        : await (_db.select(_db.products)
-              ..where((p) => p.id.equals(artikelId))
-              ..where((p) => p.deletedAt.isNull()))
-            .getSingleOrNull();
-    final angaben = SpezAngaben.aus(projekt.spezifikation);
-    final ergebnis = berechne(eingabe);
-    final quelle = SpezifikationsQuelle(
-      projektName: projekt.name,
-      ergebnis: ergebnis,
-      verlustProzent: eingabe.wirksamerVerlust,
-      artikelnummer: artikel?.artikelnummer ?? projekt.artikelnummer,
-      bezeichnung: artikel?.artikelbezeichnung,
-      kunde: projekt.kunde,
-      standNummer: version.nummer,
-      haltbarkeitTage: artikel?.haltbarkeitTage,
-      aw: projekt.grenzeAw,
-      sensorik: Sensorik.aus(projekt.sensorik),
-      angaben: angaben,
+    final quelle = await this.quelle(
+      projekt: projekt,
+      versionId: versionId,
       kuerzel: kuerzel,
     );
+    if (quelle == null) {
+      throw StateError('Den Rezepturstand gibt es nicht.');
+    }
+    final ergaenzt = await _ergaenzen(sprache, vorlage);
+    if (ergaenzt != null) vorlage = ergaenzt.bytes;
+    final ergebnis = quelle.ergebnis;
+    final angaben = quelle.angaben;
     var werte = spezifikationsWerte(
       quelle,
       sprache: sprache,
@@ -380,7 +462,10 @@ class SpezifikationDienst {
     }
 
     final gefuellt = vorlageFuellen(vorlage, werte);
-    final name = (artikel?.artikelbezeichnung ?? projekt.name)
+    final platzhalter = platzhalterIn(vorlage);
+    // Der Dateiname mit der deutschen Bezeichnung — auch für Englisch.
+    final bezeichnung = quelle.bezeichnung?.trim() ?? '';
+    final name = (bezeichnung.isEmpty ? projekt.name : bezeichnung)
         .replaceAll(RegExp(r'[^A-Za-z0-9äöüßÄÖÜ \-]'), '_')
         .trim();
     return SpezifikationErgebnis(
@@ -393,11 +478,19 @@ class SpezifikationDienst {
       uebersetzt: uebersetzt,
       uebersetzungsFehler: fehler,
       kaestchen: gefuellt.kaestchen,
-      hinweise: spezPlatzHinweise(
-        platzhalter: platzhalterIn(vorlage),
-        ergebnis: ergebnis,
-        angaben: angaben,
-      ),
+      hinweise: [
+        if (ergaenzt != null)
+          'Die Vorlage war noch nicht ganz eingerichtet — die App hat '
+              '${ergaenzt.felder.length} '
+              '${ergaenzt.felder.length == 1 ? 'Feld' : 'Felder'} ergänzt '
+              'und sich die Vorlage so gemerkt.',
+        ...spezLuecken(platzhalter: platzhalter, werte: werte),
+        ...spezPlatzHinweise(
+          platzhalter: platzhalter,
+          ergebnis: ergebnis,
+          angaben: angaben,
+        ),
+      ],
     );
   }
 }
@@ -446,4 +539,25 @@ final spezStaendeProvider =
     FutureProvider.autoDispose.family<List<FreigabeStand>, String>(
   (ref, projektId) =>
       ref.watch(spezifikationDienstProvider).staende(projektId),
+);
+
+/// Was mit dem Stand [versionId] in der Spezifikation stünde (deutsch) —
+/// für die Vorschau im Reiter. Null, wenn es Projekt oder Stand nicht
+/// gibt. Rechnet neu, wenn sich Projekt, Rezeptur oder Katalog ändern.
+final spezVorschauProvider = FutureProvider.autoDispose
+    .family<Map<String, String>?, ({String projektId, String versionId})>(
+  (ref, a) async {
+    ref.watch(entwicklungAenderungProvider);
+    final projekt = await ref.watch(projektProvider(a.projektId).future);
+    if (projekt == null) return null;
+    final q = await ref
+        .watch(spezifikationDienstProvider)
+        .quelle(projekt: projekt, versionId: a.versionId);
+    if (q == null) return null;
+    return spezifikationsWerte(
+      q,
+      sprache: SpezSprache.de,
+      datum: DateTime.now(),
+    );
+  },
 );

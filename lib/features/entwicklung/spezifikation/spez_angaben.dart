@@ -1,8 +1,9 @@
 import 'dart:convert';
 
 // Die Angaben einer Spezifikation, die weder aus der Rezeptur noch aus der
-// Sensorik kommen: Toleranz des Stückgewichts, Lagerung, Haltbarkeit,
-// Produkthinweise, mögliche Spuren von Allergenen und die Verpackung.
+// Sensorik kommen: die Artikelbezeichnung, Toleranz des Stückgewichts,
+// Lagerung, Haltbarkeit, Produkthinweise, mögliche Spuren von Allergenen
+// und die Verpackung.
 //
 // Sie gehören zum Projekt (Spalte `spezifikation`, als JSON) und gelten
 // für jede Sprache: Die englische Spezifikation übersetzt die Texte auf
@@ -208,6 +209,7 @@ class Verpackung {
 /// Was ein Projekt für seine Spezifikation selbst angibt.
 class SpezAngaben {
   const SpezAngaben({
+    this.bezeichnung = '',
     this.toleranz = '',
     this.lagerung = '',
     this.haltbarkeit = '',
@@ -215,6 +217,10 @@ class SpezAngaben {
     this.spuren = const {},
     this.verpackung = const Verpackung(),
   });
+
+  /// Die Artikelbezeichnung für die Spezifikation — leer: die des
+  /// freigegebenen Artikels, sonst der Name des Projekts.
+  final String bezeichnung;
 
   /// Toleranz des Stückgewichts, etwa „± 5".
   final String toleranz;
@@ -242,6 +248,7 @@ class SpezAngaben {
       ];
 
   bool get leer =>
+      bezeichnung.trim().isEmpty &&
       toleranz.trim().isEmpty &&
       lagerung.trim().isEmpty &&
       haltbarkeit.trim().isEmpty &&
@@ -250,6 +257,7 @@ class SpezAngaben {
       verpackung.leer;
 
   Map<String, Object> toJson() => {
+        if (bezeichnung.trim().isNotEmpty) 'bezeichnung': bezeichnung.trim(),
         if (toleranz.isNotEmpty) 'toleranz': toleranz,
         if (lagerung.isNotEmpty) 'lagerung': lagerung,
         if (haltbarkeit.isNotEmpty) 'haltbarkeit': haltbarkeit,
@@ -267,6 +275,7 @@ class SpezAngaben {
       final d = jsonDecode(json);
       if (d is! Map<String, dynamic>) return const SpezAngaben();
       return SpezAngaben(
+        bezeichnung: _text(d, 'bezeichnung'),
         toleranz: _text(d, 'toleranz'),
         lagerung: _text(d, 'lagerung'),
         haltbarkeit: _text(d, 'haltbarkeit'),
@@ -280,6 +289,7 @@ class SpezAngaben {
   }
 
   SpezAngaben kopie({
+    String? bezeichnung,
     String? toleranz,
     String? lagerung,
     String? haltbarkeit,
@@ -288,6 +298,7 @@ class SpezAngaben {
     Verpackung? verpackung,
   }) =>
       SpezAngaben(
+        bezeichnung: bezeichnung ?? this.bezeichnung,
         toleranz: toleranz ?? this.toleranz,
         lagerung: lagerung ?? this.lagerung,
         haltbarkeit: haltbarkeit ?? this.haltbarkeit,

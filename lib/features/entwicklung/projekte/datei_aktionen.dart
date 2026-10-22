@@ -9,8 +9,10 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../../core/database/database.dart';
 import '../../../core/utils/fehler_text.dart';
-import '../../../core/utils/format.dart';
+import '../daten/datei_typen.dart';
 import '../daten/dateien.dart';
+
+export '../daten/datei_typen.dart' show groesseText, mimeTypAus;
 
 // Angehängte Dateien öffnen, speichern und hinzufügen. Zum Öffnen wird der
 // Inhalt entschlüsselt in einen eigenen Ordner unter den temporären
@@ -21,49 +23,6 @@ final dateiInhaltProvider =
     FutureProvider.autoDispose.family<Uint8List?, String>(
   (ref, dateiId) => ref.watch(entwicklungDateienProvider).lesen(dateiId),
 );
-
-/// „12 KB", „3,4 MB".
-String groesseText(int bytes) {
-  if (bytes < 1024) return '$bytes B';
-  if (bytes < 1024 * 1024) return '${Format.zahl(bytes / 1024)} KB';
-  return '${Format.zahl(bytes / (1024 * 1024), nachkomma: 1)} MB';
-}
-
-/// Der Medientyp nach der Endung — null, wenn sie unbekannt ist.
-String? mimeTypAus(String name) {
-  switch (p.extension(name).toLowerCase()) {
-    case '.pdf':
-      return 'application/pdf';
-    case '.png':
-      return 'image/png';
-    case '.jpg':
-    case '.jpeg':
-      return 'image/jpeg';
-    case '.gif':
-      return 'image/gif';
-    case '.webp':
-      return 'image/webp';
-    case '.txt':
-      return 'text/plain';
-    case '.csv':
-      return 'text/csv';
-    case '.msg':
-      return 'application/vnd.ms-outlook';
-    case '.eml':
-      return 'message/rfc822';
-    case '.xlsx':
-      return 'application/vnd.openxmlformats-officedocument.'
-          'spreadsheetml.sheet';
-    case '.xls':
-      return 'application/vnd.ms-excel';
-    case '.docx':
-      return 'application/vnd.openxmlformats-officedocument.'
-          'wordprocessingml.document';
-    case '.doc':
-      return 'application/msword';
-  }
-  return null;
-}
 
 /// Ist die Datei ein Bild, das sich in der App zeigen lässt?
 bool istBild(EntwicklungsDatei d) {

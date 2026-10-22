@@ -7,10 +7,10 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
-import '../entwicklung_format.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import '../rezepturen/stand_vergleich.dart';
 
 // Daten der Produktentwicklung: Zutaten und Rezepturen lesen und
 // schreiben — und Rezepturen so laden, wie der Rechenkern sie braucht.
@@ -284,17 +284,50 @@ class EntwicklungRepository {
         .write(daten.copyWith(updatedAt: Value(DateTime.now())));
   }
 
+  /// Der Stand, mit dem [v] verglichen wird: der letzte abgeschlossene
+  /// davor — null beim ersten.
+  Future<RezepturVersion?> vorigerStand(RezepturVersion v) async {
+    final davor = await (_db.select(_db.entwicklungRezepturVersionen)
+          ..where(
+            (x) =>
+                x.rezepturId.equals(v.rezepturId) &
+                x.nummer.isSmallerThanValue(v.nummer) &
+                x.status.equals(VersionStatus.abgeschlossen),
+          )
+          ..orderBy([(x) => OrderingTerm.desc(x.nummer)])
+          ..limit(1))
+        .getSingleOrNull();
+    return davor;
+  }
+
+  /// Was sich bei Stand [versionId] gegenüber dem vorigen abgeschlossenen
+  /// ändert (siehe [standAenderungen]) — leer, wenn es ihn nicht gibt.
+  Future<List<String>> standAenderungenVon(String versionId) async {
+    final v = await version(versionId);
+    final nachher = await rechenRezeptur(versionId);
+    if (v == null || nachher == null) return const [];
+    final vor = await vorigerStand(v);
+    final vorher = vor == null ? null : await rechenRezeptur(vor.id);
+    return standAenderungen(vorher, nachher, vorherNummer: vor?.nummer);
+  }
+
   /// Schließt einen Entwurf ab: Er wird mit allen Zutatendaten
-  /// eingefroren. Gehört die Rezeptur zu einem Projekt, steht der Stand
-  /// danach auch in dessen Verlauf.
-  Future<void> versionAbschliessen(String id) async {
+  /// eingefroren. [grund] — was neu ist und warum — steht danach als
+  /// Notiz am Stand (leer: keine; ohne [grund] bleibt die Notiz, wie sie
+  /// ist). Gehört die Rezeptur zu einem Projekt, steht der Stand auch in
+  /// dessen Verlauf: mit Rezepturname, Grund und den Änderungen zum
+  /// vorigen Stand.
+  Future<void> versionAbschliessen(String id, {String? grund}) async {
     await _nurEntwurf(id);
     final eingabe = await rechenRezeptur(id);
     final v = await version(id);
     if (eingabe == null || v == null) {
       throw StateError('Den Stand gibt es nicht.');
     }
-    final projektId = (await rezeptur(v.rezepturId))?.projektId;
+    final kopf = await rezeptur(v.rezepturId);
+    final projektId = kopf?.projektId;
+    final aenderungen = await standAenderungenVon(id);
+    final warum = grund?.trim() ?? '';
     final jetzt = DateTime.now();
     await _db.transaction(() async {
       await (_db.update(_db.entwicklungRezepturVersionen)
@@ -305,31 +338,29 @@ class EntwicklungRepository {
           stand: Value(jsonEncode(eingabe.toJson())),
           abgeschlossenAm: Value(jetzt),
           updatedAt: Value(jetzt),
+          notiz: grund == null
+              ? const Value.absent()
+              : Value(warum.isEmpty ? null : warum),
         ),
       );
       if (projektId == null) return;
-      final e = berechne(eingabe);
+      final bezeichnung = v.bezeichnung?.trim() ?? '';
+      final beschreibung = [
+        if (bezeichnung.isNotEmpty) bezeichnung,
+        if (warum.isNotEmpty) warum,
+      ].join('\n');
       await _db.into(_db.entwicklungProjektEintraege).insert(
             EntwicklungProjektEintraegeCompanion.insert(
               id: _uuid.v4(),
               projektId: projektId,
               art: EintragArt.rezeptur.schluessel,
-              titel: 'Rezepturstand ${v.nummer} abgeschlossen',
+              titel: '${kopf?.name ?? 'Rezeptur'} · Stand ${v.nummer}',
               datum: DateTime(jetzt.year, jetzt.month, jetzt.day),
               status: Value(EintragStatus.erledigt.schluessel),
-              beschreibung: Value(v.bezeichnung),
+              beschreibung:
+                  Value(beschreibung.isEmpty ? null : beschreibung),
               versionId: Value(id),
-              aenderungen: Value(
-                texteZuJson([
-                  'Endgewicht ${mengeText(e.endgewichtKg)} kg aus '
-                      '${mengeText(e.eingesetztKg)} kg',
-                  eingabe.positionen.length == 1
-                      ? '1 Zeile'
-                      : '${eingabe.positionen.length} Zeilen',
-                  if (e.fleischanteilProzent > 0)
-                    'Fleischanteil ${prozentText(e.fleischanteilProzent)}',
-                ]),
-              ),
+              aenderungen: Value(texteZuJson(aenderungen)),
             ),
           );
       await (_db.update(_db.entwicklungProjekte)

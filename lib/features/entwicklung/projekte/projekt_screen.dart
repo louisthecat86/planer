@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
+import '../../../core/ui/ablage.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../bericht/bericht_drucken.dart';
@@ -52,6 +53,26 @@ Future<void> projektSpeichern(
   try {
     await ref.read(projektRepositoryProvider).projektAendern(id, daten);
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Projekt');
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Speichern fehlgeschlagen: ${fehlerText(e)}')),
+      );
+    }
+  }
+}
+
+/// Ändert den Status und hält den Wechsel im Verlauf fest; Fehler
+/// erscheinen unten.
+Future<void> projektStatusAendern(
+  BuildContext context,
+  WidgetRef ref,
+  String id,
+  ProjektStatus neu,
+) async {
+  try {
+    await ref.read(projektRepositoryProvider).statusAendern(id, neu);
+    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Projektstatus');
   } catch (e) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -190,16 +211,23 @@ class ProjektScreen extends ConsumerWidget {
               ? const Center(
                   child: LeerHinweis('Dieses Projekt gibt es nicht mehr.'),
                 )
-              : TabBarView(
-                  children: [
-                    ProjektVerlauf(projekt: p),
-                    ProjektUebersicht(projekt: p),
-                    ProjektProzess(projekt: p),
-                    ProjektHaccp(projekt: p),
-                    ProjektSensorik(projekt: p),
-                    ProjektSpezifikation(projekt: p),
-                    ProjektDateien(projekt: p),
-                  ],
+              // Mails (auch direkt aus Outlook) und Dateien lassen sich auf
+              // jeden Reiter ziehen — sie kommen in den Verlauf.
+              : AblageZone(
+                  hinweis: 'Mail oder Datei loslassen — kommt in den Verlauf',
+                  onAbgelegt: (dateien) =>
+                      projektAblage(context, ref, p.id, dateien),
+                  child: TabBarView(
+                    children: [
+                      ProjektVerlauf(projekt: p),
+                      ProjektUebersicht(projekt: p),
+                      ProjektProzess(projekt: p),
+                      ProjektHaccp(projekt: p),
+                      ProjektSensorik(projekt: p),
+                      ProjektSpezifikation(projekt: p),
+                      ProjektDateien(projekt: p),
+                    ],
+                  ),
                 ),
         ),
       ),
@@ -321,9 +349,7 @@ class ProjektStammdaten extends ConsumerWidget {
                   ],
                   onChanged: (s) {
                     if (s != null && s != status) {
-                      speichern(
-                        EntwicklungProjekteCompanion(status: Value(s.schluessel)),
-                      );
+                      projektStatusAendern(context, ref, p.id, s);
                     }
                   },
                 ),

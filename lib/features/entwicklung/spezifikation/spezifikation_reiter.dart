@@ -16,14 +16,16 @@ import '../rezepturen/rezeptur_screen.dart' show TextFeld;
 import 'spez_angaben.dart';
 import 'spezifikation_dialog.dart';
 import 'spezifikation_dienst.dart';
+import 'spezifikation_vorschau.dart';
 import 'spezifikation_werte.dart';
 
 // Der Reiter „Spezifikation" eines Projekts: oben auf Knopfdruck die
-// Spezifikation auf Deutsch oder Englisch, darunter was das Projekt dafür
-// selbst angibt — Stückgewicht und Toleranz, Lagerung, Haltbarkeit,
-// Produkthinweise, mögliche Spuren und die Verpackung. Zutaten,
-// Allergene, Nährwerte und Hilfsstoffe kommen aus dem Rezepturstand, die
-// Sensorik aus ihrem Reiter.
+// Spezifikation auf Deutsch oder Englisch, darunter was hineinkommt
+// (Vorschau für den gewählten Stand) und was das Projekt dafür selbst
+// angibt — Artikelnummer und -bezeichnung, Stückgewicht und Toleranz,
+// Lagerung, Haltbarkeit, Produkthinweise, mögliche Spuren und die
+// Verpackung. Zutaten, Allergene, Nährwerte und Hilfsstoffe kommen aus
+// dem Rezepturstand, die Sensorik aus ihrem Reiter.
 
 /// Die Spezifikation eines Projekts.
 class ProjektSpezifikation extends ConsumerStatefulWidget {
@@ -125,10 +127,23 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
     });
   }
 
+  /// Der gewählte Stand — sonst der vorgeschlagene.
+  String? _stand(List<FreigabeStand> alle) =>
+      alle.any((s) => s.version.id == _versionId)
+          ? _versionId
+          : spezStandVorschlag(alle, widget.projekt.freigabeVersionId);
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    final staende =
+        ref.watch(spezStaendeProvider(widget.projekt.id)).valueOrNull ??
+            const <FreigabeStand>[];
+    final versionId = _stand(staende);
     final erstellen = _erstellenBereich(context);
+    final vorschau = versionId == null
+        ? null
+        : SpezVorschau(projektId: widget.projekt.id, versionId: versionId);
     final angaben = _angabenBereich(context);
     final verpackung = _verpackungBereich(context);
     return LayoutBuilder(
@@ -140,6 +155,10 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 erstellen,
+                if (vorschau != null) ...[
+                  const SizedBox(height: 16),
+                  vorschau,
+                ],
                 const SizedBox(height: 16),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,6 +176,10 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
           children: [
             erstellen,
+            if (vorschau != null) ...[
+              const SizedBox(height: 16),
+              vorschau,
+            ],
             const SizedBox(height: 16),
             angaben,
             const SizedBox(height: 16),
@@ -177,17 +200,19 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
       _kuerzelGeladen = true;
       _kuerzel.text = kuerzel.value ?? '';
     }
-    final alle = staende.valueOrNull ?? const <FreigabeStand>[];
-    final versionId = alle.any((s) => s.version.id == _versionId)
-        ? _versionId
-        : spezStandVorschlag(alle, p.freigabeVersionId);
+    final versionId = _stand(staende.valueOrNull ?? const <FreigabeStand>[]);
     final meldung = _meldung;
 
     Widget vorlagenZeile(SpezSprache s) {
       final d = ref.watch(spezVorlageProvider(s)).valueOrNull;
-      final felder =
-          ref.watch(spezVorlagePlatzhalterProvider(s)).valueOrNull ??
-              const <String>{};
+      // Null, solange die Felder noch gezählt werden.
+      final felder = ref.watch(spezVorlagePlatzhalterProvider(s)).valueOrNull;
+      final zusatz = switch (felder) {
+        null => '',
+        Set(isEmpty: true) =>
+          ' · noch nicht eingerichtet — das macht die App beim Erstellen',
+        final f => ' · ${f.length} Felder',
+      };
       return Padding(
         padding: const EdgeInsets.only(top: 2),
         child: Row(
@@ -203,8 +228,7 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
                 d == null
                     ? 'Vorlage ${s.label}: noch keine — unter „Vorlagen und '
                         'DeepL" wählen'
-                    : 'Vorlage ${s.label}: ${d.name}'
-                        '${felder.isEmpty ? '' : ' · ${felder.length} Felder'}',
+                    : 'Vorlage ${s.label}: ${d.name}$zusatz',
                 style: theme.textTheme.bodySmall?.copyWith(color: grau),
                 overflow: TextOverflow.ellipsis,
               ),
@@ -350,7 +374,8 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
     final a = _angaben;
-    final sensorik = Sensorik.aus(widget.projekt.sensorik);
+    final p = widget.projekt;
+    final sensorik = Sensorik.aus(p.sensorik);
     const abstand = SizedBox(height: 10);
     return Bereich(
       titel: 'Angaben',
@@ -360,6 +385,41 @@ class _ProjektSpezifikationState extends ConsumerState<ProjektSpezifikation>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Wrap(
+            spacing: 12,
+            runSpacing: 10,
+            children: [
+              SizedBox(
+                width: 180,
+                child: TextFeld(
+                  key: const ValueKey('spez-artikelnummer'),
+                  wert: p.artikelnummer ?? '',
+                  label: 'Artikelnummer',
+                  // Nach der Freigabe gilt die Nummer des Artikels.
+                  bearbeitbar: p.artikelId == null,
+                  hinweis: p.artikelId == null ? null : 'vom Artikel',
+                  onFertig: (t) => _aendern(
+                    EntwicklungProjekteCompanion(
+                      artikelnummer: Value(t.isEmpty ? null : t),
+                    ),
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 380,
+                child: TextFeld(
+                  key: const ValueKey('spez-bezeichnung'),
+                  wert: a.bezeichnung,
+                  label: 'Artikelbezeichnung',
+                  hinweis: p.artikelId == null
+                      ? 'leer: „${p.name}"'
+                      : 'leer: die des Artikels',
+                  onFertig: (t) => _speichern(_angaben.kopie(bezeichnung: t)),
+                ),
+              ),
+            ],
+          ),
+          abstand,
           Wrap(
             spacing: 12,
             runSpacing: 10,

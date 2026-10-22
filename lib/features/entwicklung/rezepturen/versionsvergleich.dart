@@ -9,55 +9,9 @@ import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import 'stand_vergleich.dart';
 
-/// Eine Zeile des Vergleichs: dieselbe Zutat oder Unterrezeptur in zwei
-/// Ständen.
-class VergleichsZeile {
-  const VergleichsZeile({required this.name, this.mengeA, this.mengeB});
-
-  final String name;
-
-  /// null: in diesem Stand nicht enthalten.
-  final double? mengeA;
-  final double? mengeB;
-
-  bool get neu => mengeA == null && mengeB != null;
-  bool get entfernt => mengeA != null && mengeB == null;
-  bool get geaendert =>
-      mengeA != null && mengeB != null && (mengeA! - mengeB!).abs() > 1e-9;
-}
-
-/// Stellt die Zeilen zweier Stände nebeneinander — gleiche Zutaten und
-/// Unterrezepturen zusammen, in der Reihenfolge von [a], Neues dahinter.
-List<VergleichsZeile> vergleicheZeilen(RechenRezeptur a, RechenRezeptur b) {
-  String schluessel(RechenPosition p) =>
-      p.zutat?.id ?? 'rezeptur:${p.unterrezeptur?.id}';
-  String name(RechenPosition p) =>
-      p.zutat?.name ?? p.unterrezeptur?.name ?? '?';
-
-  final reihenfolge = <String>[];
-  final namen = <String, String>{};
-  final mengenA = <String, double>{};
-  final mengenB = <String, double>{};
-  for (final p in a.positionen) {
-    final k = schluessel(p);
-    if (!mengenA.containsKey(k)) reihenfolge.add(k);
-    namen[k] = name(p);
-    mengenA[k] = (mengenA[k] ?? 0) + p.mengeKg;
-  }
-  for (final p in b.positionen) {
-    final k = schluessel(p);
-    if (!mengenA.containsKey(k) && !mengenB.containsKey(k)) {
-      reihenfolge.add(k);
-    }
-    namen[k] = name(p);
-    mengenB[k] = (mengenB[k] ?? 0) + p.mengeKg;
-  }
-  return [
-    for (final k in reihenfolge)
-      VergleichsZeile(name: namen[k]!, mengeA: mengenA[k], mengeB: mengenB[k]),
-  ];
-}
+export 'stand_vergleich.dart' show VergleichsZeile, vergleicheZeilen;
 
 /// Vergleicht zwei Stände einer Rezeptur: Zusammensetzung, Verlust und
 /// Ergebnis.

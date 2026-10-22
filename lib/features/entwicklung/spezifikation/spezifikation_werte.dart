@@ -377,3 +377,47 @@ Map<String, String> spezifikationsWerte(
   }
   return werte;
 }
+
+// ── Texte für die Vorschau im Reiter ──────────────────────────────────
+
+/// Die Nährwerte je 100 g in einer Zeile: „Energie 1050 kJ / 251 kcal ·
+/// Fett 13 g · …".
+String vorschauNaehrwerte(Map<String, String> w) => [
+      'Energie ${w['naehrwert.energie'] ?? ''}',
+      'Fett ${w['naehrwert.fett'] ?? ''} g',
+      'davon gesättigte Fettsäuren '
+          '${w['naehrwert.gesaettigte_fettsaeuren'] ?? ''} g',
+      'Kohlenhydrate ${w['naehrwert.kohlenhydrate'] ?? ''} g',
+      'davon Zucker ${w['naehrwert.zucker'] ?? ''} g',
+      'Eiweiß ${w['naehrwert.eiweiss'] ?? ''} g',
+      'Salz ${w['naehrwert.salz'] ?? ''} g',
+    ].join(' · ');
+
+/// Die Verarbeitungshilfsstoffe: „Siliziumdioxid (aus Gewürzmischung)" —
+/// „Keine", wenn es keine gibt.
+String vorschauHilfsstoffe(Map<String, String> w) => [
+      for (var i = 1; i <= kHilfsstoffPlaetze; i++)
+        if ((w['hilfsstoff.$i.name'] ?? '').trim().isNotEmpty)
+          switch (w['hilfsstoff.$i.quelle']?.trim() ?? '') {
+            '' || '-' => w['hilfsstoff.$i.name']!.trim(),
+            final aus => '${w['hilfsstoff.$i.name']!.trim()} (aus $aus)',
+          },
+    ].join(', ');
+
+/// Die Sensorik, je Merkmal eine Zeile — leer, wenn nichts eingetragen ist.
+String vorschauSensorik(Map<String, String> w) => [
+      for (final (schluessel, label) in const [
+        ('aussehen', 'Optik'),
+        ('konsistenz', 'Konsistenz'),
+        ('geruch', 'Geruch'),
+        ('geschmack', 'Geschmack'),
+      ])
+        if ((w['sensorik.$schluessel'] ?? '').trim().isNotEmpty)
+          '$label: ${w['sensorik.$schluessel']!.trim()}',
+    ].join('\n');
+
+/// Die möglichen Spuren: „Sellerie, Senf" — leer, wenn keine.
+String vorschauSpuren(Map<String, String> w) => [
+      for (final x in kSpezAllergene)
+        if (w['allergen.$x.spuren'] == 'X') allergenName(x, SpezSprache.de),
+    ].join(', ');
