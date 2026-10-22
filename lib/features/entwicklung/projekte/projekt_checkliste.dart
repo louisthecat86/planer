@@ -12,14 +12,15 @@ import '../rechenkern/rechenkern.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart' show projekteProvider;
 
-// Die Projekt-Checkliste rechnet sich selbst (F25): Sechs ihrer acht
+// Die Projekt-Checkliste rechnet sich selbst (F25): Sieben ihrer acht
 // Punkte sieht die App dem Projekt an — Artikel, Rezeptur, Nährwerte,
-// Spezifikation, Prozess und Sensorik. Von Hand bleiben nur das Etikett
-// und Navision. Gezählt wird überall gleich: in der Projektliste, in der
-// Übersicht, in den Zahlen der Entwicklung und im Bericht.
+// Spezifikation, Prozess, Sensorik und das Etikett an seinen
+// Pflichtangaben (F28). Von Hand bleibt nur Navision. Gezählt wird
+// überall gleich: in der Projektliste, in der Übersicht, in den Zahlen
+// der Entwicklung und im Bericht.
 
 /// Die Punkte, die man von Hand abhakt — die übrigen rechnet die App.
-const Set<String> kChecklisteVonHand = {'etikettErstellt', 'navisionAngelegt'};
+const Set<String> kChecklisteVonHand = {'navisionAngelegt'};
 
 /// Was für einen offenen Punkt zu tun ist — für „Als Nächstes".
 const Map<String, String> kCheckAufgabe = {
@@ -28,7 +29,7 @@ const Map<String, String> kCheckAufgabe = {
   'sensorikErstellt': 'Sensorik beschreiben',
   'prozessErstellt': 'Prozess beschreiben',
   'spezifikationErstellt': 'Spezifikation erstellen',
-  'etikettErstellt': 'Etikett erstellen und abhaken',
+  'etikettErstellt': 'Pflichtangaben des Etiketts prüfen',
   'artikelAngelegt': 'Als Artikel freigeben',
   'navisionAngelegt': 'In Navision anlegen und abhaken',
 };
@@ -53,7 +54,7 @@ class CheckStand {
   /// geprüften Stands, ohne ihn die einzige des Projekts.
   final String? rezepturId;
 
-  /// Von Hand abzuhaken: Etikett und Navision.
+  /// Von Hand abzuhaken: Navision.
   bool get vonHand => kChecklisteVonHand.contains(punkt.schluessel);
 }
 
@@ -219,7 +220,7 @@ ProjektCheckStand projektCheckStand({
         // Hakt die App beim Erstellen der Spezifikation selbst ab.
         return haken.contains(c.schluessel)
             ? erledigt()
-            : offen('Im Reiter „Spezifikation" erstellen');
+            : offen('Im Reiter „Produkt" erstellen');
 
       case 'prozessErstellt':
         final prozess = Prozessparameter.aus(p.prozess);
@@ -234,7 +235,7 @@ ProjektCheckStand projektCheckStand({
         }
         return offen(
           prozess.leer
-              ? 'Im Reiter „Prozess" eintragen und speichern'
+              ? 'Im Reiter „Herstellung" eintragen und speichern'
               : 'Noch keine Werte eingetragen',
         );
 
@@ -249,12 +250,40 @@ ProjektCheckStand projektCheckStand({
         if (fehlt.isEmpty) return erledigt();
         return offen(
           fehlt.length == 4
-              ? 'Im Reiter „Sensorik" beschreiben'
+              ? 'Im Reiter „Produkt" beschreiben'
               : 'Fehlt: ${_aufzaehlen(fehlt)}',
         );
 
+      case 'etikettErstellt':
+        // Die Pflichtangaben des Etiketts (F28): erledigt, wenn jede
+        // abgehakt ist oder nicht zutrifft.
+        final lmiv = lmivAus(p.etikettCheckliste);
+        final alle = kEtikettCheckliste.length;
+        final geprueft = kEtikettCheckliste
+            .where((l) => lmivStand(lmiv, l.schluessel).geprueft)
+            .length;
+        if (geprueft == alle) {
+          final nz = kEtikettCheckliste
+              .where(
+                (l) =>
+                    lmivStand(lmiv, l.schluessel) == LmivStand.trifftNichtZu,
+              )
+              .length;
+          final zusatz = switch (nz) {
+            0 => '',
+            1 => ' · 1 trifft nicht zu',
+            _ => ' · $nz treffen nicht zu',
+          };
+          return erledigt('Alle $alle Pflichtangaben geprüft$zusatz');
+        }
+        // Vor F28 von Hand abgehakt — das gilt weiter.
+        if (haken.contains(c.schluessel)) {
+          return erledigt('Früher von Hand abgehakt');
+        }
+        return offen('$geprueft von $alle Pflichtangaben geprüft');
+
       default:
-        // Von Hand: Etikett und Navision.
+        // Von Hand: Navision.
         return CheckStand(punkt: c, erledigt: haken.contains(c.schluessel));
     }
   }

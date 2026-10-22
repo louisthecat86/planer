@@ -22,15 +22,21 @@ import 'spezifikation_werte.dart';
 // selbst ein), für Englisch auf Wunsch mit DeepL übersetzen — dann wird
 // die gefüllte Mappe gespeichert.
 
-/// Öffnet das Fenster für [projekt].
+/// Öffnet das Fenster für [projekt] — auf Wunsch mit dem Stand
+/// [versionId] vorgewählt, sonst mit dem vorgeschlagenen.
 Future<void> spezifikationOeffnen(
   BuildContext context,
   EntwicklungsProjekt projekt, {
   SpezSprache sprache = SpezSprache.de,
+  String? versionId,
 }) =>
     showDialog<void>(
       context: context,
-      builder: (_) => SpezifikationDialog(projekt: projekt, sprache: sprache),
+      builder: (_) => SpezifikationDialog(
+        projekt: projekt,
+        sprache: sprache,
+        versionId: versionId,
+      ),
     );
 
 /// Hängt [endung] an, wenn der Speichern-Dialog es nicht tat.
@@ -201,6 +207,7 @@ class SpezifikationDialog extends ConsumerStatefulWidget {
     super.key,
     required this.projekt,
     this.sprache = SpezSprache.de,
+    this.versionId,
   });
 
   final EntwicklungsProjekt projekt;
@@ -208,13 +215,16 @@ class SpezifikationDialog extends ConsumerStatefulWidget {
   /// Die Sprache, mit der das Fenster aufgeht.
   final SpezSprache sprache;
 
+  /// Der Stand, mit dem das Fenster aufgeht — null: der vorgeschlagene.
+  final String? versionId;
+
   @override
   ConsumerState<SpezifikationDialog> createState() =>
       _SpezifikationDialogState();
 }
 
 class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
-  String? _versionId;
+  late String? _versionId = widget.versionId;
   late SpezSprache _sprache = widget.sprache;
   bool _uebersetzen = true;
   bool _ablegen = true;
@@ -419,8 +429,9 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     final staende =
         ref.read(spezStaendeProvider(widget.projekt.id)).valueOrNull ??
             const <FreigabeStand>[];
-    final versionId = _versionId ??
-        spezStandVorschlag(staende, widget.projekt.freigabeVersionId);
+    final versionId = staende.any((s) => s.version.id == _versionId)
+        ? _versionId
+        : spezStandVorschlag(staende, widget.projekt.freigabeVersionId);
     if (versionId == null) return;
     final hinterlegt = ref.read(deeplHinterlegtProvider).valueOrNull ?? false;
     setState(() {
@@ -464,7 +475,10 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
       _kuerzel.text = kuerzel.value ?? '';
     }
     final alle = staende.valueOrNull ?? const <FreigabeStand>[];
-    final versionId = _versionId ?? spezStandVorschlag(alle, freigegeben);
+    // Ein Stand, den es nicht (mehr) gibt, gilt nicht.
+    final versionId = alle.any((s) => s.version.id == _versionId)
+        ? _versionId
+        : spezStandVorschlag(alle, freigegeben);
     final kann =
         !_laeuft && versionId != null && vorlage.valueOrNull != null;
     final meldung = _meldung;

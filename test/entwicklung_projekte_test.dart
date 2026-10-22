@@ -20,6 +20,7 @@ import 'package:produktion_planer/features/entwicklung/projekte/projekt_verlauf.
 import 'package:produktion_planer/features/entwicklung/projekte/projekte_ansicht.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/zeitstrahl.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
 
 import 'helpers/test_db.dart';
 
@@ -66,14 +67,25 @@ void main() {
         schluessel: 'rezepturErstellt',
         erledigt: true,
       );
-      await repo.checklistePunkt(
+      // Die Pflichtangaben des Etiketts: abgehakt oder „trifft nicht zu"
+      // (F28).
+      await repo.lmivPunkt(
         id,
         schluessel: 'allergene',
-        erledigt: true,
-        etikett: true,
+        stand: LmivStand.erledigt,
+      );
+      await repo.lmivPunkt(
+        id,
+        schluessel: 'schutzgas',
+        stand: LmivStand.trifftNichtZu,
       );
       var p = (await repo.projekt(id))!;
       expect(checklisteAus(p.checkliste), {'rezepturErstellt'});
+      expect(lmivAus(p.etikettCheckliste), {
+        'allergene': LmivStand.erledigt,
+        'schutzgas': LmivStand.trifftNichtZu,
+      });
+      // Wer nur Haken liest (etwa eine frühere Version), sieht den einen.
       expect(checklisteAus(p.etikettCheckliste), {'allergene'});
 
       await repo.checklistePunkt(
@@ -81,8 +93,11 @@ void main() {
         schluessel: 'rezepturErstellt',
         erledigt: false,
       );
+      await repo.lmivPunkt(id, schluessel: 'allergene', stand: LmivStand.offen);
+      await repo.lmivPunkt(id, schluessel: 'schutzgas', stand: LmivStand.offen);
       p = (await repo.projekt(id))!;
       expect(p.checkliste, isNull);
+      expect(p.etikettCheckliste, isNull);
     });
 
     test('Einträge und Kommentare', () async {
@@ -260,6 +275,11 @@ void main() {
           neueZutaten: false,
           zielFett: 12,
           checkliste: checklisteZuJson({'artikelAngelegt'}),
+          // Zwei der zwölf Pflichtangaben geprüft (F28).
+          etikettCheckliste: lmivZuJson(const {
+            'bezeichnung': LmivStand.erledigt,
+            'schutzgas': LmivStand.trifftNichtZu,
+          }),
           sensorik: const Sensorik(aussehen: 'goldbraun').alsJson(),
           createdAt: zeit,
           updatedAt: zeit,
@@ -392,6 +412,9 @@ void main() {
             (ref, id) async => const FreigabeUebersicht(),
           ),
           rechenRezepturProvider.overrideWith((ref, id) async => eingabe),
+          // Der Reiter „Produkt": noch kein Stand für die Spezifikation.
+          spezStaendeProvider.overrideWith((ref, id) async => const []),
+          spezVorschauProvider.overrideWith((ref, a) async => null),
         ];
 
     Finder bereich(String titel, [String? untertitel]) =>
@@ -480,6 +503,11 @@ void main() {
       await tester.pump();
 
       expect(find.text('Schnitzel Wiener Art · Muster GmbH'), findsOneWidget);
+      // Fünf Reiter (F26).
+      expect(
+        [for (final t in tester.widgetList<Tab>(find.byType(Tab))) t.text],
+        ['Verlauf', 'Übersicht', 'Produkt', 'Herstellung', 'Dateien'],
+      );
       // Ein Projekt öffnet mit dem Verlauf (F21).
       expect(find.byType(Zeitstrahl), findsOneWidget);
       await reiter(tester, 'Übersicht');
@@ -495,15 +523,45 @@ void main() {
         find.text('Fehlt: Geruch, Geschmack und Konsistenz'),
         findsOneWidget,
       );
-      // Von Hand nur Etikett und Navision.
-      expect(find.text('von Hand'), findsNWidgets(2));
+      // Von Hand nur noch Navision.
+      expect(find.text('von Hand'), findsOneWidget);
+      // Das Etikett mit seinen Pflichtangaben — zugeklappt, es ist noch
+      // nicht dran.
       expect(
         find.byKey(const ValueKey('check-etikettErstellt')),
         findsOneWidget,
       );
-      expect(bereich('Etikett (LMIV)', '0 von 12'), findsOneWidget);
+      expect(find.text('2 von 12 Pflichtangaben geprüft'), findsOneWidget);
+      expect(find.byKey(const ValueKey('lmiv-zutaten')), findsNothing);
+      await tester.ensureVisible(find.text('Etikett erstellt'));
+      await tester.pump();
+      await tester.tap(find.text('Etikett erstellt'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      bool haken(String schluessel) =>
+          tester.widget<Checkbox>(find.byKey(ValueKey('lmiv-$schluessel')))
+              .value!;
+      bool trifftNichtZu(String schluessel) => tester
+          .widget<FilterChip>(find.byKey(ValueKey('lmiv-nz-$schluessel')))
+          .selected;
+      expect(haken('bezeichnung'), isTrue);
+      expect(haken('zutaten'), isFalse);
+      expect(trifftNichtZu('schutzgas'), isTrue);
+      expect(haken('schutzgas'), isFalse);
+      expect(trifftNichtZu('zutaten'), isFalse);
+      expect(find.text('trifft nicht zu'), findsNWidgets(12));
+      // Kein früherer Haken — nichts zurückzunehmen.
+      expect(find.byKey(const ValueKey('etikett-alter-haken')), findsNothing);
+      expect(bereich('Etikett (LMIV)'), findsNothing);
       expect(bereich('Rezepturen', '1'), findsOneWidget);
       expect(find.text('Stand 1 · abgeschlossen'), findsOneWidget);
+      // Die Artikelnummer steht nur hier — vor der Freigabe änderbar.
+      final nummer = find.descendant(
+        of: find.byKey(const ValueKey('stamm-artikelnummer')),
+        matching: find.byType(TextField),
+      );
+      expect(tester.widget<TextField>(nummer).enabled, isTrue);
+      expect(find.text('4711'), findsOneWidget);
       // Das Fließdiagramm: nur die Auswahl aus der Liste, kein PDF.
       expect(find.text('FD_101 · Testware paniert'), findsOneWidget);
       expect(
@@ -582,8 +640,7 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('projekt-erstellen')));
       await bilder(tester);
       for (final t in const [
-        'Spezifikation (Deutsch)…',
-        'Spezifikation (Englisch)…',
+        'Spezifikation…',
         'Etikett…',
         'Projektbericht (PDF)…',
       ]) {
@@ -717,7 +774,7 @@ void main() {
         findsOneWidget,
       );
 
-      await reiter(tester, 'Sensorik');
+      await reiter(tester, 'Produkt');
       expect(bereich('Sensorik'), findsOneWidget);
       expect(find.text('goldbraun'), findsOneWidget);
     });

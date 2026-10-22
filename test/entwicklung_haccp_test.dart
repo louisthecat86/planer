@@ -21,7 +21,8 @@ import 'helpers/test_db.dart';
 
 /// Tests für Prozessparameter, Gefahrenanalyse und Fließdiagramme: Versionen,
 /// Vergleich, Vorlage, Entscheidungsbaum, die eingefügte Liste — und die
-/// Reiter „Prozess" und „HACCP" einer Projektseite. Alles erfunden.
+/// Reiter „Herstellung" einer Projektseite mit Prozess und HACCP. Alles
+/// erfunden.
 void main() {
   ProzessFeld feld(String id, String wert) =>
       ProzessFeld(id: id, label: 'Feld $id', wert: wert);
@@ -524,7 +525,7 @@ void main() {
     testWidgets('Prozess: Version, Abschnitte, Änderung und Verwerfen',
         (tester) async {
       await zeige(tester, projekt(prozessJson: prozess.alsJson()));
-      await reiter(tester, 'Prozess');
+      await reiter(tester, 'Herstellung');
 
       expect(find.textContaining('Version 1.1'), findsWidgets);
       expect(find.text('Garen und Braten'), findsOneWidget);
@@ -544,7 +545,7 @@ void main() {
     testWidgets('Prozess: leer beginnen mit einem eigenen Abschnitt',
         (tester) async {
       await zeige(tester, projekt());
-      await reiter(tester, 'Prozess');
+      await reiter(tester, 'Herstellung');
 
       expect(find.text('Vorlage verwenden'), findsOneWidget);
       await tester.tap(find.text('Leer beginnen'));
@@ -560,7 +561,7 @@ void main() {
     testWidgets('HACCP: Gefahren mit Risiko und Lenkungspunkte',
         (tester) async {
       await zeige(tester, projekt(prozessJson: prozess.alsJson()));
-      await reiter(tester, 'HACCP');
+      await reiter(tester, 'Herstellung');
 
       expect(find.text('Metallteile'), findsOneWidget);
       expect(find.text('Risiko 6 · hoch'), findsOneWidget);
@@ -588,8 +589,56 @@ void main() {
         EntwicklungsProjekt.fromJson({...p.toJson(), 'haccp': null}),
         groesse: const Size(640, 800),
       );
-      await reiter(tester, 'HACCP');
+      await reiter(tester, 'Herstellung');
+      // Schmal: erst der Prozess, HACCP zum Umschalten.
+      expect(find.textContaining('Gefahrenanalyse fehlt noch'), findsNothing);
+      await tester.tap(find.text('HACCP'));
+      await tester.pump();
       expect(find.textContaining('Gefahrenanalyse fehlt noch'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Herstellung: breit nebeneinander, schmal umschalten',
+        (tester) async {
+      await zeige(tester, projekt(prozessJson: prozess.alsJson()));
+      await reiter(tester, 'Herstellung');
+      // Breit: Prozess und HACCP nebeneinander, ohne Umschalter.
+      expect(
+        find.byKey(const ValueKey('herstellung-umschalten')),
+        findsNothing,
+      );
+      expect(find.text('Garen und Braten'), findsOneWidget);
+      expect(find.text('Metallteile'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Metallteile')).dx,
+        greaterThan(tester.getTopLeft(find.text('Garen und Braten')).dx + 400),
+      );
+      // Eine Änderung, noch nicht gespeichert …
+      await tester.enterText(find.widgetWithText(TextField, '180'), '175');
+      await tester.pump();
+      expect(find.text('ungespeichert'), findsOneWidget);
+
+      // … übersteht den Wechsel auf schmal.
+      tester.view.physicalSize = const Size(900, 900);
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('herstellung-umschalten')),
+        findsOneWidget,
+      );
+      expect(find.text('ungespeichert'), findsOneWidget);
+      expect(find.text('175'), findsOneWidget);
+      // Schmal ist nur einer zu sehen.
+      expect(find.text('Metallteile'), findsNothing);
+      await tester.tap(find.text('HACCP'));
+      await tester.pump();
+      expect(find.text('Metallteile'), findsOneWidget);
+      expect(find.text('Garen und Braten'), findsNothing);
+      await tester.tap(find.text('Prozess'));
+      await tester.pump();
+      expect(find.text('175'), findsOneWidget);
+      expect(find.text('ungespeichert'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

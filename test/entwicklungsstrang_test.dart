@@ -505,8 +505,8 @@ void main() {
       );
       expect(e.spurenSatz, isEmpty);
       expect(e.fehlt, [
-        'Lagerbedingungen (Reiter „Spezifikation")',
-        'Nettofüllmenge (Reiter „Spezifikation", Verpackung)',
+        'Lagerbedingungen (Reiter „Produkt", Angaben)',
+        'Nettofüllmenge (Reiter „Produkt", Verpackung)',
         'Nährwerte für Paprika — die Tabelle ist sonst zu niedrig',
       ]);
       expect(etikettText(e), isNot(contains('Nettofüllmenge')));

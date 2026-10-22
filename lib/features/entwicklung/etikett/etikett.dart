@@ -128,8 +128,8 @@ EtikettInhalt etikettAus({
     stand: stand,
     fehlt: [
       if (e.zutatenliste.trim().isEmpty) 'Zutaten mit Menge',
-      if (lagerung.isEmpty) 'Lagerbedingungen (Reiter „Spezifikation")',
-      if (netto.isEmpty) 'Nettofüllmenge (Reiter „Spezifikation", Verpackung)',
+      if (lagerung.isEmpty) 'Lagerbedingungen (Reiter „Produkt", Angaben)',
+      if (netto.isEmpty) 'Nettofüllmenge (Reiter „Produkt", Verpackung)',
       if (e.ohneNaehrwerte.isNotEmpty)
         'Nährwerte für ${aufzaehlung(e.ohneNaehrwerte)} — die Tabelle ist '
             'sonst zu niedrig',

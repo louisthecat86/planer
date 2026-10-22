@@ -441,10 +441,11 @@ void main() {
         [
           'Die Vorlage hat keinen Platz für Artikelbezeichnung, '
               'Lagerbedingungen und Haltbarkeit — trag dort Platzhalter wie '
-              '{{artikelnummer}} ein oder wähl sie unter „Vorlagen und '
-              'DeepL" noch einmal.',
-          'Leer geblieben: Artikelnummer — einzutragen im Reiter '
-              '„Spezifikation".',
+              '{{artikelnummer}} ein oder wähl die Vorlage noch einmal '
+              '(„Ersetzen…").',
+          // Die Artikelnummer steht in den Stammdaten.
+          'Leer geblieben: Artikelnummer — einzutragen in der Übersicht bei '
+              'den Stammdaten.',
           'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt '
               'leer.',
         ],
@@ -607,10 +608,12 @@ void main() {
       );
       expect(
         e.hinweise,
-        contains(
-          'Leer geblieben: Artikelnummer, Lagerbedingungen und Haltbarkeit — '
-          'einzutragen im Reiter „Spezifikation".',
-        ),
+        containsAll([
+          'Leer geblieben: Artikelnummer — einzutragen in der Übersicht bei '
+              'den Stammdaten.',
+          'Leer geblieben: Lagerbedingungen und Haltbarkeit — einzutragen im '
+              'Reiter „Produkt" bei „Angaben".',
+        ]),
       );
       // Die eigene Bezeichnung — auch im Dateinamen.
       expect(e.dateiname, 'Frikadelle fein_ gebraten_Spezifikation.xlsx');

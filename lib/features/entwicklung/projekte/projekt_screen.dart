@@ -14,16 +14,14 @@ import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../etikett/etikett_dialog.dart';
 import '../freigabe/freigabe_ansicht.dart';
-import '../haccp/haccp_ansicht.dart';
-import '../haccp/prozess_ansicht.dart';
+import '../haccp/herstellung_reiter.dart';
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rezepturen/rezeptur_screen.dart' show TextFeld;
 import '../rezepturen/rezepturen_ansicht.dart';
 import '../spezifikation/spezifikation_dialog.dart';
-import '../spezifikation/spezifikation_reiter.dart';
-import '../spezifikation/spezifikation_werte.dart' show SpezSprache;
 import 'entwicklungsstrang.dart' show phaseVorDemArchiv;
 import 'fliessdiagramme_dialog.dart';
+import 'produkt_reiter.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_dateien.dart';
 import 'projekt_kopf.dart';
@@ -33,13 +31,13 @@ import 'projekt_verlauf.dart';
 
 /// Die Reiter einer Projektseite — vorn der Verlauf mit dem Zeitstrahl:
 /// Wer ein Projekt öffnet, sieht zuerst, wie es sich entwickelt hat (F21).
+/// „Produkt" bündelt Sensorik, Angaben, Verpackung und Spezifikation,
+/// „Herstellung" Prozess und HACCP (F26).
 enum ProjektReiter {
   verlauf('Verlauf'),
   uebersicht('Übersicht'),
-  prozess('Prozess'),
-  haccp('HACCP'),
-  sensorik('Sensorik'),
-  spezifikation('Spezifikation'),
+  produkt('Produkt'),
+  herstellung('Herstellung'),
   dateien('Dateien');
 
   const ProjektReiter(this.label);
@@ -53,16 +51,14 @@ void projektReiterZeigen(BuildContext context, ProjektReiter r) =>
 
 /// Wohin ein Punkt der Checkliste führt: in den Reiter, in dem er
 /// entsteht, oder in die Rezeptur — null, wenn er in der Übersicht selbst
-/// erledigt wird (Freigabe, Etikett, Navision).
+/// erledigt wird (Etikett, Freigabe, Navision).
 VoidCallback? checkpunktZiel(BuildContext context, CheckStand c) {
   final rezeptur = c.rezepturId;
   return switch (c.punkt.schluessel) {
     'prozessErstellt' => () =>
-        projektReiterZeigen(context, ProjektReiter.prozess),
-    'sensorikErstellt' => () =>
-        projektReiterZeigen(context, ProjektReiter.sensorik),
-    'spezifikationErstellt' => () =>
-        projektReiterZeigen(context, ProjektReiter.spezifikation),
+        projektReiterZeigen(context, ProjektReiter.herstellung),
+    'sensorikErstellt' || 'spezifikationErstellt' => () =>
+        projektReiterZeigen(context, ProjektReiter.produkt),
     'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
         oeffneRezeptur(context, rezeptur),
     _ => null,
@@ -121,8 +117,7 @@ Future<void> projektStatusAendern(
 
 String? _oderNull(String t) => t.trim().isEmpty ? null : t.trim();
 
-/// Ein Projekt: Verlauf, Übersicht, Prozess, HACCP, Sensorik,
-/// Spezifikation und Dateien.
+/// Ein Projekt: Verlauf, Übersicht, Produkt, Herstellung und Dateien.
 class ProjektScreen extends ConsumerWidget {
   const ProjektScreen({super.key, required this.projektId});
 
@@ -244,22 +239,12 @@ class ProjektScreen extends ConsumerWidget {
                 tooltip: 'Spezifikation, Etikett oder Projektbericht',
                 onSelected: (aktion) => aktion(),
                 itemBuilder: (_) => [
+                  // Sprache, Stand und Vorlage wählt man im Fenster.
                   PopupMenuItem(
                     value: () => spezifikationOeffnen(context, p),
                     child: const ListTile(
                       leading: Icon(Icons.table_view_outlined),
-                      title: Text('Spezifikation (Deutsch)…'),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: () => spezifikationOeffnen(
-                      context,
-                      p,
-                      sprache: SpezSprache.en,
-                    ),
-                    child: const ListTile(
-                      leading: Icon(Icons.translate),
-                      title: Text('Spezifikation (Englisch)…'),
+                      title: Text('Spezifikation…'),
                     ),
                   ),
                   PopupMenuItem(
@@ -393,10 +378,8 @@ class ProjektScreen extends ConsumerWidget {
                           children: [
                             ProjektVerlauf(projekt: p),
                             ProjektUebersicht(projekt: p),
-                            ProjektProzess(projekt: p),
-                            ProjektHaccp(projekt: p),
-                            ProjektSensorik(projekt: p),
-                            ProjektSpezifikation(projekt: p),
+                            ProjektProdukt(projekt: p),
+                            ProjektHerstellung(projekt: p),
                             ProjektDateien(projekt: p),
                           ],
                         ),
@@ -411,7 +394,7 @@ class ProjektScreen extends ConsumerWidget {
 }
 
 /// Die Übersicht: Stammdaten, Ziele und Notizen links; Freigabe, Bild,
-/// Rezepturen und Checklisten rechts.
+/// Rezepturen und die Checkliste rechts.
 class ProjektUebersicht extends StatelessWidget {
   const ProjektUebersicht({super.key, required this.projekt});
 
@@ -434,8 +417,6 @@ class ProjektUebersicht extends StatelessWidget {
       ProjektRezepturen(projekt: projekt),
       const SizedBox(height: 16),
       ProjektCheckliste(projekt: projekt),
-      const SizedBox(height: 16),
-      ProjektCheckliste(projekt: projekt, etikett: true),
     ];
     return LayoutBuilder(
       builder: (context, c) {
@@ -475,8 +456,8 @@ class ProjektUebersicht extends StatelessWidget {
   }
 }
 
-/// Status, Kunde, Artikelnummer, Idee, Vereinbarungen, Fließdiagramm und
-/// was neu ist.
+/// Kunde, Artikelnummer, Idee, Vereinbarungen, Fließdiagramm und was neu
+/// ist.
 class ProjektStammdaten extends ConsumerWidget {
   const ProjektStammdaten({super.key, required this.projekt});
 
@@ -520,8 +501,12 @@ class ProjektStammdaten extends ConsumerWidget {
               SizedBox(
                 width: 160,
                 child: TextFeld(
+                  key: const ValueKey('stamm-artikelnummer'),
                   wert: p.artikelnummer ?? '',
                   label: 'Artikelnummer',
+                  // Nach der Freigabe gilt die Nummer des Artikels.
+                  bearbeitbar: p.artikelId == null,
+                  hinweis: p.artikelId == null ? null : 'vom Artikel',
                   onFertig: (t) => speichern(
                     EntwicklungProjekteCompanion(
                       artikelnummer: Value(_oderNull(t)),
@@ -784,19 +769,13 @@ class _Notizen extends ConsumerWidget {
   }
 }
 
-/// Die Projekt-Checkliste — sechs Punkte rechnet die App selbst, Etikett
-/// und Navision hakt man ab (F25) — oder die Etiketten-Checkliste.
+/// Die Projekt-Checkliste: Sieben Punkte rechnet die App selbst — das
+/// Etikett aus seinen Pflichtangaben, die man darunter abhakt (F28) —,
+/// Navision hakt man von Hand ab (F25).
 class ProjektCheckliste extends ConsumerWidget {
-  const ProjektCheckliste({
-    super.key,
-    required this.projekt,
-    this.etikett = false,
-  });
+  const ProjektCheckliste({super.key, required this.projekt});
 
   final EntwicklungsProjekt projekt;
-
-  /// true: die Pflichtangaben des Etiketts, sonst die Projekt-Checkliste.
-  final bool etikett;
 
   Future<void> _haken(
     WidgetRef ref,
@@ -807,49 +786,12 @@ class ProjektCheckliste extends ConsumerWidget {
           projekt.id,
           schluessel: schluessel,
           erledigt: erledigt,
-          etikett: etikett,
         );
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Checkliste');
   }
 
-  Widget _hakenZeile(
-    WidgetRef ref,
-    CheckPunkt c, {
-    required bool erledigt,
-    String? untertitel,
-  }) =>
-      CheckboxListTile(
-        key: ValueKey('check-${c.schluessel}'),
-        dense: true,
-        visualDensity: VisualDensity.compact,
-        controlAffinity: ListTileControlAffinity.leading,
-        value: erledigt,
-        title: Text(c.label),
-        subtitle: untertitel == null ? null : Text(untertitel),
-        onChanged: (v) => _haken(ref, c.schluessel, erledigt: v ?? false),
-      );
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (etikett) {
-      final erledigt = checklisteAus(projekt.etikettCheckliste);
-      final anzahl = kEtikettCheckliste
-          .where((c) => erledigt.contains(c.schluessel))
-          .length;
-      return Bereich(
-        titel: 'Etikett (LMIV)',
-        icon: Icons.label_outline,
-        untertitel: '$anzahl von ${kEtikettCheckliste.length}',
-        innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
-        child: Column(
-          children: [
-            for (final c in kEtikettCheckliste)
-              _hakenZeile(ref, c, erledigt: erledigt.contains(c.schluessel)),
-          ],
-        ),
-      );
-    }
-
     final theme = Theme.of(context);
     final rezepturen = ref.watch(projektRezepturenProvider(projekt.id));
     final versionen = ref.watch(alleVersionenProvider);
@@ -864,12 +806,25 @@ class ProjektCheckliste extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final c in stand.punkte)
-            if (c.vonHand)
-              _hakenZeile(
-                ref,
-                c.punkt,
-                erledigt: c.erledigt,
-                untertitel: 'von Hand',
+            if (c.punkt.schluessel == 'etikettErstellt')
+              _EtikettPunkt(
+                projekt: projekt,
+                stand: c,
+                // Ist das Etikett als Nächstes dran, steht die Liste offen.
+                aufgeklappt:
+                    stand.naechster?.punkt.schluessel == 'etikettErstellt',
+              )
+            else if (c.vonHand)
+              CheckboxListTile(
+                key: ValueKey('check-${c.punkt.schluessel}'),
+                dense: true,
+                visualDensity: VisualDensity.compact,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: c.erledigt,
+                title: Text(c.punkt.label),
+                subtitle: const Text('von Hand'),
+                onChanged: (neu) =>
+                    _haken(ref, c.punkt.schluessel, erledigt: neu ?? false),
               )
             else
               _AutoPunkt(stand: c, onTap: checkpunktZiel(context, c)),
@@ -877,7 +832,8 @@ class ProjektCheckliste extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
             child: Text(
               'Die App hakt die Punkte selbst ab, sobald das Projekt sie '
-              'erfüllt — von Hand nur Etikett und Navision.',
+              'erfüllt. Beim Etikett hakst du die Pflichtangaben ab, '
+              'Navision von Hand.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -909,6 +865,28 @@ class ProjektCheckliste extends ConsumerWidget {
   }
 }
 
+/// Haken oder Kreis vor einem Punkt, den die App abhakt.
+class _CheckSymbol extends StatelessWidget {
+  const _CheckSymbol({required this.erledigt, required this.hinweis});
+
+  final bool erledigt;
+  final String hinweis;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: hinweis,
+      child: Icon(
+        erledigt ? Icons.check_circle : Icons.radio_button_unchecked,
+        size: 22,
+        color: erledigt
+            ? AppFarben.von(context).ok
+            : Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+}
+
 /// Ein Punkt, den die App selbst abhakt: Haken oder Kreis, dazu woran sie
 /// es sieht oder was noch fehlt; antippen führt dorthin, wo er entsteht.
 class _AutoPunkt extends StatelessWidget {
@@ -919,28 +897,174 @@ class _AutoPunkt extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final text = stand.text;
     return ListTile(
       key: ValueKey('check-${stand.punkt.schluessel}'),
       dense: true,
       visualDensity: VisualDensity.compact,
-      leading: Tooltip(
-        message: stand.erledigt
+      leading: _CheckSymbol(
+        erledigt: stand.erledigt,
+        hinweis: stand.erledigt
             ? 'Erledigt — die App hat es abgehakt'
             : 'Offen — die App hakt es ab, sobald es erfüllt ist',
-        child: Icon(
-          stand.erledigt ? Icons.check_circle : Icons.radio_button_unchecked,
-          size: 22,
-          color: stand.erledigt
-              ? AppFarben.von(context).ok
-              : theme.colorScheme.onSurfaceVariant,
-        ),
       ),
       title: Text(stand.punkt.label),
       subtitle: text == null ? null : Text(text),
       trailing: onTap == null ? null : const Icon(Icons.chevron_right, size: 18),
       onTap: onTap,
+    );
+  }
+}
+
+/// „Etikett erstellt" mit den Pflichtangaben nach LMIV zum Aufklappen
+/// (F28): erledigt, sobald jede abgehakt ist oder nicht zutrifft.
+class _EtikettPunkt extends ConsumerWidget {
+  const _EtikettPunkt({
+    required this.projekt,
+    required this.stand,
+    this.aufgeklappt = false,
+  });
+
+  final EntwicklungsProjekt projekt;
+  final CheckStand stand;
+
+  /// Aufgeklappt beginnen.
+  final bool aufgeklappt;
+
+  Future<void> _setze(WidgetRef ref, String schluessel, LmivStand neu) async {
+    await ref.read(projektRepositoryProvider).lmivPunkt(
+          projekt.id,
+          schluessel: schluessel,
+          stand: neu,
+        );
+    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Etikett');
+  }
+
+  Future<void> _alterHakenWeg(WidgetRef ref) async {
+    await ref.read(projektRepositoryProvider).checklistePunkt(
+          projekt.id,
+          schluessel: 'etikettErstellt',
+          erledigt: false,
+        );
+    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Checkliste');
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final lmiv = lmivAus(projekt.etikettCheckliste);
+    final alleGeprueft = kEtikettCheckliste
+        .every((l) => lmivStand(lmiv, l.schluessel).geprueft);
+    // Vor F28 von Hand abgehakt: Das zählt, bis man den Haken zurücknimmt.
+    final alterHaken = !alleGeprueft &&
+        checklisteAus(projekt.checkliste).contains('etikettErstellt');
+    final text = stand.text;
+    return ExpansionTile(
+      key: const ValueKey('check-etikettErstellt'),
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      initiallyExpanded: aufgeklappt,
+      shape: const Border(),
+      collapsedShape: const Border(),
+      expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+      childrenPadding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+      leading: _CheckSymbol(
+        erledigt: stand.erledigt,
+        hinweis: 'Erledigt, sobald jede Pflichtangabe abgehakt ist oder '
+            'nicht zutrifft',
+      ),
+      title: Text(stand.punkt.label),
+      subtitle: text == null ? null : Text(text),
+      children: [
+        for (final l in kEtikettCheckliste)
+          _LmivZeile(
+            punkt: l,
+            stand: lmivStand(lmiv, l.schluessel),
+            onAendern: (neu) => _setze(ref, l.schluessel, neu),
+          ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+          child: Text(
+            'Abhaken, was auf dem Etikett steht — „trifft nicht zu", wenn '
+            'eine Angabe für dieses Produkt nicht gilt, etwa die '
+            'Schutzatmosphäre bei Vakuum.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        if (alterHaken)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              key: const ValueKey('etikett-alter-haken'),
+              onPressed: () => _alterHakenWeg(ref),
+              icon: const Icon(Icons.undo, size: 16),
+              label: const Text('Früheren Haken zurücknehmen'),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Eine Pflichtangabe des Etiketts: abhaken oder „trifft nicht zu".
+class _LmivZeile extends StatelessWidget {
+  const _LmivZeile({
+    required this.punkt,
+    required this.stand,
+    required this.onAendern,
+  });
+
+  final CheckPunkt punkt;
+  final LmivStand stand;
+  final ValueChanged<LmivStand> onAendern;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final erledigt = stand == LmivStand.erledigt;
+    final nz = stand == LmivStand.trifftNichtZu;
+    void haken() =>
+        onAendern(erledigt ? LmivStand.offen : LmivStand.erledigt);
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: AppMasse.ecken,
+            onTap: haken,
+            child: Row(
+              children: [
+                Checkbox(
+                  key: ValueKey('lmiv-${punkt.schluessel}'),
+                  value: erledigt,
+                  visualDensity: VisualDensity.compact,
+                  onChanged: (_) => haken(),
+                ),
+                Expanded(
+                  child: Text(
+                    punkt.label,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: nz ? theme.colorScheme.onSurfaceVariant : null,
+                      decoration: nz ? TextDecoration.lineThrough : null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        FilterChip(
+          key: ValueKey('lmiv-nz-${punkt.schluessel}'),
+          label: const Text('trifft nicht zu'),
+          selected: nz,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          onSelected: (an) =>
+              onAendern(an ? LmivStand.trifftNichtZu : LmivStand.offen),
+        ),
+      ],
     );
   }
 }
@@ -1063,112 +1187,6 @@ class ProjektRezepturen extends ConsumerWidget {
                   ),
               ],
             ),
-    );
-  }
-}
-
-/// Die sensorische Beschreibung des Produkts.
-class ProjektSensorik extends ConsumerWidget {
-  const ProjektSensorik({super.key, required this.projekt});
-
-  final EntwicklungsProjekt projekt;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = Sensorik.aus(projekt.sensorik);
-    void speichern(Sensorik neu) => projektSpeichern(
-          context,
-          ref,
-          projekt.id,
-          EntwicklungProjekteCompanion(sensorik: Value(neu.alsJson())),
-        );
-    const abstand = SizedBox(height: 10);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-      children: [
-        Align(
-          alignment: Alignment.topLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 820),
-            child: Bereich(
-              titel: 'Sensorik',
-              icon: Icons.restaurant_menu,
-              untertitel: 'das fertige Produkt',
-              innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  TextFeld(
-                    wert: s.aussehen,
-                    label: 'Aussehen',
-                    mehrzeilig: true,
-                    onFertig: (t) => speichern(s.kopie(aussehen: t)),
-                  ),
-                  abstand,
-                  TextFeld(
-                    wert: s.geruch,
-                    label: 'Geruch',
-                    mehrzeilig: true,
-                    onFertig: (t) => speichern(s.kopie(geruch: t)),
-                  ),
-                  abstand,
-                  TextFeld(
-                    wert: s.geschmack,
-                    label: 'Geschmack',
-                    mehrzeilig: true,
-                    onFertig: (t) => speichern(s.kopie(geschmack: t)),
-                  ),
-                  abstand,
-                  TextFeld(
-                    wert: s.konsistenz,
-                    label: 'Konsistenz',
-                    mehrzeilig: true,
-                    onFertig: (t) => speichern(s.kopie(konsistenz: t)),
-                  ),
-                  abstand,
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 10,
-                    children: [
-                      SizedBox(
-                        width: 180,
-                        child: TextFeld(
-                          wert: s.laenge,
-                          label: 'Länge',
-                          onFertig: (t) => speichern(s.kopie(laenge: t)),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: TextFeld(
-                          wert: s.durchmesser,
-                          label: 'Durchmesser',
-                          onFertig: (t) => speichern(s.kopie(durchmesser: t)),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 180,
-                        child: TextFeld(
-                          wert: s.gewicht,
-                          label: 'Stückgewicht',
-                          onFertig: (t) => speichern(s.kopie(gewicht: t)),
-                        ),
-                      ),
-                    ],
-                  ),
-                  abstand,
-                  TextFeld(
-                    wert: s.zubereitung,
-                    label: 'Zubereitung',
-                    mehrzeilig: true,
-                    onFertig: (t) => speichern(s.kopie(zubereitung: t)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

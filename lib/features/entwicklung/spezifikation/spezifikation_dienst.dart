@@ -110,18 +110,24 @@ List<String> spezLuecken({
   ];
   bool leer(String name) =>
       platzhalter.contains(name) && (werte[name]?.trim() ?? '').isEmpty;
+  // Die Artikelnummer steht in den Stammdaten, alles andere im Reiter
+  // „Produkt".
   final eintragen = [
     for (final f in kSpezPflichtfelder)
-      if (f.name != 'zutaten' && leer(f.name)) f.label,
+      if (f.name != 'zutaten' && f.name != 'artikelnummer' && leer(f.name))
+        f.label,
   ];
   return [
     if (ohnePlatz.isNotEmpty)
       'Die Vorlage hat keinen Platz für ${_liste(ohnePlatz)} — trag dort '
-          'Platzhalter wie {{artikelnummer}} ein oder wähl sie unter '
-          '„Vorlagen und DeepL" noch einmal.',
+          'Platzhalter wie {{artikelnummer}} ein oder wähl die Vorlage '
+          'noch einmal („Ersetzen…").',
+    if (leer('artikelnummer'))
+      'Leer geblieben: Artikelnummer — einzutragen in der Übersicht bei '
+          'den Stammdaten.',
     if (eintragen.isNotEmpty)
       'Leer geblieben: ${_liste(eintragen)} — einzutragen im Reiter '
-          '„Spezifikation".',
+          '„Produkt" bei „Angaben".',
     if (leer('zutaten'))
       'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt leer.',
   ];
@@ -343,7 +349,7 @@ class SpezifikationDienst {
 
   /// Woraus die Spezifikation des Stands [versionId] entsteht: Projekt,
   /// Rezepturstand, Artikel (nach der Freigabe) und die Angaben im Reiter
-  /// „Spezifikation" — null, wenn es den Stand nicht gibt.
+  /// „Produkt" — null, wenn es den Stand nicht gibt.
   Future<SpezifikationsQuelle?> quelle({
     required EntwicklungsProjekt projekt,
     required String versionId,

@@ -7,8 +7,8 @@ import '../../../core/utils/fehler_text.dart';
 import 'spezifikation_dienst.dart';
 import 'spezifikation_werte.dart';
 
-// Die Vorschau im Reiter „Spezifikation": was mit dem gewählten Stand in
-// der Spezifikation stünde — Artikel, Zutaten, Allergene, Nährwerte,
+// Die Vorschau im Reiter „Produkt": was mit dem gewählten Stand in der
+// Spezifikation stünde — Artikel, Zutaten, Allergene, Nährwerte,
 // Hilfsstoffe, Sensorik, Lagerung. Was fehlt, steht in Warnfarbe da, mit
 // dem Ort, an dem man es einträgt.
 
@@ -64,7 +64,7 @@ class _Inhalt extends StatelessWidget {
   Widget build(BuildContext context) {
     final w = werte;
     String t(String schluessel) => w[schluessel]?.trim() ?? '';
-    const imReiter = 'fehlt — unten bei „Angaben" eintragen';
+    const beiAngaben = 'fehlt — bei „Angaben" eintragen';
     final gewicht = [
       if (t('sensorik.gewicht').isNotEmpty) t('sensorik.gewicht'),
       if (t('toleranz').isNotEmpty) 'Toleranz ${t('toleranz')}',
@@ -75,7 +75,7 @@ class _Inhalt extends StatelessWidget {
         _Zeile(
           label: 'Artikelnummer',
           wert: t('artikelnummer'),
-          fehlt: imReiter,
+          fehlt: 'fehlt — in der Übersicht bei den Stammdaten eintragen',
         ),
         _Zeile(label: 'Artikelbezeichnung', wert: t('bezeichnung')),
         _Zeile(label: 'Stückgewicht', wert: gewicht),
@@ -95,10 +95,14 @@ class _Inhalt extends StatelessWidget {
         _Zeile(
           label: 'Sensorik',
           wert: vorschauSensorik(w),
-          leer: 'im Reiter „Sensorik" eintragen',
+          leer: 'bei „Sensorik" eintragen',
         ),
-        _Zeile(label: 'Lagerung', wert: t('lagerung'), fehlt: imReiter),
-        _Zeile(label: 'Haltbarkeit', wert: t('haltbarkeit'), fehlt: imReiter),
+        _Zeile(label: 'Lagerung', wert: t('lagerung'), fehlt: beiAngaben),
+        _Zeile(
+          label: 'Haltbarkeit',
+          wert: t('haltbarkeit'),
+          fehlt: beiAngaben,
+        ),
       ],
     );
   }

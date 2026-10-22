@@ -59,9 +59,14 @@ Ein eigener Bereich für die Entwicklung neuer Produkte. Er ist mit einem
 eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 (`entwicklung_*`), Anhänge und Vorlagen verschlüsselt (ChaCha20-Poly1305).
 
-- **Projekte** mit Stammdaten, Zielen (Fett, Eiweiß, aw), Checklisten,
-  Verlauf mit Kommentaren, Prozess mit Versionen, HACCP-Gefahrenanalyse mit
-  Entscheidungsbaum, Fließdiagramm, Sensorik, Spezifikation und Dateien.
+- **Projekte** in fünf Reitern: **Verlauf** (mit Kommentaren),
+  **Übersicht** (Stammdaten mit Artikelnummer und Fließdiagramm, Ziele für
+  Fett, Eiweiß und aw, Notizen, Freigabe, Bild, Rezepturen, Checkliste),
+  **Produkt** (Sensorik mit Maßen, Stückgewicht und Toleranz, Angaben und
+  Verpackung für die Spezifikation, daneben was mit einem Stand in der
+  Spezifikation stünde), **Herstellung** (Prozess mit Versionen und die
+  HACCP-Gefahrenanalyse — breit nebeneinander, schmal zum Umschalten) und
+  **Dateien**. Jede Angabe gibt es nur einmal.
   Über jedem Reiter steht der **Projektkopf**: die Phase (Entwicklung ›
   Validierung › Produktion — antippen wechselt nach einer Rückfrage, der
   Wechsel steht als Meilenstein im Verlauf), der Fortschritt der
@@ -71,9 +76,11 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   im Menü daneben. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
   (ein abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit
   Werten), Spezifikation, Prozess, Sensorik (Aussehen, Geruch, Geschmack,
-  Konsistenz) und Artikel (Freigabe) sieht die App dem Projekt an — von
-  Hand bleiben nur Etikett und Navision; Liste, Übersicht, Zahlen und
-  Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
+  Konsistenz) und Artikel (Freigabe) sieht die App dem Projekt an; „Etikett
+  erstellt" klappt die zwölf Pflichtangaben nach LMIV auf und ist erledigt,
+  sobald jede abgehakt ist oder „trifft nicht zu" (ein früherer Haken von
+  Hand gilt weiter) — von Hand bleibt nur Navision. Liste, Übersicht,
+  Zahlen und Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
   (antippen schaltet um).
 - **HACCP-Entscheidungsbaum** wie im HACCP-Konzept: Frage 1 (Kontroll-
   maßnahmen vorhanden?) mit Zusatzfrage (Kontrolle hier aus
@@ -90,7 +97,12 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   App. Die Liste gehört zu den Entwicklungsdaten und steht nicht im Code.
 - **Rezepturen** in Ständen (Entwurf oder abgeschlossen): Zutatenliste
   nach LMIV mit hervorgehobenen Allergenen, Fleischanteil (QUID), Verlust,
-  Nährwerte je 100 g gerundet, Vergleich zweier Stände.
+  Nährwerte je 100 g gerundet, Vergleich zweier Stände. Über den Ständen
+  steht in Worten, was mit dem gewählten ist, und ein Hauptknopf je nach
+  Lage: „Stand abschließen…" beim Entwurf, „Weiterentwickeln" beim
+  abgeschlossenen — oder „Zum Entwurf", wenn schon einer in Arbeit ist.
+  Vergleichen, Etikett, Fleischanteil, Kopie und Löschen stehen unter
+  „Mehr".
 - **Entwicklungsstrang:** Beim Abschließen eines Stands fragt die App „Was
   ist neu und warum?" und vergleicht selbst mit dem vorigen Stand (Zeilen,
   Verlust, Fleischanteil, Nährwerte wie auf dem Etikett, Allergene,
@@ -119,17 +131,19 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   ein Ziel einstellen, Entwicklung in Zahlen.
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
-- **Spezifikation** (Excel) auf Knopfdruck auf Deutsch oder Englisch
-  (Texte auf Wunsch über DeepL): Das eigene Formblatt wird in der App
+- **Spezifikation** (Excel) auf Deutsch oder Englisch (Texte auf Wunsch
+  über DeepL) — ein Fenster für alles, oben unter „Erstellen" oder im
+  Reiter „Produkt": Das eigene Formblatt wird in der App
   gewählt und dabei selbst eingerichtet — die App erkennt die Beschriftungen
   (Artikelnummer, Zutaten, Nährwerte, Allergene mit ja/nein/Spuren,
   Verpackung …), setzt Platzhalter wie `{{zutaten}}` und hakt
   Kontrollkästchen an; einer Vorlage, der Platzhalter fehlen, ergänzt sie
   sie beim Erstellen. Was nicht aus Rezeptur oder Sensorik kommt
-  (Artikelnummer und -bezeichnung, Toleranz, Lagerung, Haltbarkeit,
-  Produkthinweise, Spuren, Verpackung, Kürzel), steht im Reiter
-  „Spezifikation" des Projekts — dort zeigt eine Vorschau, was mit dem
-  gewählten Stand hineinkommt, und was noch fehlt. Dazu ein
+  (Artikelbezeichnung, Lagerung, Haltbarkeit, Produkthinweise, Spuren,
+  Verpackung), steht im Reiter „Produkt", die Artikelnummer in den
+  Stammdaten; Kürzel und Datum fragt das Fenster. Im Reiter „Produkt"
+  zeigt eine Vorschau, was mit dem gewählten Stand hineinkommt, und was
+  noch fehlt — mit dem Ort, an dem man es einträgt. Dazu ein
   **Projektbericht** als PDF mit Checklisten und dem Entwicklungsweg
   (Stationen mit Grund, Änderungen, Kennzahlen und Rückmeldungen, Phasen,
   Freigabe).

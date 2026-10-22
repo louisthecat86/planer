@@ -53,7 +53,7 @@ final prozessVorlageProvider = Provider<ProzessVorlageDienst>(
   (ref) => ProzessVorlageDienst(ref.watch(entwicklungDateienProvider)),
 );
 
-/// Der Reiter „Prozess" eines Projekts.
+/// Der Prozess eines Projekts — im Reiter „Herstellung".
 class ProjektProzess extends ConsumerStatefulWidget {
   const ProjektProzess({super.key, required this.projekt});
 

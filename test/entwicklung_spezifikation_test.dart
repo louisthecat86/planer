@@ -17,6 +17,7 @@ import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/produkt_reiter.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
@@ -26,7 +27,6 @@ import 'package:produktion_planer/features/entwicklung/spezifikation/deepl.dart'
 import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
-import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_reiter.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_vorschau.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_vorlage.dart';
@@ -995,6 +995,7 @@ void main() {
       List<FreigabeStand>? liste,
       bool mitVorlage = false,
       bool schluessel = false,
+      String? versionId,
     }) async {
       tester.view.physicalSize = const Size(1400, 1100);
       tester.view.devicePixelRatio = 1;
@@ -1017,7 +1018,9 @@ void main() {
           ],
           child: MaterialApp(
             theme: AppTheme.light(),
-            home: Scaffold(body: SpezifikationDialog(projekt: projekt)),
+            home: Scaffold(
+              body: SpezifikationDialog(projekt: projekt, versionId: versionId),
+            ),
           ),
         ),
       );
@@ -1049,6 +1052,22 @@ void main() {
       expect(knopf(tester, 'Erstellen…').enabled, isFalse);
       // DeepL gibt es nur für Englisch.
       expect(find.text('Texte mit DeepL übersetzen'), findsNothing);
+    });
+
+    String? gewaehlterStand(WidgetTester tester) => tester
+        .widget<DropdownButton<String>>(find.byType(DropdownButton<String>))
+        .value;
+
+    testWidgets('mit dem Stand aus dem Reiter „Produkt"', (tester) async {
+      await zeige(tester, versionId: 'v2');
+      expect(gewaehlterStand(tester), 'v2');
+    });
+
+    testWidgets('einen Stand, den es nicht gibt, ersetzt der Vorschlag',
+        (tester) async {
+      await zeige(tester, versionId: 'gibt-es-nicht');
+      expect(gewaehlterStand(tester), 'v1');
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('mit Vorlage: Name und Größe, Erstellen frei', (tester) async {
@@ -1108,7 +1127,7 @@ void main() {
     });
   });
 
-  group('Reiter Spezifikation', () {
+  group('Reiter Produkt', () {
     final zeit = DateTime(2026, 10, 20);
     final rezeptur = Rezeptur(
       id: 'r1',
@@ -1205,7 +1224,7 @@ void main() {
           ],
           child: MaterialApp(
             theme: theme ?? AppTheme.light(),
-            home: Scaffold(body: ProjektSpezifikation(projekt: p)),
+            home: Scaffold(body: ProjektProdukt(projekt: p)),
           ),
         ),
       );
@@ -1225,7 +1244,7 @@ void main() {
           (w) => w is BereichKopf && w.titel == titel,
         );
 
-    testWidgets('breit: Erstellen oben, Angaben und Verpackung daneben',
+    testWidgets('breit: links die Eingaben, rechts die Spezifikation',
         (tester) async {
       const angaben = SpezAngaben(
         toleranz: '± 5',
@@ -1233,24 +1252,29 @@ void main() {
         verpackung: Verpackung(um: {'e2_kiste'}, atmosphaere: 'vakuum'),
       );
       await zeige(tester, projekt(spezifikation: angaben.alsJson()));
-      expect(bereich('Spezifikation erstellen'), findsOneWidget);
+      expect(bereich('Sensorik'), findsOneWidget);
+      expect(bereich('Spezifikation'), findsOneWidget);
       expect(
         find.text('Frikadelle Testart · Stand 1 · freigegeben'),
         findsOneWidget,
       );
-      // Deutsch hat eine Vorlage, Englisch noch nicht.
-      expect(knopf(tester, 'Deutsch erstellen…').enabled, isTrue);
-      expect(knopf(tester, 'Englisch erstellen…').enabled, isFalse);
-      expect(
-        find.text('Vorlage Deutsch: Formblatt.xlsx · 3 Felder'),
-        findsOneWidget,
-      );
-      expect(find.textContaining('Vorlage Englisch: noch keine'), findsOneWidget);
-      // Das Kürzel dieses Rechners steht schon da.
-      expect(find.widgetWithText(TextField, 'TE'), findsOneWidget);
+      // Ein Weg zum Erstellen: das Fenster mit Sprache, Vorlage, Kürzel und
+      // Datum — keine eigenen Knöpfe je Sprache mehr.
+      expect(knopf(tester, 'Spezifikation erstellen…').enabled, isTrue);
+      expect(find.text('Deutsch erstellen…'), findsNothing);
+      expect(find.textContaining('Vorlage Deutsch'), findsNothing);
+      expect(find.widgetWithText(TextField, 'TE'), findsNothing);
 
+      // Stückgewicht und Toleranz stehen einmal — bei der Sensorik.
       expect(find.text('± 5'), findsOneWidget);
       expect(find.text('80 g'), findsOneWidget);
+      final gewicht =
+          tester.getTopLeft(find.byKey(const ValueKey('spez-gewicht'))).dy;
+      expect(gewicht, greaterThan(tester.getTopLeft(bereich('Sensorik')).dy));
+      expect(gewicht, lessThan(tester.getTopLeft(bereich('Angaben')).dy));
+      // Die Artikelnummer steht in den Stammdaten.
+      expect(find.byKey(const ValueKey('spez-artikelnummer')), findsNothing);
+
       bool gewaehlt(String label) =>
           tester.widget<FilterChip>(find.widgetWithText(FilterChip, label))
               .selected;
@@ -1264,11 +1288,33 @@ void main() {
             .selected,
         isTrue,
       );
-      // Angaben und Verpackung stehen nebeneinander.
+      // Rechts neben den Eingaben; links Sensorik, Angaben, Verpackung
+      // untereinander.
       expect(
-        tester.getTopLeft(bereich('Verpackung')).dx,
+        tester.getTopLeft(bereich('Spezifikation')).dx,
         greaterThan(tester.getTopLeft(bereich('Angaben')).dx + 300),
       );
+      expect(
+        tester.getTopLeft(bereich('Verpackung')).dx,
+        tester.getTopLeft(bereich('Angaben')).dx,
+      );
+      expect(
+        tester.getTopLeft(bereich('Verpackung')).dy,
+        greaterThan(tester.getTopLeft(bereich('Angaben')).dy),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Erstellen öffnet das Fenster mit dem gewählten Stand',
+        (tester) async {
+      await zeige(tester, projekt());
+      await tester.tap(find.byKey(const ValueKey('spez-erstellen')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      final fenster = find.byType(SpezifikationDialog);
+      expect(fenster, findsOneWidget);
+      expect(tester.widget<SpezifikationDialog>(fenster).versionId, 'v1');
+      expect(find.text('Spezifikation erstellen'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -1296,11 +1342,17 @@ void main() {
       expect(inVorschau(find.text('Optik: goldbraun')), findsOneWidget);
       // Artikelnummer und Lagerung fehlen — mit dem Ort zum Eintragen.
       expect(
-        inVorschau(find.text('fehlt — unten bei „Angaben" eintragen')),
-        findsNWidgets(2),
+        inVorschau(
+          find.text('fehlt — in der Übersicht bei den Stammdaten eintragen'),
+        ),
+        findsOneWidget,
       );
-      // Und dort stehen die Felder dafür.
-      expect(find.byKey(const ValueKey('spez-artikelnummer')), findsOneWidget);
+      expect(
+        inVorschau(find.text('fehlt — bei „Angaben" eintragen')),
+        findsOneWidget,
+      );
+      // Und hier stehen die Felder dafür.
+      expect(find.byKey(const ValueKey('spez-lagerung')), findsOneWidget);
       expect(find.byKey(const ValueKey('spez-bezeichnung')), findsOneWidget);
       expect(
         find.text('leer: „Frikadelle Testart"'),
@@ -1318,24 +1370,28 @@ void main() {
         theme: AppTheme.dark(),
       );
       expect(tester.takeException(), isNull);
-      expect(bereich('Angaben'), findsOneWidget);
-      // Untereinander: die Verpackung unter den Angaben.
-      expect(
-        tester.getTopLeft(bereich('Angaben')).dx,
-        tester.getTopLeft(bereich('Spezifikation erstellen')).dx,
-      );
+      expect(bereich('Sensorik'), findsOneWidget);
+      final liste = find
+          .descendant(
+            of: find.byType(ListView),
+            matching: find.byType(Scrollable),
+          )
+          .first;
       await tester.scrollUntilVisible(
         find.text('Einzelverpackung'),
         300,
-        scrollable: find
-            .descendant(
-              of: find.byType(ListView),
-              matching: find.byType(Scrollable),
-            )
-            .first,
+        scrollable: liste,
       );
       await tester.pump();
       expect(find.text('Einzelverpackung'), findsOneWidget);
+      // Untereinander: die Spezifikation am Ende, so breit wie alles.
+      await tester.scrollUntilVisible(
+        bereich('Spezifikation'),
+        300,
+        scrollable: liste,
+      );
+      await tester.pump();
+      expect(tester.getTopLeft(bereich('Spezifikation')).dx, lessThan(60));
       expect(tester.takeException(), isNull);
     });
   });

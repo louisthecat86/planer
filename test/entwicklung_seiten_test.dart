@@ -96,21 +96,26 @@ void main() {
         ],
       );
 
-  final overrides = [
-    zutatenProvider.overrideWith((ref) => Stream.value([schwein, senf])),
-    alleZutatenProvider.overrideWith(
-      (ref) => Stream.value({'z1': schwein, 'z2': senf}),
-    ),
-    rezepturenProvider.overrideWith((ref) => Stream.value([rezeptur])),
-    alleRezepturenProvider.overrideWith(
-      (ref) => Stream.value({'r1': rezeptur}),
-    ),
-    alleVersionenProvider.overrideWith((ref) => Stream.value([v1, v2])),
-    rezepturProvider.overrideWith((ref, id) => Stream.value(rezeptur)),
-    versionenProvider.overrideWith((ref, id) => Stream.value([v2, v1])),
-    positionenProvider.overrideWith((ref, id) => Stream.value(positionen)),
-    rechenRezepturProvider.overrideWith((ref, id) async => rechen()),
-  ];
+  /// [staende]: die Stände der Rezeptur, der neueste zuerst — sonst ein
+  /// abgeschlossener und ein Entwurf.
+  List<Override> overrides({List<RezepturVersion>? staende}) =>
+      [
+        zutatenProvider.overrideWith((ref) => Stream.value([schwein, senf])),
+        alleZutatenProvider.overrideWith(
+          (ref) => Stream.value({'z1': schwein, 'z2': senf}),
+        ),
+        rezepturenProvider.overrideWith((ref) => Stream.value([rezeptur])),
+        alleRezepturenProvider.overrideWith(
+          (ref) => Stream.value({'r1': rezeptur}),
+        ),
+        alleVersionenProvider.overrideWith((ref) => Stream.value([v1, v2])),
+        rezepturProvider.overrideWith((ref, id) => Stream.value(rezeptur)),
+        versionenProvider.overrideWith(
+          (ref, id) => Stream.value(staende ?? [v2, v1]),
+        ),
+        positionenProvider.overrideWith((ref, id) => Stream.value(positionen)),
+        rechenRezepturProvider.overrideWith((ref, id) async => rechen()),
+      ];
 
   /// Ein Bereich über seinen Kopf — der Titel steht dort mit dem Zusatz
   /// in einem Text.
@@ -123,13 +128,14 @@ void main() {
     Widget seite, {
     Size groesse = const Size(1400, 900),
     ThemeData? theme,
+    List<RezepturVersion>? staende,
   }) async {
     tester.view.physicalSize = groesse;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: overrides,
+        overrides: overrides(staende: staende),
         child: MaterialApp(
           theme: theme ?? AppTheme.light(),
           home: Scaffold(body: seite),
@@ -180,9 +186,79 @@ void main() {
     expect(bereich('Zutatenliste'), findsOneWidget);
     expect(find.text('Schweineschulter S3'), findsOneWidget);
     expect(bereich('Nährwerte je 100 g'), findsOneWidget);
-    // Der Entwurf ist bearbeitbar, der Stand lässt sich abschließen.
-    expect(find.text('Abschließen'), findsOneWidget);
-    expect(find.text('Vergleichen'), findsOneWidget);
+    // Der Entwurf ist in Arbeit; der eine Hauptknopf schließt ihn ab.
+    expect(find.text('Entwurf · in Arbeit'), findsOneWidget);
+    expect(find.text('Stand abschließen…'), findsOneWidget);
+    // Alles andere steht unter „Mehr".
+    expect(find.text('Mit anderem Stand vergleichen…'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('stand-mehr')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    for (final t in const [
+      'Mit anderem Stand vergleichen…',
+      'Etikett ansehen…',
+      'Fleischanteil einstellen…',
+      'Neuen Stand daraus anlegen',
+      'Entwurf löschen…',
+    ]) {
+      expect(find.text(t), findsOneWidget, reason: t);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Rezeptur: abgeschlossener Stand — zum Entwurf in Arbeit',
+      (tester) async {
+    await zeige(tester, const RezepturScreen(rezepturId: 'r1'));
+    await tester.pump();
+    await tester.tap(find.text('Stand 1'));
+    await tester.pump();
+    await tester.pump();
+    // In Worten, was mit ihm ist (ohne Datum: die Testdaten haben keins).
+    expect(
+      tester.widget<Text>(find.byKey(const ValueKey('stand-zustand'))).data,
+      'abgeschlossen',
+    );
+    // Stand 2 ist schon in Arbeit — dorthin führt der Hauptknopf.
+    expect(find.text('Zum Entwurf (Stand 2)'), findsOneWidget);
+    expect(find.text('Weiterentwickeln'), findsNothing);
+    await tester.tap(find.text('Zum Entwurf (Stand 2)'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Stand abschließen…'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Rezeptur: nur abgeschlossen — weiterentwickeln',
+      (tester) async {
+    await zeige(
+      tester,
+      const RezepturScreen(rezepturId: 'r1'),
+      staende: [v1],
+    );
+    await tester.pump();
+    expect(find.text('Weiterentwickeln'), findsOneWidget);
+    expect(find.text('Stand abschließen…'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('stand-mehr')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Etikett ansehen…'), findsOneWidget);
+    // Weiterentwickeln steht schon als Knopf da, löschen lässt sich nur
+    // ein Entwurf, vergleichen erst mit zwei Ständen.
+    expect(find.text('Neuen Stand daraus anlegen'), findsNothing);
+    expect(find.text('Entwurf löschen…'), findsNothing);
+    expect(find.text('Mit anderem Stand vergleichen…'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Rezeptur: Name und Löschen im Menü der Kopfzeile',
+      (tester) async {
+    await zeige(tester, const RezepturScreen(rezepturId: 'r1'));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('rezeptur-mehr')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Name und Angaben…'), findsOneWidget);
+    expect(find.text('Rezeptur löschen…'), findsOneWidget);
   });
 
   testWidgets('Rezeptur schmal und dunkel: untereinander, kein Überlauf',
@@ -202,9 +278,13 @@ void main() {
     await zeige(tester, const RezepturScreen(rezepturId: 'r1'));
     await tester.pump();
 
-    await tester.tap(find.text('Vergleichen'));
+    await tester.tap(find.byKey(const ValueKey('stand-mehr')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Mit anderem Stand vergleichen…'));
     await tester.pump();
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Vergleich'), findsOneWidget);
     await tester.tap(find.text('Schließen'));

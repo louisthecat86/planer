@@ -183,6 +183,58 @@ String? checklisteZuJson(Set<String> erledigt) => erledigt.isEmpty
     ? null
     : jsonEncode({for (final s in erledigt.toList()..sort()) s: true});
 
+/// Wie eine Pflichtangabe des Etiketts steht (F28): offen, abgehakt oder
+/// für dieses Produkt nicht zutreffend — etwa die Schutzatmosphäre bei
+/// Vakuum.
+enum LmivStand {
+  offen,
+  erledigt,
+  trifftNichtZu;
+
+  /// Geprüft: abgehakt oder „trifft nicht zu".
+  bool get geprueft => this != LmivStand.offen;
+}
+
+/// So steht „trifft nicht zu" im JSON der Etiketten-Checkliste; ein
+/// abgehakter Punkt steht dort wie in jeder Checkliste als `true`.
+const String kLmivTrifftNichtZu = 'trifftNichtZu';
+
+/// Liest die Etiketten-Checkliste: je Punkt abgehakt oder „trifft nicht
+/// zu" — was nicht drinsteht, ist offen.
+Map<String, LmivStand> lmivAus(String? json) {
+  if (json == null || json.trim().isEmpty) return <String, LmivStand>{};
+  try {
+    final daten = jsonDecode(json);
+    if (daten is! Map<String, dynamic>) return <String, LmivStand>{};
+    return {
+      for (final MapEntry(:key, :value) in daten.entries)
+        if (value == true)
+          key: LmivStand.erledigt
+        else if (value == kLmivTrifftNichtZu)
+          key: LmivStand.trifftNichtZu,
+    };
+  } on FormatException {
+    return <String, LmivStand>{};
+  }
+}
+
+/// Der Stand des Punkts [schluessel] — ohne Eintrag offen.
+LmivStand lmivStand(Map<String, LmivStand> staende, String schluessel) =>
+    staende[schluessel] ?? LmivStand.offen;
+
+/// Schreibt die Etiketten-Checkliste als JSON — null, wenn alles offen ist.
+String? lmivZuJson(Map<String, LmivStand> staende) {
+  final schluessel = [
+    for (final MapEntry(:key, :value) in staende.entries)
+      if (value.geprueft) key,
+  ]..sort();
+  if (schluessel.isEmpty) return null;
+  return jsonEncode(<String, Object>{
+    for (final s in schluessel)
+      s: staende[s] == LmivStand.erledigt ? true : kLmivTrifftNichtZu,
+  });
+}
+
 /// Die sensorische Beschreibung eines Produkts.
 class Sensorik {
   const Sensorik({

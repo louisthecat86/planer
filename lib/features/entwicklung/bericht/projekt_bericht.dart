@@ -511,9 +511,10 @@ Future<Uint8List> baueProjektPdf(
   final haccp = Haccp.aus(p.haccp);
   final checkliste = b.checkliste ??
       projektCheckStand(projekt: p, rezepturen: const [], versionen: const []);
-  final etikett = checklisteAus(p.etikettCheckliste);
-  final etikettErledigt =
-      kEtikettCheckliste.where((c) => etikett.contains(c.schluessel)).length;
+  final etikett = lmivAus(p.etikettCheckliste);
+  final etikettGeprueft = kEtikettCheckliste
+      .where((c) => lmivStand(etikett, c.schluessel).geprueft)
+      .length;
   final status = ProjektStatus.aus(p.status);
 
   doc.addPage(
@@ -745,15 +746,19 @@ Future<Uint8List> baueProjektPdf(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   _text(
-                    'Etikett (LMIV) · $etikettErledigt von '
-                    '${kEtikettCheckliste.length} erledigt',
+                    'Etikett (LMIV) · $etikettGeprueft von '
+                    '${kEtikettCheckliste.length} Pflichtangaben geprüft',
                     farbe: _grau,
                   ),
                   pw.SizedBox(height: 2),
                   for (final c in kEtikettCheckliste)
                     _text(
-                      '${etikett.contains(c.schluessel) ? '[x]' : '[ ]'} '
-                      '${c.label}',
+                      switch (lmivStand(etikett, c.schluessel)) {
+                        LmivStand.erledigt => '[x] ${c.label}',
+                        LmivStand.trifftNichtZu =>
+                          '[-] ${c.label} (trifft nicht zu)',
+                        LmivStand.offen => '[ ] ${c.label}',
+                      },
                     ),
                 ],
               ),

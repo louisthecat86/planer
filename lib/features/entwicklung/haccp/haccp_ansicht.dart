@@ -41,7 +41,7 @@ StatusArt lenkungsArt(Lenkungsart a) => switch (a) {
       Lenkungsart.kp => StatusArt.neutral,
     };
 
-/// Der Reiter „HACCP" eines Projekts.
+/// Die HACCP-Gefahrenanalyse eines Projekts — im Reiter „Herstellung".
 class ProjektHaccp extends ConsumerWidget {
   const ProjektHaccp({super.key, required this.projekt});
 

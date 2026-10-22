@@ -132,27 +132,40 @@ class ProjektRepository {
             .write(const EntwicklungRezepturenCompanion(projektId: Value(null)));
       });
 
-  /// Hakt einen Punkt einer Checkliste ab oder nimmt den Haken weg.
+  /// Hakt einen Punkt der Projekt-Checkliste ab oder nimmt den Haken weg.
   Future<void> checklistePunkt(
     String id, {
     required String schluessel,
     required bool erledigt,
-    bool etikett = false,
   }) async {
     final p = await projekt(id);
     if (p == null) return;
-    final punkte = checklisteAus(etikett ? p.etikettCheckliste : p.checkliste);
+    final punkte = checklisteAus(p.checkliste);
     if (erledigt) {
       punkte.add(schluessel);
     } else {
       punkte.remove(schluessel);
     }
-    final json = Value(checklisteZuJson(punkte));
     await projektAendern(
       id,
-      etikett
-          ? EntwicklungProjekteCompanion(etikettCheckliste: json)
-          : EntwicklungProjekteCompanion(checkliste: json),
+      EntwicklungProjekteCompanion(checkliste: Value(checklisteZuJson(punkte))),
+    );
+  }
+
+  /// Setzt eine Pflichtangabe des Etiketts auf [stand] (F28).
+  Future<void> lmivPunkt(
+    String id, {
+    required String schluessel,
+    required LmivStand stand,
+  }) async {
+    final p = await projekt(id);
+    if (p == null) return;
+    final staende = lmivAus(p.etikettCheckliste)..[schluessel] = stand;
+    await projektAendern(
+      id,
+      EntwicklungProjekteCompanion(
+        etikettCheckliste: Value(lmivZuJson(staende)),
+      ),
     );
   }
 

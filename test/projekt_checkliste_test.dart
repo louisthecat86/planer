@@ -24,6 +24,7 @@ void main() {
     String? freigabeVersionId,
     Sensorik sensorik = const Sensorik(),
     String? prozess,
+    Map<String, LmivStand> etikett = const {},
   }) =>
       EntwicklungsProjekt(
         id: id,
@@ -36,6 +37,7 @@ void main() {
         freigegebenAm: freigegebenAm,
         freigabeVersionId: freigabeVersionId,
         checkliste: checklisteZuJson(haken),
+        etikettCheckliste: lmivZuJson(etikett),
         sensorik: sensorik.alsJson(),
         prozess: prozess,
         createdAt: zeit,
@@ -127,6 +129,44 @@ void main() {
     });
   });
 
+  group('Etiketten-Checkliste (F28)', () {
+    test('abgehakt, trifft nicht zu, offen — hin und zurück', () {
+      final staende = {
+        'zutaten': LmivStand.erledigt,
+        'schutzgas': LmivStand.trifftNichtZu,
+        'mhd': LmivStand.offen,
+      };
+      final json = lmivZuJson(staende);
+      expect(json, '{"schutzgas":"trifftNichtZu","zutaten":true}');
+      expect(lmivAus(json), {
+        'schutzgas': LmivStand.trifftNichtZu,
+        'zutaten': LmivStand.erledigt,
+      });
+      expect(lmivStand(lmivAus(json), 'mhd'), LmivStand.offen);
+      // Alles offen: nichts zu speichern.
+      expect(lmivZuJson(const {'mhd': LmivStand.offen}), isNull);
+      expect(lmivZuJson(const {}), isNull);
+      expect(LmivStand.trifftNichtZu.geprueft, isTrue);
+      expect(LmivStand.offen.geprueft, isFalse);
+    });
+
+    test('frühere Listen und Unbekanntes', () {
+      // Wie bisher (und aus der Suite): nur Haken.
+      expect(lmivAus('{"zutaten":true,"mhd":false}'), {
+        'zutaten': LmivStand.erledigt,
+      });
+      expect(lmivAus('{"zutaten":"irgendwas","mhd":1}'), isEmpty);
+      expect(lmivAus('kaputt'), isEmpty);
+      expect(lmivAus('[1,2]'), isEmpty);
+      expect(lmivAus(null), isEmpty);
+      // Wer nur Haken liest, sieht „trifft nicht zu" als offen.
+      expect(
+        checklisteAus(lmivZuJson(const {'quid': LmivStand.trifftNichtZu})),
+        isEmpty,
+      );
+    });
+  });
+
   group('Checkliste (F25)', () {
     String? text(ProjektCheckStand s, String schluessel) =>
         s.punkt(schluessel)!.text;
@@ -151,22 +191,22 @@ void main() {
       );
       expect(
         text(s, 'spezifikationErstellt'),
-        'Im Reiter „Spezifikation" erstellen',
+        'Im Reiter „Produkt" erstellen',
       );
       expect(
         text(s, 'prozessErstellt'),
-        'Im Reiter „Prozess" eintragen und speichern',
+        'Im Reiter „Herstellung" eintragen und speichern',
       );
-      expect(text(s, 'sensorikErstellt'), 'Im Reiter „Sensorik" beschreiben');
-      // Von Hand: Etikett und Navision.
+      expect(text(s, 'sensorikErstellt'), 'Im Reiter „Produkt" beschreiben');
+      // Von Hand nur noch Navision; das Etikett an seinen Pflichtangaben.
       expect(
         [
           for (final p in s.punkte)
             if (p.vonHand) p.punkt.schluessel,
         ],
-        ['etikettErstellt', 'navisionAngelegt'],
+        ['navisionAngelegt'],
       );
-      expect(text(s, 'etikettErstellt'), isNull);
+      expect(text(s, 'etikettErstellt'), '0 von 12 Pflichtangaben geprüft');
     });
 
     test('als Nächstes: der erste offene Punkt in Arbeitsreihenfolge', () {
@@ -182,7 +222,7 @@ void main() {
         'Sensorik beschreiben',
         'Prozess beschreiben',
         'Spezifikation erstellen',
-        'Etikett erstellen und abhaken',
+        'Pflichtangaben des Etiketts prüfen',
         'Als Artikel freigeben',
         'In Navision anlegen und abhaken',
       ]);
@@ -235,7 +275,51 @@ void main() {
       expect(luecke.naechster!.punkt.schluessel, 'spezifikationErstellt');
     });
 
-    test('von Hand zählen nur Etikett und Navision', () {
+    test('Etikett: erledigt, wenn jede Pflichtangabe geprüft ist (F28)', () {
+      String? etikett(Map<String, LmivStand> staende) => text(
+            projektCheckStand(
+              projekt: projekt(etikett: staende),
+              rezepturen: const [],
+              versionen: const [],
+            ),
+            'etikettErstellt',
+          );
+      final alle = {
+        for (final c in kEtikettCheckliste) c.schluessel: LmivStand.erledigt,
+      };
+      expect(etikett(alle), 'Alle 12 Pflichtangaben geprüft');
+      // „Trifft nicht zu" zählt wie abgehakt.
+      expect(
+        etikett({
+          ...alle,
+          'quid': LmivStand.trifftNichtZu,
+          'schutzgas': LmivStand.trifftNichtZu,
+        }),
+        'Alle 12 Pflichtangaben geprüft · 2 treffen nicht zu',
+      );
+      expect(
+        etikett({...alle, 'schutzgas': LmivStand.trifftNichtZu}),
+        'Alle 12 Pflichtangaben geprüft · 1 trifft nicht zu',
+      );
+      // Eine offene genügt, damit das Etikett offen bleibt.
+      final offen = projektCheckStand(
+        projekt: projekt(etikett: {...alle, 'mhd': LmivStand.offen}),
+        rezepturen: const [],
+        versionen: const [],
+      );
+      expect(erledigt(offen, 'etikettErstellt'), isFalse);
+      expect(
+        text(offen, 'etikettErstellt'),
+        '11 von 12 Pflichtangaben geprüft',
+      );
+      expect(
+        checkAufgabe(offen.punkt('etikettErstellt')!),
+        'Pflichtangaben des Etiketts prüfen',
+      );
+      expect(offen.punkt('etikettErstellt')!.vonHand, isFalse);
+    });
+
+    test('von Hand nur Navision; ein früherer Etikett-Haken gilt', () {
       final s = projektCheckStand(
         projekt: projekt(
           haken: {
@@ -252,7 +336,9 @@ void main() {
         versionen: const [],
       );
       expect(s.text, '2 von 8');
+      // Vor F28 von Hand abgehakt: Das gilt weiter.
       expect(erledigt(s, 'etikettErstellt'), isTrue);
+      expect(text(s, 'etikettErstellt'), 'Früher von Hand abgehakt');
       expect(erledigt(s, 'navisionAngelegt'), isTrue);
       expect(erledigt(s, 'rezepturErstellt'), isFalse);
       expect(erledigt(s, 'sensorikErstellt'), isFalse);
@@ -400,7 +486,7 @@ void main() {
         rezepturen: const [],
         versionen: const [],
       );
-      expect(text(s, 'sensorikErstellt'), 'Im Reiter „Sensorik" beschreiben');
+      expect(text(s, 'sensorikErstellt'), 'Im Reiter „Produkt" beschreiben');
     });
 
     test('Artikel: Freigabe oder früher von Hand abgehakt', () {

@@ -538,7 +538,7 @@ void main() {
       ],
       lagerung: 'gekühlt',
       stand: 'Frikadelle · Stand 2 · abgeschlossen am 05.03.2026',
-      fehlt: ['Nettofüllmenge (Reiter „Spezifikation", Verpackung)'],
+      fehlt: ['Nettofüllmenge (Reiter „Produkt", Verpackung)'],
     );
 
     testWidgets('Vorschau, was fehlt, Text kopieren', (tester) async {

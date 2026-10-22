@@ -213,18 +213,29 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
       appBar: AppBar(
         title: Text(r?.name ?? 'Rezeptur'),
         actions: [
-          if (r != null) ...[
-            IconButton(
-              tooltip: 'Name und Angaben',
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => _bearbeiten(r),
+          if (r != null)
+            PopupMenuButton<VoidCallback>(
+              key: const ValueKey('rezeptur-mehr'),
+              tooltip: 'Name und Angaben ändern oder Rezeptur löschen',
+              onSelected: (aktion) => aktion(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: () => _bearbeiten(r),
+                  child: const ListTile(
+                    leading: Icon(Icons.edit_outlined),
+                    title: Text('Name und Angaben…'),
+                  ),
+                ),
+                const PopupMenuDivider(),
+                PopupMenuItem(
+                  value: () => _loeschen(r),
+                  child: const ListTile(
+                    leading: Icon(Icons.delete_outline),
+                    title: Text('Rezeptur löschen…'),
+                  ),
+                ),
+              ],
             ),
-            IconButton(
-              tooltip: 'Rezeptur löschen',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: () => _loeschen(r),
-            ),
-          ],
           const SizedBox(width: 8),
         ],
       ),
@@ -335,7 +346,11 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
   }
 }
 
-/// Die Stände als Reiter, dahinter die Aktionen für den gewählten.
+/// Die Stände als Reiter, dahinter für den gewählten in Worten, was mit
+/// ihm ist, und ein Hauptknopf je nach Lage: Ein Entwurf wird
+/// abgeschlossen, ein abgeschlossener Stand weiterentwickelt — oder, wenn
+/// schon ein Entwurf in Arbeit ist, geht es zu ihm. Alles andere steht
+/// unter „Mehr".
 class _StandLeiste extends StatelessWidget {
   const _StandLeiste({
     required this.versionen,
@@ -349,26 +364,102 @@ class _StandLeiste extends StatelessWidget {
     this.onFleisch,
   });
 
+  /// Die Stände, der neueste zuerst.
   final List<RezepturVersion> versionen;
   final RezepturVersion aktuell;
   final ValueChanged<String> onWahl;
+
+  /// Ein neuer Entwurf als Kopie des gewählten Stands.
   final VoidCallback onNeu;
   final VoidCallback onAbschliessen;
   final VoidCallback onVergleichen;
   final VoidCallback? onLoeschen;
 
-  /// Das Etikett des Stands — null: kein Knopf.
+  /// Das Etikett des Stands — null: kein Eintrag.
   final VoidCallback? onEtikett;
 
-  /// „Fleischanteil einstellen" — null: kein Knopf.
+  /// „Fleischanteil einstellen" — null: kein Eintrag.
   final VoidCallback? onFleisch;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final entwurf = aktuell.status == VersionStatus.entwurf;
-    final loeschen = onLoeschen;
     final abgeschlossenAm = aktuell.abgeschlossenAm;
+    // Ein anderer Entwurf, an dem schon gearbeitet wird — der neueste.
+    final inArbeit = versionen
+        .where((v) => v.status == VersionStatus.entwurf && v.id != aktuell.id)
+        .firstOrNull;
+
+    final Widget haupt;
+    if (entwurf) {
+      haupt = FilledButton.icon(
+        key: const ValueKey('stand-haupt'),
+        onPressed: onAbschliessen,
+        icon: const Icon(Icons.lock_outline, size: 18),
+        label: const Text('Stand abschließen…'),
+      );
+    } else if (inArbeit != null) {
+      haupt = FilledButton.tonalIcon(
+        key: const ValueKey('stand-haupt'),
+        onPressed: () => onWahl(inArbeit.id),
+        icon: const Icon(Icons.edit_outlined, size: 18),
+        label: Text('Zum Entwurf (Stand ${inArbeit.nummer})'),
+      );
+    } else {
+      haupt = Tooltip(
+        message: 'Legt einen neuen Entwurf als Kopie dieses Stands an',
+        child: FilledButton.icon(
+          key: const ValueKey('stand-haupt'),
+          onPressed: onNeu,
+          icon: const Icon(Icons.arrow_forward, size: 18),
+          label: const Text('Weiterentwickeln'),
+        ),
+      );
+    }
+
+    final etikett = onEtikett;
+    final fleisch = onFleisch;
+    final loeschen = onLoeschen;
+    final mehr = MenueKnopf(
+      key: const ValueKey('stand-mehr'),
+      eintraege: [
+        if (versionen.length > 1)
+          MenueEintrag(
+            'Mit anderem Stand vergleichen…',
+            icon: Icons.compare_arrows,
+            aktion: onVergleichen,
+          ),
+        if (etikett != null)
+          MenueEintrag(
+            'Etikett ansehen…',
+            icon: Icons.label_outline,
+            aktion: etikett,
+          ),
+        if (fleisch != null)
+          MenueEintrag(
+            'Fleischanteil einstellen…',
+            icon: Icons.tune,
+            aktion: fleisch,
+          ),
+        // Weiterentwickeln steht sonst schon als Hauptknopf da.
+        if (entwurf || inArbeit != null)
+          MenueEintrag(
+            'Neuen Stand daraus anlegen',
+            icon: Icons.add,
+            aktion: onNeu,
+          ),
+        if (loeschen != null) ...[
+          null,
+          MenueEintrag(
+            'Entwurf löschen…',
+            icon: Icons.delete_outline,
+            aktion: loeschen,
+          ),
+        ],
+      ],
+    );
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
       decoration: BoxDecoration(
@@ -384,6 +475,9 @@ class _StandLeiste extends StatelessWidget {
           for (final v in versionen.reversed)
             ChoiceChip(
               selected: v.id == aktuell.id,
+              tooltip: v.status == VersionStatus.abgeschlossen
+                  ? 'Abgeschlossen'
+                  : 'Entwurf',
               avatar: Icon(
                 v.status == VersionStatus.abgeschlossen
                     ? Icons.lock_outline
@@ -398,48 +492,20 @@ class _StandLeiste extends StatelessWidget {
               onSelected: (_) => onWahl(v.id),
             ),
           const SizedBox(width: 8),
-          if (!entwurf && abgeschlossenAm != null)
-            Text(
-              'abgeschlossen am ${Format.datum(abgeschlossenAm)}',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
+          // In Worten, was mit dem gewählten Stand ist.
+          Text(
+            entwurf
+                ? 'Entwurf · in Arbeit'
+                : abgeschlossenAm == null
+                    ? 'abgeschlossen'
+                    : 'abgeschlossen am ${Format.datum(abgeschlossenAm)}',
+            key: const ValueKey('stand-zustand'),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
             ),
-          OutlinedButton.icon(
-            onPressed: onNeu,
-            icon: const Icon(Icons.add, size: 18),
-            label: const Text('Neuer Stand'),
           ),
-          if (entwurf)
-            FilledButton.icon(
-              onPressed: onAbschliessen,
-              icon: const Icon(Icons.lock_outline, size: 18),
-              label: const Text('Abschließen'),
-            ),
-          if (versionen.length > 1)
-            OutlinedButton.icon(
-              onPressed: onVergleichen,
-              icon: const Icon(Icons.compare_arrows, size: 18),
-              label: const Text('Vergleichen'),
-            ),
-          if (onEtikett != null)
-            OutlinedButton.icon(
-              onPressed: onEtikett,
-              icon: const Icon(Icons.label_outline, size: 18),
-              label: const Text('Etikett'),
-            ),
-          if (onFleisch != null)
-            OutlinedButton.icon(
-              onPressed: onFleisch,
-              icon: const Icon(Icons.tune, size: 18),
-              label: const Text('Fleischanteil einstellen…'),
-            ),
-          if (loeschen != null)
-            IconButton(
-              tooltip: 'Diesen Entwurf löschen',
-              icon: const Icon(Icons.delete_outline),
-              onPressed: loeschen,
-            ),
+          haupt,
+          mehr,
         ],
       ),
     );
@@ -683,7 +749,8 @@ class Zusammensetzung extends ConsumerWidget {
               if (!entwurf) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'Abgeschlossen — für Änderungen einen neuen Stand anlegen.',
+                  'Abgeschlossen — geändert wird nur ein Entwurf: oben '
+                  '„Weiterentwickeln" oder „Zum Entwurf".',
                   style: theme.textTheme.bodySmall?.copyWith(color: grau),
                 ),
               ],

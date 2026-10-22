@@ -504,3 +504,62 @@ class LeerHinweis extends StatelessWidget {
     );
   }
 }
+
+/// Ein Eintrag eines [MenueKnopf]s: Text, Symbol und was beim Antippen
+/// geschieht — ohne [aktion] gesperrt.
+class MenueEintrag {
+  const MenueEintrag(this.text, {required this.icon, this.aktion, this.key});
+
+  final String text;
+  final IconData icon;
+  final VoidCallback? aktion;
+
+  /// Zum Wiederfinden, etwa in Tests.
+  final Key? key;
+}
+
+/// Ein beschrifteter Knopf, der ein Menü öffnet — „Mehr ▾". Für Aktionen,
+/// die nicht ständig gebraucht werden: Sie stehen mit Text im Menü statt
+/// als Symbole nebeneinander. `null` in [eintraege] trennt mit einer Linie.
+class MenueKnopf extends StatelessWidget {
+  const MenueKnopf({
+    super.key,
+    required this.eintraege,
+    this.label = 'Mehr',
+    this.icon = Icons.more_horiz,
+  });
+
+  final List<MenueEintrag?> eintraege;
+  final String label;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      menuChildren: [
+        for (final e in eintraege)
+          if (e == null)
+            const Divider(height: 1)
+          else
+            MenuItemButton(
+              key: e.key,
+              leadingIcon: Icon(e.icon, size: 18),
+              onPressed: e.aktion,
+              child: Text(e.text),
+            ),
+      ],
+      builder: (context, menue, _) => OutlinedButton.icon(
+        onPressed: () => menue.isOpen ? menue.close() : menue.open(),
+        icon: Icon(icon, size: 18),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
