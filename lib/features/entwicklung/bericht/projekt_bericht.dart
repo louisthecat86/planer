@@ -52,6 +52,7 @@ class ProjektBericht {
     this.checkliste,
     this.versionen = const {},
     this.kennzahlen = const {},
+    this.ergebnisse = const {},
     this.inArbeit = const [],
   });
 
@@ -87,6 +88,10 @@ class ProjektBericht {
   /// Je Station (Stand-ID) die Kennzahlen mit der Änderung zum vorigen
   /// Stand derselben Rezeptur.
   final Map<String, List<WegKennzahl>> kennzahlen;
+
+  /// Das berechnete Rezepturergebnis je Stand, einschließlich Zutatenliste
+  /// und Nährwerten.
+  final Map<String, RezepturErgebnis> ergebnisse;
 
   /// Stände, die noch nicht abgeschlossen sind — der älteste zuerst.
   final List<InArbeit> inArbeit;
@@ -207,6 +212,13 @@ Future<ProjektBericht> berichtLaden(
     final e = await repo.rechenRezeptur(s.versionId);
     if (e != null) ergebnisse[s.versionId] = berechne(e);
   }
+  for (final v in versionen) {
+    if (v.status != VersionStatus.entwurf || ergebnisse.containsKey(v.id)) {
+      continue;
+    }
+    final e = await repo.rechenRezeptur(v.id);
+    if (e != null) ergebnisse[v.id] = berechne(e);
+  }
   final kennzahlen = <String, List<WegKennzahl>>{};
   final letzte = <String, String>{};
   for (final s in stationen) {
@@ -246,6 +258,7 @@ Future<ProjektBericht> berichtLaden(
     ),
     versionen: versionenNachId,
     kennzahlen: kennzahlen,
+    ergebnisse: ergebnisse,
     inArbeit: inArbeit,
   );
 }
@@ -504,6 +517,98 @@ pw.Widget _zeilen(List<(String, String)> paare) => pw.Table(
       ],
     );
 
+pw.Widget _naehrwertVergleich({
+  required RezepturErgebnis aktuell,
+  RezepturErgebnis? vorher,
+  required int? vorherigeNummer,
+}) =>
+    pw.Table(
+      columnWidths: const {
+        0: pw.FixedColumnWidth(132),
+        1: pw.FlexColumnWidth(1),
+        2: pw.FlexColumnWidth(1),
+        3: pw.FlexColumnWidth(.8),
+      },
+      children: [
+        pw.TableRow(
+          decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+          children: [
+            'Nährwert',
+            vorherigeNummer == null
+                ? 'Vorheriger Stand'
+                : 'Stand $vorherigeNummer',
+            'Aktueller Stand',
+            'Änderung',
+          ]
+              .map(
+                (titel) => pw.Padding(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 4,
+                  ),
+                  child: _text(titel, groesse: 7.5, farbe: PdfColors.grey800),
+                ),
+              )
+              .toList(),
+        ),
+        for (final stoff in Naehrstoff.values)
+          pw.TableRow(
+            children: [
+              _naehrwertZelle('${stoff.label} (${stoff.einheit})'),
+              _naehrwertZelle(
+                vorher == null
+                    ? '—'
+                    : '${naehrwertGerundet(stoff, naehrstoffWert(vorher.je100g, stoff))} ${stoff.einheit}',
+              ),
+              _naehrwertZelle(
+                '${naehrwertGerundet(stoff, naehrstoffWert(aktuell.je100g, stoff))} ${stoff.einheit}',
+              ),
+              _naehrwertZelle(
+                _naehrwertDifferenz(
+                  stoff,
+                  vorher == null ? null : naehrstoffWert(vorher.je100g, stoff),
+                  naehrstoffWert(aktuell.je100g, stoff),
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+
+pw.Widget _naehrwertZelle(String text) => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      child: _text(text, groesse: 8),
+    );
+
+String _naehrwertDifferenz(
+  Naehrstoff stoff,
+  double? vorher,
+  double? aktuell,
+) {
+  if (vorher == null || aktuell == null) return '—';
+  final genauigkeit = switch (stoff) {
+    Naehrstoff.energieKj || Naehrstoff.energieKcal => 0,
+    Naehrstoff.salz => 2,
+    _ => 1,
+  };
+  final differenz = aktuell - vorher;
+  final wert = Format.zahl(differenz.abs(), nachkomma: genauigkeit);
+  if (wert == Format.zahl(0, nachkomma: genauigkeit)) return 'unverändert';
+  return '${differenz > 0 ? '+' : '−'}$wert ${stoff.einheit}';
+}
+
+List<(String, String)> _fleischanteilVergleich(
+  List<WegKennzahl> kennzahlen,
+) =>
+    [
+      for (final k in kennzahlen)
+        if (k.label == 'Fleischanteil')
+          (
+            k.label,
+            '${k.wert}${k.aenderung == null ? '' : ' · Änderung ${k.aenderung}'}',
+          ),
+    ];
+
 pw.Widget _text(String text, {double groesse = 9, PdfColor? farbe}) => pw.Text(
       pdfText(text),
       style: pw.TextStyle(fontSize: groesse, color: farbe),
@@ -670,6 +775,8 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
   final kunde = p.kunde?.trim() ?? '';
   final widgets = <pw.Widget>[];
   final weg = entwicklungsweg(b.verlauf);
+  final letzterStandJeRezeptur = <String, RezepturVersion>{};
+  var hatRezepturStation = false;
   for (final punkt in weg) {
     switch (punkt) {
       case WegAnfang(:final eintraege):
@@ -705,67 +812,139 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
         }
       case WegStation():
         final e = punkt.eintrag;
-        final beschreibung = e.beschreibung?.trim() ?? '';
+        final version = b.versionen[punkt.versionId];
+        final vorherigeVersion =
+            version == null ? null : letzterStandJeRezeptur[version.rezepturId];
+        final ergebnis = b.ergebnisse[punkt.versionId];
+        final vorherigesErgebnis =
+            vorherigeVersion == null ? null : b.ergebnisse[vorherigeVersion.id];
         final kennzahlen = b.kennzahlen[punkt.versionId] ?? const [];
+        if (hatRezepturStation) widgets.add(pw.NewPage());
+        hatRezepturStation = true;
         widgets.add(
           pw.Container(
-            margin: const pw.EdgeInsets.only(top: 12, bottom: 4),
-            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            decoration: const pw.BoxDecoration(
+            margin: const pw.EdgeInsets.only(top: 5, bottom: 7),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: pw.BoxDecoration(
               color: PdfColors.purple50,
-              border: pw.Border(
-                left: pw.BorderSide(color: _stationFarbe, width: 3),
-              ),
+              border: pw.Border.all(color: _stationFarbe, width: 1),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
                 _text(
-                  'STATION ${punkt.nummer} · ${e.titel}',
-                  groesse: 10,
+                  'REZEPTURSTAND ${version?.nummer ?? punkt.nummer}',
+                  groesse: 13,
                   farbe: _stationFarbe,
                 ),
                 pw.SizedBox(height: 2),
                 _text(
                   [
-                    'Rezepturstand ${b.versionen[punkt.versionId]?.nummer ?? ''}',
+                    e.titel,
+                    if (version?.status == VersionStatus.abgeschlossen)
+                      'abgeschlossen',
                     Format.datum(e.datum),
                     if (p.freigabeVersionId == punkt.versionId) 'Freigegeben',
                   ].where((s) => s.isNotEmpty).join(' · '),
-                  groesse: 8,
+                  groesse: 8.5,
                   farbe: _grau,
                 ),
               ],
             ),
           ),
         );
-        if (beschreibung.isNotEmpty) {
-          widgets.addAll(_absatz('Standbeschreibung', beschreibung));
+        final bezeichnung = version?.bezeichnung?.trim() ?? '';
+        if (bezeichnung.isNotEmpty) {
+          widgets.addAll(_absatz('Standbezeichnung', bezeichnung));
+        }
+        final grund = version?.notiz?.trim() ?? '';
+        if (grund.isNotEmpty) {
+          widgets.addAll(_absatz('Grund für diesen Stand', grund));
         }
         final aenderungen = texteAus(e.aenderungen);
-        if (aenderungen.isNotEmpty) {
-          widgets.add(_unterkapitel('Änderungen an der Rezeptur'));
+        if (vorherigeVersion != null) {
+          widgets.add(
+            _unterkapitel(
+              'Was hat sich gegenüber Rezepturstand '
+              '${vorherigeVersion.nummer} geändert?',
+            ),
+          );
+          if (aenderungen.isEmpty) {
+            widgets.add(
+              _text('Keine Rezepturänderungen dokumentiert.', farbe: _grau),
+            );
+          }
           for (final a in aenderungen) {
             widgets.add(_text('• $a', groesse: 8.5));
           }
+        } else {
+          widgets.add(
+            _unterkapitel('Ausgangsstand dieser Rezeptur'),
+          );
+          widgets.add(
+            _text(
+              'Für diese Rezeptur gibt es keinen vorherigen abgeschlossenen Stand.',
+              farbe: _grau,
+            ),
+          );
         }
-        if (kennzahlen.isNotEmpty) {
+        widgets.add(
+          _unterkapitel(
+            'Zutatenliste · Rezepturstand ${version?.nummer ?? punkt.nummer}',
+          ),
+        );
+        if (ergebnis == null) {
+          widgets.add(
+            _text(
+              'Für diesen Stand liegt keine berechnete Zutatenliste vor.',
+              farbe: _grau,
+            ),
+          );
+        } else if (ergebnis.zutatenliste.trim().isEmpty) {
+          widgets.add(
+            _text(
+              'Für diesen Stand sind keine Zutaten eingetragen.',
+              farbe: _grau,
+            ),
+          );
+        } else {
+          widgets.add(
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(bottom: 5),
+              child: _fliesstext(ergebnis.zutatenliste),
+            ),
+          );
+        }
+        if (ergebnis != null) {
           widgets.add(
             _unterkapitel(
-              'Nährwerte und Kennzahlen je 100 g'
-              ' · Änderung zum vorherigen Stand',
+              'Nährwerte je 100 g · Stand ${version?.nummer ?? punkt.nummer}'
+              '${vorherigeVersion == null ? '' : ' im Vergleich zu Stand ${vorherigeVersion.nummer}'}',
             ),
           );
           widgets.add(
-            _zeilen([
-              for (final k in kennzahlen)
-                (
-                  k.label,
-                  '${k.wert}'
-                      '${k.aenderung == null ? '' : ' · ${k.aenderung}'}',
-                ),
-            ]),
+            _naehrwertVergleich(
+              aktuell: ergebnis,
+              vorher: vorherigesErgebnis,
+              vorherigeNummer: vorherigeVersion?.nummer,
+            ),
           );
+          if (vorherigeVersion != null && vorherigesErgebnis == null) {
+            widgets.add(
+              _text(
+                'Das Ergebnis des vorherigen Stands ist nicht verfügbar; '
+                'daher werden keine Vergleichswerte angezeigt.',
+                groesse: 7.5,
+                farbe: _grau,
+              ),
+            );
+          }
+          final fleischanteil = _fleischanteilVergleich(kennzahlen);
+          if (fleischanteil.isNotEmpty) {
+            widgets.add(_unterkapitel('Fleischanteil'));
+            widgets.add(_zeilen(fleischanteil));
+          }
         }
         final kommentare = Kommentar.listeAus(e.kommentare);
         if (kommentare.isNotEmpty) {
@@ -785,6 +964,9 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
           for (final r in punkt.rueckmeldungen) {
             widgets.addAll(_eintrag(r, einzug: 8));
           }
+        }
+        if (version != null) {
+          letzterStandJeRezeptur[version.rezepturId] = version;
         }
       case WegPhase():
         final e = punkt.eintrag;
@@ -842,32 +1024,74 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
     );
   }
   for (final a in b.inArbeit) {
+    final ergebnis = b.ergebnisse[a.version.id];
+    final vorherigeVersion = b.versionen.values
+        .where(
+          (v) =>
+              v.rezepturId == a.version.rezepturId &&
+              v.nummer < a.version.nummer &&
+              v.status == VersionStatus.abgeschlossen,
+        )
+        .fold<RezepturVersion?>(
+          null,
+          (bisher, v) =>
+              bisher == null || v.nummer > bisher.nummer ? v : bisher,
+        );
+    final vorherigesErgebnis =
+        vorherigeVersion == null ? null : b.ergebnisse[vorherigeVersion.id];
+    if (hatRezepturStation) widgets.add(pw.NewPage());
     widgets.add(
-      pw.Container(
-        margin: const pw.EdgeInsets.only(top: 12),
-        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: const pw.BoxDecoration(
-          color: PdfColors.orange50,
-          border: pw.Border(
-            left: pw.BorderSide(color: PdfColors.orange800, width: 3),
-          ),
-        ),
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _text(
-              'IN ARBEIT · Entwurf',
-              groesse: 9.5,
-              farbe: PdfColors.orange800,
+      pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            margin: const pw.EdgeInsets.only(top: 5, bottom: 7),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.orange50,
+              border: pw.Border.all(color: PdfColors.orange800, width: 1),
+              borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
             ),
-            pw.SizedBox(height: 2),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _text(
+                  'AKTUELLER ENTWURF · REZEPTURSTAND ${a.version.nummer}',
+                  groesse: 12,
+                  farbe: PdfColors.orange800,
+                ),
+                pw.SizedBox(height: 2),
+                _text(a.rezeptur, groesse: 8.5, farbe: _grau),
+              ],
+            ),
+          ),
+          if (vorherigeVersion != null)
+            _unterkapitel(
+              'Entwurf im Vergleich zu abgeschlossenem Stand '
+              '${vorherigeVersion.nummer}',
+            ),
+          if (ergebnis == null) ...[
             _text(
-              '${a.rezeptur} · Stand ${a.version.nummer}',
-              groesse: 8.5,
+              'Für diesen Entwurf liegt keine berechnete Rezeptur vor.',
               farbe: _grau,
             ),
+          ] else ...[
+            _unterkapitel(
+              'Zutatenliste · Rezepturstand ${a.version.nummer}',
+            ),
+            _fliesstext(ergebnis.zutatenliste),
+            pw.SizedBox(height: 6),
+            _unterkapitel(
+              'Nährwerte je 100 g · Entwurf ${a.version.nummer}'
+              '${vorherigeVersion == null ? '' : ' im Vergleich zu Stand ${vorherigeVersion.nummer}'}',
+            ),
+            _naehrwertVergleich(
+              aktuell: ergebnis,
+              vorher: vorherigesErgebnis,
+              vorherigeNummer: vorherigeVersion?.nummer,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }

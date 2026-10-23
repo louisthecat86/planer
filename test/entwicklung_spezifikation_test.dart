@@ -895,6 +895,15 @@ void main() {
         expect(b.kennzahlen[a.v1]!.every((k) => k.aenderung == null), isTrue);
         final fett = b.kennzahlen[a.v2]!.firstWhere((k) => k.label == 'Fett');
         expect(fett.aenderung, startsWith('+'));
+        expect(b.ergebnisse.keys, containsAll([a.v1, a.v2, v3]));
+        expect(
+          b.ergebnisse[a.v1]!.zutatenliste,
+          isNot(b.ergebnisse[a.v2]!.zutatenliste),
+        );
+        expect(
+          b.ergebnisse[a.v1]!.je100g.fett,
+          isNot(b.ergebnisse[a.v2]!.je100g.fett),
+        );
         expect(b.inArbeit.single.version.id, v3);
         expect(b.inArbeit.single.rezeptur, 'Frikadelle Testart');
         expect(b.versionen.keys, containsAll([a.v1, a.v2, v3]));
