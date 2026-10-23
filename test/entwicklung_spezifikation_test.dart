@@ -270,8 +270,7 @@ void main() {
       ),
     );
 
-    test('die Angaben des Projekts: Kürzel, Haltbarkeit, Hinweise, Spuren',
-        () {
+    test('die Angaben des Projekts: Kürzel, Haltbarkeit, Hinweise, Spuren', () {
       final w = spezifikationsWerte(
         quelle(angaben: angaben, kuerzel: ' TE '),
         sprache: SpezSprache.de,
@@ -679,8 +678,7 @@ void main() {
       expect(checklisteAus(p.checkliste), contains('spezifikationErstellt'));
     });
 
-    test('englisch: ohne Schlüssel deutsch, mit Schlüssel übersetzt',
-        () async {
+    test('englisch: ohne Schlüssel deutsch, mit Schlüssel übersetzt', () async {
       final a = await anlegen();
       final d = dienst();
       await d.vorlageSpeichern(SpezSprache.en, 'Spec.xlsx', beispielvorlage());
@@ -894,8 +892,7 @@ void main() {
         expect(b.kennzahlen.keys, unorderedEquals([a.v1, a.v2]));
         // Die erste Station ohne Änderung, die zweite gegen die erste.
         expect(b.kennzahlen[a.v1]!.every((k) => k.aenderung == null), isTrue);
-        final fett =
-            b.kennzahlen[a.v2]!.firstWhere((k) => k.label == 'Fett');
+        final fett = b.kennzahlen[a.v2]!.firstWhere((k) => k.label == 'Fett');
         expect(fett.aenderung, startsWith('+'));
         expect(b.inArbeit.single.version.id, v3);
         expect(b.inArbeit.single.rezeptur, 'Frikadelle Testart');
@@ -996,6 +993,63 @@ void main() {
           'Noch keine Version festgehalten',
         );
         final pdf = await baueProjektPdf(b, gedrucktAm: datum);
+        expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
+      });
+
+      test('Bericht übernimmt Maschineneinstellungen aus dem Artikel',
+          () async {
+        final id = await projekte.projektAnlegen(name: 'Artikel mit Kette');
+        await db.into(db.products).insert(
+              ProductsCompanion.insert(
+                id: 'artikel-1',
+                artikelnummer: 'A-123',
+                artikelbezeichnung: 'Testprodukt',
+                produktgruppe: const Value('bratstrasse_natur'),
+                haltbarkeitTage: const Value(14),
+              ),
+            );
+        await db.into(db.productSteps).insert(
+              ProductStepsCompanion.insert(
+                id: 'schritt-1',
+                productId: 'artikel-1',
+                reihenfolge: 1,
+                abteilung: 'bratstrasse',
+                basisMengeKg: 100,
+                basisDauerMinuten: 12,
+                basisMitarbeiter: 2,
+                maschine: const Value('Testbratstraße'),
+                maschinenEinstellungenJson: const Value(
+                  '{"Band": "mittig"}',
+                ),
+              ),
+            );
+        await db.into(db.productStepParameters).insert(
+              ProductStepParametersCompanion.insert(
+                id: 'parameter-1',
+                stepId: 'schritt-1',
+                parameterGruppe: 'MASCHINENEINSTELLUNGEN',
+                parameterName: 'Drehzahl',
+                wert: const Value('3000 U/min'),
+              ),
+            );
+        await projekte.projektAendern(
+          id,
+          const EntwicklungProjekteCompanion(artikelId: Value('artikel-1')),
+        );
+
+        final projekt = (await projekte.projekt(id))!;
+        final bericht = await berichtLaden(db, dateien, projekt);
+        expect(bericht.artikelSchritte, hasLength(1));
+        expect(
+          bericht.artikelSchritte.single.schritt.maschine,
+          'Testbratstraße',
+        );
+        expect(
+          bericht.artikelSchritte.single.parameter.single.wert,
+          '3000 U/min',
+        );
+
+        final pdf = await baueProjektPdf(bericht, gedrucktAm: datum);
         expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
       });
     });
@@ -1157,7 +1211,8 @@ void main() {
       expect(find.text('Texte mit DeepL übersetzen'), findsOneWidget);
       expect(find.text('Schlüssel eingeben…'), findsOneWidget);
       // Ohne Schlüssel lässt sich nicht übersetzen.
-      final schalter = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      final schalter =
+          tester.widget<SwitchListTile>(find.byType(SwitchListTile));
       expect(schalter.onChanged, isNull);
       expect(schalter.value, isFalse);
     });
@@ -1168,7 +1223,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('Schlüssel ändern…'), findsOneWidget);
-      final schalter = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
+      final schalter =
+          tester.widget<SwitchListTile>(find.byType(SwitchListTile));
       expect(schalter.value, isTrue);
       expect(schalter.onChanged, isNotNull);
     });
@@ -1373,9 +1429,9 @@ void main() {
       // Die Artikelnummer steht in den Stammdaten.
       expect(find.byKey(const ValueKey('spez-artikelnummer')), findsNothing);
 
-      bool gewaehlt(String label) =>
-          tester.widget<FilterChip>(find.widgetWithText(FilterChip, label))
-              .selected;
+      bool gewaehlt(String label) => tester
+          .widget<FilterChip>(find.widgetWithText(FilterChip, label))
+          .selected;
       expect(gewaehlt('Senf'), isTrue);
       expect(gewaehlt('Gluten'), isFalse);
       expect(gewaehlt('E2-Kiste'), isTrue);

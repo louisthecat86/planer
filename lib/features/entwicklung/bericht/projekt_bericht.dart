@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/constants/artikel_merkmale.dart';
+import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
 import '../../../core/utils/format.dart';
 import '../../../core/utils/pdf_text.dart';
@@ -17,6 +20,7 @@ import '../projekte/projekt_checkliste.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechenkern.dart';
+import '../spezifikation/spez_angaben.dart';
 
 // Der Projektbericht als PDF: Stammdaten, Rezeptur mit Zutatenliste und
 // Nährwerten, Sensorik, Prozess, HACCP, Checklisten und der
@@ -25,6 +29,14 @@ import '../rechenkern/rechenkern.dart';
 
 /// Ein Stand, der gerade in Arbeit ist.
 typedef InArbeit = ({String rezeptur, RezepturVersion version});
+
+/// Ein Schritt aus dem freigegebenen Artikel mit den tatsächlich
+/// gespeicherten Einstellungen.
+typedef BerichtArtikelSchritt = ({
+  ProductStep schritt,
+  Machine? maschine,
+  List<ProductStepParameter> parameter,
+});
 
 /// Was im Bericht steht.
 class ProjektBericht {
@@ -36,6 +48,7 @@ class ProjektBericht {
     this.verlauf = const [],
     this.bild,
     this.artikel,
+    this.artikelSchritte = const [],
     this.fliessdiagramm,
     this.checkliste,
     this.versionen = const {},
@@ -57,6 +70,9 @@ class ProjektBericht {
   final Uint8List? bild;
 
   final Product? artikel;
+
+  /// Die Prozessschritte des freigegebenen Artikels samt Maschinenwerten.
+  final List<BerichtArtikelSchritt> artikelSchritte;
 
   /// Das Fließdiagramm mit Bezeichnung, etwa „FD_011 · Schnitzel paniert"
   /// — null: nur die Kennung aus dem Projekt.
@@ -139,6 +155,37 @@ Future<ProjektBericht> berichtLaden(
       ? null
       : await (db.select(db.products)..where((p) => p.id.equals(artikelId)))
           .getSingleOrNull();
+  final artikelSchritte = <BerichtArtikelSchritt>[];
+  if (artikel != null) {
+    final schritte = await (db.select(db.productSteps)
+          ..where((s) => s.productId.equals(artikel.id))
+          ..where((s) => s.deletedAt.isNull())
+          ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+        .get();
+    for (final schritt in schritte) {
+      final parameter = await (db.select(db.productStepParameters)
+            ..where((p) => p.stepId.equals(schritt.id))
+            ..where((p) => p.deletedAt.isNull())
+            ..orderBy([
+              (p) => OrderingTerm.asc(p.reihenfolge),
+              (p) => OrderingTerm.asc(p.parameterGruppe),
+            ]))
+          .get();
+      final maschineId = schritt.maschineId;
+      final maschine = maschineId == null
+          ? null
+          : await (db.select(db.machines)
+                ..where((m) => m.id.equals(maschineId)))
+              .getSingleOrNull();
+      artikelSchritte.add(
+        (
+          schritt: schritt,
+          maschine: maschine,
+          parameter: parameter,
+        ),
+      );
+    }
+  }
 
   // Der Entwicklungsweg: die Stände seiner Stationen und Phasen — auch
   // solche, deren Rezeptur nicht mehr zum Projekt gehört.
@@ -191,6 +238,7 @@ Future<ProjektBericht> berichtLaden(
     verlauf: verlauf,
     bild: bild,
     artikel: artikel,
+    artikelSchritte: artikelSchritte,
     fliessdiagramm: await _fliessdiagrammText(db, projekt.fliessdiagramm),
     checkliste: projektCheckStand(
       projekt: projekt,
@@ -214,6 +262,291 @@ Future<String?> _fliessdiagrammText(AppDatabase db, String? fdId) async {
 
 const PdfColor _grau = PdfColors.grey700;
 const PdfColor _linie = PdfColors.grey400;
+const PdfColor _blau = PdfColor.fromInt(0xFF174A70);
+const PdfColor _hellBlau = PdfColor.fromInt(0xFFEAF1F6);
+
+pw.Widget _kapitel(String titel, {String? untertitel}) => pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Container(
+          width: double.infinity,
+          padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: const pw.BoxDecoration(
+            color: _hellBlau,
+            border: pw.Border(
+              left: pw.BorderSide(color: _blau, width: 3),
+              bottom: pw.BorderSide(color: _linie, width: .5),
+            ),
+          ),
+          child: pw.Text(
+            pdfText(titel),
+            style: pw.TextStyle(
+              fontSize: 14,
+              fontWeight: pw.FontWeight.bold,
+              color: _blau,
+            ),
+          ),
+        ),
+        if (untertitel != null && untertitel.trim().isNotEmpty)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 5),
+            child: _text(untertitel, groesse: 8, farbe: _grau),
+          ),
+        pw.SizedBox(height: 8),
+      ],
+    );
+
+pw.Widget _unterkapitel(String titel) => pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 10, bottom: 4),
+      child: pw.Text(
+        pdfText(titel),
+        style: pw.TextStyle(
+          fontSize: 10.5,
+          fontWeight: pw.FontWeight.bold,
+          color: _blau,
+        ),
+      ),
+    );
+
+String _produktWert(double? wert, {int nachkomma = 1, String einheit = ''}) =>
+    wert == null ? '' : '${_zahl(wert, nachkomma: nachkomma)}$einheit';
+
+String _auswahlText(Set<String> werte, List<SpezWahl> liste) => [
+      for (final w in liste)
+        if (werte.contains(w.schluessel)) w.label,
+    ].join(', ');
+
+String _wahlText(String schluessel, List<SpezWahl> liste) {
+  for (final w in liste) {
+    if (w.schluessel == schluessel) return w.label;
+  }
+  return schluessel;
+}
+
+List<(String, String)> _artikelZeilen(Product p) => [
+      ('Bezeichnung', p.artikelbezeichnung),
+      ('Artikelnummer', p.artikelnummer),
+      ('Produktgruppe', produktgruppeLabel(p.produktgruppe)),
+      ('Verpackungsart', p.verpackungsart ?? ''),
+      (
+        'Gebindegröße',
+        _produktWert(p.gebindeGroesseKg, nachkomma: 3, einheit: ' kg'),
+      ),
+      (
+        'Haltbarkeit',
+        p.haltbarkeitTage == null ? '' : '${p.haltbarkeitTage} Tage'
+      ),
+      (
+        'Mindestvorlauf',
+        p.mindestVorlaufzeitTage == null
+            ? ''
+            : '${p.mindestVorlaufzeitTage} Tage',
+      ),
+      (
+        'Gesamtausbeute',
+        _produktWert(
+          p.gesamtAusbeuteFaktor == null ? null : p.gesamtAusbeuteFaktor! * 100,
+          einheit: ' %',
+        ),
+      ),
+      ('Ziel-Kerntemperatur', _produktWert(p.zielKerntempC, einheit: ' °C')),
+      ('Kutter-Endtemperatur', _produktWert(p.kutterEndtempC, einheit: ' °C')),
+      ('Brätfeinheit', p.braetFeinheit ?? ''),
+      ('Kochkammer-Programm', p.kochkammerProgramm ?? ''),
+      ('Räucherart', p.raeucherart ?? ''),
+      ('Starterkultur', p.startkultur ?? ''),
+      (
+        'Reifezeit',
+        p.reifezeitTage == null ? '' : '${p.reifezeitTage} Tage',
+      ),
+      ('Klimaprogramm', p.klimaprogramm ?? ''),
+      ('Ziel-pH', _produktWert(p.zielPh, nachkomma: 2)),
+      ('Ziel-aw', _produktWert(p.zielAw, nachkomma: 2)),
+      (
+        'Gewichtsverlust',
+        _produktWert(p.gewichtsverlustProzent, einheit: ' %'),
+      ),
+      ('Pökelart', p.poekelart ?? ''),
+      (
+        'Lake-Konzentration',
+        _produktWert(p.lakeKonzentrationProzent, einheit: ' %'),
+      ),
+      (
+        'Pökelzeit',
+        p.poekelzeitTage == null ? '' : '${p.poekelzeitTage} Tage',
+      ),
+      ('Tumbelzeit', _produktWert(p.tumbelzeitMin, einheit: ' min')),
+      ('Basisprodukt', p.basisProduktArtikelnummer ?? ''),
+      ('Scheibendicke', _produktWert(p.scheibendickeMm, einheit: ' mm')),
+      (
+        'Scheiben je Packung',
+        p.scheibenProPackung?.toString() ?? '',
+      ),
+      ('Packungsgewicht', _produktWert(p.packungsgewichtG, einheit: ' g')),
+      ('MAP-Gasgemisch', p.mapGas ?? ''),
+      ('Formgewicht', _produktWert(p.formgewichtG, einheit: ' g')),
+      ('Form', p.form ?? ''),
+      ('Bratgrad', p.bratgrad ?? ''),
+      ('Panierart', p.panierart ?? ''),
+      (
+        'Panieraufnahme',
+        _produktWert(p.panierAufnahmeProzent, einheit: ' %'),
+      ),
+      ('Fleischanteiltyp', p.fleischanteilTyp ?? ''),
+      (
+        'Max. Durchlaufzeit',
+        _produktWert(p.gesamtdurchlaufzeitMaxStd, einheit: ' h'),
+      ),
+      ('Wolf-Lochscheibe', _produktWert(p.wolfLochscheibeMm, einheit: ' mm')),
+      ('Abkühlgradient', p.abkuehlgradient ?? ''),
+      ('Bratenvariante', p.bratenVariante ?? ''),
+      ('Füllung', p.fuellung ?? ''),
+      (
+        'Netzbindung',
+        p.netzbindung == null ? '' : (p.netzbindung! ? 'ja' : 'nein'),
+      ),
+      ('Sous-vide-Badtemperatur', _produktWert(p.svBadtempC, einheit: ' °C')),
+      ('Sous-vide-Garzeit', _produktWert(p.svGarzeitStd, einheit: ' h')),
+      ('Anbratgrad', p.anbratgrad ?? ''),
+      ('Allergene', merkmaleLabel(p.allergene, kAllergene)),
+      (
+        'Qualitätsstufe',
+        merkmalLabel(p.qualitaetsstufe, kQualitaetsstufen) ?? '',
+      ),
+      (
+        'Verarbeitungsstufe',
+        merkmaleLabel(p.verarbeitungsstufe, kVerarbeitungsstufen),
+      ),
+      (
+        'Verpackungsformen',
+        merkmaleLabel(p.verpackungsformen, kVerpackungsformen),
+      ),
+      ('Kartongröße', merkmalLabel(p.kartonGroesse, kKartonGroessen) ?? ''),
+      (
+        'Kartonbedruckung',
+        merkmalLabel(p.kartonBedruckung, kKartonBedruckungen) ?? '',
+      ),
+      (
+        'Packungen je Karton',
+        p.packungenProKarton?.toString() ?? '',
+      ),
+      ('Nettofüllmenge', _produktWert(p.fuellmengeNettoG, einheit: ' g')),
+      ('Abgabeart', merkmalLabel(p.abgabeart, kAbgabearten) ?? ''),
+      ('Beschreibung', p.beschreibung ?? ''),
+      ('Artikelnotizen', p.notizen ?? ''),
+    ];
+
+List<(String, String)> _legacyMaschinenWerte(String? json) {
+  final raw = json?.trim() ?? '';
+  if (raw.isEmpty) return const [];
+  try {
+    final daten = jsonDecode(raw);
+    if (daten is Map<String, dynamic>) {
+      return [
+        for (final MapEntry(:key, :value) in daten.entries)
+          if (value != null && '$value'.trim().isNotEmpty) (key, '$value'),
+      ];
+    }
+    if (daten is List) {
+      return [
+        for (final (index, value) in daten.indexed)
+          if (value != null && '$value'.trim().isNotEmpty)
+            ('Einstellung ${index + 1}', '$value'),
+      ];
+    }
+  } on FormatException {
+    // Alte Freitextwerte bleiben lesbar, auch wenn sie kein gültiges JSON sind.
+  }
+  return [('Maschineneinstellungen', raw)];
+}
+
+List<(String, String)> _artikelSchrittZeilen(BerichtArtikelSchritt eintrag) {
+  final s = eintrag.schritt;
+  return [
+    ('Abteilung', abteilungsName(s.abteilung)),
+    ('Anlage', eintrag.maschine?.name ?? s.maschine ?? ''),
+    ('Prozessschritt', s.prozessschritt ?? ''),
+    ('Menge', _produktWert(s.mengeKg, nachkomma: 3, einheit: ' kg')),
+    ('Mitarbeiter', s.basisMitarbeiter.toString()),
+    (
+      'Basiszeit',
+      '${_zahl(s.basisDauerMinuten)} min je ${_zahl(s.basisMengeKg, nachkomma: 3)} kg',
+    ),
+    ('Rüstzeit', _produktWert(s.fixZeitMinuten, einheit: ' min')),
+    ('Kerntemperatur', _produktWert(s.kerntemperaturZiel, einheit: ' °C')),
+    ('Raumtemperatur max.', _produktWert(s.raumtemperaturMax, einheit: ' °C')),
+    ('Wartezeit', _produktWert(s.wartezeitMinuten, einheit: ' min')),
+    ('Ausbeute', _produktWert(s.ausbeuteFaktor, nachkomma: 3)),
+    ('Chargengröße min.', _produktWert(s.minChargenKg, einheit: ' kg')),
+    ('Chargengröße max.', _produktWert(s.maxChargenKg, einheit: ' kg')),
+    ('Kochkammer-Programm', s.kochkammerProgramm ?? ''),
+    ('Klimaprogramm', s.klimaprogramm ?? ''),
+    ('Bratparameter', s.bratparameter ?? ''),
+    ('Notizen', s.notizen ?? ''),
+    ..._legacyMaschinenWerte(s.maschinenEinstellungenJson),
+  ];
+}
+
+pw.Widget _artikelSchrittWidget(
+  BerichtArtikelSchritt eintrag,
+  int nummer,
+) {
+  final s = eintrag.schritt;
+  final zeilen = _artikelSchrittZeilen(eintrag);
+  final gruppen = <String, List<(String, String)>>{};
+  for (final p in eintrag.parameter) {
+    final wert = p.wert?.trim() ?? '';
+    if (wert.isEmpty) continue;
+    gruppen.putIfAbsent(p.parameterGruppe.trim(), () => []).add(
+      (p.parameterName, wert),
+    );
+  }
+  return pw.Container(
+    margin: const pw.EdgeInsets.only(bottom: 8),
+    padding: const pw.EdgeInsets.all(8),
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(color: _linie, width: .5),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          pdfText(
+            '$nummer. ${eintrag.maschine?.name ?? s.maschine ?? s.prozessschritt ?? 'Prozessschritt'}',
+          ),
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        ),
+        pw.SizedBox(height: 3),
+        _zeilen(zeilen),
+        for (final gruppe in gruppen.entries) ...[
+          pw.SizedBox(height: 4),
+          _text(
+            gruppe.key.isEmpty ? 'Maschineneinstellungen' : gruppe.key,
+            groesse: 8,
+            farbe: _grau,
+          ),
+          _zeilen(gruppe.value),
+        ],
+      ],
+    ),
+  );
+}
+
+List<List<BerichtArtikelSchritt>> _artikelStationen(
+  List<BerichtArtikelSchritt> schritte,
+) {
+  final stationen = <List<BerichtArtikelSchritt>>[];
+  for (final eintrag in schritte) {
+    if (stationen.isNotEmpty &&
+        stationen.last.first.schritt.abteilung == eintrag.schritt.abteilung) {
+      stationen.last.add(eintrag);
+    } else {
+      stationen.add([eintrag]);
+    }
+  }
+  return stationen;
+}
 
 /// Ein Schritt der Prozesskette: Nummer, Name und Prozessschritt, darunter
 /// seine Werte — eingerückt unter seiner Station.
@@ -239,25 +572,6 @@ List<pw.Widget> _schritt(List<ProzessSchritt> kette, ProzessSchritt s) {
       ),
   ];
 }
-
-pw.Widget _abschnitt(String titel) => pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 14, bottom: 6),
-      child: pw.Container(
-        padding: const pw.EdgeInsets.only(bottom: 3),
-        decoration: const pw.BoxDecoration(
-          border: pw.Border(bottom: pw.BorderSide(color: _linie)),
-        ),
-        child: pw.Text(
-          pdfText(titel.toUpperCase()),
-          style: pw.TextStyle(
-            fontSize: 9,
-            fontWeight: pw.FontWeight.bold,
-            color: _grau,
-            letterSpacing: 1,
-          ),
-        ),
-      ),
-    );
 
 pw.Widget _zeilen(List<(String, String)> paare) => pw.Table(
       columnWidths: const {
@@ -288,8 +602,7 @@ pw.Widget _zeilen(List<(String, String)> paare) => pw.Table(
       ],
     );
 
-pw.Widget _text(String text, {double groesse = 9, PdfColor? farbe}) =>
-    pw.Text(
+pw.Widget _text(String text, {double groesse = 9, PdfColor? farbe}) => pw.Text(
       pdfText(text),
       style: pw.TextStyle(fontSize: groesse, color: farbe),
     );
@@ -530,9 +843,10 @@ Future<Uint8List> baueProjektPdf(
   final bild = _bildAus(b.bild);
   final artikel = b.artikel;
   final version = b.version;
-
+  final abgeschlossenAm = version?.abgeschlossenAm;
   final e = b.ergebnis;
   final sensorik = Sensorik.aus(p.sensorik);
+  final spezifikation = SpezAngaben.aus(p.spezifikation);
   final prozess = Prozessparameter.aus(p.prozess);
   final haccp = Haccp.aus(p.haccp);
   final checkliste = b.checkliste ??
@@ -542,25 +856,64 @@ Future<Uint8List> baueProjektPdf(
       .where((c) => lmivStand(etikett, c.schluessel).geprueft)
       .length;
   final status = ProjektStatus.aus(p.status);
+  final hatProduktDaten =
+      artikel != null || !sensorik.leer || !spezifikation.leer;
+  final hatRezeptur = e != null && version != null;
+  final hatProzess =
+      artikel != null || !prozess.leer || b.artikelSchritte.isNotEmpty;
+  final hatVerlauf = b.verlauf.isNotEmpty || b.inArbeit.isNotEmpty;
 
   doc.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(40, 36, 40, 36),
+      margin: const pw.EdgeInsets.fromLTRB(40, 48, 40, 44),
       maxPages: 200,
       theme: theme,
+      header: (_) => pw.Container(
+        margin: const pw.EdgeInsets.only(bottom: 8),
+        padding: const pw.EdgeInsets.only(bottom: 5),
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(bottom: pw.BorderSide(color: _linie, width: .5)),
+        ),
+        child: pw.Row(
+          children: [
+            _text('ARTIKELENTWICKLUNG', groesse: 8, farbe: _blau),
+            pw.SizedBox(width: 8),
+            pw.Expanded(
+              child: pw.Text(
+                pdfText(p.name),
+                textAlign: pw.TextAlign.right,
+                maxLines: 1,
+                style: const pw.TextStyle(fontSize: 8, color: _grau),
+              ),
+            ),
+          ],
+        ),
+      ),
       footer: (ctx) => pw.Container(
-        alignment: pw.Alignment.centerRight,
         margin: const pw.EdgeInsets.only(top: 8),
-        child: _text(
-          '${p.name} · Projektbericht vom ${Format.datum(jetzt)} · Seite '
-          '${ctx.pageNumber}/${ctx.pagesCount}',
-          groesse: 7,
-          farbe: PdfColors.grey600,
+        padding: const pw.EdgeInsets.only(top: 5),
+        decoration: const pw.BoxDecoration(
+          border: pw.Border(top: pw.BorderSide(color: _linie, width: .5)),
+        ),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            _text(
+              'Projektbericht · ${Format.datum(jetzt)}',
+              groesse: 7,
+              farbe: PdfColors.grey600,
+            ),
+            _text(
+              'Seite ${ctx.pageNumber}/${ctx.pagesCount}',
+              groesse: 7,
+              farbe: PdfColors.grey600,
+            ),
+          ],
         ),
       ),
       build: (ctx) => [
-        // ── Kopf ──────────────────────────────────────────────────────
+        _kapitel('Projektübersicht'),
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
@@ -568,49 +921,45 @@ Future<Uint8List> baueProjektPdf(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  _text('PROJEKTBERICHT', groesse: 9, farbe: _grau),
-                  pw.SizedBox(height: 4),
                   pw.Text(
                     pdfText(p.name),
                     style: pw.TextStyle(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   if ((p.kunde ?? '').trim().isNotEmpty)
-                    _text(p.kunde!.trim(), groesse: 12),
-                  pw.SizedBox(height: 4),
-                  _text(
-                    [
-                      status.label,
-                      if (p.artikelnummer != null)
-                        'Artikel ${p.artikelnummer}',
-                      'angelegt ${Format.datum(p.createdAt)}',
-                    ].join(' · '),
-                    farbe: _grau,
-                  ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.only(top: 3),
+                      child: _text(p.kunde!.trim(), groesse: 11, farbe: _grau),
+                    ),
                 ],
               ),
             ),
             if (bild != null)
               pw.Container(
-                width: 140,
-                height: 105,
+                width: 125,
+                height: 90,
                 margin: const pw.EdgeInsets.only(left: 12),
                 child: pw.Image(bild, fit: pw.BoxFit.contain),
               ),
           ],
         ),
-
-        // ── Stammdaten ────────────────────────────────────────────────
-        _abschnitt('Stammdaten'),
+        pw.SizedBox(height: 10),
         _zeilen([
+          ('Projektphase', status.label),
+          ('Artikelnummer', artikel?.artikelnummer ?? p.artikelnummer ?? ''),
+          ('Angelegt', Format.datum(p.createdAt)),
+          (
+            'Freigegeben am',
+            p.freigegebenAm == null ? '' : Format.datum(p.freigegebenAm!),
+          ),
           ('Fließdiagramm', b.fliessdiagramm ?? p.fliessdiagramm ?? ''),
           ('Neuer Prozess', p.neuerProzess ? 'ja' : 'nein'),
           (
             'Neue Zutaten',
             p.neueZutaten
-                ? 'ja${(p.neueZutatenDetails ?? '').isEmpty ? '' : ': ${p.neueZutatenDetails}'}'
+                ? 'ja${(p.neueZutatenDetails ?? '').trim().isEmpty ? '' : ': ${p.neueZutatenDetails!.trim()}'}'
                 : 'nein',
           ),
           (
@@ -622,35 +971,54 @@ Future<Uint8List> baueProjektPdf(
             p.zielEiweiss == null ? '' : 'min. ${_zahl(p.zielEiweiss)} %',
           ),
           (
-            'aw-Wert',
-            p.grenzeAw == null
-                ? ''
-                : 'max. ${_zahl(p.grenzeAw, nachkomma: 2)}',
+            'Ziel aw',
+            p.grenzeAw == null ? '' : 'max. ${_zahl(p.grenzeAw, nachkomma: 2)}',
           ),
-          if (artikel != null)
-            (
-              'Freigegeben',
-              '${artikel.artikelnummer} ${artikel.artikelbezeichnung}'
-                  '${p.freigegebenAm == null ? '' : ' am ${Format.datum(p.freigegebenAm!)}'}',
-            ),
+          (
+            'Freigegebener Artikel',
+            artikel == null
+                ? ''
+                : '${artikel.artikelnummer} · ${artikel.artikelbezeichnung}',
+          ),
+          (
+            'Rezepturstand',
+            version == null
+                ? ''
+                : '${b.rezepturName ?? 'Rezeptur'} · Stand ${version.nummer}'
+                    '${version.status == VersionStatus.abgeschlossen ? ' · abgeschlossen' : ' · Entwurf'}',
+          ),
         ]),
         ..._absatz('Produktidee', p.produktidee),
         ..._absatz('Kundenvereinbarungen', p.kundenvereinbarungen),
-        ..._absatz('Notizen', p.notizen),
-
-        // ── Rezeptur ──────────────────────────────────────────────────
-        if (e != null && version != null) ...[
-          _abschnitt(
-            'Rezeptur — ${b.rezepturName ?? ''} Stand ${version.nummer}'
-            '${version.status == VersionStatus.abgeschlossen ? '' : ' (Entwurf)'}',
+        ..._absatz('Projekt-Notizen', p.notizen),
+        if (hatRezeptur) ...[
+          pw.NewPage(),
+          _kapitel(
+            'Rezeptur und Nährwerte',
+            untertitel:
+                '${b.rezepturName ?? 'Rezeptur'} · Stand ${version.nummer}'
+                '${version.status == VersionStatus.abgeschlossen ? ' · abgeschlossen' : ' · Entwurf'}'
+                '${abgeschlossenAm == null ? '' : ' · abgeschlossen am ${Format.datum(abgeschlossenAm)}'}',
           ),
-          _fliesstext(e.zutatenliste),
-          pw.SizedBox(height: 6),
+          _unterkapitel('Zutatenverzeichnis'),
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(9),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _linie, width: .5),
+            ),
+            child: _fliesstext(e.zutatenliste),
+          ),
+          pw.SizedBox(height: 8),
           _zeilen([
             (
-              'Endgewicht',
-              '${_zahl(e.endgewichtKg, nachkomma: 3)} kg aus '
-                  '${_zahl(e.eingesetztKg, nachkomma: 3)} kg',
+              'Einsatzmenge',
+              '${_zahl(e.eingesetztKg, nachkomma: 3)} kg',
+            ),
+            ('Fertige Menge', '${_zahl(e.endgewichtKg, nachkomma: 3)} kg'),
+            (
+              'Verlust',
+              '${_zahl(version.verlustProzent)} % · ${version.verlustArt}',
             ),
             (
               'Fleischanteil',
@@ -675,9 +1043,7 @@ Future<Uint8List> baueProjektPdf(
               e.verarbeitungshilfsstoffe.keys.join(', '),
             ),
           ]),
-          pw.SizedBox(height: 6),
-          _text('Nährwerte je 100 g', farbe: _grau),
-          pw.SizedBox(height: 2),
+          _unterkapitel('Nährwerte je 100 g'),
           _zeilen([
             for (final s in Naehrstoff.values)
               (
@@ -686,145 +1052,229 @@ Future<Uint8List> baueProjektPdf(
               ),
           ]),
           if (e.warnungen.isNotEmpty) ...[
-            pw.SizedBox(height: 6),
+            _unterkapitel('Berechnungshinweise'),
             for (final w in e.warnungen)
-              _text('Hinweis: $w', groesse: 8, farbe: PdfColors.orange800),
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 3),
+                child: _text(w, groesse: 8, farbe: PdfColors.orange800),
+              ),
           ],
         ],
-
-        // ── Sensorik ──────────────────────────────────────────────────
-        if (!sensorik.leer) ...[
-          _abschnitt('Sensorik'),
-          _zeilen([
-            ('Aussehen', sensorik.aussehen),
-            ('Geruch', sensorik.geruch),
-            ('Geschmack', sensorik.geschmack),
-            ('Konsistenz', sensorik.konsistenz),
-            ('Länge', sensorik.laenge),
-            ('Durchmesser', sensorik.durchmesser),
-            ('Stückgewicht', sensorik.gewicht),
-            ('Zubereitung', sensorik.zubereitung),
-          ]),
+        if (hatProduktDaten) ...[
+          pw.NewPage(),
+          _kapitel('Produktdaten und Spezifikation'),
+          if (artikel != null) ...[
+            _unterkapitel('Freigegebener Artikel im Planer'),
+            _zeilen(_artikelZeilen(artikel)),
+          ],
+          if (!sensorik.leer) ...[
+            _unterkapitel('Sensorik und Produktmerkmale'),
+            _zeilen([
+              ('Aussehen', sensorik.aussehen),
+              ('Geruch', sensorik.geruch),
+              ('Geschmack', sensorik.geschmack),
+              ('Konsistenz', sensorik.konsistenz),
+              ('Länge', sensorik.laenge),
+              ('Durchmesser', sensorik.durchmesser),
+              ('Stückgewicht', sensorik.gewicht),
+              ('Zubereitung', sensorik.zubereitung),
+            ]),
+          ],
+          if (!spezifikation.leer) ...[
+            _unterkapitel('Spezifikation und Verpackung'),
+            _zeilen([
+              ('Artikelbezeichnung', spezifikation.bezeichnung),
+              ('Gewichtstoleranz', spezifikation.toleranz),
+              ('Lagerung', spezifikation.lagerung),
+              ('Haltbarkeit', spezifikation.haltbarkeit),
+              ('Produkthinweise', spezifikation.hinweise),
+              (
+                'Allergene als Spuren',
+                merkmaleLabel(spezifikation.spuren.join(','), kAllergene),
+              ),
+              (
+                'Umverpackung',
+                _auswahlText(spezifikation.verpackung.um, kUmverpackungen),
+              ),
+              (
+                'Karton',
+                _wahlText(
+                  spezifikation.verpackung.karton,
+                  kKartonAufmachungen,
+                ),
+              ),
+              (
+                'Füllart Umverpackung',
+                _wahlText(
+                  spezifikation.verpackung.umFuellung,
+                  kUmFuellungen,
+                ),
+              ),
+              ('Tara Umverpackung', spezifikation.verpackung.umTara),
+              ('Netto Umverpackung', spezifikation.verpackung.umNetto),
+              ('Material Umverpackung', spezifikation.verpackung.umMaterial),
+              (
+                'Einzelverpackung',
+                _auswahlText(
+                  spezifikation.verpackung.einzel,
+                  kEinzelverpackungen,
+                ),
+              ),
+              ('Einheiten je Umverpackung', spezifikation.verpackung.anzahl),
+              (
+                'Atmosphäre',
+                _wahlText(
+                  spezifikation.verpackung.atmosphaere,
+                  kAtmosphaeren,
+                ),
+              ),
+              (
+                'Füllart Einzelverpackung',
+                _wahlText(
+                  spezifikation.verpackung.einzelFuellung,
+                  kEinzelFuellungen,
+                ),
+              ),
+              (
+                'Stück je Einzelverpackung',
+                spezifikation.verpackung.stueckzahl
+              ),
+              ('Tara Einzelverpackung', spezifikation.verpackung.einzelTara),
+              ('Netto Einzelverpackung', spezifikation.verpackung.einzelNetto),
+              (
+                'Material Einzelverpackung',
+                spezifikation.verpackung.einzelMaterial,
+              ),
+            ]),
+          ],
         ],
-
-        // ── Prozess ───────────────────────────────────────────────────
-        if (!prozess.leer) ...[
-          _abschnitt('Prozess'),
-          _text(
-            [
-              prozessKurztext(prozess),
-              prozessFassung(
-                prozess,
-                ProzessStand.listeAus(p.prozessHistorie),
-              ).text,
-            ].join(' · '),
-            farbe: _grau,
+        if (hatProzess) ...[
+          pw.NewPage(),
+          _kapitel(
+            'Prozess und Maschineneinstellungen',
+            untertitel: artikel != null
+                ? 'Artikel ${artikel.artikelnummer} · Werte aus dem freigegebenen Artikel'
+                : 'Prozessstand aus der Produktentwicklung',
           ),
-          // Die Kette nach Stationen, je Schritt seine Werte.
-          for (final (k, station)
-              in stationenAus(prozess.schritte).indexed) ...[
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 6, bottom: 1),
-              child: pw.Text(
-                pdfText(
-                  'Station ${k + 1} · '
-                  '${abteilungsName(station.first.abteilung)}',
-                ),
-                style: pw.TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: pw.FontWeight.bold,
-                ),
+          if (b.artikelSchritte.isNotEmpty) ...[
+            for (final (stationIndex, station)
+                in _artikelStationen(b.artikelSchritte).indexed) ...[
+              _unterkapitel(
+                'Station ${stationIndex + 1} · '
+                '${abteilungsName(station.first.schritt.abteilung)}',
               ),
-            ),
-            for (final s in station) ..._schritt(prozess.schritte, s),
-          ],
-          // Abschnitte aus der Zeit vor der Kette — bis das Projekt im
-          // Reiter „Herstellung" geöffnet wird (F34).
-          for (final a in prozess.abschnitte) ...[
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 4, bottom: 2),
-              child: pw.Text(
-                pdfText(a.titel),
-                style: pw.TextStyle(
-                  fontSize: 9,
-                  fontWeight: pw.FontWeight.bold,
+              for (final eintrag in station)
+                _artikelSchrittWidget(
+                  eintrag,
+                  b.artikelSchritte.indexOf(eintrag) + 1,
                 ),
-              ),
+            ],
+          ] else if (artikel != null)
+            _text(
+              'Im freigegebenen Artikel sind keine aktiven Prozessschritte hinterlegt.',
+              farbe: _grau,
             ),
-            _zeilen([for (final f in a.felder) (f.label, f.wert)]),
+          if (!prozess.leer) ...[
+            _unterkapitel(
+              artikel == null
+                  ? 'Prozesskette des Projekts'
+                  : 'Prozessstand im Entwicklungsprojekt',
+            ),
+            _text(
+              [
+                prozessKurztext(prozess),
+                prozessFassung(
+                  prozess,
+                  ProzessStand.listeAus(p.prozessHistorie),
+                ).text,
+              ].join(' · '),
+              farbe: _grau,
+            ),
+            for (final (k, station)
+                in stationenAus(prozess.schritte).indexed) ...[
+              _unterkapitel(
+                'Station ${k + 1} · '
+                '${abteilungsName(station.first.abteilung)}',
+              ),
+              for (final s in station) ..._schritt(prozess.schritte, s),
+            ],
+            for (final abschnitt in prozess.abschnitte) ...[
+              _unterkapitel(abschnitt.titel),
+              _zeilen([
+                for (final f in abschnitt.felder) (f.label, f.wert),
+              ]),
+            ],
           ],
         ],
-
-        // ── HACCP ─────────────────────────────────────────────────────
         if (!haccp.leer) ...[
-          _abschnitt('HACCP'),
+          pw.NewPage(),
+          _kapitel('Lebensmittelsicherheit und Freigabe'),
+          _unterkapitel('HACCP-Gefahrenanalyse'),
           for (final g in haccp.gefahren)
-            _text(
-              '${g.gefahr} (${g.art.label}) — Risiko ${g.risiko} '
-              '(${g.schwere} × ${g.wahrscheinlichkeit})'
-              '${g.massnahmen.trim().isEmpty ? '' : ': ${g.massnahmen.trim()}'}',
-            ),
-          if (haccp.lenkungspunkte.isNotEmpty) pw.SizedBox(height: 4),
-          for (final l in haccp.lenkungspunkte)
-            _text(
-              '${l.ergebnis.kuerzel} — ${l.schritt}'
-              '${l.lenkung.trim().isEmpty ? '' : ': ${l.lenkung.trim()}'}',
-            ),
-        ],
-
-        // ── Checklisten ───────────────────────────────────────────────
-        _abschnitt('Checklisten'),
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Expanded(
-              flex: 3,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _text(
-                    'Projekt · ${checkliste.text} erledigt',
-                    farbe: _grau,
-                  ),
-                  pw.SizedBox(height: 2),
-                  for (final c in checkliste.punkte)
-                    _text(
-                      '${c.erledigt ? '[x]' : '[ ]'} ${c.punkt.label}'
-                      '${c.vonHand ? ' (von Hand)' : c.text == null ? '' : ': ${c.text}'}',
-                    ),
-                ],
+            pw.Container(
+              margin: const pw.EdgeInsets.only(bottom: 6),
+              padding: const pw.EdgeInsets.all(7),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: _linie, width: .5),
               ),
+              child: _zeilen([
+                ('Gefahr', g.gefahr),
+                ('Art', g.art.label),
+                (
+                  'Risikobewertung',
+                  '${g.risiko} (${g.schwere} × ${g.wahrscheinlichkeit})',
+                ),
+                ('Maßnahmen', g.massnahmen),
+              ]),
             ),
-            pw.SizedBox(width: 12),
-            pw.Expanded(
-              flex: 2,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _text(
-                    'Etikett (LMIV) · $etikettGeprueft von '
-                    '${kEtikettCheckliste.length} Pflichtangaben geprüft',
-                    farbe: _grau,
+          if (haccp.lenkungspunkte.isNotEmpty) ...[
+            _unterkapitel('Lenkungspunkte'),
+            for (final l in haccp.lenkungspunkte)
+              pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 6),
+                padding: const pw.EdgeInsets.all(7),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: _linie, width: .5),
+                ),
+                child: _zeilen([
+                  ('Einstufung', l.ergebnis.kuerzel),
+                  ('Prozessschritt', l.schritt),
+                  ('Lenkungsmaßnahme', l.lenkung),
+                  (
+                    'Entscheidungsbaum',
+                    [
+                      for (final antwort in l.antworten.entries)
+                        '${kEntscheidungsbaum[antwort.key]?.kurz ?? antwort.key}: '
+                            '${antwort.value ? 'Ja' : 'Nein'}',
+                    ].join(' · '),
                   ),
-                  pw.SizedBox(height: 2),
-                  for (final c in kEtikettCheckliste)
-                    _text(
-                      switch (lmivStand(etikett, c.schluessel)) {
-                        LmivStand.erledigt => '[x] ${c.label}',
-                        LmivStand.trifftNichtZu =>
-                          '[-] ${c.label} (trifft nicht zu)',
-                        LmivStand.offen => '[ ] ${c.label}',
-                      },
-                    ),
-                ],
+                ]),
               ),
-            ),
           ],
+        ],
+        pw.NewPage(),
+        _kapitel('Checklisten und Bearbeitungsstand'),
+        _unterkapitel('Projekt-Checkliste · ${checkliste.text} erledigt'),
+        for (final c in checkliste.punkte)
+          _text(
+            '${c.erledigt ? '[x]' : '[ ]'} ${c.punkt.label}'
+            '${c.vonHand ? ' (von Hand)' : c.text == null ? '' : ': ${c.text}'}',
+          ),
+        _unterkapitel(
+          'Etikett (LMIV) · $etikettGeprueft von '
+          '${kEtikettCheckliste.length} Pflichtangaben geprüft',
         ),
-
-        // ── Entwicklungsweg ───────────────────────────────────────────
-        if (b.verlauf.isNotEmpty || b.inArbeit.isNotEmpty) ...[
-          _abschnitt('Entwicklungsweg'),
+        for (final c in kEtikettCheckliste)
+          _text(
+            switch (lmivStand(etikett, c.schluessel)) {
+              LmivStand.erledigt => '[x] ${c.label}',
+              LmivStand.trifftNichtZu => '[-] ${c.label} (trifft nicht zu)',
+              LmivStand.offen => '[ ] ${c.label}',
+            },
+          ),
+        if (hatVerlauf) ...[
+          pw.NewPage(),
+          _kapitel('Entwicklungsverlauf'),
           ..._entwicklungsweg(b),
         ],
       ],
