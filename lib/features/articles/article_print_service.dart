@@ -1,14 +1,17 @@
-import 'package:flutter/material.dart' show
-    AlertDialog,
-    BuildContext,
-    CheckboxListTile,
-    FilledButton,
-    Navigator,
-    StatefulBuilder,
-    SwitchListTile,
-    Text,
-    TextButton,
-    showDialog;
+import 'dart:convert';
+
+import 'package:flutter/material.dart'
+    show
+        AlertDialog,
+        BuildContext,
+        CheckboxListTile,
+        FilledButton,
+        Navigator,
+        StatefulBuilder,
+        SwitchListTile,
+        Text,
+        TextButton,
+        showDialog;
 import 'package:flutter/widgets.dart' as w;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pdf/pdf.dart';
@@ -301,8 +304,7 @@ class ArticlePrintService {
             padding: const pw.EdgeInsets.only(top: 2),
             child: pw.Text(
               p.produktgruppe!,
-              style:
-                  const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
             ),
           ),
         pw.SizedBox(height: 5),
@@ -321,6 +323,16 @@ class ArticlePrintService {
     return 'Leistung: ${_fmt(l.mengeKg)} kg in ${Zeit.kurz(l.minuten)} '
         '(${_fmt(l.kgProStunde.roundToDouble())} kg/h)';
   }
+
+  /// Das Abteilungsband im Artikel-Prozessblattstil.
+  static pw.Widget berichtAbteilungsBand(
+    String abteilungDb,
+    List<ProductStep> schritte,
+  ) =>
+      _abteilungsBand(
+        abteilungDb,
+        leistung: _leistungText(schritte),
+      );
 
   static pw.Widget _abteilungsBand(String abteilungDb, {String? leistung}) {
     final abt = Abteilung.fromDbValue(abteilungDb);
@@ -423,9 +435,18 @@ class ArticlePrintService {
         .where((p) => !istVerstecktesPlattenParam(p.parameterName))
         .where((p) => p.wert != null && p.wert!.trim().isNotEmpty)
         .toList();
-    final paramGruppen = <String, List<ProductStepParameter>>{};
+    final paramGruppen = <String, List<({String name, String wert})>>{};
     for (final p in sichtbare) {
-      paramGruppen.putIfAbsent(p.parameterGruppe, () => []).add(p);
+      paramGruppen.putIfAbsent(p.parameterGruppe, () => []).add(
+        (name: p.parameterName, wert: p.wert!.trim()),
+      );
+    }
+    for (final (name, wert) in _legacyMaschinenWerte(
+      step.maschinenEinstellungenJson,
+    )) {
+      paramGruppen
+          .putIfAbsent('MASCHINENEINSTELLUNGEN', () => [])
+          .add((name: name, wert: wert));
     }
 
     return pw.Container(
@@ -526,8 +547,7 @@ class ArticlePrintService {
               spacing: 10,
               runSpacing: 2,
               children: [
-                for (final p in g.value)
-                  _parameterZeile(p.parameterName, p.wert!.trim()),
+                for (final p in g.value) _parameterZeile(p.name, p.wert),
               ],
             ),
           ],
@@ -547,6 +567,38 @@ class ArticlePrintService {
         ],
       ),
     );
+  }
+
+  /// Die vollständige Maschinenkarte im Artikel-Prozessblattstil.
+  static pw.Widget berichtSchrittBlock({
+    required ProductStep step,
+    required Machine? maschine,
+    required List<ProductStepParameter> parameter,
+  }) =>
+      _schrittBlock(step: step, maschine: maschine, parameter: parameter);
+
+  static List<(String, String)> _legacyMaschinenWerte(String? json) {
+    final raw = json?.trim() ?? '';
+    if (raw.isEmpty) return const [];
+    try {
+      final daten = jsonDecode(raw);
+      if (daten is Map<String, dynamic>) {
+        return [
+          for (final MapEntry(:key, :value) in daten.entries)
+            if (value != null && '$value'.trim().isNotEmpty) (key, '$value'),
+        ];
+      }
+      if (daten is List) {
+        return [
+          for (final (index, value) in daten.indexed)
+            if (value != null && '$value'.trim().isNotEmpty)
+              ('Einstellung ${index + 1}', '$value'),
+        ];
+      }
+    } on FormatException {
+      // Alte Freitextwerte bleiben lesbar.
+    }
+    return [('Maschineneinstellungen', raw)];
   }
 
   /// Breite einer Parameterspalte im Druck. Zwei Spalten passen neben-
@@ -618,8 +670,7 @@ class ArticlePrintService {
         children: [
           pw.Text(
             label,
-            style:
-                const pw.TextStyle(fontSize: 6, color: PdfColors.grey600),
+            style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey600),
           ),
           pw.Text(
             wert,
@@ -778,8 +829,7 @@ class ArticlePrintService {
             left: 2,
             child: pw.Text(
               '$zone',
-              style:
-                  const pw.TextStyle(fontSize: 5, color: PdfColors.grey600),
+              style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey600),
             ),
           ),
           pw.Center(
@@ -804,11 +854,3 @@ class ArticlePrintService {
     return v.toStringAsFixed(1).replaceAll('.', ',');
   }
 }
-
-
-
-
-
-
-
-

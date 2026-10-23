@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:drift/drift.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -9,6 +7,7 @@ import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
 import '../../../core/utils/format.dart';
 import '../../../core/utils/pdf_text.dart';
+import '../../articles/article_print_service.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
 import '../haccp/haccp_modell.dart';
@@ -436,103 +435,6 @@ List<(String, String)> _artikelZeilen(Product p) => [
       ('Artikelnotizen', p.notizen ?? ''),
     ];
 
-List<(String, String)> _legacyMaschinenWerte(String? json) {
-  final raw = json?.trim() ?? '';
-  if (raw.isEmpty) return const [];
-  try {
-    final daten = jsonDecode(raw);
-    if (daten is Map<String, dynamic>) {
-      return [
-        for (final MapEntry(:key, :value) in daten.entries)
-          if (value != null && '$value'.trim().isNotEmpty) (key, '$value'),
-      ];
-    }
-    if (daten is List) {
-      return [
-        for (final (index, value) in daten.indexed)
-          if (value != null && '$value'.trim().isNotEmpty)
-            ('Einstellung ${index + 1}', '$value'),
-      ];
-    }
-  } on FormatException {
-    // Alte Freitextwerte bleiben lesbar, auch wenn sie kein gültiges JSON sind.
-  }
-  return [('Maschineneinstellungen', raw)];
-}
-
-List<(String, String)> _artikelSchrittZeilen(BerichtArtikelSchritt eintrag) {
-  final s = eintrag.schritt;
-  return [
-    ('Abteilung', abteilungsName(s.abteilung)),
-    ('Anlage', eintrag.maschine?.name ?? s.maschine ?? ''),
-    ('Prozessschritt', s.prozessschritt ?? ''),
-    ('Menge', _produktWert(s.mengeKg, nachkomma: 3, einheit: ' kg')),
-    ('Mitarbeiter', s.basisMitarbeiter.toString()),
-    (
-      'Basiszeit',
-      '${_zahl(s.basisDauerMinuten)} min je ${_zahl(s.basisMengeKg, nachkomma: 3)} kg',
-    ),
-    ('Rüstzeit', _produktWert(s.fixZeitMinuten, einheit: ' min')),
-    ('Kerntemperatur', _produktWert(s.kerntemperaturZiel, einheit: ' °C')),
-    ('Raumtemperatur max.', _produktWert(s.raumtemperaturMax, einheit: ' °C')),
-    ('Wartezeit', _produktWert(s.wartezeitMinuten, einheit: ' min')),
-    ('Ausbeute', _produktWert(s.ausbeuteFaktor, nachkomma: 3)),
-    ('Chargengröße min.', _produktWert(s.minChargenKg, einheit: ' kg')),
-    ('Chargengröße max.', _produktWert(s.maxChargenKg, einheit: ' kg')),
-    ('Kochkammer-Programm', s.kochkammerProgramm ?? ''),
-    ('Klimaprogramm', s.klimaprogramm ?? ''),
-    ('Bratparameter', s.bratparameter ?? ''),
-    ('Notizen', s.notizen ?? ''),
-    ..._legacyMaschinenWerte(s.maschinenEinstellungenJson),
-  ];
-}
-
-pw.Widget _artikelSchrittWidget(
-  BerichtArtikelSchritt eintrag,
-  int nummer,
-) {
-  final s = eintrag.schritt;
-  final zeilen = _artikelSchrittZeilen(eintrag);
-  final gruppen = <String, List<(String, String)>>{};
-  for (final p in eintrag.parameter) {
-    final wert = p.wert?.trim() ?? '';
-    if (wert.isEmpty) continue;
-    gruppen.putIfAbsent(p.parameterGruppe.trim(), () => []).add(
-      (p.parameterName, wert),
-    );
-  }
-  return pw.Container(
-    margin: const pw.EdgeInsets.only(bottom: 8),
-    padding: const pw.EdgeInsets.all(8),
-    decoration: pw.BoxDecoration(
-      border: pw.Border.all(color: _linie, width: .5),
-      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
-    ),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          pdfText(
-            '$nummer. ${eintrag.maschine?.name ?? s.maschine ?? s.prozessschritt ?? 'Prozessschritt'}',
-          ),
-          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 3),
-        _zeilen(zeilen),
-        for (final gruppe in gruppen.entries) ...[
-          pw.SizedBox(height: 4),
-          _text(
-            gruppe.key.isEmpty ? 'Maschineneinstellungen' : gruppe.key,
-            groesse: 8,
-            farbe: _grau,
-          ),
-          _zeilen(gruppe.value),
-        ],
-      ],
-    ),
-  );
-}
-
 List<List<BerichtArtikelSchritt>> _artikelStationen(
   List<BerichtArtikelSchritt> schritte,
 ) {
@@ -655,46 +557,114 @@ PdfColor _phasenFarbe(ProjektStatus s) => switch (s) {
 /// Die Farbe der Stationen — wie die Rezepturstände im Zeitstrahl.
 const PdfColor _stationFarbe = PdfColor.fromInt(0xFF7E3FB8);
 
-/// Ein Eintrag des Verlaufs: Kopfzeile, Beschreibung, Änderungen und
-/// Kommentare; offene Einträge sind markiert. [einzug] rückt ihn unter
-/// seine Station.
+({PdfColor akzent, PdfColor hintergrund, String label}) _risikoDarstellung(
+  int risiko,
+) =>
+    risiko >= 6
+        ? (
+            akzent: PdfColor.fromHex('#B42318'),
+            hintergrund: PdfColor.fromHex('#FDECEA'),
+            label: 'KRITISCH',
+          )
+        : risiko >= 3
+            ? (
+                akzent: PdfColor.fromHex('#B54708'),
+                hintergrund: PdfColor.fromHex('#FFF4E5'),
+                label: 'MITTEL',
+              )
+            : (
+                akzent: PdfColor.fromHex('#067647'),
+                hintergrund: PdfColor.fromHex('#ECFDF3'),
+                label: 'OK',
+              );
+
+pw.Widget _risikoLegende(String label, PdfColor farbe) => pw.Row(
+      mainAxisSize: pw.MainAxisSize.min,
+      children: [
+        pw.Container(
+          width: 7,
+          height: 7,
+          decoration: pw.BoxDecoration(
+            color: farbe,
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2)),
+          ),
+        ),
+        pw.SizedBox(width: 3),
+        _text(label, groesse: 7.5, farbe: _grau),
+      ],
+    );
+
+/// Ein Verlaufseintrag mit getrennt erkennbaren Metadaten, Beschreibung,
+/// Änderungen und Kommentaren.
 List<pw.Widget> _eintrag(ProjektEintrag e, {double einzug = 0}) {
-  pw.Widget eingerueckt(pw.Widget w) => einzug == 0
-      ? w
-      : pw.Padding(padding: pw.EdgeInsets.only(left: einzug), child: w);
   final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
   final beschreibung = e.beschreibung?.trim() ?? '';
   return [
-    eingerueckt(
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 4),
-        child: pw.Text(
-          pdfText(
-            '${Format.datum(e.datum)} · ${EintragArt.aus(e.art).label} · '
-            '${e.titel}${offen ? ' (offen)' : ''}',
+    pw.Padding(
+      padding: pw.EdgeInsets.only(left: einzug, top: 5),
+      child: pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.grey100,
+          border: pw.Border(
+            left: pw.BorderSide(color: _blau, width: 2),
           ),
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _text(e.titel, groesse: 9, farbe: PdfColors.grey900),
+            pw.SizedBox(height: 2),
+            _text(
+              '${Format.datum(e.datum)} · ${EintragArt.aus(e.art).label}'
+              '${offen ? ' · Offen' : ''}',
+              groesse: 7.5,
+              farbe: _grau,
+            ),
+          ],
         ),
       ),
     ),
-    if (beschreibung.isNotEmpty) eingerueckt(_fliesstext(beschreibung)),
-    for (final a in texteAus(e.aenderungen))
-      eingerueckt(_text('- $a', groesse: 8, farbe: _grau)),
-    for (final k in Kommentar.listeAus(e.kommentare))
-      eingerueckt(
+    if (beschreibung.isNotEmpty) ...[
+      pw.Padding(
+        padding: pw.EdgeInsets.only(left: einzug + 8, top: 4, bottom: 1),
+        child: _text('Beschreibung', groesse: 7.5, farbe: _grau),
+      ),
+      pw.Padding(
+        padding: pw.EdgeInsets.only(left: einzug + 8),
+        child: _fliesstext(beschreibung),
+      ),
+    ],
+    if (texteAus(e.aenderungen).isNotEmpty) ...[
+      pw.Padding(
+        padding: pw.EdgeInsets.only(left: einzug + 8, top: 4, bottom: 1),
+        child: _text('Änderungen', groesse: 7.5, farbe: _grau),
+      ),
+      for (final a in texteAus(e.aenderungen))
+        _text(
+          '• $a',
+          groesse: 8,
+          farbe: _grau,
+        ),
+    ],
+    if (Kommentar.listeAus(e.kommentare).isNotEmpty) ...[
+      pw.Padding(
+        padding: pw.EdgeInsets.only(left: einzug + 8, top: 4, bottom: 1),
+        child: _text('Kommentare', groesse: 7.5, farbe: _grau),
+      ),
+      for (final k in Kommentar.listeAus(e.kommentare))
         _text(
           '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
           groesse: 8,
           farbe: _grau,
         ),
-      ),
+    ],
   ];
 }
 
-/// Der Entwicklungsweg — von oben nach unten: die Idee mit dem, was vor
-/// dem ersten Stand geschah, dann jede Station (ein abgeschlossener
-/// Rezepturstand) mit Grund, Änderungen, Kennzahlen und dem, was danach
-/// kam, dazwischen die Wechsel der Phase; am Ende, was in Arbeit ist.
+/// Der Entwicklungsweg als zeitlich geordnete Stationen mit klar
+/// bezeichneten Rückmeldungen, Rezepturänderungen und Phasenwechseln.
 List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
   final p = b.projekt;
   final kunde = p.kunde?.trim() ?? '';
@@ -704,101 +674,162 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
     switch (punkt) {
       case WegAnfang(:final eintraege):
         widgets.add(
-          pw.Text(
-            pdfText(
-              [
-                'Idee und Anfrage',
-                'seit ${Format.datum(p.createdAt)}',
-                if (kunde.isNotEmpty) kunde,
-              ].join(' · '),
+          pw.Container(
+            margin: const pw.EdgeInsets.only(top: 5),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.blue50,
+              border: pw.Border(
+                left: pw.BorderSide(color: _blau, width: 3),
+              ),
             ),
-            style: pw.TextStyle(fontSize: 10.5, fontWeight: pw.FontWeight.bold),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _text('START · Idee und Anfrage', groesse: 10, farbe: _blau),
+                pw.SizedBox(height: 2),
+                _text(
+                  [
+                    'Projektstart ${Format.datum(p.createdAt)}',
+                    if (kunde.isNotEmpty) 'Kunde: $kunde',
+                  ].join(' · '),
+                  groesse: 8,
+                  farbe: _grau,
+                ),
+              ],
+            ),
           ),
         );
         for (final e in eintraege) {
-          widgets.addAll(_eintrag(e, einzug: 10));
+          widgets.addAll(_eintrag(e, einzug: 8));
         }
       case WegStation():
         final e = punkt.eintrag;
         final beschreibung = e.beschreibung?.trim() ?? '';
         final kennzahlen = b.kennzahlen[punkt.versionId] ?? const [];
-        widgets.addAll([
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 10),
-            child: pw.Text(
-              pdfText('Station ${punkt.nummer} · ${e.titel}'),
-              style: pw.TextStyle(
-                fontSize: 10.5,
-                fontWeight: pw.FontWeight.bold,
-                color: _stationFarbe,
+        widgets.add(
+          pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12, bottom: 4),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.purple50,
+              border: pw.Border(
+                left: pw.BorderSide(color: _stationFarbe, width: 3),
               ),
             ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _text(
+                  'STATION ${punkt.nummer} · ${e.titel}',
+                  groesse: 10,
+                  farbe: _stationFarbe,
+                ),
+                pw.SizedBox(height: 2),
+                _text(
+                  [
+                    'Rezepturstand ${b.versionen[punkt.versionId]?.nummer ?? ''}',
+                    Format.datum(e.datum),
+                    if (p.freigabeVersionId == punkt.versionId) 'Freigegeben',
+                  ].where((s) => s.isNotEmpty).join(' · '),
+                  groesse: 8,
+                  farbe: _grau,
+                ),
+              ],
+            ),
           ),
-          _text(
-            [
-              Format.datum(e.datum),
-              if (p.freigabeVersionId == punkt.versionId) 'freigegeben',
-            ].join(' · '),
-            groesse: 8,
-            farbe: _grau,
-          ),
-          if (beschreibung.isNotEmpty) _fliesstext(beschreibung),
-          for (final a in texteAus(e.aenderungen)) _text('- $a', groesse: 8.5),
-          if (kennzahlen.isNotEmpty)
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 3),
-              child: _text(
-                [
-                  for (final k in kennzahlen)
-                    '${k.label} ${k.wert}'
-                        '${k.aenderung == null ? '' : ' (${k.aenderung})'}',
-                ].join(' · '),
+        );
+        if (beschreibung.isNotEmpty) {
+          widgets.addAll(_absatz('Standbeschreibung', beschreibung));
+        }
+        final aenderungen = texteAus(e.aenderungen);
+        if (aenderungen.isNotEmpty) {
+          widgets.add(_unterkapitel('Änderungen an der Rezeptur'));
+          for (final a in aenderungen) {
+            widgets.add(_text('• $a', groesse: 8.5));
+          }
+        }
+        if (kennzahlen.isNotEmpty) {
+          widgets.add(
+            _unterkapitel(
+              'Nährwerte und Kennzahlen je 100 g'
+              ' · Änderung zum vorherigen Stand',
+            ),
+          );
+          widgets.add(
+            _zeilen([
+              for (final k in kennzahlen)
+                (
+                  k.label,
+                  '${k.wert}'
+                      '${k.aenderung == null ? '' : ' · ${k.aenderung}'}',
+                ),
+            ]),
+          );
+        }
+        final kommentare = Kommentar.listeAus(e.kommentare);
+        if (kommentare.isNotEmpty) {
+          widgets.add(_unterkapitel('Kommentare zum Stand'));
+          for (final k in kommentare) {
+            widgets.add(
+              _text(
+                '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
                 groesse: 8,
                 farbe: _grau,
               ),
-            ),
-          for (final k in Kommentar.listeAus(e.kommentare))
-            _text(
-              '${k.name.isEmpty ? '' : '${k.name}: '}${k.text}',
-              groesse: 8,
-              farbe: _grau,
-            ),
-        ]);
+            );
+          }
+        }
         if (punkt.rueckmeldungen.isNotEmpty) {
-          widgets.add(
-            pw.Padding(
-              padding: const pw.EdgeInsets.only(top: 4),
-              child: _text('Danach', groesse: 8, farbe: _grau),
-            ),
-          );
+          widgets.add(_unterkapitel('Rückmeldungen nach dieser Station'));
           for (final r in punkt.rueckmeldungen) {
-            widgets.addAll(_eintrag(r, einzug: 10));
+            widgets.addAll(_eintrag(r, einzug: 8));
           }
         }
       case WegPhase():
         final e = punkt.eintrag;
         final stand = b.versionen[e.versionId]?.nummer;
+        final wechsel = statusWechsel(e);
         widgets.add(
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 10),
-            child: pw.Text(
-              pdfText(
-                [
-                  e.titel,
-                  if (stand != null) 'Stand $stand',
-                  Format.datum(e.datum),
-                ].join(' · '),
+          pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12),
+            padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            decoration: pw.BoxDecoration(
+              color: PdfColors.grey100,
+              border: pw.Border(
+                left: pw.BorderSide(
+                  color: _phasenFarbe(punkt.status),
+                  width: 3,
+                ),
               ),
-              style: pw.TextStyle(
-                fontSize: 10,
-                fontWeight: pw.FontWeight.bold,
-                color: _phasenFarbe(punkt.status),
-              ),
+            ),
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _text(
+                  'PHASENWECHSEL · ${wechsel == null ? punkt.status.label : '${wechsel.alt?.label ?? ''} → ${wechsel.neu.label}'}',
+                  groesse: 9.5,
+                  farbe: _phasenFarbe(punkt.status),
+                ),
+                pw.SizedBox(height: 2),
+                _text(
+                  [
+                    e.titel,
+                    if (stand != null) 'Stand $stand',
+                    Format.datum(e.datum),
+                  ].join(' · '),
+                  groesse: 8,
+                  farbe: _grau,
+                ),
+              ],
             ),
           ),
         );
-        for (final a in texteAus(e.aenderungen)) {
-          widgets.add(_text('- $a', groesse: 8, farbe: _grau));
+        final aenderungen = texteAus(e.aenderungen);
+        if (aenderungen.isNotEmpty) {
+          for (final a in aenderungen) {
+            widgets.add(_text('• $a', groesse: 8, farbe: _grau));
+          }
         }
     }
   }
@@ -812,11 +843,30 @@ List<pw.Widget> _entwicklungsweg(ProjektBericht b) {
   }
   for (final a in b.inArbeit) {
     widgets.add(
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(top: 8),
-        child: _text(
-          'In Arbeit: ${a.rezeptur} · Stand ${a.version.nummer} (Entwurf)',
-          farbe: _grau,
+      pw.Container(
+        margin: const pw.EdgeInsets.only(top: 12),
+        padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+        decoration: const pw.BoxDecoration(
+          color: PdfColors.orange50,
+          border: pw.Border(
+            left: pw.BorderSide(color: PdfColors.orange800, width: 3),
+          ),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _text(
+              'IN ARBEIT · Entwurf',
+              groesse: 9.5,
+              farbe: PdfColors.orange800,
+            ),
+            pw.SizedBox(height: 2),
+            _text(
+              '${a.rezeptur} · Stand ${a.version.nummer}',
+              groesse: 8.5,
+              farbe: _grau,
+            ),
+          ],
         ),
       ),
     );
@@ -1153,20 +1203,29 @@ Future<Uint8List> baueProjektPdf(
           _kapitel(
             'Prozess und Maschineneinstellungen',
             untertitel: artikel != null
-                ? 'Artikel ${artikel.artikelnummer} · Werte aus dem freigegebenen Artikel'
+                ? 'Artikel ${artikel.artikelnummer} · Prozessblattdarstellung'
                 : 'Prozessstand aus der Produktentwicklung',
           ),
           if (b.artikelSchritte.isNotEmpty) ...[
-            for (final (stationIndex, station)
-                in _artikelStationen(b.artikelSchritte).indexed) ...[
-              _unterkapitel(
-                'Station ${stationIndex + 1} · '
-                '${abteilungsName(station.first.schritt.abteilung)}',
+            for (final station in _artikelStationen(b.artikelSchritte)) ...[
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(
+                  top: 8,
+                  bottom: 4,
+                ),
+                child: ArticlePrintService.berichtAbteilungsBand(
+                  station.first.schritt.abteilung,
+                  [for (final eintrag in station) eintrag.schritt],
+                ),
               ),
               for (final eintrag in station)
-                _artikelSchrittWidget(
-                  eintrag,
-                  b.artikelSchritte.indexOf(eintrag) + 1,
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 6),
+                  child: ArticlePrintService.berichtSchrittBlock(
+                    step: eintrag.schritt,
+                    maschine: eintrag.maschine,
+                    parameter: eintrag.parameter,
+                  ),
                 ),
             ],
           ] else if (artikel != null)
@@ -1174,11 +1233,9 @@ Future<Uint8List> baueProjektPdf(
               'Im freigegebenen Artikel sind keine aktiven Prozessschritte hinterlegt.',
               farbe: _grau,
             ),
-          if (!prozess.leer) ...[
+          if (b.artikelSchritte.isEmpty && !prozess.leer) ...[
             _unterkapitel(
-              artikel == null
-                  ? 'Prozesskette des Projekts'
-                  : 'Prozessstand im Entwicklungsprojekt',
+              'Prozesskette des Projekts',
             ),
             _text(
               [
@@ -1210,23 +1267,67 @@ Future<Uint8List> baueProjektPdf(
           pw.NewPage(),
           _kapitel('Lebensmittelsicherheit und Freigabe'),
           _unterkapitel('HACCP-Gefahrenanalyse'),
-          for (final g in haccp.gefahren)
-            pw.Container(
-              margin: const pw.EdgeInsets.only(bottom: 6),
-              padding: const pw.EdgeInsets.all(7),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: _linie, width: .5),
-              ),
-              child: _zeilen([
-                ('Gefahr', g.gefahr),
-                ('Art', g.art.label),
-                (
-                  'Risikobewertung',
-                  '${g.risiko} (${g.schwere} × ${g.wahrscheinlichkeit})',
+          pw.Wrap(
+            spacing: 12,
+            children: [
+              _risikoLegende('1–2 · OK', PdfColor.fromHex('#067647')),
+              _risikoLegende('3–4 · Mittel', PdfColor.fromHex('#B54708')),
+              _risikoLegende('6–9 · Kritisch', PdfColor.fromHex('#B42318')),
+            ],
+          ),
+          pw.SizedBox(height: 5),
+          for (final g in haccp.gefahren) ...[
+            () {
+              final risiko = _risikoDarstellung(g.risiko);
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 6),
+                padding: const pw.EdgeInsets.all(7),
+                decoration: pw.BoxDecoration(
+                  color: risiko.hintergrund,
+                  border: pw.Border.all(color: risiko.akzent, width: .7),
                 ),
-                ('Maßnahmen', g.massnahmen),
-              ]),
-            ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _text(
+                            'Risiko ${g.risiko} · ${g.schwere} × ${g.wahrscheinlichkeit}',
+                            groesse: 9,
+                            farbe: risiko.akzent,
+                          ),
+                        ),
+                        pw.Container(
+                          padding: const pw.EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
+                          decoration: pw.BoxDecoration(
+                            color: risiko.akzent,
+                            borderRadius: const pw.BorderRadius.all(
+                              pw.Radius.circular(3),
+                            ),
+                          ),
+                          child: _text(
+                            risiko.label,
+                            groesse: 7,
+                            farbe: PdfColors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                    pw.SizedBox(height: 4),
+                    _zeilen([
+                      ('Gefahr', g.gefahr),
+                      ('Art', g.art.label),
+                      ('Maßnahmen', g.massnahmen),
+                    ]),
+                  ],
+                ),
+              );
+            }(),
+          ],
           if (haccp.lenkungspunkte.isNotEmpty) ...[
             _unterkapitel('Lenkungspunkte'),
             for (final l in haccp.lenkungspunkte)

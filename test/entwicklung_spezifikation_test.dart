@@ -7,6 +7,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:produktion_planer/core/constants/parameter_namen.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
@@ -1032,6 +1033,24 @@ void main() {
                 wert: const Value('3000 U/min'),
               ),
             );
+        await db.into(db.productStepParameters).insert(
+              ProductStepParametersCompanion.insert(
+                id: 'parameter-2',
+                stepId: 'schritt-1',
+                parameterGruppe: kPlattenGruppeBrat,
+                parameterName: 'Platte Oben 1',
+                wert: const Value('180'),
+              ),
+            );
+        await db.into(db.productStepParameters).insert(
+              ProductStepParametersCompanion.insert(
+                id: 'parameter-schema',
+                stepId: 'schritt-1',
+                parameterGruppe: kPlattenGruppeBrat,
+                parameterName: kPlattenSchemaParam,
+                wert: const Value('bratstrasse'),
+              ),
+            );
         await projekte.projektAendern(
           id,
           const EntwicklungProjekteCompanion(artikelId: Value('artikel-1')),
@@ -1045,7 +1064,9 @@ void main() {
           'Testbratstraße',
         );
         expect(
-          bericht.artikelSchritte.single.parameter.single.wert,
+          bericht.artikelSchritte.single.parameter
+              .singleWhere((p) => p.parameterName == 'Drehzahl')
+              .wert,
           '3000 U/min',
         );
 
