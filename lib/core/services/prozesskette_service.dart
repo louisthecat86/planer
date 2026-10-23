@@ -3,6 +3,17 @@ import 'package:uuid/uuid.dart';
 
 import '../database/database.dart';
 
+/// Ein Schritt, wie die Kette eines Artikels werden soll — mit [id] ein
+/// vorhandener Schritt, ohne einer, der neu entsteht. Siehe
+/// [ProzesskettenService.uebernehmen].
+typedef SollSchritt = ({
+  String? id,
+  String abteilung,
+  String? maschineId,
+  String? maschine,
+  String? prozessschritt,
+});
+
 /// Änderungen an der Prozesskette eines Artikels: Schritte einfügen,
 /// verschieben, entfernen, einer anderen Abteilung zuordnen — und die
 /// Leistungsdaten je Abteilung.
@@ -277,6 +288,114 @@ class ProzesskettenService {
             if (s.id != stepId) s.id,
         ],
       );
+    });
+  }
+
+  /// Setzt die Kette des Artikels auf [soll] — so übernimmt die Freigabe
+  /// aus der Produktentwicklung die Kette eines Projekts.
+  ///
+  /// Ein Eintrag mit `id` ist ein vorhandener Schritt: Er behält Personen
+  /// und alles, was die Entwicklung nicht kennt, und bekommt Abteilung,
+  /// Anlage und Prozessschritt aus [soll]. Einer ohne `id` wird neu
+  /// angelegt — mit einer Person und ohne Leistungsdaten. Vorhandene
+  /// Schritte, die in [soll] fehlen, entfallen. Die Leistungsdaten bleiben
+  /// bei ihren Stationen wie bei jedem Umbau der Kette.
+  ///
+  /// Gibt die IDs der Schritte in der neuen Abfolge zurück. Wirft einen
+  /// [StateError] bei mehr als [maxSchritte] Schritten und einen
+  /// [ArgumentError], wenn eine `id` nicht (mehr) zu den aktiven Schritten
+  /// gehört oder doppelt vorkommt.
+  static Future<List<String>> uebernehmen(
+    AppDatabase db,
+    String productId,
+    List<SollSchritt> soll,
+  ) {
+    return db.transaction(() async {
+      if (soll.length > maxSchritte) {
+        throw StateError(
+          'Höchstens $maxSchritte Schritte je Artikel — so viele Spalten hat '
+          'das Artikelblatt der Excel-Vorlage.',
+        );
+      }
+      final vorher = await schritte(db, productId);
+      final aktiv = {for (final s in vorher) s.id: s};
+      final ids = <String>[];
+      final neue = <ProductStep>[];
+      final abteilungen = <String, String>{};
+      final jetzt = DateTime.now();
+      for (final z in soll) {
+        final id = z.id;
+        if (id == null) {
+          final neuId = const Uuid().v4();
+          await db.into(db.productSteps).insert(
+                ProductStepsCompanion.insert(
+                  id: neuId,
+                  productId: productId,
+                  // Vorläufig — gleich danach wird die ganze Kette
+                  // nummeriert.
+                  reihenfolge: vorher.length + neue.length + 1,
+                  abteilung: z.abteilung,
+                  maschineId: Value(z.maschineId),
+                  // Legacy-Feld parallel pflegen — der Excel-Export liest
+                  // beide.
+                  maschine: Value(z.maschine),
+                  prozessschritt: Value(z.prozessschritt),
+                  basisMengeKg: 0,
+                  basisDauerMinuten: 0,
+                  basisMitarbeiter: 1,
+                ),
+              );
+          neue.add(
+            await (db.select(db.productSteps)
+                  ..where((s) => s.id.equals(neuId)))
+                .getSingle(),
+          );
+          ids.add(neuId);
+        } else {
+          final alt = aktiv[id];
+          if (alt == null || ids.contains(id)) {
+            throw ArgumentError(
+              'Die Prozesskette hat sich inzwischen geändert — bitte neu '
+              'laden.',
+            );
+          }
+          if (alt.maschineId != z.maschineId ||
+              alt.maschine != z.maschine ||
+              alt.prozessschritt != z.prozessschritt) {
+            await _schreibe(
+              db,
+              id,
+              ProductStepsCompanion(
+                maschineId: Value(z.maschineId),
+                maschine: Value(z.maschine),
+                prozessschritt: Value(z.prozessschritt),
+                updatedAt: Value(jetzt),
+              ),
+            );
+          }
+          ids.add(id);
+        }
+        abteilungen[ids.last] = z.abteilung;
+      }
+      for (final s in vorher) {
+        if (ids.contains(s.id)) continue;
+        await _schreibe(
+          db,
+          s.id,
+          ProductStepsCompanion(
+            deletedAt: Value(jetzt),
+            updatedAt: Value(jetzt),
+          ),
+        );
+      }
+      await _schreibeKette(
+        db,
+        vorher,
+        ids,
+        abteilungen: abteilungen,
+        neue: neue,
+      );
+      return ids;
     });
   }
 

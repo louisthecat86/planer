@@ -440,13 +440,17 @@ void main() {
     ];
 
     /// [seite]: das Projekt der Projektseite, sonst das Schnitzel;
-    /// [verlauf]: seine Einträge, sonst die drei oben.
+    /// [verlauf]: seine Einträge, sonst die drei oben; [liste]: die
+    /// Projekte der Liste, sonst die drei oben.
     List<Override> overrides({
       EntwicklungsProjekt? seite,
       List<ProjektEintrag>? verlauf,
+      List<EntwicklungsProjekt>? liste,
     }) =>
         [
-          projekteProvider.overrideWith((ref) => Stream.value([p1, p2, p3])),
+          projekteProvider.overrideWith(
+            (ref) => Stream.value(liste ?? [p1, p2, p3]),
+          ),
           projektProvider.overrideWith((ref, id) => Stream.value(seite ?? p1)),
           projektEintraegeProvider.overrideWith(
             (ref, id) => Stream.value(verlauf ?? eintraege),
@@ -493,6 +497,7 @@ void main() {
       ThemeData? theme,
       EntwicklungsProjekt? projekt,
       List<ProjektEintrag>? verlauf,
+      List<EntwicklungsProjekt>? liste,
       List<Override> dazu = const [],
     }) async {
       tester.view.physicalSize = groesse;
@@ -501,7 +506,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...overrides(seite: projekt, verlauf: verlauf),
+            ...overrides(seite: projekt, verlauf: verlauf, liste: liste),
             ...dazu,
           ],
           child: MaterialApp(
@@ -552,6 +557,50 @@ void main() {
       expect(find.text('Bratwurst fein'), findsNothing);
     });
 
+    testWidgets('Projekte: die Artikelnummer vorn — freigegeben ein Verweis '
+        'auf den Artikel', (tester) async {
+      final freigegeben = p1.copyWith(
+        artikelId: const Value('a-4711'),
+        status: ProjektStatus.produktion.schluessel,
+      );
+      await zeige(tester, const ProjekteAnsicht(), liste: [freigegeben, p2]);
+
+      // Die Spalte steht vor dem Namen.
+      expect(
+        tester.getTopLeft(find.text('Art.-Nr.')).dx,
+        lessThan(tester.getTopLeft(find.text('Projekt')).dx),
+      );
+      expect(
+        tester.getTopLeft(find.text('4711').last).dx,
+        lessThan(tester.getTopLeft(find.text('Bratwurst fein')).dx),
+      );
+      // Nur das freigegebene Projekt führt zu seinem Artikel.
+      expect(
+        find.byKey(const ValueKey('projekt-artikel-p1')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('projekt-artikel-p2')), findsNothing);
+      expect(find.byTooltip('Artikel in der Planung öffnen'), findsOneWidget);
+    });
+
+    testWidgets('Projektseite freigegeben: ein Klick zum Artikel',
+        (tester) async {
+      await zeige(
+        tester,
+        const ProjektScreen(projektId: 'p1'),
+        projekt: p1.copyWith(
+          artikelId: const Value('a-4711'),
+          status: ProjektStatus.produktion.schluessel,
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('projekt-zum-artikel')),
+        findsOneWidget,
+      );
+      expect(find.text('Artikel 4711'), findsOneWidget);
+    });
+
     testWidgets('Projekte schmal und dunkel: kein Überlauf', (tester) async {
       await zeige(
         tester,
@@ -568,11 +617,13 @@ void main() {
       await tester.pump();
 
       expect(find.text('Schnitzel Wiener Art · Muster GmbH'), findsOneWidget);
-      // Fünf Reiter (F26).
+      // Sechs Reiter (F26) — die Rezeptur gleich hinter der Übersicht.
       expect(
         [for (final t in tester.widgetList<Tab>(find.byType(Tab))) t.text],
-        ['Verlauf', 'Übersicht', 'Produkt', 'Herstellung', 'Dateien'],
+        ['Verlauf', 'Übersicht', 'Rezeptur', 'Produkt', 'Herstellung', 'Dateien'],
       );
+      // Noch nicht freigegeben: kein Weg zum Artikel.
+      expect(find.byKey(const ValueKey('projekt-zum-artikel')), findsNothing);
       // Ein Projekt öffnet mit dem Verlauf (F21).
       expect(find.byType(Zeitstrahl), findsOneWidget);
       await reiter(tester, 'Übersicht');

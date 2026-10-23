@@ -11,6 +11,7 @@ import '../../../core/ui/ablage.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
+import '../freigabe/freigabe_ansicht.dart' show oeffneArtikel;
 import '../import/suite_import_dialog.dart';
 import '../mail/mail.dart';
 import '../mail/mail_ablage.dart';
@@ -321,7 +322,10 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
 
 abstract final class _Spalten {
   static const double kunde = 170;
-  static const double nummer = 96;
+
+  /// Die Artikelnummer steht vorn — schmal etwas enger.
+  static const double nummer = 104;
+  static const double nummerSchmal = 88;
   static const double status = 130;
   static const double checkliste = 80;
   static const double datum = 90;
@@ -359,12 +363,15 @@ class _Kopf extends StatelessWidget {
       ),
       child: Row(
         children: [
+          spalte(
+            'Art.-Nr.',
+            breit ? _Spalten.nummer : _Spalten.nummerSchmal,
+          ),
+          const SizedBox(width: _Spalten.luecke),
           Expanded(child: Text('Projekt', style: stil)),
           const SizedBox(width: _Spalten.luecke),
           if (breit) ...[
             spalte('Kunde', _Spalten.kunde),
-            const SizedBox(width: _Spalten.luecke),
-            spalte('Art.-Nr.', _Spalten.nummer),
             const SizedBox(width: _Spalten.luecke),
           ],
           spalte('Status', _Spalten.status),
@@ -418,6 +425,11 @@ class _Zeile extends StatelessWidget {
           ),
           child: Row(
             children: [
+              SizedBox(
+                width: breit ? _Spalten.nummer : _Spalten.nummerSchmal,
+                child: _Nummer(projekt: p),
+              ),
+              const SizedBox(width: _Spalten.luecke),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -456,16 +468,6 @@ class _Zeile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: _Spalten.luecke),
-                SizedBox(
-                  width: _Spalten.nummer,
-                  child: Text(
-                    p.artikelnummer ?? '—',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: stil?.copyWith(color: grau),
-                  ),
-                ),
-                const SizedBox(width: _Spalten.luecke),
               ],
               SizedBox(
                 width: _Spalten.status,
@@ -498,6 +500,66 @@ class _Zeile extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Die Artikelnummer eines Projekts — ist es als Artikel freigegeben, ein
+/// Verweis auf ihn in der Planung.
+class _Nummer extends StatelessWidget {
+  const _Nummer({required this.projekt});
+
+  final EntwicklungsProjekt projekt;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final stil = theme.textTheme.bodyMedium;
+    final nummer = projekt.artikelnummer?.trim() ?? '';
+    final artikelId = projekt.artikelId;
+    if (artikelId == null) {
+      return Text(
+        nummer.isEmpty ? '—' : nummer,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: stil?.copyWith(
+          color: nummer.isEmpty ? theme.colorScheme.onSurfaceVariant : null,
+        ),
+      );
+    }
+    final farbe = theme.colorScheme.primary;
+    return Align(
+      alignment: Alignment.centerLeft,
+      heightFactor: 1,
+      child: Tooltip(
+        message: 'Artikel in der Planung öffnen',
+        child: InkWell(
+          key: ValueKey('projekt-artikel-${projekt.id}'),
+          borderRadius: BorderRadius.circular(4),
+          onTap: () => oeffneArtikel(context, artikelId),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    nummer.isEmpty ? 'Artikel' : nummer,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: stil?.copyWith(
+                      color: farbe,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.open_in_new, size: 14, color: farbe),
+              ],
+            ),
           ),
         ),
       ),

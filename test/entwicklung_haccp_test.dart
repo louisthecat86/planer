@@ -198,8 +198,7 @@ void main() {
       expect(ergebnis!.lenkungspunkt!.antworten, {'f1': true, 'f2': true});
     });
 
-    testWidgets('geringes Risiko braucht keinen Lenkungspunkt',
-        (tester) async {
+    testWidgets('geringes Risiko braucht keinen Lenkungspunkt', (tester) async {
       HaccpErgebnis? ergebnis;
       await tester.pumpWidget(
         MaterialApp(
@@ -246,7 +245,9 @@ void main() {
         'FD_005\n'
         'FD_001 doppelt\n',
       );
-      expect([for (final f in liste) f.id], [
+      expect([
+        for (final f in liste) f.id,
+      ], [
         'FD_001',
         'FD_002',
         'FD_003',
@@ -407,7 +408,9 @@ void main() {
     }
 
     Future<void> reiter(WidgetTester tester, String name) async {
-      await tester.tap(find.widgetWithText(Tab, name));
+      final tab = find.widgetWithText(Tab, name);
+      await tester.ensureVisible(tab);
+      await tester.tap(tab);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       // Der Katalog der Anlagen kommt nach.
@@ -609,7 +612,11 @@ void main() {
             id: 'garen',
             titel: 'Garen und Braten',
             felder: [
-              ProzessFeld(id: 'anlage', label: 'Anlage', wert: 'Testbratstraße'),
+              ProzessFeld(
+                id: 'anlage',
+                label: 'Anlage',
+                wert: 'Testbratstraße',
+              ),
               ProzessFeld(id: 'b', label: 'Bandgeschwindigkeit', wert: '4'),
             ],
           ),
@@ -786,8 +793,7 @@ class _Speicher implements ProjektRepository {
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Ohne Sicherung — keine Zeitgeber im Test.
@@ -796,8 +802,7 @@ class _OhneSicherung implements AutoBackupTrigger {
   void fireDebounced({String reason = 'Daten-Änderung'}) {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      super.noSuchMethod(invocation);
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 /// Der Katalog der Planung — ohne Datenbank, erfunden.

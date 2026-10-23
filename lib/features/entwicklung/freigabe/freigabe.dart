@@ -6,9 +6,13 @@ import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
+import '../../../core/services/prozesskette_service.dart';
 import '../../whiteboard/whiteboard_provider.dart' show ausbeuteAusProduktionen;
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
+import '../haccp/anlagen_katalog.dart' show anlagenLaden, ketteAusArtikel;
+import '../haccp/prozess_kette.dart' show prozessKurztext;
+import '../haccp/prozess_modell.dart';
 import '../projekte/entwicklungsstrang.dart' show statusWert;
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
@@ -16,6 +20,7 @@ import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
 import '../spezifikation/spez_angaben.dart'
     show SpezAngaben, haltbarkeitInTagen;
+import 'kette_uebernahme.dart';
 
 // Freigabe: Ein Projekt wird zum Artikel des Planers. Aus dem
 // abgeschlossenen Rezepturstand kommen die Allergene, aus dem Projekt
@@ -23,6 +28,13 @@ import '../spezifikation/spez_angaben.dart'
 // und aw-Wert; nur die Produktgruppe trägt man dabei ein. Den Verlust des
 // Stands nimmt die Planung als Vorgabe, solange keine Produktion erfasst
 // ist (core/services/entwicklung_vorgabe.dart).
+//
+// Die Prozesskette des Projekts wird die des Artikels (F35): Schritte, die
+// einander entsprechen, bleiben derselbe Schritt — mit Personen und
+// Leistungsdaten —, neue kommen dazu, was das Projekt nicht mehr hat,
+// entfällt auf Wunsch (kette_uebernahme.dart). Es zählt der jetzige Stand;
+// weicht er von der zuletzt festgehaltenen Version ab, wird er vorher als
+// neue Version festgehalten (F36).
 //
 // Danach vergleicht der Abgleich den Verlust der erfassten Produktionen
 // mit dem der Rezeptur — weicht er ab, stimmt auch der Fleischanteil auf
@@ -281,6 +293,15 @@ class FreigabeDienst {
     return liste;
   }
 
+  /// Die Prozesskette des Artikels [artikelId] — die Schritte unter ihrer
+  /// ID im Artikel.
+  Future<List<ProzessSchritt>> artikelKette(String artikelId) async =>
+      ketteAusArtikel(
+        _db,
+        artikelId,
+        katalog: await anlagenLaden(_db),
+      );
+
   /// Ein Artikel mit dieser Nummer — auch ein gelöschter.
   Future<Product?> artikelZuNummer(String nummer) =>
       (_db.select(_db.products)
@@ -329,12 +350,16 @@ class FreigabeDienst {
   }
 
   /// Gibt den Stand [versionId] als Artikel frei: legt ihn an oder schreibt
-  /// [felder] in den vorhandenen. Gibt die ID des Artikels zurück.
+  /// [felder] in den vorhandenen. Mit [prozessUebernehmen] wird die Kette
+  /// des Projekts die des Artikels — mit [prozessEntfernen] entfällt dabei,
+  /// was das Projekt nicht mehr hat. Gibt die ID des Artikels zurück.
   Future<String> freigeben({
     required EntwicklungsProjekt projekt,
     required String versionId,
     required FreigabeWerte werte,
     Set<FreigabeFeld> felder = const {...FreigabeFeld.values},
+    bool prozessUebernehmen = true,
+    bool prozessEntfernen = true,
   }) async {
     final nummer = werte.artikelnummer.trim();
     if (nummer.isEmpty) {
@@ -409,6 +434,21 @@ class FreigabeDienst {
         'artikelAngelegt',
         true,
       );
+      final kette = prozessUebernehmen
+          ? await _ketteUebernehmen(
+              artikelId: artikelId,
+              nummer: nummer,
+              prozess: Prozessparameter.aus(
+                aktuell?.prozess ?? projekt.prozess,
+              ),
+              historie: ProzessStand.listeAus(
+                aktuell?.prozessHistorie ?? projekt.prozessHistorie,
+              ),
+              entfernen: prozessEntfernen,
+              jetzt: jetzt,
+            )
+          : null;
+      final festgehalten = kette?.festgehalten;
       await _projekte.projektAendern(
         projekt.id,
         EntwicklungProjekteCompanion(
@@ -418,8 +458,28 @@ class FreigabeDienst {
           freigegebenAm: Value(jetzt),
           status: Value(ProjektStatus.produktion.schluessel),
           checkliste: Value(checkliste),
+          prozess: festgehalten == null
+              ? const Value.absent()
+              : Value(festgehalten.prozess.alsJson()),
+          prozessHistorie: festgehalten == null
+              ? const Value.absent()
+              : Value(ProzessStand.listeZuJson(festgehalten.historie)),
         ),
       );
+      // Eine Version, die erst die Freigabe festhält, steht im Verlauf wie
+      // eine von Hand festgehaltene.
+      if (festgehalten != null) {
+        final stand = festgehalten.historie.last;
+        await _projekte.eintragAnlegen(
+          projektId: projekt.id,
+          art: EintragArt.parameter,
+          titel: 'Prozessparameter ${stand.version}',
+          datum: DateTime(jetzt.year, jetzt.month, jetzt.day),
+          beschreibung: stand.notiz,
+          status: EintragStatus.erledigt,
+          wert: festgehalten.prozess.alsJson(),
+        );
+      }
       final version = await _rezepte.version(versionId);
       await _projekte.eintragAnlegen(
         projektId: projekt.id,
@@ -432,15 +492,149 @@ class FreigabeDienst {
         versionId: versionId,
         beschreibung:
             version == null ? null : 'Rezepturstand ${version.nummer}',
-        aenderungen: geschrieben.isEmpty
-            ? const ['Nichts geändert']
-            : ['Geschrieben: ${geschrieben.join(', ')}'],
+        aenderungen: [
+          if (geschrieben.isNotEmpty) 'Geschrieben: ${geschrieben.join(', ')}',
+          if (kette != null) kette.text,
+          if (geschrieben.isEmpty && kette == null) 'Nichts geändert',
+        ],
         wert: vorher == ProjektStatus.produktion
             ? null
             : statusWert(vorher, ProjektStatus.produktion),
       );
     });
     return artikelId;
+  }
+
+  /// Übernimmt die Kette [prozess] des Projekts in den Artikel — null,
+  /// wenn es keine gibt, die sich übernehmen lässt (keine Schritte, noch
+  /// frühere Abschnitte oder eine Station ohne Abteilung). Weicht der
+  /// Stand von der zuletzt festgehaltenen Version ab, wird er als neue
+  /// festgehalten (F36) — das Ergebnis nennt sie, damit sie ins Projekt
+  /// kommt.
+  Future<
+      ({
+        String text,
+        ({Prozessparameter prozess, List<ProzessStand> historie})?
+            festgehalten,
+      })?> _ketteUebernehmen({
+    required String artikelId,
+    required String nummer,
+    required Prozessparameter prozess,
+    required List<ProzessStand> historie,
+    required bool entfernen,
+    required DateTime jetzt,
+  }) async {
+    if (!kannKetteUebernehmen(prozess)) return null;
+    final fassung = prozessFassung(prozess, historie);
+    ({Prozessparameter prozess, List<ProzessStand> historie})? festgehalten;
+    var stand = prozess;
+    var nummerDerVersion = fassung.version ?? prozess.version;
+    if (fassung.geaendert) {
+      nummerDerVersion = naechsteProzessVersion(prozess, historie);
+      stand = prozess.kopie(version: nummerDerVersion, stand: jetzt);
+      festgehalten = (
+        prozess: stand,
+        historie: [
+          ...historie,
+          ProzessStand(
+            version: nummerDerVersion,
+            datum: jetzt,
+            notiz: 'Bei der Freigabe für Artikel $nummer festgehalten',
+            parameter: stand,
+          ),
+        ],
+      );
+    }
+    final ziel = zielKette(
+      await artikelKette(artikelId),
+      stand.schritte,
+      entfernen: entfernen,
+    );
+    final ids = await ProzesskettenService.uebernehmen(_db, artikelId, [
+      for (final z in ziel)
+        (
+          id: z.artikelId,
+          abteilung: z.schritt.abteilung,
+          maschineId: z.schritt.maschineId,
+          maschine: _oderNull(z.schritt.maschine),
+          prozessschritt: _oderNull(z.schritt.prozessschritt),
+        ),
+    ]);
+    for (final (i, z) in ziel.indexed) {
+      await _werteSchreiben(
+        ids[i],
+        z.schritt,
+        // Ein neuer Schritt hat nichts, was entfallen könnte.
+        entfernen: entfernen || z.artikelId == null,
+      );
+    }
+    return (
+      text: 'Prozess Version $nummerDerVersion übernommen: '
+          '${prozessKurztext(Prozessparameter(schritte: stand.schritte))}',
+      festgehalten: festgehalten,
+    );
+  }
+
+  /// Schreibt die Werte von [soll] an den Schritt [stepId] im Artikel.
+  Future<void> _werteSchreiben(
+    String stepId,
+    ProzessSchritt soll, {
+    required bool entfernen,
+  }) async {
+    final zeilen = await (_db.select(_db.productStepParameters)
+          ..where((p) => p.stepId.equals(stepId))
+          ..where((p) => p.deletedAt.isNull()))
+        .get();
+    final aktionen = werteAbgleichen(
+      [
+        for (final z in zeilen)
+          (
+            id: z.id,
+            gruppe: z.parameterGruppe,
+            name: z.parameterName,
+            wert: z.wert,
+            eigen: z.istCustom,
+            reihenfolge: z.reihenfolge,
+          ),
+      ],
+      soll,
+      entfernen: entfernen,
+    );
+    final jetzt = DateTime.now();
+    for (final a in aktionen) {
+      switch (a) {
+        case WertSetzen(:final id, :final wert):
+          await (_db.update(_db.productStepParameters)
+                ..where((p) => p.id.equals(id)))
+              .write(
+            ProductStepParametersCompanion(
+              wert: Value(wert),
+              updatedAt: Value(jetzt),
+            ),
+          );
+        case WertAnlegen():
+          await _db.into(_db.productStepParameters).insert(
+                ProductStepParametersCompanion.insert(
+                  id: _uuid.v4(),
+                  stepId: stepId,
+                  parameterGruppe: a.gruppe,
+                  parameterName: a.name,
+                  wert: Value(a.wert),
+                  reihenfolge: Value(a.reihenfolge),
+                  istCustom: Value(a.eigen),
+                ),
+              );
+        case WertLoeschen(:final id):
+          await (_db.update(_db.productStepParameters)
+                ..where((p) => p.id.equals(id)))
+              .write(
+            ProductStepParametersCompanion(
+              deletedAt: Value(jetzt),
+              updatedAt: Value(jetzt),
+            ),
+          );
+      }
+    }
   }
 
   /// Der freigegebene Artikel, der Stand und der Abgleich mit den
@@ -509,6 +703,16 @@ class FreigabeDienst {
     );
   }
 }
+
+/// Lässt sich die Kette von [prozess] in einen Artikel übernehmen? Dafür
+/// braucht sie Schritte, keine früheren Abschnitte mehr und an jeder
+/// Station eine Abteilung.
+bool kannKetteUebernehmen(Prozessparameter prozess) =>
+    prozess.abschnitte.isEmpty &&
+    prozess.schritte.isNotEmpty &&
+    stationenOhneAbteilung(prozess.schritte).isEmpty;
+
+String? _oderNull(String text) => text.trim().isEmpty ? null : text.trim();
 
 final freigabeDienstProvider = Provider<FreigabeDienst>(
   (ref) => FreigabeDienst(ref.watch(databaseProvider)),

@@ -411,4 +411,109 @@ void main() {
       expect((await kette()).length, ProzesskettenService.maxSchritte);
     });
   });
+
+  group('Übernahme aus der Produktentwicklung', () {
+    SollSchritt soll(
+      String? id,
+      String abteilung, {
+      String? maschine,
+      String? prozessschritt,
+    }) =>
+        (
+          id: id,
+          abteilung: abteilung,
+          maschineId: null,
+          maschine: maschine,
+          prozessschritt: prozessschritt,
+        );
+
+    test('vorhandene behalten Personen und Leistungsdaten, neue kommen dazu, '
+        'fehlende entfallen', () async {
+      await legeKetteAn();
+      await setze('z1', 500, 50);
+      await setze('b1', 600, 60);
+      await (db.update(db.productSteps)..where((s) => s.id.equals('b2')))
+          .write(const ProductStepsCompanion(basisMitarbeiter: Value(3)));
+
+      final ids = await ProzesskettenService.uebernehmen(db, 'p1', [
+        soll('z1', 'zerlegung', prozessschritt: 'Wolfen'),
+        soll(null, 'zerlegung', maschine: 'Testkutter'),
+        soll('b2', 'bratstrasse', maschine: 'Testbratstraße'),
+        soll(null, 'verpackung', prozessschritt: 'Kartonieren'),
+      ]);
+
+      final k = await kette();
+      expect([for (final s in k) s.id], ids);
+      expect(ids.take(1), ['z1']);
+      expect(ids[2], 'b2');
+      expect([for (final s in k) s.reihenfolge], [1, 2, 3, 4]);
+      expect(
+        [for (final s in k) s.abteilung],
+        ['zerlegung', 'zerlegung', 'bratstrasse', 'verpackung'],
+      );
+      // z2, b1 und v1 sind entfallen.
+      final weg = await (db.select(db.productSteps)
+            ..where((s) => s.id.isIn(['z2', 'b1', 'v1'])))
+          .get();
+      expect(weg.every((s) => s.deletedAt != null), isTrue);
+      // Anlage und Prozessschritt kommen aus der Entwicklung, Personen
+      // bleiben; ein neuer Schritt hat eine Person.
+      final [z1, kutter, b2, karton] = k;
+      expect((z1.prozessschritt, kutter.maschine), ('Wolfen', 'Testkutter'));
+      expect((b2.maschine, b2.basisMitarbeiter), ('Testbratstraße', 3));
+      expect((kutter.basisMitarbeiter, karton.prozessschritt), (1, 'Kartonieren'));
+      // Die Leistungsdaten bleiben bei ihren Stationen — auch wenn der
+      // Schritt, der sie trug, entfallen ist.
+      expect(leistungsdatenVon([z1, kutter])?.mengeKg, 500);
+      expect(leistungsdatenVon([b2])?.mengeKg, 600);
+      expect(leistungsdatenVon([karton]), isNull);
+    });
+
+    test('in einen leeren Artikel: alles neu, in dieser Reihenfolge', () async {
+      await seedArtikel(db, id: 'p1', nummer: '3001');
+      final ids = await ProzesskettenService.uebernehmen(db, 'p1', [
+        soll(null, 'zerlegung', maschine: 'Testwolf'),
+        soll(null, 'bratstrasse', prozessschritt: 'Abkühlen'),
+      ]);
+      final k = await kette();
+      expect([for (final s in k) s.id], ids);
+      expect([for (final s in k) s.maschine ?? s.prozessschritt], [
+        'Testwolf',
+        'Abkühlen',
+      ]);
+    });
+
+    test('eine veraltete Kette und zu viele Schritte werden abgewiesen',
+        () async {
+      await legeKetteAn();
+      await expectLater(
+        ProzesskettenService.uebernehmen(db, 'p1', [
+          soll('gibt-es-nicht', 'zerlegung'),
+        ]),
+        throwsArgumentError,
+      );
+      await expectLater(
+        ProzesskettenService.uebernehmen(db, 'p1', [
+          soll('z1', 'zerlegung'),
+          soll('z1', 'zerlegung'),
+        ]),
+        throwsArgumentError,
+      );
+      await expectLater(
+        ProzesskettenService.uebernehmen(db, 'p1', [
+          for (var i = 0; i <= ProzesskettenService.maxSchritte; i++)
+            soll(null, 'verpackung'),
+        ]),
+        throwsStateError,
+      );
+      // Nichts geändert.
+      expect([for (final s in await kette()) s.id], [
+        'z1',
+        'z2',
+        'b1',
+        'b2',
+        'v1',
+      ]);
+    });
+  });
 }

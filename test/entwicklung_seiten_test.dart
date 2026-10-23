@@ -5,6 +5,8 @@ import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/projekt_rezeptur.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/rezeptur_screen.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/rezepturen_ansicht.dart';
@@ -98,8 +100,7 @@ void main() {
 
   /// [staende]: die Stände der Rezeptur, der neueste zuerst — sonst ein
   /// abgeschlossener und ein Entwurf.
-  List<Override> overrides({List<RezepturVersion>? staende}) =>
-      [
+  List<Override> overrides({List<RezepturVersion>? staende}) => [
         zutatenProvider.overrideWith((ref) => Stream.value([schwein, senf])),
         alleZutatenProvider.overrideWith(
           (ref) => Stream.value({'z1': schwein, 'z2': senf}),
@@ -129,13 +130,14 @@ void main() {
     Size groesse = const Size(1400, 900),
     ThemeData? theme,
     List<RezepturVersion>? staende,
+    List<Override> dazu = const [],
   }) async {
     tester.view.physicalSize = groesse;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: overrides(staende: staende),
+        overrides: [...overrides(staende: staende), ...dazu],
         child: MaterialApp(
           theme: theme ?? AppTheme.light(),
           home: Scaffold(body: seite),
@@ -228,8 +230,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Rezeptur: nur abgeschlossen — weiterentwickeln',
-      (tester) async {
+  testWidgets('Rezeptur: nur abgeschlossen — weiterentwickeln', (tester) async {
     await zeige(
       tester,
       const RezepturScreen(rezepturId: 'r1'),
@@ -289,5 +290,134 @@ void main() {
     expect(find.text('Vergleich'), findsOneWidget);
     await tester.tap(find.text('Schließen'));
     await tester.pump();
+  });
+
+  group('Im Projekt', () {
+    final projekt = EntwicklungsProjekt(
+      id: 'pr1',
+      name: 'Bratwurst grob',
+      status: 'entwicklung',
+      neuerProzess: false,
+      neueZutaten: false,
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    final zweite = Rezeptur(
+      id: 'r2',
+      name: 'Bratwurst grob mit Käse',
+      projektId: 'pr1',
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    Override rezepturen(List<Rezeptur> liste) =>
+        projektRezepturenProvider.overrideWith(
+          (ref, id) => Stream.value(liste),
+        );
+
+    testWidgets(
+        'eingebettet: ohne eigene Titelleiste, Knöpfe und Menü in '
+        'einer Zeile', (tester) async {
+      await zeige(
+        tester,
+        RezepturScreen(
+          rezepturId: 'r1',
+          eingebettet: true,
+          aktionen: [
+            IconButton(
+              key: const ValueKey('extra'),
+              onPressed: () {},
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(AppBar), findsNothing);
+      expect(find.byKey(const ValueKey('extra')), findsOneWidget);
+      expect(find.byKey(const ValueKey('rezeptur-mehr')), findsOneWidget);
+      expect(find.byKey(const ValueKey('stand-haupt')), findsOneWidget);
+      expect(bereich('Zusammensetzung'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Reiter „Rezeptur": mehrere Rezepturen zur Wahl',
+        (tester) async {
+      await zeige(
+        tester,
+        ProjektRezeptur(projekt: projekt),
+        dazu: [
+          rezepturen([rezeptur, zweite]),
+        ],
+      );
+      await tester.pump();
+
+      ChoiceChip chip(String id) => tester.widget<ChoiceChip>(
+            find.byKey(ValueKey('projekt-rezeptur-wahl-$id')),
+          );
+      expect(chip('r1').selected, isTrue);
+      expect(chip('r2').selected, isFalse);
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-r1')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('projekt-rezeptur-wahl-r2')));
+      await tester.pump();
+      await tester.pump();
+      expect(chip('r2').selected, isTrue);
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-r2')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-neu')),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'Reiter „Rezeptur" schmal und dunkel: eine Rezeptur mit '
+        'ihrem Namen', (tester) async {
+      await zeige(
+        tester,
+        ProjektRezeptur(projekt: projekt),
+        groesse: const Size(760, 700),
+        theme: AppTheme.dark(),
+        dazu: [
+          rezepturen([rezeptur]),
+        ],
+      );
+      await tester.pump();
+
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-wahl-r1')),
+        findsNothing,
+      );
+      expect(find.text('Bratwurst grob'), findsWidgets);
+      expect(bereich('Zusammensetzung'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Reiter „Rezeptur" ohne Rezeptur: anlegen oder zuordnen',
+        (tester) async {
+      await zeige(
+        tester,
+        ProjektRezeptur(projekt: projekt),
+        dazu: [rezepturen(const [])],
+      );
+      await tester.pump();
+
+      expect(find.text('Noch keine Rezeptur im Projekt.'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-neu')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('projekt-rezeptur-zuordnen')),
+        findsOneWidget,
+      );
+    });
   });
 }

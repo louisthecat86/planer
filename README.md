@@ -59,10 +59,13 @@ Ein eigener Bereich für die Entwicklung neuer Produkte. Er ist mit einem
 eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 (`entwicklung_*`), Anhänge und Vorlagen verschlüsselt (ChaCha20-Poly1305).
 
-- **Projekte** in fünf Reitern: **Verlauf** (mit Kommentaren),
+- **Projekte** in sechs Reitern: **Verlauf** (mit Kommentaren),
   **Übersicht** (Stammdaten mit Artikelnummer und Fließdiagramm, Ziele für
   Fett, Eiweiß und aw, Notizen, Freigabe, Produktfoto klein, Rezepturen,
-  Checkliste), **Produkt** (Sensorik mit Produktfoto, Maßen, Stückgewicht
+  Checkliste), **Rezeptur** (die Rezeptur gleich im Projekt, mit Ständen,
+  Zusammensetzung und Ergebnis wie auf ihrer eigenen Seite — bei mehreren
+  oben zur Wahl; Rezepturen aus Übersicht, Checkliste und Verlauf öffnen
+  sich hier), **Produkt** (Sensorik mit Produktfoto, Maßen, Stückgewicht
   und Toleranz, Angaben und Verpackung für die Spezifikation, daneben was
   mit einem Stand in der Spezifikation stünde), **Herstellung** (Prozess
   und die HACCP-Gefahrenanalyse — breit nebeneinander, schmal zum
@@ -94,7 +97,10 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   ihn an, wenn dort etwas leer bliebe.
   Spezifikation, Etikett und Projektbericht stehen oben unter „Erstellen",
   Umbenennen, Archivieren (und Wiederaufnehmen) und Löschen im Menü
-  daneben. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
+  daneben; ist das Projekt freigegeben, führt „Artikel …" davor mit einem
+  Klick zum Artikel der Planung. In der Projektliste steht die
+  Artikelnummer vorn — bei freigegebenen Projekten ein Verweis auf den
+  Artikel. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
   (ein abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit
   Werten), Sensorik (Aussehen, Geruch, Geschmack, Konsistenz),
   Produktfoto, Prozess, Spezifikation und Artikel (Freigabe) sieht die App
@@ -155,6 +161,14 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   ein Ziel einstellen, Entwicklung in Zahlen.
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
+  Die Prozesskette des Projekts wird die des Artikels: Schritte derselben
+  Anlage (ohne Anlage: desselben Namens) bleiben derselbe Schritt mit
+  Personen und Leistungsdaten, neue kommen mit einer Person dazu, die Werte
+  ändern sich an ihrer Stelle (leere Zeilen der Excel-Vorlage bleiben). Was
+  das Projekt nicht mehr hat, entfällt nur mit Haken — das Fenster nennt
+  es und zeigt alle Änderungen am Artikel. Weicht der Prozess von der
+  zuletzt festgehaltenen Version ab, wird er dabei als neue Version
+  festgehalten.
 - **Spezifikation** (Excel) auf Deutsch oder Englisch (Texte auf Wunsch
   über DeepL) — ein Fenster für alles, oben unter „Erstellen" oder im
   Reiter „Produkt": Das eigene Formblatt wird in der App

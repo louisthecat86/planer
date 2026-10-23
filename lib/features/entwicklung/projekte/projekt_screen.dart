@@ -28,15 +28,18 @@ import 'projekt_dateien.dart';
 import 'projekt_kopf.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
+import 'projekt_rezeptur.dart';
 import 'projekt_verlauf.dart';
 
 /// Die Reiter einer Projektseite — vorn der Verlauf mit dem Zeitstrahl:
 /// Wer ein Projekt öffnet, sieht zuerst, wie es sich entwickelt hat (F21).
-/// „Produkt" bündelt Sensorik mit Produktfoto, Angaben, Verpackung und
-/// Spezifikation, „Herstellung" Prozess und HACCP (F26).
+/// „Rezeptur" zeigt die Rezeptur gleich im Projekt, „Produkt" bündelt
+/// Sensorik mit Produktfoto, Angaben, Verpackung und Spezifikation,
+/// „Herstellung" Prozess und HACCP (F26).
 enum ProjektReiter {
   verlauf('Verlauf'),
   uebersicht('Übersicht'),
+  rezeptur('Rezeptur'),
   produkt('Produkt'),
   herstellung('Herstellung'),
   dateien('Dateien');
@@ -50,10 +53,15 @@ enum ProjektReiter {
 void projektReiterZeigen(BuildContext context, ProjektReiter r) =>
     DefaultTabController.maybeOf(context)?.animateTo(r.index);
 
-/// Wohin ein Punkt der Checkliste führt: in den Reiter, in dem er
-/// entsteht, oder in die Rezeptur — null, wenn er in der Übersicht selbst
-/// erledigt wird (Etikett, Freigabe, Navision).
-VoidCallback? checkpunktZiel(BuildContext context, CheckStand c) {
+/// Wohin ein Punkt der Checkliste des Projekts [projektId] führt: in den
+/// Reiter, in dem er entsteht — bei Rezeptur und Nährwerten in den Reiter
+/// „Rezeptur" mit der Rezeptur, um die es geht. Null, wenn er in der
+/// Übersicht selbst erledigt wird (Etikett, Freigabe, Navision).
+VoidCallback? checkpunktZiel(
+  BuildContext context,
+  CheckStand c, {
+  required String projektId,
+}) {
   final rezeptur = c.rezepturId;
   return switch (c.punkt.schluessel) {
     'prozessErstellt' => () =>
@@ -62,16 +70,21 @@ VoidCallback? checkpunktZiel(BuildContext context, CheckStand c) {
     'produktfotoHinterlegt' ||
     'spezifikationErstellt' =>
       () => projektReiterZeigen(context, ProjektReiter.produkt),
-    'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
-        oeffneRezeptur(context, rezeptur),
+    'rezepturErstellt' || 'naehrwerteErstellt' => rezeptur == null
+        ? () => projektReiterZeigen(context, ProjektReiter.rezeptur)
+        : () => projektRezepturZeigen(context, projektId, rezeptur),
     _ => null,
   };
 }
 
 /// Führt zu einem Punkt der Checkliste — ohne eigenes Ziel in die
 /// Übersicht, wo er abgehakt oder freigegeben wird.
-void checkpunktOeffnen(BuildContext context, CheckStand c) {
-  final ziel = checkpunktZiel(context, c);
+void checkpunktOeffnen(
+  BuildContext context,
+  CheckStand c, {
+  required String projektId,
+}) {
+  final ziel = checkpunktZiel(context, c, projektId: projektId);
   if (ziel != null) {
     ziel();
   } else {
@@ -120,7 +133,8 @@ Future<void> projektStatusAendern(
 
 String? _oderNull(String t) => t.trim().isEmpty ? null : t.trim();
 
-/// Ein Projekt: Verlauf, Übersicht, Produkt, Herstellung und Dateien.
+/// Ein Projekt: Verlauf, Übersicht, Rezeptur, Produkt, Herstellung und
+/// Dateien.
 class ProjektScreen extends ConsumerWidget {
   const ProjektScreen({super.key, required this.projektId});
 
@@ -237,6 +251,12 @@ class ProjektScreen extends ConsumerWidget {
           ),
           actions: [
             if (p != null) ...[
+              // Freigegeben: mit einem Klick zum Artikel in der Planung.
+              if (p.artikelId case final artikelId?)
+                _ZumArtikel(
+                  artikelId: artikelId,
+                  nummer: p.artikelnummer?.trim() ?? '',
+                ),
               PopupMenuButton<VoidCallback>(
                 key: const ValueKey('projekt-erstellen'),
                 tooltip: 'Spezifikation, Etikett oder Projektbericht',
@@ -381,6 +401,7 @@ class ProjektScreen extends ConsumerWidget {
                           children: [
                             ProjektVerlauf(projekt: p),
                             ProjektUebersicht(projekt: p),
+                            ProjektRezeptur(projekt: p),
                             ProjektProdukt(projekt: p),
                             ProjektHerstellung(projekt: p),
                             ProjektDateien(projekt: p),
@@ -391,6 +412,36 @@ class ProjektScreen extends ConsumerWidget {
                   ],
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// Zum freigegebenen Artikel in der Planung — breit mit seiner Nummer.
+class _ZumArtikel extends StatelessWidget {
+  const _ZumArtikel({required this.artikelId, required this.nummer});
+
+  final String artikelId;
+  final String nummer;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = nummer.isEmpty ? 'Artikel' : 'Artikel $nummer';
+    if (MediaQuery.sizeOf(context).width < 760) {
+      return IconButton(
+        key: const ValueKey('projekt-zum-artikel'),
+        tooltip: '$text öffnen',
+        onPressed: () => oeffneArtikel(context, artikelId),
+        icon: const Icon(Icons.inventory_2_outlined),
+      );
+    }
+    return Tooltip(
+      message: 'Den freigegebenen Artikel in der Planung öffnen',
+      child: TextButton.icon(
+        key: const ValueKey('projekt-zum-artikel'),
+        onPressed: () => oeffneArtikel(context, artikelId),
+        icon: const Icon(Icons.inventory_2_outlined, size: 20),
+        label: Text(text),
       ),
     );
   }
@@ -832,7 +883,10 @@ class ProjektCheckliste extends ConsumerWidget {
                     _haken(ref, c.punkt.schluessel, erledigt: neu ?? false),
               )
             else
-              _AutoPunkt(stand: c, onTap: checkpunktZiel(context, c)),
+              _AutoPunkt(
+                stand: c,
+                onTap: checkpunktZiel(context, c, projektId: projekt.id),
+              ),
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
             child: Text(
@@ -1092,52 +1146,6 @@ class ProjektRezepturen extends ConsumerWidget {
 
   final EntwicklungsProjekt projekt;
 
-  Future<void> _neu(BuildContext context) async {
-    final id = await showDialog<String>(
-      context: context,
-      builder: (_) => NeueRezepturDialog(
-        projektId: projekt.id,
-        vorschlag: projekt.name,
-      ),
-    );
-    if (id == null || !context.mounted) return;
-    await oeffneRezeptur(context, id);
-  }
-
-  Future<void> _zuordnen(BuildContext context, WidgetRef ref) async {
-    final alle = await ref.read(rezepturenProvider.future);
-    if (!context.mounted) return;
-    final frei = alle.where((r) => r.projektId == null).toList();
-    final id = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Rezeptur zuordnen'),
-        children: [
-          if (frei.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Alle Rezepturen gehören schon zu einem Projekt.'),
-            ),
-          for (final r in frei)
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(ctx).pop(r.id),
-              child: Text(
-                r.artikelnummer == null
-                    ? r.name
-                    : '${r.name} (${r.artikelnummer})',
-              ),
-            ),
-        ],
-      ),
-    );
-    if (id == null) return;
-    await ref.read(entwicklungRepositoryProvider).rezepturAendern(
-          id,
-          EntwicklungRezepturenCompanion(projektId: Value(projekt.id)),
-        );
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Rezeptur');
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -1162,12 +1170,12 @@ class ProjektRezepturen extends ConsumerWidget {
         IconButton(
           tooltip: 'Vorhandene Rezeptur zuordnen',
           icon: const Icon(Icons.link, size: 18),
-          onPressed: () => _zuordnen(context, ref),
+          onPressed: () => rezepturZuordnen(context, ref, projekt),
         ),
         IconButton(
           tooltip: 'Neue Rezeptur',
           icon: const Icon(Icons.add, size: 18),
-          onPressed: () => _neu(context),
+          onPressed: () => neueProjektRezeptur(context, projekt),
         ),
       ],
       child: rezepturen.isEmpty
@@ -1179,7 +1187,9 @@ class ProjektRezepturen extends ConsumerWidget {
               children: [
                 for (final r in rezepturen)
                   InkWell(
-                    onTap: () => oeffneRezeptur(context, r.id),
+                    // Im Reiter „Rezeptur".
+                    onTap: () =>
+                        projektRezepturZeigen(context, projekt.id, r.id),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(vertical: 6),
                       child: Row(

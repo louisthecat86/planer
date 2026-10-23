@@ -796,10 +796,16 @@ class _ProjektWahlState extends ConsumerState<_ProjektWahl> {
 
 /// Zwei Stände des Prozesses nebeneinander: was sich geändert hat.
 class ParameterVergleichDialog extends StatefulWidget {
-  const ParameterVergleichDialog({super.key, required this.staende});
+  const ParameterVergleichDialog({
+    super.key,
+    required this.staende,
+    this.titel = 'Versionen vergleichen',
+  });
 
   /// Älteste zuerst.
   final List<({String label, Prozessparameter parameter})> staende;
+
+  final String titel;
 
   @override
   State<ParameterVergleichDialog> createState() =>
@@ -835,7 +841,8 @@ class _ParameterVergleichDialogState extends State<ParameterVergleichDialog> {
           },
         );
     return AlertDialog(
-      title: const Text('Versionen vergleichen'),
+      scrollable: true,
+      title: Text(widget.titel),
       content: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 640, minWidth: 420),
         child: Column(
@@ -853,33 +860,27 @@ class _ParameterVergleichDialogState extends State<ParameterVergleichDialog> {
               ],
             ),
             const SizedBox(height: 12),
-            Flexible(
-              child: aenderungen.isEmpty
-                  ? const LeerHinweis('Keine Unterschiede.')
-                  : ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final a in aenderungen)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  '${a.abschnitt} · ${a.feld}',
-                                  style: theme.textTheme.labelMedium,
-                                ),
-                                Text(
-                                  '${zeigen(a.alt)}  →  ${zeigen(a.neu)}',
-                                  style: theme.textTheme.bodySmall,
-                                ),
-                              ],
-                            ),
-                          ),
-                      ],
-                    ),
-            ),
+            if (aenderungen.isEmpty)
+              const LeerHinweis('Keine Unterschiede.')
+            else
+              for (final a in aenderungen)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${a.abschnitt} · ${a.feld}',
+                        style: theme.textTheme.labelMedium,
+                      ),
+                      Text(
+                        '${zeigen(a.alt)}  →  ${zeigen(a.neu)}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
           ],
         ),
       ),

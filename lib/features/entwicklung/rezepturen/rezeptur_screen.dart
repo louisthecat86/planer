@@ -24,9 +24,27 @@ import 'zutat_auswahl_dialog.dart';
 /// Eine Rezeptur: ihre Stände, die Zusammensetzung des gewählten und das
 /// Ergebnis daneben.
 class RezepturScreen extends ConsumerStatefulWidget {
-  const RezepturScreen({super.key, required this.rezepturId});
+  const RezepturScreen({
+    super.key,
+    required this.rezepturId,
+    this.eingebettet = false,
+    this.kopf,
+    this.aktionen = const [],
+  });
 
   final String rezepturId;
+
+  /// Im Reiter „Rezeptur" eines Projekts: ohne eigene Titelleiste — der
+  /// Name (oder [kopf]), [aktionen] und das Menü stehen in einer Zeile
+  /// darüber, und nach dem Löschen bleibt die Seite stehen.
+  final bool eingebettet;
+
+  /// Statt des Namens — etwa die Wahl zwischen den Rezepturen des
+  /// Projekts. Nur [eingebettet].
+  final Widget? kopf;
+
+  /// Weitere Knöpfe vor dem Menü. Nur [eingebettet].
+  final List<Widget> aktionen;
 
   @override
   ConsumerState<RezepturScreen> createState() => _RezepturScreenState();
@@ -102,7 +120,8 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
     if (ja != true) return;
     await _repo.rezepturLoeschen(r.id);
     _gesichert('Rezeptur gelöscht');
-    if (mounted) Navigator.of(context).maybePop();
+    // Im Reiter eines Projekts bleibt das Projekt offen.
+    if (mounted && !widget.eingebettet) Navigator.of(context).maybePop();
   }
 
   Future<void> _neuerStand(RezepturVersion? vorlage) async {
@@ -208,140 +227,180 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
     final rezeptur = ref.watch(rezepturProvider(widget.rezepturId));
     final versionen = ref.watch(versionenProvider(widget.rezepturId));
     final r = rezeptur.valueOrNull;
-
+    final mehr = r == null
+        ? null
+        : PopupMenuButton<VoidCallback>(
+            key: const ValueKey('rezeptur-mehr'),
+            tooltip: 'Name und Angaben ändern oder Rezeptur löschen',
+            onSelected: (aktion) => aktion(),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: () => _bearbeiten(r),
+                child: const ListTile(
+                  leading: Icon(Icons.edit_outlined),
+                  title: Text('Name und Angaben…'),
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: () => _loeschen(r),
+                child: const ListTile(
+                  leading: Icon(Icons.delete_outline),
+                  title: Text('Rezeptur löschen…'),
+                ),
+              ),
+            ],
+          );
+    final inhalt = _inhalt(context, rezeptur, versionen);
+    if (widget.eingebettet) {
+      final theme = Theme.of(context);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 6, 8, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: widget.kopf ??
+                      Text(
+                        r?.name ?? 'Rezeptur',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                ),
+                const SizedBox(width: 8),
+                ...widget.aktionen,
+                if (mehr != null) mehr,
+              ],
+            ),
+          ),
+          Divider(height: 1, color: theme.colorScheme.outlineVariant),
+          Expanded(child: inhalt),
+        ],
+      );
+    }
     return Scaffold(
       appBar: AppBar(
         title: Text(r?.name ?? 'Rezeptur'),
         actions: [
-          if (r != null)
-            PopupMenuButton<VoidCallback>(
-              key: const ValueKey('rezeptur-mehr'),
-              tooltip: 'Name und Angaben ändern oder Rezeptur löschen',
-              onSelected: (aktion) => aktion(),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: () => _bearbeiten(r),
-                  child: const ListTile(
-                    leading: Icon(Icons.edit_outlined),
-                    title: Text('Name und Angaben…'),
-                  ),
-                ),
-                const PopupMenuDivider(),
-                PopupMenuItem(
-                  value: () => _loeschen(r),
-                  child: const ListTile(
-                    leading: Icon(Icons.delete_outline),
-                    title: Text('Rezeptur löschen…'),
-                  ),
-                ),
-              ],
-            ),
+          if (mehr != null) mehr,
           const SizedBox(width: 8),
         ],
       ),
-      body: versionen.when(
-        skipLoadingOnReload: true,
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Padding(
-          padding: const EdgeInsets.all(16),
-          child: HinweisBox(
-            fehlerText(e),
-            art: StatusArt.fehler,
-            titel: 'Die Rezeptur ließ sich nicht laden',
-            auswaehlbar: true,
-          ),
+      body: inhalt,
+    );
+  }
+
+  Widget _inhalt(
+    BuildContext context,
+    AsyncValue<Rezeptur?> rezeptur,
+    AsyncValue<List<RezepturVersion>> versionen,
+  ) {
+    final r = rezeptur.valueOrNull;
+    return versionen.when(
+      skipLoadingOnReload: true,
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: HinweisBox(
+          fehlerText(e),
+          art: StatusArt.fehler,
+          titel: 'Die Rezeptur ließ sich nicht laden',
+          auswaehlbar: true,
         ),
-        data: (liste) {
-          if (r == null && !rezeptur.isLoading) {
-            return const Center(
-              child: LeerHinweis('Diese Rezeptur gibt es nicht mehr.'),
-            );
-          }
-          if (liste.isEmpty) {
-            return Center(
-              child: LeerHinweis(
-                'Diese Rezeptur hat noch keinen Stand.',
-                icon: Icons.menu_book_outlined,
-                aktion: FilledButton.icon(
-                  onPressed: () => _neuerStand(null),
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Ersten Stand anlegen'),
-                ),
+      ),
+      data: (liste) {
+        if (r == null && !rezeptur.isLoading) {
+          return const Center(
+            child: LeerHinweis('Diese Rezeptur gibt es nicht mehr.'),
+          );
+        }
+        if (liste.isEmpty) {
+          return Center(
+            child: LeerHinweis(
+              'Diese Rezeptur hat noch keinen Stand.',
+              icon: Icons.menu_book_outlined,
+              aktion: FilledButton.icon(
+                onPressed: () => _neuerStand(null),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Ersten Stand anlegen'),
               ),
-            );
-          }
-          final aktuell = liste.firstWhere(
-            (v) => v.id == _versionId,
-            orElse: () => liste.first,
+            ),
           );
-          final leiste = _StandLeiste(
-            versionen: liste,
-            aktuell: aktuell,
-            onWahl: (id) => setState(() => _versionId = id),
-            onNeu: () => _neuerStand(aktuell),
-            onAbschliessen: () => _abschliessen(aktuell),
-            onVergleichen: () => _vergleichen(liste, aktuell),
-            onEtikett: () => etikettZeigen(context, aktuell.id),
-            onFleisch: () => _fleischanteil(aktuell),
-            onLoeschen: liste.length > 1 &&
-                    aktuell.status == VersionStatus.entwurf
-                ? () => _standLoeschen(aktuell)
-                : null,
-          );
-          final zusammensetzung = Zusammensetzung(
-            rezepturId: widget.rezepturId,
-            version: aktuell,
-          );
-          final ergebnis = RezepturErgebnisAnsicht(versionId: aktuell.id);
-          return LayoutBuilder(
-            builder: (context, c) {
-              if (c.maxWidth >= 1100) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    leiste,
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            flex: 11,
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(16, 12, 8, 24),
-                              children: [zusammensetzung],
-                            ),
-                          ),
-                          Expanded(
-                            flex: 9,
-                            child: ListView(
-                              padding: const EdgeInsets.fromLTRB(8, 12, 16, 24),
-                              children: [ergebnis],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return ListView(
-                padding: const EdgeInsets.only(bottom: 24),
+        }
+        final aktuell = liste.firstWhere(
+          (v) => v.id == _versionId,
+          orElse: () => liste.first,
+        );
+        final leiste = _StandLeiste(
+          versionen: liste,
+          aktuell: aktuell,
+          onWahl: (id) => setState(() => _versionId = id),
+          onNeu: () => _neuerStand(aktuell),
+          onAbschliessen: () => _abschliessen(aktuell),
+          onVergleichen: () => _vergleichen(liste, aktuell),
+          onEtikett: () => etikettZeigen(context, aktuell.id),
+          onFleisch: () => _fleischanteil(aktuell),
+          onLoeschen: liste.length > 1 &&
+                  aktuell.status == VersionStatus.entwurf
+              ? () => _standLoeschen(aktuell)
+              : null,
+        );
+        final zusammensetzung = Zusammensetzung(
+          rezepturId: widget.rezepturId,
+          version: aktuell,
+        );
+        final ergebnis = RezepturErgebnisAnsicht(versionId: aktuell.id);
+        return LayoutBuilder(
+          builder: (context, c) {
+            if (c.maxWidth >= 1100) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   leiste,
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                    child: zusammensetzung,
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                    child: ergebnis,
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          flex: 11,
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 8, 24),
+                            children: [zusammensetzung],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 9,
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(8, 12, 16, 24),
+                            children: [ergebnis],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               );
-            },
-          );
-        },
-      ),
+            }
+            return ListView(
+              padding: const EdgeInsets.only(bottom: 24),
+              children: [
+                leiste,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: zusammensetzung,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  child: ergebnis,
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

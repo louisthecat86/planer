@@ -102,12 +102,13 @@ Future<List<ArtikelMitKette>> artikelMitKetteLaden(AppDatabase db) async {
 }
 
 /// Die Kette des Artikels [productId] als Schritte eines Projekts — mit
-/// neuen IDs aus [neueId], ohne Personen und Leistungsdaten (F33).
+/// neuen IDs aus [neueId] (ohne: denen der Schritte im Artikel), ohne
+/// Personen und Leistungsdaten (F33).
 Future<List<ProzessSchritt>> ketteAusArtikel(
   AppDatabase db,
   String productId, {
   required List<KatalogAnlage> katalog,
-  required String Function() neueId,
+  String Function()? neueId,
 }) async {
   final schritte = await (db.select(db.productSteps)
         ..where((s) => s.productId.equals(productId))
@@ -135,7 +136,7 @@ Future<List<ProzessSchritt>> ketteAusArtikel(
   return [
     for (final s in schritte)
       schrittAusArtikel(
-        id: neueId(),
+        id: neueId?.call() ?? s.id,
         abteilung: s.abteilung,
         maschineId: s.maschineId,
         maschine: s.maschine,

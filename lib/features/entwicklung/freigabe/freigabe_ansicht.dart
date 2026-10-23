@@ -9,8 +9,12 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../entwicklung_format.dart';
+import '../haccp/prozess_ansicht.dart' show ParameterVergleichDialog;
+import '../haccp/prozess_kette.dart' show prozessKurztext;
+import '../haccp/prozess_modell.dart';
 import '../spezifikation/spez_angaben.dart' show SpezAngaben;
 import 'freigabe.dart';
+import 'kette_uebernahme.dart';
 
 /// Öffnet den Artikel im Planer.
 void oeffneArtikel(BuildContext context, String artikelId) =>
@@ -226,7 +230,8 @@ class VerlustAbgleichAnzeige extends StatelessWidget {
 
 /// Einen Stand freigeben: Artikelnummer, Bezeichnung, Produktgruppe und
 /// Haltbarkeit — vorbelegt mit dem, was im Projekt schon steht; bei einem
-/// vorhandenen Artikel die Felder, die sich ändern.
+/// vorhandenen Artikel die Felder, die sich ändern. Die Prozesskette des
+/// Projekts wird die des Artikels — was dabei wegfiele, nur mit Haken.
 class FreigabeDialog extends ConsumerStatefulWidget {
   const FreigabeDialog({
     super.key,
@@ -256,6 +261,14 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
   bool _laedt = true;
   bool _speichert = false;
   String? _fehler;
+
+  /// Die Kette des Artikels zur Nummer — leer ohne Artikel.
+  List<ProzessSchritt> _artikelKette = const [];
+
+  /// Die Kette des Projekts übernehmen — und dabei entfernen, was das
+  /// Projekt nicht mehr hat?
+  bool _prozess = true;
+  bool _entfernen = true;
 
   /// Zählt Ladevorgänge — ein älterer, langsamerer schreibt nicht über
   /// einen neueren.
@@ -296,10 +309,12 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
         _haltbarkeit.text = v.haltbarkeitTage?.toString() ?? '';
       }
       final artikel = await _dienst.artikelZuNummer(_nummer.text);
+      final kette = await _ketteVon(artikel);
       if (!mounted || nr != _ladeNr) return;
       setState(() {
         _vorschlag = v;
         _artikel = artikel;
+        _artikelKette = kette;
         _laedt = false;
       });
     } catch (e) {
@@ -311,12 +326,27 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
     }
   }
 
+  Future<List<ProzessSchritt>> _ketteVon(Product? artikel) async =>
+      artikel == null ? const [] : await _dienst.artikelKette(artikel.id);
+
   Future<void> _nummerGeaendert() async {
     final nr = ++_ladeNr;
-    final artikel = await _dienst.artikelZuNummer(_nummer.text);
-    if (!mounted || nr != _ladeNr) return;
-    setState(() => _artikel = artikel);
+    try {
+      final artikel = await _dienst.artikelZuNummer(_nummer.text);
+      final kette = await _ketteVon(artikel);
+      if (!mounted || nr != _ladeNr) return;
+      setState(() {
+        _artikel = artikel;
+        _artikelKette = kette;
+      });
+    } catch (e) {
+      if (!mounted || nr != _ladeNr) return;
+      setState(() => _fehler = fehlerText(e));
+    }
   }
+
+  Prozessparameter get _projektProzess =>
+      Prozessparameter.aus(widget.projekt.prozess);
 
   FreigabeWerte? get _werte {
     final v = _vorschlag;
@@ -349,6 +379,8 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
         versionId: _versionId,
         werte: werte,
         felder: _felder,
+        prozessUebernehmen: _prozess,
+        prozessEntfernen: _entfernen,
       );
       ref
           .read(autoBackupTriggerProvider)
@@ -363,6 +395,149 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
     }
   }
 
+  Future<void> _aenderungenZeigen(UebernahmeVorschau v, Product artikel) =>
+      showDialog<void>(
+        context: context,
+        builder: (_) => ParameterVergleichDialog(
+          titel: 'Prozesskette von Artikel ${artikel.artikelnummer}',
+          staende: [
+            (label: 'Bisher', parameter: v.vorher),
+            (label: 'Nach der Freigabe', parameter: v.nachher),
+          ],
+        ),
+      );
+
+  /// Was mit der Prozesskette geschieht.
+  List<Widget> _prozessTeil(ThemeData theme, Color grau, Product? artikel) {
+    final prozess = _projektProzess;
+    final klein = theme.textTheme.bodySmall;
+    final kopf = [
+      Text('Prozess', style: theme.textTheme.labelMedium),
+      const SizedBox(height: 4),
+    ];
+    final bleibt = artikel == null
+        ? 'Prozessschritte trägst du danach im Artikel nach.'
+        : 'Die Kette des Artikels bleibt, wie sie ist.';
+    if (prozess.abschnitte.isNotEmpty) {
+      return [
+        ...kopf,
+        HinweisBox(
+          'Der Prozess des Projekts besteht noch aus Abschnitten — im '
+          'Reiter „Herstellung" wird er zur Kette. $bleibt',
+          art: StatusArt.warnung,
+        ),
+      ];
+    }
+    if (prozess.schritte.isEmpty) {
+      return [
+        ...kopf,
+        Text(
+          'Das Projekt hat keine Prozesskette. $bleibt',
+          style: klein?.copyWith(color: grau),
+        ),
+      ];
+    }
+    final ohne = stationenOhneAbteilung(prozess.schritte);
+    if (ohne.isNotEmpty) {
+      final stationen = ohne.length == 1
+          ? 'Station ${ohne.single} hat'
+          : 'Die Stationen ${ohne.join(', ')} haben';
+      return [
+        ...kopf,
+        HinweisBox(
+          '$stationen keine Abteilung — ohne lässt sich die Kette nicht '
+          'übernehmen. Trag sie im Reiter „Herstellung" nach. $bleibt',
+          art: StatusArt.warnung,
+        ),
+      ];
+    }
+    final historie = ProzessStand.listeAus(widget.projekt.prozessHistorie);
+    final fassung = prozessFassung(prozess, historie);
+    final version = fassung.geaendert
+        ? 'Der jetzige Stand wird dabei als Version '
+            '${naechsteProzessVersion(prozess, historie)} festgehalten.'
+        : 'Version ${fassung.version}.';
+    final v = uebernahmeVorschau(
+      _artikelKette,
+      prozess.schritte,
+      entfernen: _entfernen,
+    );
+    final mitKette = artikel != null && _artikelKette.isNotEmpty;
+    final dazu = switch (v.neu) {
+      0 => 'keiner kommt dazu',
+      1 => 'einer kommt dazu',
+      final n => '$n kommen dazu',
+    };
+    final was = !mitKette
+        ? 'Personen und Leistungsdaten trägst du danach im Artikel ein.'
+        : switch (v.bleiben) {
+            0 => 'Keiner der Schritte entspricht einem im Artikel — alle '
+                'kommen neu dazu.',
+            1 => 'Ein Schritt bleibt mit Personen und Leistungsdaten, $dazu.',
+            final n =>
+              '$n Schritte bleiben mit Personen und Leistungsdaten, $dazu.',
+          };
+    final namen = [
+      for (final s in v.nurImArtikel)
+        s.bezeichnung(_artikelKette.indexOf(s) + 1),
+    ];
+    final werteAnzahl = v.werteNurImArtikel == 1
+        ? 'ein Wert'
+        : '${v.werteNurImArtikel} Werte';
+    final entfaellt = [
+      if (namen.isNotEmpty)
+        '${namen.length == 1 ? 'Schritt' : 'Schritte'} ${namen.join(', ')}',
+      if (v.werteNurImArtikel > 0) '$werteAnzahl in Schritten, die bleiben',
+    ];
+    return [
+      ...kopf,
+      CheckboxListTile(
+        key: const ValueKey('freigabe-prozess'),
+        dense: true,
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _prozess,
+        title: Text('Prozesskette übernehmen · ${prozessKurztext(prozess)}'),
+        subtitle: Text('$was $version'),
+        onChanged: (j) => setState(() => _prozess = j ?? false),
+      ),
+      if (_prozess && mitKette && v.etwasEntfaellt)
+        CheckboxListTile(
+          key: const ValueKey('freigabe-prozess-entfernen'),
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          controlAffinity: ListTileControlAffinity.leading,
+          value: _entfernen,
+          title: const Text('Was das Projekt nicht hat, aus dem Artikel '
+              'entfernen'),
+          subtitle: Text(
+            '${entfaellt.join(' und ')} — ohne Haken bleibt es im Artikel.',
+          ),
+          onChanged: (j) => setState(() => _entfernen = j ?? false),
+        ),
+      if (_prozess && mitKette)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: v.aenderungen.isEmpty
+              ? Text(
+                  'Die Kette des Artikels stimmt schon damit überein.',
+                  style: klein?.copyWith(color: grau),
+                )
+              : TextButton.icon(
+                  key: const ValueKey('freigabe-prozess-aenderungen'),
+                  onPressed: () => _aenderungenZeigen(v, artikel),
+                  icon: const Icon(Icons.compare_arrows, size: 18),
+                  label: Text(
+                    v.aenderungen.length == 1
+                        ? 'Eine Änderung am Artikel ansehen…'
+                        : '${v.aenderungen.length} Änderungen am Artikel '
+                            'ansehen…',
+                  ),
+                ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -370,6 +545,7 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
     final werte = _werte;
     final artikel = _artikel;
     final fehler = _fehler;
+    final ketteMit = _prozess && kannKetteUebernehmen(_projektProzess);
     final aenderungen = artikel == null || werte == null
         ? const <FreigabeFeld>[]
         : [
@@ -520,14 +696,21 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
                         ),
                       ],
                     ],
+                    if (werte != null) ...[
+                      const SizedBox(height: 12),
+                      ..._prozessTeil(theme, grau, artikel),
+                    ],
                     const SizedBox(height: 12),
                     if (artikel == null)
                       HinweisBox(
                         _nummer.text.trim().isEmpty
                             ? 'Bitte eine Artikelnummer eingeben.'
-                            : 'Neuer Artikel ${_nummer.text.trim()} — '
-                                'Prozessschritte trägst du danach in der '
-                                'Artikelliste nach.',
+                            : ketteMit
+                                ? 'Neuer Artikel ${_nummer.text.trim()} — mit '
+                                    'der Prozesskette des Projekts.'
+                                : 'Neuer Artikel ${_nummer.text.trim()} — '
+                                    'Prozessschritte trägst du danach in der '
+                                    'Artikelliste nach.',
                       )
                     else ...[
                       HinweisBox(

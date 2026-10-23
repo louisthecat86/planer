@@ -12,6 +12,7 @@ import '../rezepturen/versionsvergleich.dart';
 import 'entwicklungsstrang.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
+import 'projekt_rezeptur.dart' show projektRezepturZeigen;
 import 'zeitstrahl.dart';
 
 // Der Entwicklungsweg eines Produkts — von oben nach unten: die Idee und
@@ -450,7 +451,8 @@ class _StationKarte extends ConsumerWidget {
                   label: const Text('Etikett'),
                 ),
                 TextButton.icon(
-                  onPressed: () => oeffneRezeptur(context, v.rezepturId),
+                  onPressed: () =>
+                      projektRezepturZeigen(context, e.projektId, v.rezepturId),
                   icon: const Icon(Icons.menu_book_outlined, size: 16),
                   label: const Text('Rezeptur'),
                 ),
@@ -636,7 +638,11 @@ class _InArbeitZeile extends StatelessWidget {
             ),
           ),
           TextButton.icon(
-            onPressed: () => oeffneRezeptur(context, rezeptur.id),
+            onPressed: () => switch (rezeptur.projektId) {
+              final projektId? =>
+                projektRezepturZeigen(context, projektId, rezeptur.id),
+              null => oeffneRezeptur(context, rezeptur.id),
+            },
             icon: const Icon(Icons.menu_book_outlined, size: 16),
             label: const Text('Öffnen'),
           ),

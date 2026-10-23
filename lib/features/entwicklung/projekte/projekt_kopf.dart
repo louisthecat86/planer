@@ -129,6 +129,7 @@ class ProjektKopf extends ConsumerWidget {
     final fehlend =
         archiviert ? const <AngabeSchritt>[] : fehlendeAngaben(projekt);
     final fortschritt = _Fortschritt(
+      projektId: projekt.id,
       check: check,
       offen: offen,
       fehlend: fehlend,
@@ -275,12 +276,14 @@ class _PhasenKnopf extends StatelessWidget {
 /// offen ist.
 class _Fortschritt extends StatelessWidget {
   const _Fortschritt({
+    required this.projektId,
     required this.check,
     required this.offen,
     this.fehlend = const [],
     this.onAngaben,
   });
 
+  final String projektId;
   final ProjektCheckStand? check;
   final int offen;
 
@@ -357,7 +360,11 @@ class _Fortschritt extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: () => checkpunktOeffnen(context, naechster),
+                  onPressed: () => checkpunktOeffnen(
+                    context,
+                    naechster,
+                    projektId: projektId,
+                  ),
                   iconAlignment: IconAlignment.end,
                   icon: const Icon(Icons.arrow_forward, size: 16),
                   label: Text('Als Nächstes: ${checkAufgabe(naechster)}'),
@@ -372,7 +379,8 @@ class _Fortschritt extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   visualDensity: VisualDensity.compact,
                 ),
-                onPressed: () => checkpunktOeffnen(context, z),
+                onPressed: () =>
+                    checkpunktOeffnen(context, z, projektId: projektId),
                 icon: const Icon(Icons.schedule, size: 16),
                 label: Text(checkFehlt(z)),
               ),

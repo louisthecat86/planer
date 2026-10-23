@@ -14,13 +14,13 @@ import '../daten/entwicklung_repository.dart';
 import '../etikett/etikett_dialog.dart';
 import '../haccp/prozess_kette.dart';
 import '../haccp/prozess_modell.dart';
-import '../rezepturen/rezepturen_ansicht.dart';
 import 'datei_aktionen.dart';
 import 'entwicklungsstrang.dart';
 import 'entwicklungsweg_ansicht.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
+import 'projekt_rezeptur.dart' show projektRezepturZeigen;
 import 'zeitstrahl.dart';
 
 /// Der zuletzt verwendete Name für Einträge und Kommentare — gilt, bis
@@ -520,8 +520,12 @@ class EintragKarte extends ConsumerWidget {
                         spacing: 4,
                         children: [
                           TextButton.icon(
-                            onPressed: () =>
-                                oeffneRezeptur(context, v.rezepturId),
+                            // Im Reiter „Rezeptur".
+                            onPressed: () => projektRezepturZeigen(
+                              context,
+                              e.projektId,
+                              v.rezepturId,
+                            ),
                             icon: const Icon(
                               Icons.menu_book_outlined,
                               size: 16,
