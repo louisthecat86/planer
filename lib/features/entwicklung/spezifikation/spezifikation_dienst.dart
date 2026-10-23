@@ -1,3 +1,4 @@
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:drift/drift.dart';
@@ -16,6 +17,7 @@ import 'deepl.dart';
 import 'spez_angaben.dart';
 import 'spezifikation_werte.dart';
 import 'vorlage_einrichten.dart';
+import 'xlsx_bild.dart';
 import 'xlsx_vorlage.dart';
 
 // Spezifikationen aus der eigenen Excel-Vorlage erstellen. Die Vorlagen
@@ -26,7 +28,9 @@ import 'xlsx_vorlage.dart';
 // liegt — richtet die App beim Speichern selbst ein
 // (vorlage_einrichten.dart); fehlen einer Vorlage Platzhalter, die die
 // App setzen kann, ergänzt sie sie — auch beim Erstellen, für Vorlagen,
-// die noch aus einer früheren Fassung stammen.
+// die noch aus einer früheren Fassung stammen. So bekommen auch ältere
+// Vorlagen ihr Feld für das Produktfoto neben der Sensorik; das Foto
+// selbst wird beim Erstellen aufbereitet (xlsx_bild.dart).
 
 /// Die IDs der Vorlagen unter den Entwicklungsdateien.
 String spezVorlageId(SpezSprache s) => 'vorlage.spezifikation.${s.name}';
@@ -63,10 +67,14 @@ class SpezifikationErgebnis {
     this.uebersetzungsFehler,
     this.kaestchen = 0,
     this.hinweise = const [],
+    this.produktfoto = false,
   });
 
   final Uint8List bytes;
   final String dateiname;
+
+  /// Das Produktfoto steht in der Mappe.
+  final bool produktfoto;
 
   /// Wie viele Platzhalter ersetzt wurden.
   final int ersetzt;
@@ -99,10 +107,12 @@ const List<({String name, String label})> kSpezPflichtfelder = [
 ];
 
 /// Was von den Pflichtfeldern fehlt: in der Vorlage kein Platz dafür
-/// ([platzhalter]) oder leer geblieben ([werte]).
+/// ([platzhalter]) oder leer geblieben ([werte]) — dazu das Produktfoto,
+/// wenn die Vorlage ein Feld dafür hat, aber keins in [bilder] steht.
 List<String> spezLuecken({
   required Set<String> platzhalter,
   required Map<String, String> werte,
+  Set<String> bilder = const {},
 }) {
   final ohnePlatz = [
     for (final f in kSpezPflichtfelder)
@@ -130,6 +140,9 @@ List<String> spezLuecken({
           '„Produkt" bei „Angaben".',
     if (leer('zutaten'))
       'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt leer.',
+    if (platzhalter.contains('produktbild') && !bilder.contains('produktbild'))
+      'Leer geblieben: Produktfoto — zu hinterlegen im Reiter „Produkt" '
+          'neben der Sensorik.',
   ];
 }
 
@@ -406,6 +419,32 @@ class SpezifikationDienst {
     return e;
   }
 
+  /// Das Produktfoto von [projekt], aufbereitet für die Mappe — nur, wenn
+  /// die Vorlage ein Feld dafür hat. Ein Foto, das sich nicht lesen
+  /// lässt, bringt statt des Bilds einen Hinweis; die Spezifikation
+  /// entsteht trotzdem.
+  Future<({XlsxBild? bild, String? fehler})> _foto(
+    EntwicklungsProjekt projekt,
+    Set<String> platzhalter,
+  ) async {
+    final id = projekt.bildDateiId;
+    if (id == null || !platzhalter.contains('produktbild')) {
+      return (bild: null, fehler: null);
+    }
+    const fehler = 'Das Produktfoto ließ sich nicht lesen — das Feld '
+        'neben der Sensorik bleibt leer.';
+    try {
+      final roh = await _dateien.lesen(id);
+      if (roh == null) return (bild: null, fehler: fehler);
+      // Ein großes Foto zu drehen und zu verkleinern dauert — im
+      // Hintergrund, damit das Fenster nicht hängt.
+      final bild = await Isolate.run(() => bildFuerMappe(roh));
+      return (bild: bild, fehler: bild == null ? fehler : null);
+    } catch (_) {
+      return (bild: null, fehler: fehler);
+    }
+  }
+
   /// Erstellt die Spezifikation des Stands [versionId] in [sprache].
   /// Wirft [StateError], wenn Vorlage oder Stand fehlen.
   Future<SpezifikationErgebnis> erstellen({
@@ -467,8 +506,20 @@ class SpezifikationDienst {
       }
     }
 
-    final gefuellt = vorlageFuellen(vorlage, werte);
     final platzhalter = platzhalterIn(vorlage);
+    final foto = await _foto(projekt, platzhalter);
+    final gefuellt = vorlageFuellen(
+      vorlage,
+      werte,
+      bilder: {if (foto.bild case final bild?) 'produktbild': bild},
+    );
+    final fotoHinweise = [
+      if (foto.fehler case final fehler?)
+        fehler
+      else if (foto.bild != null && !gefuellt.bilder.contains('produktbild'))
+        'Das Produktfoto ließ sich nicht in die Vorlage setzen — das Feld '
+            'neben der Sensorik bleibt leer.',
+    ];
     // Der Dateiname mit der deutschen Bezeichnung — auch für Englisch.
     final bezeichnung = quelle.bezeichnung?.trim() ?? '';
     final name = (bezeichnung.isEmpty ? projekt.name : bezeichnung)
@@ -484,13 +535,23 @@ class SpezifikationDienst {
       uebersetzt: uebersetzt,
       uebersetzungsFehler: fehler,
       kaestchen: gefuellt.kaestchen,
+      produktfoto: gefuellt.bilder.contains('produktbild'),
       hinweise: [
         if (ergaenzt != null)
           'Die Vorlage war noch nicht ganz eingerichtet — die App hat '
               '${ergaenzt.felder.length} '
               '${ergaenzt.felder.length == 1 ? 'Feld' : 'Felder'} ergänzt '
               'und sich die Vorlage so gemerkt.',
-        ...spezLuecken(platzhalter: platzhalter, werte: werte),
+        ...fotoHinweise,
+        ...spezLuecken(
+          platzhalter: platzhalter,
+          werte: werte,
+          // Ein Foto, das sich nicht setzen ließ, meldet fotoHinweise.
+          bilder: {
+            ...gefuellt.bilder,
+            if (projekt.bildDateiId != null) 'produktbild',
+          },
+        ),
         ...spezPlatzHinweise(
           platzhalter: platzhalter,
           ergebnis: ergebnis,

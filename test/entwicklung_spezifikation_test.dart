@@ -16,7 +16,9 @@ import 'package:produktion_planer/features/entwicklung/daten/entwicklung_reposit
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
-import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
+import 'package:produktion_planer/features/entwicklung/haccp/prozess_modell.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/datei_aktionen.dart'
+    show dateiInhaltProvider;
 import 'package:produktion_planer/features/entwicklung/projekte/produkt_reiter.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
@@ -795,7 +797,18 @@ void main() {
           EntwicklungProjekteCompanion(
             bildDateiId: Value(bildId),
             notizen: const Value('Kunde wünscht weniger Salz.'),
-            prozess: Value(kNeutraleProzessVorlage.alsJson()),
+            // Abschnitte von früher, nie ausgefüllt.
+            prozess: Value(
+              const Prozessparameter(
+                abschnitte: [
+                  ProzessAbschnitt(
+                    id: 'garen',
+                    titel: 'Garen',
+                    felder: [ProzessFeld(id: 't', label: 'Temperatur')],
+                  ),
+                ],
+              ).alsJson(),
+            ),
             haccp: Value(
               const Haccp(
                 gefahren: [
@@ -836,10 +849,11 @@ void main() {
         );
         expect(Haccp.aus(projekt.haccp).gefahren.single.risiko, 6);
         // Die Checkliste rechnet sich selbst — wie in der Übersicht:
-        // Rezeptur und Nährwerte aus Stand 1, der Prozess hat noch keine
-        // Werte, der Sensorik fehlt das meiste.
+        // Rezeptur und Nährwerte aus Stand 1, das Produktfoto ist da, der
+        // Prozess hat noch keine Werte, der Sensorik fehlt das meiste.
         final check = b.checkliste!;
-        expect(check.text, '2 von 8');
+        expect(check.text, '3 von 9');
+        expect(check.punkt('produktfotoHinterlegt')!.erledigt, isTrue);
         expect(
           check.punkt('prozessErstellt')!.text,
           'Noch keine Werte eingetragen',
@@ -938,6 +952,52 @@ void main() {
         );
         expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
       });
+
+      test('mit Prozesskette: nach Stationen, je Schritt seine Werte',
+          () async {
+        final id = await projekte.projektAnlegen(name: 'Kette Testart');
+        const kette = Prozessparameter(
+          schritte: [
+            ProzessSchritt(
+              id: 's1',
+              abteilung: 'zerlegung',
+              maschine: 'Testwolf',
+              prozessschritt: 'Wolfen',
+              werte: [
+                ProzessWert(name: 'Lochscheibe', wert: '3', einheit: 'mm'),
+              ],
+            ),
+            ProzessSchritt(
+              id: 's2',
+              abteilung: 'bratstrasse',
+              maschine: 'Testbratstraße',
+              notiz: 'Band mittig',
+              werte: [
+                ProzessWert(
+                  name: 'Platte Oben 1',
+                  wert: '180',
+                  gruppe: 'BRATSTRASSE',
+                ),
+              ],
+            ),
+            // Ohne Abteilung und ohne Anlage — etwa aus früheren
+            // Abschnitten.
+            ProzessSchritt(id: 's3', prozessschritt: 'Abkühlen'),
+          ],
+        );
+        await projekte.projektAendern(
+          id,
+          EntwicklungProjekteCompanion(prozess: Value(kette.alsJson())),
+        );
+        final projekt = (await projekte.projekt(id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+        expect(
+          b.checkliste!.punkt('prozessErstellt')!.text,
+          'Noch keine Version festgehalten',
+        );
+        final pdf = await baueProjektPdf(b, gedrucktAm: datum);
+        expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
+      });
     });
   });
 
@@ -996,13 +1056,18 @@ void main() {
       bool mitVorlage = false,
       bool schluessel = false,
       String? versionId,
+      String? bild,
     }) async {
       tester.view.physicalSize = const Size(1400, 1100);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
+      final p = projekt.copyWith(bildDateiId: Value(bild));
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            // Das Fenster liest das Projekt neu — ein eben gewähltes Foto.
+            projektProvider.overrideWith((ref, id) => Stream.value(p)),
+            dateiInhaltProvider.overrideWith((ref, id) async => null),
             spezStaendeProvider.overrideWith(
               (ref, id) async => liste ?? staende,
             ),
@@ -1019,7 +1084,7 @@ void main() {
           child: MaterialApp(
             theme: AppTheme.light(),
             home: Scaffold(
-              body: SpezifikationDialog(projekt: projekt, versionId: versionId),
+              body: SpezifikationDialog(projekt: p, versionId: versionId),
             ),
           ),
         ),
@@ -1106,6 +1171,38 @@ void main() {
       final schalter = tester.widget<SwitchListTile>(find.byType(SwitchListTile));
       expect(schalter.value, isTrue);
       expect(schalter.onChanged, isNotNull);
+    });
+
+    testWidgets('das Produktfoto: fehlt es, lässt es sich gleich wählen',
+        (tester) async {
+      await zeige(tester, mitVorlage: true);
+      expect(find.textContaining('Noch kein Produktfoto'), findsOneWidget);
+      // Was sonst leer bliebe — der Assistent fragt es ab (F39).
+      expect(
+        find.text(
+          'Noch offen: Artikelnummer, Sensorik, Lagerung, Haltbarkeit und '
+          'Verpackung — sie blieben in der Spezifikation leer.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('spez-angaben')), findsOneWidget);
+      expect(find.byKey(const ValueKey('spez-foto-waehlen')), findsOneWidget);
+      // Erstellen geht trotzdem — das Feld bleibt dann leer.
+      expect(knopf(tester, 'Erstellen…').enabled, isTrue);
+    });
+
+    // Ein eigener Test: Ein zweites zeige() im selben Test behielte den
+    // ProviderScope samt dem Projekt ohne Foto.
+    testWidgets('das Produktfoto: ist es da, steht es neben der Sensorik',
+        (tester) async {
+      await zeige(tester, mitVorlage: true, bild: 'f1');
+      expect(
+        find.text('Produktfoto — kommt ins Feld neben der Sensorik'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('spez-foto-anderes')), findsOneWidget);
+      expect(find.textContaining('Noch kein Produktfoto'), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('ohne Rezeptur ein Hinweis', (tester) async {
@@ -1209,6 +1306,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            projektProvider.overrideWith((ref, id) => Stream.value(p)),
             spezVorschauProvider.overrideWith((ref, a) async => vorschau),
             spezStaendeProvider.overrideWith((ref, id) async => staende),
             spezVorlageProvider.overrideWith(
@@ -1349,6 +1447,11 @@ void main() {
       );
       expect(
         inVorschau(find.text('fehlt — bei „Angaben" eintragen')),
+        findsOneWidget,
+      );
+      // Das Produktfoto kommt neben die Sensorik — hier fehlt es noch.
+      expect(
+        inVorschau(find.text('fehlt — bei „Sensorik" hinterlegen')),
         findsOneWidget,
       );
       // Und hier stehen die Felder dafür.

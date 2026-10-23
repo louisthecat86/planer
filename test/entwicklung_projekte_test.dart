@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/services/auto_backup_trigger.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
@@ -25,8 +26,9 @@ import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikati
 import 'helpers/test_db.dart';
 
 /// Tests für die Projekte der Produktentwicklung: anlegen, Verlauf,
-/// Kommentare, Checklisten, Dateien und Fließdiagramme in der Datenbank —
-/// und die Seiten mit Daten aus den Providern. Alles erfunden.
+/// Kommentare, Checklisten mit zurückgestelltem Produktfoto, Dateien und
+/// Fließdiagramme in der Datenbank — und die Seiten mit Daten aus den
+/// Providern. Alles erfunden.
 void main() {
   group('Daten', () {
     late AppDatabase db;
@@ -98,6 +100,65 @@ void main() {
       p = (await repo.projekt(id))!;
       expect(p.checkliste, isNull);
       expect(p.etikettCheckliste, isNull);
+    });
+
+    test('Produktfoto zurückstellen und hinterlegen (F37)', () async {
+      final id = await repo.projektAnlegen(name: 'Bratwurst fein');
+      await repo.checklistePunkt(
+        id,
+        schluessel: 'navisionAngelegt',
+        erledigt: true,
+      );
+      await repo.checklisteZurueckstellen(
+        id,
+        schluessel: 'produktfotoHinterlegt',
+        zurueck: true,
+      );
+      var p = (await repo.projekt(id))!;
+      expect(checklisteAus(p.checkliste), {'navisionAngelegt'});
+      expect(
+        checklisteZurueckgestellt(p.checkliste),
+        {'produktfotoHinterlegt'},
+      );
+
+      // Ein anderer Haken lässt das „Später" stehen.
+      await repo.checklistePunkt(
+        id,
+        schluessel: 'navisionAngelegt',
+        erledigt: false,
+      );
+      p = (await repo.projekt(id))!;
+      expect(checklisteAus(p.checkliste), isEmpty);
+      expect(
+        checklisteZurueckgestellt(p.checkliste),
+        {'produktfotoHinterlegt'},
+      );
+
+      // Mit einem Foto ist es nicht mehr zurückgestellt.
+      await db.into(db.entwicklungDateien).insert(
+            EntwicklungDateienCompanion.insert(
+              id: 'f1',
+              name: 'Foto.jpg',
+              projektId: Value(id),
+            ),
+          );
+      await repo.produktfotoSetzen(id, 'f1');
+      p = (await repo.projekt(id))!;
+      expect(p.bildDateiId, 'f1');
+      expect(p.checkliste, isNull);
+
+      // Zurückstellen lässt sich auch wieder aufheben.
+      await repo.checklisteZurueckstellen(
+        id,
+        schluessel: 'produktfotoHinterlegt',
+        zurueck: true,
+      );
+      await repo.checklisteZurueckstellen(
+        id,
+        schluessel: 'produktfotoHinterlegt',
+        zurueck: false,
+      );
+      expect((await repo.projekt(id))!.checkliste, isNull);
     });
 
     test('Einträge und Kommentare', () async {
@@ -193,7 +254,7 @@ void main() {
       expect(await db.select(db.entwicklungProjektEintraege).get(), isEmpty);
     });
 
-    test('eine gelöschte Datei verschwindet aus Verlauf und Bild', () async {
+    test('eine gelöschte Datei verschwindet aus Verlauf und Foto', () async {
       final id = await repo.projektAnlegen(name: 'Bratwurst fein');
       await db.into(db.entwicklungDateien).insert(
             EntwicklungDateienCompanion.insert(
@@ -432,13 +493,17 @@ void main() {
       ThemeData? theme,
       EntwicklungsProjekt? projekt,
       List<ProjektEintrag>? verlauf,
+      List<Override> dazu = const [],
     }) async {
       tester.view.physicalSize = groesse;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.pumpWidget(
         ProviderScope(
-          overrides: overrides(seite: projekt, verlauf: verlauf),
+          overrides: [
+            ...overrides(seite: projekt, verlauf: verlauf),
+            ...dazu,
+          ],
           child: MaterialApp(
             theme: theme ?? AppTheme.light(),
             home: Scaffold(body: seite),
@@ -472,8 +537,8 @@ void main() {
       // Die Checkliste rechnet sich selbst (F25): beim Schnitzel Artikel
       // (früher abgehakt), Rezeptur und Nährwerte aus Stand 1, bei der
       // Bratwurst ohne Rezeptur nur der Artikel.
-      expect(find.text('3 von 8'), findsOneWidget);
-      expect(find.text('1 von 8'), findsOneWidget);
+      expect(find.text('3 von 9'), findsOneWidget);
+      expect(find.text('1 von 9'), findsOneWidget);
 
       await tester.tap(find.text('Archiv (1)'));
       await tester.pump();
@@ -512,7 +577,7 @@ void main() {
       expect(find.byType(Zeitstrahl), findsOneWidget);
       await reiter(tester, 'Übersicht');
       expect(bereich('Stammdaten'), findsOneWidget);
-      expect(bereich('Checkliste', '3 von 8'), findsOneWidget);
+      expect(bereich('Checkliste', '3 von 9'), findsOneWidget);
       expect(
         find.text('Schnitzel Wiener Art · Stand 1 abgeschlossen'),
         findsOneWidget,
@@ -570,6 +635,13 @@ void main() {
       );
       // Die Rezeptur hat mehr Fett als das Ziel erlaubt.
       expect(find.textContaining('über dem Ziel'), findsOneWidget);
+      // Das Produktfoto pflegt man im Reiter „Produkt"; hier fehlt es noch.
+      expect(bereich('Produktfoto'), findsOneWidget);
+      expect(find.text('Fehlt noch'), findsOneWidget);
+      expect(
+        find.text('Im Reiter „Produkt" hinterlegen'),
+        findsOneWidget,
+      );
     });
 
     Future<void> bilder(WidgetTester tester) async {
@@ -602,11 +674,32 @@ void main() {
       // Der Kopf steht über jedem Reiter — hier über dem Verlauf.
       expect(find.byType(Zeitstrahl), findsOneWidget);
       expect(
-        find.descendant(of: kopf, matching: find.text('3 von 8')),
+        find.descendant(of: kopf, matching: find.text('3 von 9')),
         findsOneWidget,
       );
       expect(find.text('Als Nächstes: Sensorik beschreiben'), findsOneWidget);
       expect(find.text('1 offener Eintrag im Verlauf'), findsOneWidget);
+      // Was an Angaben fehlt — antippen startet den Assistenten (F39).
+      expect(
+        find.text('5 Angaben fehlen — ergänzen…'),
+        findsOneWidget,
+      );
+      expect(
+        find.byTooltip(
+          'Fehlt: Sensorik, Produktfoto, Lagerung, Haltbarkeit und '
+          'Verpackung',
+        ),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const ValueKey('kopf-angaben')));
+      await bilder(tester);
+      expect(find.text('Angaben ergänzen'), findsOneWidget);
+      expect(find.text('Wie ist das fertige Produkt?'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('assistent-schliessen')));
+      await bilder(tester);
+      // Das Fenster blendet noch aus.
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Angaben ergänzen'), findsNothing);
 
       // „Als Nächstes" führt dorthin, wo es zu tun ist …
       await tester.tap(find.text('Als Nächstes: Sensorik beschreiben'));
@@ -807,6 +900,78 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('Produktfoto: „Später" stellt zurück (F37)', (tester) async {
+      final speicher = _Zurueckstellen();
+      await zeige(
+        tester,
+        const ProjektScreen(projektId: 'p1'),
+        dazu: [
+          projektRepositoryProvider.overrideWithValue(speicher),
+          autoBackupTriggerProvider.overrideWithValue(_OhneSicherung()),
+        ],
+      );
+      await reiter(tester, 'Produkt');
+      // Neben der Sensorik: noch kein Foto — wählen oder später.
+      expect(find.byKey(const ValueKey('produktfoto')), findsOneWidget);
+      expect(find.text('Noch kein Produktfoto'), findsOneWidget);
+      expect(find.byKey(const ValueKey('foto-waehlen')), findsOneWidget);
+      await tester.ensureVisible(find.byKey(const ValueKey('foto-spaeter')));
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('foto-spaeter')));
+      await tester.pump();
+      expect(speicher.aufrufe, ['p1 produktfotoHinterlegt true']);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Produktfoto zurückgestellt: der Kopf erinnert dezent (F37)',
+        (tester) async {
+      final spaeter = p1.copyWith(
+        checkliste: Value(
+          checklisteMit(p1.checkliste, 'produktfotoHinterlegt', kCheckSpaeter),
+        ),
+      );
+      await zeige(
+        tester,
+        const ProjektScreen(projektId: 'p1'),
+        projekt: spaeter,
+      );
+      final kopf = find.byKey(const ValueKey('projekt-kopf'));
+      // Es zählt weiter als offen, „Als Nächstes" bleibt bei der Sensorik.
+      expect(
+        find.descendant(of: kopf, matching: find.text('3 von 9')),
+        findsOneWidget,
+      );
+      expect(find.text('Als Nächstes: Sensorik beschreiben'), findsOneWidget);
+      final fehlt =
+          find.byKey(const ValueKey('kopf-fehlt-produktfotoHinterlegt'));
+      expect(
+        find.descendant(
+          of: fehlt,
+          matching: find.text('Produktfoto fehlt noch'),
+        ),
+        findsOneWidget,
+      );
+
+      // Antippen führt zum Foto im Reiter „Produkt".
+      await tester.tap(fehlt);
+      await bilder(tester);
+      expect(
+        find.text('Zurückgestellt, bis es ein Foto gibt'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('foto-wieder')), findsOneWidget);
+      expect(find.byKey(const ValueKey('foto-spaeter')), findsNothing);
+
+      // In der Übersicht: dezent, mit Uhr in der Checkliste.
+      await reiter(tester, 'Übersicht');
+      expect(find.text('Fehlt noch — zurückgestellt'), findsOneWidget);
+      expect(
+        find.byTooltip('Zurückgestellt — „Als Nächstes" geht weiter'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Projektseite schmal und dunkel: kein Überlauf',
         (tester) async {
       await zeige(
@@ -919,4 +1084,31 @@ void main() {
       expect(find.text('Übernehmen'), findsOneWidget);
     });
   });
+}
+
+/// Hält fest, was zurückgestellt wird — ohne Datenbank.
+class _Zurueckstellen implements ProjektRepository {
+  final aufrufe = <String>[];
+
+  @override
+  Future<void> checklisteZurueckstellen(
+    String id, {
+    required String schluessel,
+    required bool zurueck,
+  }) async =>
+      aufrufe.add('$id $schluessel $zurueck');
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
+}
+
+/// Keine Sicherung im Test.
+class _OhneSicherung implements AutoBackupTrigger {
+  @override
+  void fireDebounced({String reason = 'Daten-Änderung'}) {}
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      super.noSuchMethod(invocation);
 }

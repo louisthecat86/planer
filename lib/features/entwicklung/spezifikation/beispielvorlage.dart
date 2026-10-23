@@ -162,6 +162,14 @@ Uint8List beispielvorlage() {
     ..schreibe(['Durchmesser', p('sensorik.durchmesser')])
     ..schreibe(['Stückgewicht', p('sensorik.gewicht')])
     ..schreibe(['Zubereitung', p('sensorik.zubereitung')])
+    ..schreibe(['Produktfoto', p('produktbild')]);
+  // Das Foto füllt den verbundenen Bereich seiner Zelle: acht Zeilen hoch.
+  final foto = spez.zeile;
+  spez.verbinde('B$foto:D${foto + 7}');
+  for (var i = 0; i < 7; i++) {
+    spez.leer();
+  }
+  spez
     ..leer()
     ..schreibe(['Produkthinweise', p('hinweise')], stil: 1);
   for (var i = 1; i <= kHinweisPlaetze; i++) {

@@ -1256,11 +1256,14 @@ class _AngabenDialogState extends State<_AngabenDialog> {
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _nummer,
-              decoration: const InputDecoration(labelText: 'Artikelnummer'),
-            ),
+            // Im Projekt steht die Artikelnummer in den Stammdaten.
+            if (widget.rezeptur.projektId == null) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nummer,
+                decoration: const InputDecoration(labelText: 'Artikelnummer'),
+              ),
+            ],
             const SizedBox(height: 10),
             TextField(
               controller: _beschreibung,

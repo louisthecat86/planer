@@ -21,6 +21,7 @@ import '../rezepturen/rezepturen_ansicht.dart';
 import '../spezifikation/spezifikation_dialog.dart';
 import 'entwicklungsstrang.dart' show phaseVorDemArchiv;
 import 'fliessdiagramme_dialog.dart';
+import 'produkt_foto.dart';
 import 'produkt_reiter.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_dateien.dart';
@@ -31,8 +32,8 @@ import 'projekt_verlauf.dart';
 
 /// Die Reiter einer Projektseite — vorn der Verlauf mit dem Zeitstrahl:
 /// Wer ein Projekt öffnet, sieht zuerst, wie es sich entwickelt hat (F21).
-/// „Produkt" bündelt Sensorik, Angaben, Verpackung und Spezifikation,
-/// „Herstellung" Prozess und HACCP (F26).
+/// „Produkt" bündelt Sensorik mit Produktfoto, Angaben, Verpackung und
+/// Spezifikation, „Herstellung" Prozess und HACCP (F26).
 enum ProjektReiter {
   verlauf('Verlauf'),
   uebersicht('Übersicht'),
@@ -57,8 +58,10 @@ VoidCallback? checkpunktZiel(BuildContext context, CheckStand c) {
   return switch (c.punkt.schluessel) {
     'prozessErstellt' => () =>
         projektReiterZeigen(context, ProjektReiter.herstellung),
-    'sensorikErstellt' || 'spezifikationErstellt' => () =>
-        projektReiterZeigen(context, ProjektReiter.produkt),
+    'sensorikErstellt' ||
+    'produktfotoHinterlegt' ||
+    'spezifikationErstellt' =>
+      () => projektReiterZeigen(context, ProjektReiter.produkt),
     'rezepturErstellt' || 'naehrwerteErstellt' when rezeptur != null => () =>
         oeffneRezeptur(context, rezeptur),
     _ => null,
@@ -393,8 +396,9 @@ class ProjektScreen extends ConsumerWidget {
   }
 }
 
-/// Die Übersicht: Stammdaten, Ziele und Notizen links; Freigabe, Bild,
-/// Rezepturen und die Checkliste rechts.
+/// Die Übersicht: Stammdaten, Ziele und Notizen links; Freigabe,
+/// Produktfoto (klein — gepflegt wird es im Reiter „Produkt"), Rezepturen
+/// und die Checkliste rechts.
 class ProjektUebersicht extends StatelessWidget {
   const ProjektUebersicht({super.key, required this.projekt});
 
@@ -412,7 +416,7 @@ class ProjektUebersicht extends StatelessWidget {
     final rechts = <Widget>[
       ProjektFreigabe(projekt: projekt),
       const SizedBox(height: 16),
-      ProduktBild(projekt: projekt),
+      ProduktFotoUebersicht(projekt: projekt),
       const SizedBox(height: 16),
       ProjektRezepturen(projekt: projekt),
       const SizedBox(height: 16),
@@ -769,9 +773,10 @@ class _Notizen extends ConsumerWidget {
   }
 }
 
-/// Die Projekt-Checkliste: Sieben Punkte rechnet die App selbst — das
+/// Die Projekt-Checkliste: Acht Punkte rechnet die App selbst — das
 /// Etikett aus seinen Pflichtangaben, die man darunter abhakt (F28) —,
-/// Navision hakt man von Hand ab (F25).
+/// Navision hakt man von Hand ab (F25). Das Produktfoto lässt sich
+/// zurückstellen, solange es keins gibt (F37).
 class ProjektCheckliste extends ConsumerWidget {
   const ProjektCheckliste({super.key, required this.projekt});
 
@@ -833,7 +838,8 @@ class ProjektCheckliste extends ConsumerWidget {
             child: Text(
               'Die App hakt die Punkte selbst ab, sobald das Projekt sie '
               'erfüllt. Beim Etikett hakst du die Pflichtangaben ab, '
-              'Navision von Hand.',
+              'Navision von Hand. Ein fehlendes Produktfoto lässt sich im '
+              'Reiter „Produkt" zurückstellen.',
               style: theme.textTheme.bodySmall?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
@@ -865,19 +871,27 @@ class ProjektCheckliste extends ConsumerWidget {
   }
 }
 
-/// Haken oder Kreis vor einem Punkt, den die App abhakt.
+/// Haken oder Kreis vor einem Punkt, den die App abhakt — eine Uhr, wenn
+/// er zurückgestellt ist.
 class _CheckSymbol extends StatelessWidget {
-  const _CheckSymbol({required this.erledigt, required this.hinweis});
+  const _CheckSymbol({
+    required this.erledigt,
+    required this.hinweis,
+    this.zurueckgestellt = false,
+  });
 
   final bool erledigt;
   final String hinweis;
+  final bool zurueckgestellt;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: hinweis,
       child: Icon(
-        erledigt ? Icons.check_circle : Icons.radio_button_unchecked,
+        erledigt
+            ? Icons.check_circle
+            : (zurueckgestellt ? Icons.schedule : Icons.radio_button_unchecked),
         size: 22,
         color: erledigt
             ? AppFarben.von(context).ok
@@ -904,9 +918,12 @@ class _AutoPunkt extends StatelessWidget {
       visualDensity: VisualDensity.compact,
       leading: _CheckSymbol(
         erledigt: stand.erledigt,
+        zurueckgestellt: stand.zurueckgestellt,
         hinweis: stand.erledigt
             ? 'Erledigt — die App hat es abgehakt'
-            : 'Offen — die App hakt es ab, sobald es erfüllt ist',
+            : stand.zurueckgestellt
+                ? 'Zurückgestellt — „Als Nächstes" geht weiter'
+                : 'Offen — die App hakt es ab, sobald es erfüllt ist',
       ),
       title: Text(stand.punkt.label),
       subtitle: text == null ? null : Text(text),

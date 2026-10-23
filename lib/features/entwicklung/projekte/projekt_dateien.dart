@@ -1,5 +1,3 @@
-// `show Value`: drift bringt eine eigene Klasse `Column` mit.
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -57,7 +55,7 @@ Future<void> projektAblage(
   messenger.showSnackBar(SnackBar(content: Text(bericht.text)));
 }
 
-/// Löscht eine Datei nach Rückfrage — auch aus Verlauf und Produktbild.
+/// Löscht eine Datei nach Rückfrage — auch aus Verlauf und Produktfoto.
 Future<void> dateiLoeschen(
   BuildContext context,
   WidgetRef ref,
@@ -249,7 +247,7 @@ class ProjektDateien extends ConsumerWidget {
                         DateiZeile(
                           datei: d,
                           zusatz: d.id == projekt.bildDateiId
-                              ? 'Produktbild'
+                              ? 'Produktfoto'
                               : zuEintrag[d.id] == null
                                   ? null
                                   : 'Verlauf: ${zuEintrag[d.id]!.titel}',
@@ -261,94 +259,6 @@ class ProjektDateien extends ConsumerWidget {
           ],
         );
       },
-    );
-  }
-}
-
-/// Das Produktbild mit Wählen und Entfernen.
-class ProduktBild extends ConsumerWidget {
-  const ProduktBild({super.key, required this.projekt});
-
-  final EntwicklungsProjekt projekt;
-
-  Future<void> _waehlen(BuildContext context, WidgetRef ref) async {
-    final datei = await dateiWaehlen(context, nurBilder: true);
-    if (datei == null || !context.mounted) return;
-    try {
-      final alt = projekt.bildDateiId;
-      final id = await dateiAblegen(ref, datei, projektId: projekt.id);
-      await ref.read(projektRepositoryProvider).projektAendern(
-            projekt.id,
-            EntwicklungProjekteCompanion(bildDateiId: Value(id)),
-          );
-      if (alt != null) {
-        await ref.read(entwicklungDateienProvider).loeschen(alt);
-      }
-      ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Produktbild');
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Das Bild ließ sich nicht ablegen: ${fehlerText(e)}'),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _entfernen(WidgetRef ref) async {
-    final alt = projekt.bildDateiId;
-    if (alt == null) return;
-    await ref.read(entwicklungDateienProvider).loeschen(alt);
-    await ref.read(projektRepositoryProvider).dateiVerweiseEntfernen(alt);
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Produktbild');
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final bildId = projekt.bildDateiId;
-    return Bereich(
-      titel: 'Produktbild',
-      icon: Icons.image_outlined,
-      aktionen: [
-        IconButton(
-          tooltip: bildId == null ? 'Bild wählen' : 'Anderes Bild wählen',
-          icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
-          onPressed: () => _waehlen(context, ref),
-        ),
-        if (bildId != null)
-          IconButton(
-            tooltip: 'Bild entfernen',
-            icon: const Icon(Icons.hide_image_outlined, size: 18),
-            onPressed: () => _entfernen(ref),
-          ),
-      ],
-      child: bildId == null
-          ? const LeerHinweis('Noch kein Bild.', icon: Icons.image_outlined)
-          : ref.watch(dateiInhaltProvider(bildId)).when(
-                skipLoadingOnReload: true,
-                loading: () => const SizedBox(
-                  height: 120,
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-                error: (e, _) => HinweisBox(
-                  'Das Bild ließ sich nicht lesen: ${fehlerText(e)}',
-                  art: StatusArt.fehler,
-                ),
-                data: (bytes) => bytes == null
-                    ? const LeerHinweis('Der Inhalt des Bilds fehlt.')
-                    : ConstrainedBox(
-                        constraints: const BoxConstraints(maxHeight: 240),
-                        child: Image.memory(
-                          bytes,
-                          fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const LeerHinweis(
-                            'Dieses Bildformat lässt sich hier nicht zeigen.',
-                            icon: Icons.broken_image_outlined,
-                          ),
-                        ),
-                      ),
-              ),
     );
   }
 }

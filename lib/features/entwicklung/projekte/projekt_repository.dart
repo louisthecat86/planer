@@ -133,6 +133,7 @@ class ProjektRepository {
       });
 
   /// Hakt einen Punkt der Projekt-Checkliste ab oder nimmt den Haken weg.
+  /// Die übrigen Punkte bleiben, wie sie sind — auch zurückgestellte.
   Future<void> checklistePunkt(
     String id, {
     required String schluessel,
@@ -140,17 +141,55 @@ class ProjektRepository {
   }) async {
     final p = await projekt(id);
     if (p == null) return;
-    final punkte = checklisteAus(p.checkliste);
-    if (erledigt) {
-      punkte.add(schluessel);
-    } else {
-      punkte.remove(schluessel);
-    }
     await projektAendern(
       id,
-      EntwicklungProjekteCompanion(checkliste: Value(checklisteZuJson(punkte))),
+      EntwicklungProjekteCompanion(
+        checkliste: Value(
+          checklisteMit(p.checkliste, schluessel, erledigt ? true : null),
+        ),
+      ),
     );
   }
+
+  /// Stellt einen Punkt der Checkliste mit „Später" zurück (F37) — „Als
+  /// Nächstes" geht dann an ihm vorbei — oder nimmt das zurück.
+  Future<void> checklisteZurueckstellen(
+    String id, {
+    required String schluessel,
+    required bool zurueck,
+  }) async {
+    final p = await projekt(id);
+    if (p == null) return;
+    await projektAendern(
+      id,
+      EntwicklungProjekteCompanion(
+        checkliste: Value(
+          checklisteMit(
+            p.checkliste,
+            schluessel,
+            zurueck ? kCheckSpaeter : null,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Nimmt die Datei [dateiId] als Produktfoto — war das Foto
+  /// zurückgestellt, ist es das damit nicht mehr.
+  Future<void> produktfotoSetzen(String id, String dateiId) =>
+      _db.transaction(() async {
+        final p = await projekt(id);
+        if (p == null) return;
+        await projektAendern(
+          id,
+          EntwicklungProjekteCompanion(
+            bildDateiId: Value(dateiId),
+            checkliste: Value(
+              checklisteMit(p.checkliste, 'produktfotoHinterlegt', null),
+            ),
+          ),
+        );
+      });
 
   /// Setzt eine Pflichtangabe des Etiketts auf [stand] (F28).
   Future<void> lmivPunkt(

@@ -447,11 +447,14 @@ class _NeueRezepturDialogState extends ConsumerState<NeueRezepturDialog> {
               decoration: const InputDecoration(labelText: 'Name'),
               onSubmitted: (_) => _anlegen(),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: _nummer,
-              decoration: const InputDecoration(labelText: 'Artikelnummer'),
-            ),
+            // Im Projekt steht die Artikelnummer schon in den Stammdaten.
+            if (widget.projektId == null) ...[
+              const SizedBox(height: 10),
+              TextField(
+                controller: _nummer,
+                decoration: const InputDecoration(labelText: 'Artikelnummer'),
+              ),
+            ],
             const SizedBox(height: 10),
             TextField(
               controller: _beschreibung,

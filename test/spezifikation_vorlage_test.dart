@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 // `show Value`: drift bringt eine eigene Klasse `Column` mit.
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/features/entwicklung/daten/dateien.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
@@ -14,6 +15,7 @@ import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angabe
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/vorlage_einrichten.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_bild.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_blatt.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/xlsx_vorlage.dart';
 
@@ -21,9 +23,9 @@ import 'helpers/test_db.dart';
 
 /// Tests für das Einrichten und Füllen einer Spezifikationsvorlage: ein
 /// erfundenes Formblatt auf Deutsch und Englisch — Beschriftungen,
-/// verbundene Zellen, Kontrollkästchen, Kopfzeile —, dazu die Angaben des
-/// Projekts, und der Dienst mit der Datenbank. Keine echten
-/// Firmenangaben.
+/// verbundene Zellen, Kontrollkästchen, Kopfzeile, das Produktfoto neben
+/// der Sensorik —, dazu die Angaben des Projekts, und der Dienst mit der
+/// Datenbank. Keine echten Firmenangaben, die Fotos sind gemalt.
 void main() {
   group('Formblatt einrichten', () {
     test('deutsch: Felder neben den Beschriftungen, Kästchen, Kopfzeile', () {
@@ -47,6 +49,7 @@ void main() {
         'hilfsstoff.1.quelle': 'H13',
         'hilfsstoff.2.name': 'C14',
         'hilfsstoff.2.quelle': 'H14',
+        'produktbild': 'H15',
         'sensorik.aussehen': 'C16',
         'sensorik.geschmack': 'C17',
         'naehrwert.energie_kj': 'H19',
@@ -115,6 +118,7 @@ void main() {
       expect(e.felder['zutaten'], 'C8');
       expect(e.felder['hilfsstoff.2.quelle'], 'H14');
       expect(e.felder['sensorik.aussehen'], 'C16');
+      expect(e.felder['produktbild'], 'H15');
       expect(e.felder['naehrwert.gesaettigte_fettsaeuren'], 'H21');
       expect(e.felder['lagerung'], 'D24');
       expect(e.felder['haltbarkeit'], 'D25');
@@ -333,6 +337,246 @@ void main() {
     });
   });
 
+  group('Produktfoto', () {
+    test('sein Platz: das leere Feld rechts neben der Sensorik', () {
+      XlsxBlatt blatt(Uint8List xlsx) =>
+          XlsxBlatt(XlsxMappe.lesen(xlsx), 'xl/worksheets/sheet1.xml');
+      expect(produktbildBereich(blatt(formblatt())).toString(), 'H15:K18');
+      expect(
+        produktbildBereich(blatt(formblatt(englisch: true))).toString(),
+        'H15:K18',
+      );
+      // Steht dort schon etwas, ist es kein freier Platz.
+      expect(
+        produktbildBereich(blatt(mitZellen(formblatt(), {'H15': 'Notiz'}))),
+        isNull,
+      );
+      // Ohne Sensorik-Überschrift kein Platz.
+      expect(
+        produktbildBereich(
+          blatt(mitZellen(formblatt(), {'A15': 'Mikrobiologie:'})),
+        ),
+        isNull,
+      );
+    });
+
+    test('aufbereitet: verkleinert, gedreht, ohne EXIF, JPEG', () {
+      final gross = bildFuerMappe(malen(2400, 1800))!;
+      expect((gross.breite, gross.hoehe), (1200, 900));
+      expect(gross.endung, 'jpeg');
+      expect(gross.mimeTyp, 'image/jpeg');
+      // Ein Foto, das die Kamera hochkant vermerkt hat, steht danach.
+      final hochkant = bildFuerMappe(malen(300, 200, drehung: 6))!;
+      expect((hochkant.breite, hochkant.hoehe), (200, 300));
+      final gelesen = img.decodeJpg(hochkant.bytes)!;
+      expect(gelesen.exif.isEmpty, isTrue);
+      expect((gelesen.width, gelesen.height), (200, 300));
+      // Kleine Fotos bleiben so groß.
+      expect(bildFuerMappe(malen(640, 480))!.breite, 640);
+      // PNG nur mit durchsichtigen Stellen.
+      expect(bildFuerMappe(malenPng(durchsichtig: true))!.endung, 'png');
+      expect(bildFuerMappe(malenPng(durchsichtig: false))!.endung, 'jpeg');
+      expect(
+        bildFuerMappe(Uint8List.fromList(utf8.encode('kein Bild'))),
+        isNull,
+      );
+    });
+
+    test('eingepasst und mittig, das Seitenverhältnis bleibt', () {
+      // Spalten zu 10 Zeichen — bei Calibri 11 je 70 Pixel —, Zeilen zu
+      // 15 pt = 20 Pixel.
+      const blatt = '<worksheet><sheetFormatPr defaultRowHeight="15"/>'
+          '<cols><col min="2" max="4" width="10" customWidth="1"/></cols>'
+          '<sheetData/></worksheet>';
+      // Quadratisch in 140 × 80: die Höhe gibt das Maß vor (80 − 2 × 4
+      // Rand = 72), waagrecht mittig: (140 − 72) / 2 = 34.
+      final a = bildAnker(blatt, Bereich.aus('B2:C5')!, 100, 100);
+      expect((a.cx, a.cy), (72 * 9525, 72 * 9525));
+      expect((a.spalte, a.spaltenVersatz), (1, 34 * 9525));
+      expect((a.zeile, a.zeilenVersatz), (1, 4 * 9525));
+      // Breit: jetzt die Breite (132 × 44), senkrecht mittig.
+      final breit = bildAnker(blatt, Bereich.aus('B2:C5')!, 300, 100);
+      expect((breit.cx, breit.cy), (132 * 9525, 44 * 9525));
+      expect((breit.spalte, breit.spaltenVersatz), (1, 4 * 9525));
+      expect((breit.zeile, breit.zeilenVersatz), (1, 18 * 9525));
+      // Hochkant in 210 × 80: Die Ecke liegt in der zweiten Spalte.
+      final hoch = bildAnker(blatt, Bereich.aus('B2:D5')!, 100, 300);
+      expect((hoch.cx, hoch.cy), (24 * 9525, 72 * 9525));
+      expect((hoch.spalte, hoch.spaltenVersatz), (2, 23 * 9525));
+    });
+
+    test('ins Formblatt gesetzt: eine neue Zeichnung, die Zelle leer', () {
+      final vorlage = vorlageEinrichten(formblatt()).bytes;
+      final bild = bildFuerMappe(malen(800, 600))!;
+      final e = vorlageFuellen(
+        vorlage,
+        {for (final n in platzhalterIn(vorlage)) n: ''},
+        bilder: {'produktbild': bild},
+      );
+      expect(e.bilder, {'produktbild'});
+      expect(e.unbekannt, isEmpty);
+      expect(platzhalterIn(e.bytes), isEmpty);
+
+      final mappe = XlsxMappe.lesen(e.bytes);
+      const pfad = 'xl/worksheets/sheet1.xml';
+      final xml = mappe.text(pfad)!;
+      // Die Zeichnung steht vor den Kontrollkästchen, wie Excel es will.
+      final rid =
+          RegExp(r'<drawing r:id="([^"]+)"/>').firstMatch(xml)![1]!;
+      expect(
+        xml.indexOf('<drawing '),
+        lessThan(xml.indexOf('<legacyDrawing')),
+      );
+      expect(mappe.beziehungen(pfad)[rid], 'xl/drawings/drawing1.xml');
+      final zeichnung = mappe.text('xl/drawings/drawing1.xml')!;
+      // Im Feld H15:K18 (Spalten zu 61 Pixeln, Zeilen zu 20): 96 × 72
+      // Pixel, mittig — die Ecke liegt in Spalte I.
+      expect(
+        zeichnung,
+        contains(
+          '<xdr:col>8</xdr:col><xdr:colOff>${13 * 9525}</xdr:colOff>'
+          '<xdr:row>14</xdr:row><xdr:rowOff>${4 * 9525}</xdr:rowOff>',
+        ),
+      );
+      expect(
+        mappe.beziehungen('xl/drawings/drawing1.xml').values,
+        ['xl/media/image1.jpeg'],
+      );
+      expect(
+        ZipDecoder().decodeBytes(e.bytes).findFile('xl/media/image1.jpeg')!
+            .content,
+        bild.bytes,
+      );
+      final typen = mappe.text('[Content_Types].xml')!;
+      expect(
+        typen,
+        contains('<Default Extension="jpeg" ContentType="image/jpeg"/>'),
+      );
+      expect(typen, contains('PartName="/xl/drawings/drawing1.xml"'));
+      // Das Seitenverhältnis 4 : 3 bleibt.
+      final ext = RegExp(r'<xdr:ext cx="(\d+)" cy="(\d+)"/>')
+          .firstMatch(zeichnung)!;
+      expect(
+        int.parse(ext[1]!) / int.parse(ext[2]!),
+        closeTo(4 / 3, 0.01),
+      );
+      // In der Zelle steht nichts mehr.
+      expect(XlsxBlatt(mappe, pfad).zelle(14, 7)?.text ?? '', '');
+      // Ohne Foto bleibt das Feld einfach leer.
+      final ohne = vorlageFuellen(
+        vorlage,
+        {for (final n in platzhalterIn(vorlage)) n: ''},
+      );
+      expect(ohne.bilder, isEmpty);
+      expect(
+        XlsxMappe.lesen(ohne.bytes).hat('xl/media/image1.jpeg'),
+        isFalse,
+      );
+    });
+
+    test('eine vorhandene Zeichnung bekommt das Bild dazu', () {
+      final archiv = Archive();
+      void neu(String pfad, String inhalt) {
+        final bytes = utf8.encode(inhalt);
+        archiv.addFile(ArchiveFile(pfad, bytes.length, bytes));
+      }
+
+      const nsR = 'http://schemas.openxmlformats.org/officeDocument/2006/'
+          'relationships';
+      neu(
+        'xl/workbook.xml',
+        '<workbook xmlns:r="$nsR"><sheets><sheet r:id="rId1"/></sheets>'
+            '</workbook>',
+      );
+      neu(
+        'xl/_rels/workbook.xml.rels',
+        '<Relationships><Relationship Id="rId1" Target="worksheets/'
+            'sheet1.xml"/></Relationships>',
+      );
+      neu(
+        'xl/worksheets/sheet1.xml',
+        '<worksheet xmlns:r="$nsR"><sheetData><row r="2"><c r="B2" '
+            't="inlineStr"><is><t>{{produktbild}}</t></is></c></row>'
+            '</sheetData><mergeCells><mergeCell ref="B2:D6"/></mergeCells>'
+            '<drawing r:id="rId9"/></worksheet>',
+      );
+      neu(
+        'xl/worksheets/_rels/sheet1.xml.rels',
+        '<Relationships><Relationship Id="rId9" Target="../drawings/'
+            'drawing1.xml"/></Relationships>',
+      );
+      neu(
+        'xl/drawings/drawing1.xml',
+        '<xdr:wsDr xmlns:xdr="x" xmlns:a="a"><xdr:twoCellAnchor>'
+            '<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="5" name="Kästchen"/>'
+            '</xdr:nvSpPr></xdr:sp></xdr:twoCellAnchor></xdr:wsDr>',
+      );
+      final vorlage = Uint8List.fromList(ZipEncoder().encode(archiv)!);
+      final e = vorlageFuellen(
+        vorlage,
+        const {},
+        bilder: {'produktbild': bildFuerMappe(malen(40, 30))!},
+      );
+      expect(e.bilder, {'produktbild'});
+      final mappe = XlsxMappe.lesen(e.bytes);
+      // Keine zweite Zeichnung: Das Bild kommt in die vorhandene.
+      expect(mappe.hat('xl/drawings/drawing2.xml'), isFalse);
+      final zeichnung = mappe.text('xl/drawings/drawing1.xml')!;
+      expect(zeichnung, contains('<xdr:cNvPr id="5" name="Kästchen"/>'));
+      expect(zeichnung, contains('<xdr:cNvPr id="6" name="Produktfoto"/>'));
+      expect(
+        mappe.beziehungen('xl/drawings/drawing1.xml').values,
+        ['xl/media/image1.jpeg'],
+      );
+      final xml = mappe.text('xl/worksheets/sheet1.xml')!;
+      expect('<drawing '.allMatches(xml), hasLength(1));
+      expect(xml, contains('<c r="B2"/>'));
+    });
+
+    test('ein Blatt mit Erweiterungen: die Zeichnung davor', () {
+      final archiv = Archive();
+      void neu(String pfad, String inhalt) {
+        final bytes = utf8.encode(inhalt);
+        archiv.addFile(ArchiveFile(pfad, bytes.length, bytes));
+      }
+
+      neu(
+        'xl/workbook.xml',
+        '<workbook><sheets/></workbook>',
+      );
+      // Eine bedingte Formatierung mit eigener extLst, danach die des
+      // Blatts — <drawing> gehört zwischen beide.
+      neu(
+        'xl/worksheets/sheet1.xml',
+        '<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is>'
+            '<t>{{produktbild}}</t></is></c></row></sheetData>'
+            '<mergeCells><mergeCell ref="A1:C4"/></mergeCells>'
+            '<conditionalFormatting><cfRule><extLst><ext/></extLst></cfRule>'
+            '</conditionalFormatting><pageMargins/>'
+            '<extLst><ext uri="x"/></extLst></worksheet>',
+      );
+      final vorlage = Uint8List.fromList(ZipEncoder().encode(archiv)!);
+      final e = vorlageFuellen(
+        vorlage,
+        const {},
+        bilder: {'produktbild': bildFuerMappe(malen(40, 30))!},
+      );
+      final xml = XlsxMappe.lesen(e.bytes).text('xl/worksheets/sheet1.xml')!;
+      expect(xml, startsWith('<worksheet xmlns:r="http://schemas.'));
+      expect(
+        xml,
+        contains(
+          '</conditionalFormatting><pageMargins/><drawing r:id="rId1"/>'
+          '<extLst><ext uri="x"/></extLst></worksheet>',
+        ),
+      );
+      expect(
+        relativerPfad('xl/worksheets/sheet1.xml', 'xl/drawings/d.xml'),
+        '../drawings/d.xml',
+      );
+    });
+  });
+
   group('Zellen und Bezüge', () {
     test('Bezüge in beide Richtungen', () {
       expect(zellortAus('C5'), (zeile: 4, spalte: 2));
@@ -449,6 +693,24 @@ void main() {
           'Der Rezepturstand hat keine Zutaten — die Zutatenliste bleibt '
               'leer.',
         ],
+      );
+      // Ein Feld für das Foto, aber kein Foto.
+      const foto = 'Leer geblieben: Produktfoto — zu hinterlegen im Reiter '
+          '„Produkt" neben der Sensorik.';
+      expect(
+        spezLuecken(
+          platzhalter: {'produktbild'},
+          werte: {'produktbild': ''},
+        ),
+        contains(foto),
+      );
+      expect(
+        spezLuecken(
+          platzhalter: {'produktbild'},
+          werte: {'produktbild': ''},
+          bilder: {'produktbild'},
+        ),
+        isNot(contains(foto)),
       );
     });
 
@@ -613,8 +875,12 @@ void main() {
               'den Stammdaten.',
           'Leer geblieben: Lagerbedingungen und Haltbarkeit — einzutragen im '
               'Reiter „Produkt" bei „Angaben".',
+          // Das Feld fürs Foto hat die App mit eingerichtet.
+          'Leer geblieben: Produktfoto — zu hinterlegen im Reiter „Produkt" '
+              'neben der Sensorik.',
         ]),
       );
+      expect(e.produktfoto, isFalse);
       // Die eigene Bezeichnung — auch im Dateinamen.
       expect(e.dateiname, 'Frikadelle fein_ gebraten_Spezifikation.xlsx');
       final blatt =
@@ -696,6 +962,17 @@ void main() {
       await rezepte.positionHinzufuegen(v.id, zutatId: mehl, mengeKg: 15);
       await rezepte.positionHinzufuegen(v.id, zutatId: milch, mengeKg: 5);
       await rezepte.versionAbschliessen(v.id);
+      // Das Produktfoto: ein großes, gemaltes Foto.
+      final fotoId = await EntwicklungDateienDienst(db).speichern(
+        name: 'Frikadelle.jpg',
+        inhalt: malen(2000, 1500),
+        projektId: id,
+        mimeTyp: 'image/jpeg',
+      );
+      await projekte.projektAendern(
+        id,
+        EntwicklungProjekteCompanion(bildDateiId: Value(fotoId)),
+      );
       await dienst.vorlageSpeichern(
         SpezSprache.de,
         'Formblatt.xlsx',
@@ -715,6 +992,15 @@ void main() {
       // Gluten ja, Eier nein, Senf Spuren; E2-Kiste, neutral, Beutel,
       // Vakuum.
       expect(e.kaestchen, 7);
+      // Das Foto steht verkleinert neben der Sensorik.
+      expect(e.produktfoto, isTrue);
+      final medium = img.decodeJpg(
+        Uint8List.fromList(
+          ZipDecoder().decodeBytes(e.bytes).findFile('xl/media/image1.jpeg')!
+              .content as List<int>,
+        ),
+      )!;
+      expect((medium.width, medium.height), (1200, 900));
       expect(e.hinweise, [
         'Die Rezeptur enthält Milch — die Vorlage hat dafür keine Zeile in '
             'der Allergentabelle.',
@@ -761,6 +1047,30 @@ void main() {
   });
 }
 
+/// Ein gemaltes Foto als JPEG — auf Wunsch mit EXIF-Drehung, wie eine
+/// Kamera sie hochkant vermerkt.
+Uint8List malen(int breite, int hoehe, {int drehung = 1}) {
+  final b = img.Image(width: breite, height: hoehe);
+  img.fill(b, color: img.ColorRgb8(240, 235, 225));
+  img.fillCircle(
+    b,
+    x: breite ~/ 2,
+    y: hoehe ~/ 2,
+    radius: (breite < hoehe ? breite : hoehe) ~/ 3,
+    color: img.ColorRgb8(170, 100, 40),
+  );
+  if (drehung != 1) b.exif.imageIfd.orientation = drehung;
+  return img.encodeJpg(b, quality: 90);
+}
+
+/// Ein gemaltes PNG mit Alphakanal — durchsichtig oder ganz deckend.
+Uint8List malenPng({required bool durchsichtig}) {
+  final b = img.Image(width: 20, height: 20, numChannels: 4);
+  img.fill(b, color: img.ColorRgba8(200, 120, 60, 255));
+  if (durchsichtig) b.setPixelRgba(0, 0, 0, 0, 0, 0);
+  return img.encodePng(b);
+}
+
 /// Eine Datei der Mappe als Text.
 String datei(Uint8List xlsx, String pfad) => utf8.decode(
       ZipDecoder().decodeBytes(xlsx).findFile(pfad)!.content as List<int>,
@@ -786,9 +1096,9 @@ Uint8List kleineMappe(String geteilt, {String kopf = ''}) {
 }
 
 /// Ein erfundenes Formblatt einer Spezifikation: Beschriftungen links,
-/// verbundene Wertfelder rechts, eine Allergentabelle und eine Verpackung
-/// mit Kontrollkästchen, ein Datumsfeld oben rechts und die Artikelnummer
-/// in der Kopfzeile.
+/// verbundene Wertfelder rechts, neben der Sensorik ein freies Feld fürs
+/// Foto, eine Allergentabelle und eine Verpackung mit Kontrollkästchen,
+/// ein Datumsfeld oben rechts und die Artikelnummer in der Kopfzeile.
 Uint8List formblatt({bool englisch = false}) {
   final en = englisch;
   final geteilt = <String>[];
@@ -846,6 +1156,9 @@ Uint8List formblatt({bool englisch = false}) {
     zelle('C$z', bis: 'G$z');
     zelle('H$z', bis: 'J$z');
   }
+  zelle('A15', text: en ? 'Sensory properties:' : 'Sensorik:', bis: 'G15');
+  // Rechts daneben ein großes leeres Feld — dorthin gehört das Foto.
+  zelle('H15', bis: 'K18');
   paar('A16', 'A16', en ? 'Visual appearance' : 'Optik', 'C16', 'G16');
   paar('A17', 'A17', en ? 'Taste' : 'Geschmack', 'C17', 'G17');
   paar('C19', 'G19', en ? 'Energy kJ' : 'Brennwert kJ', 'H19', 'I19');
@@ -1060,6 +1373,12 @@ Uint8List formblatt({bool englisch = false}) {
   neu('xl/worksheets/_rels/sheet1.xml.rels', rels.toString());
   neu('xl/drawings/vmlDrawing1.vml', vml.toString());
   neu('xl/styles.xml', '<styleSheet>unverändert</styleSheet>');
+  neu(
+    '[Content_Types].xml',
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
+        'content-types"><Default Extension="xml" ContentType="application/'
+        'xml"/></Types>',
+  );
   return Uint8List.fromList(ZipEncoder().encode(archiv)!);
 }
 

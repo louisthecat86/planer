@@ -144,6 +144,11 @@ List<Platzhalter> get kSpezifikationPlatzhalter => [
         'zubereitung',
       ])
         (name: 'sensorik.$f', erklaerung: 'Sensorik: $f'),
+      (
+        name: 'produktbild',
+        erklaerung: 'Produktfoto — allein in eine Zelle; es füllt deren '
+            'verbundenen Bereich',
+      ),
       (name: 'hinweise', erklaerung: 'Alle Produkthinweise, je Zeile einer'),
       for (var i = 1; i <= kHinweisPlaetze; i++)
         (name: 'hinweis.$i', erklaerung: 'Produkthinweis $i'),
@@ -322,6 +327,9 @@ Map<String, String> spezifikationsWerte(
     'sensorik.durchmesser': q.sensorik.durchmesser,
     'sensorik.gewicht': eingabe(q.sensorik.gewicht),
     'sensorik.zubereitung': q.sensorik.zubereitung,
+    // Das Foto ist ein Bild, kein Text: Die Zelle wird leer, das Bild
+    // setzt der Dienst ein (xlsx_bild.dart).
+    'produktbild': '',
     'hinweise': hinweise.join('\n'),
     for (var i = 1; i <= kHinweisPlaetze; i++)
       'hinweis.$i': i <= hinweise.length ? hinweise[i - 1] : '',

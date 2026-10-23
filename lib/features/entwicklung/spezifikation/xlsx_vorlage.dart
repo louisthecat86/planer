@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'xlsx_bild.dart';
 import 'xlsx_blatt.dart';
 
 // Platzhalter in einer Excel-Mappe ersetzen, ohne die Mappe neu zu bauen.
@@ -13,6 +14,10 @@ import 'xlsx_blatt.dart';
 // kästchen, setzt sein Wert das Häkchen: „X" hakt an, leer nimmt den Haken
 // weg; die Zelle selbst bleibt dann leer.
 //
+// Ein Bild-Platzhalter ({{produktbild}}) allein in einer Zelle bekommt
+// sein Bild über den verbundenen Bereich der Zelle (xlsx_bild.dart); ohne
+// Bild bleibt die Zelle leer.
+//
 // Ein Platzhalter in einem formatierten Textstück behält dessen Format.
 // Hat Excel einen Platzhalter beim Bearbeiten in mehrere Formatierungs-
 // stücke zerlegt („{{zu" fett, „taten}}" normal), wird der ganze Text der
@@ -25,6 +30,9 @@ final RegExp kPlatzhalterMuster = RegExp(r'\{\{\s*([A-Za-z0-9_.]+)\s*\}\}');
 /// Ein Platzhalter allein in einer Zelle.
 final RegExp _allein = RegExp(r'^\s*\{\{\s*([A-Za-z0-9_.]+)\s*\}\}\s*$');
 
+/// Platzhalter für Bilder — ohne Bild bleiben sie leer.
+const Set<String> kBildPlatzhalter = {'produktbild'};
+
 /// Das Ergebnis: die neue Mappe und was dabei auffiel.
 class VorlageErgebnis {
   const VorlageErgebnis({
@@ -32,6 +40,7 @@ class VorlageErgebnis {
     required this.ersetzt,
     required this.unbekannt,
     this.kaestchen = 0,
+    this.bilder = const {},
   });
 
   final Uint8List bytes;
@@ -44,6 +53,9 @@ class VorlageErgebnis {
 
   /// Wie viele Kontrollkästchen angehakt wurden.
   final int kaestchen;
+
+  /// Die Bild-Platzhalter, die ihr Bild bekommen haben.
+  final Set<String> bilder;
 }
 
 final RegExp _si = RegExp(r'<si>(.*?)</si>', dotAll: true);
@@ -76,15 +88,22 @@ Set<String> platzhalterIn(Uint8List xlsx) {
 }
 
 /// Ersetzt in [xlsx] jeden bekannten Platzhalter durch seinen Wert aus
-/// [werte]. Unbekannte bleiben stehen und werden gemeldet. Wirft
-/// [FormatException], wenn [xlsx] keine Excel-Mappe ist.
-VorlageErgebnis vorlageFuellen(Uint8List xlsx, Map<String, String> werte) {
+/// [werte] und setzt die [bilder] ein. Unbekannte Platzhalter bleiben
+/// stehen und werden gemeldet. Wirft [FormatException], wenn [xlsx] keine
+/// Excel-Mappe ist.
+VorlageErgebnis vorlageFuellen(
+  Uint8List xlsx,
+  Map<String, String> werte, {
+  Map<String, XlsxBild> bilder = const {},
+}) {
   final mappe = XlsxMappe.lesen(xlsx);
   final ersetzt = <String>{};
   final unbekannt = <String>{};
+  final eingesetzt = <String>{};
 
   String? wertVon(String name) {
-    final wert = werte[name];
+    final wert =
+        werte[name] ?? (kBildPlatzhalter.contains(name) ? '' : null);
     if (wert == null) {
       unbekannt.add(name);
     } else {
@@ -123,6 +142,24 @@ VorlageErgebnis vorlageFuellen(Uint8List xlsx, Map<String, String> werte) {
   for (final pfad in mappe.blattPfade) {
     final blatt = XlsxBlatt(mappe, pfad);
     var xml = mappe.text(pfad) ?? '';
+
+    // Bilder: über den verbundenen Bereich ihrer Zelle, die leer wird.
+    for (final z in blatt.zellen) {
+      final m = _allein.firstMatch(z.text);
+      final bild = m == null ? null : bilder[m[1]!];
+      if (m == null || bild == null) continue;
+      final neu = bildEinsetzen(
+        mappe,
+        blattPfad: pfad,
+        blattXml: xml,
+        bereich: blatt.bereichVon(z.zeile, z.spalte),
+        bild: bild,
+      );
+      if (neu == null) continue;
+      xml = zelleLeeren(neu, z.ref);
+      wertVon(m[1]!);
+      eingesetzt.add(m[1]!);
+    }
 
     // Platzhalter unter Kontrollkästchen setzen den Haken.
     for (final z in blatt.zellen) {
@@ -171,6 +208,7 @@ VorlageErgebnis vorlageFuellen(Uint8List xlsx, Map<String, String> werte) {
     ersetzt: ersetzt,
     unbekannt: unbekannt,
     kaestchen: kaestchen,
+    bilder: eingesetzt,
   );
 }
 

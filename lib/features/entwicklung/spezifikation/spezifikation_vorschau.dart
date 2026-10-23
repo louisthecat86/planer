@@ -9,8 +9,8 @@ import 'spezifikation_werte.dart';
 
 // Die Vorschau im Reiter „Produkt": was mit dem gewählten Stand in der
 // Spezifikation stünde — Artikel, Zutaten, Allergene, Nährwerte,
-// Hilfsstoffe, Sensorik, Lagerung. Was fehlt, steht in Warnfarbe da, mit
-// dem Ort, an dem man es einträgt.
+// Hilfsstoffe, Sensorik mit Produktfoto, Lagerung. Was fehlt, steht in
+// Warnfarbe da, mit dem Ort, an dem man es einträgt.
 
 /// Was mit dem Stand [versionId] in der Spezifikation stünde.
 class SpezVorschau extends ConsumerWidget {
@@ -18,10 +18,14 @@ class SpezVorschau extends ConsumerWidget {
     super.key,
     required this.projektId,
     required this.versionId,
+    this.produktfoto,
   });
 
   final String projektId;
   final String versionId;
+
+  /// Ob es ein Produktfoto gibt — null: keine Zeile dafür.
+  final bool? produktfoto;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,16 +53,17 @@ class SpezVorschau extends ConsumerWidget {
         ),
         data: (w) => w == null
             ? const LeerHinweis('Diesen Stand gibt es nicht mehr.')
-            : _Inhalt(werte: w),
+            : _Inhalt(werte: w, produktfoto: produktfoto),
       ),
     );
   }
 }
 
 class _Inhalt extends StatelessWidget {
-  const _Inhalt({required this.werte});
+  const _Inhalt({required this.werte, this.produktfoto});
 
   final Map<String, String> werte;
+  final bool? produktfoto;
 
   @override
   Widget build(BuildContext context) {
@@ -97,6 +102,12 @@ class _Inhalt extends StatelessWidget {
           wert: vorschauSensorik(w),
           leer: 'bei „Sensorik" eintragen',
         ),
+        if (produktfoto case final foto?)
+          _Zeile(
+            label: 'Produktfoto',
+            wert: foto ? 'neben der Sensorik' : '',
+            fehlt: 'fehlt — bei „Sensorik" hinterlegen',
+          ),
         _Zeile(label: 'Lagerung', wert: t('lagerung'), fehlt: beiAngaben),
         _Zeile(
           label: 'Haltbarkeit',

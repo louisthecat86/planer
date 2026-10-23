@@ -9,6 +9,7 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../entwicklung_format.dart';
+import '../spezifikation/spez_angaben.dart' show SpezAngaben;
 import 'freigabe.dart';
 
 /// Öffnet den Artikel im Planer.
@@ -224,7 +225,8 @@ class VerlustAbgleichAnzeige extends StatelessWidget {
 }
 
 /// Einen Stand freigeben: Artikelnummer, Bezeichnung, Produktgruppe und
-/// Haltbarkeit; bei einem vorhandenen Artikel die Felder, die sich ändern.
+/// Haltbarkeit — vorbelegt mit dem, was im Projekt schon steht; bei einem
+/// vorhandenen Artikel die Felder, die sich ändern.
 class FreigabeDialog extends ConsumerStatefulWidget {
   const FreigabeDialog({
     super.key,
@@ -274,6 +276,12 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
   }
 
   FreigabeDienst get _dienst => ref.read(freigabeDienstProvider);
+
+  /// Die Haltbarkeit aus den Angaben im Reiter „Produkt" — null ohne.
+  String? get _haltbarkeitAngabe {
+    final t = SpezAngaben.aus(widget.projekt.spezifikation).haltbarkeit.trim();
+    return t.isEmpty ? null : t;
+  }
 
   Future<void> _laden({bool neu = false}) async {
     final nr = ++_ladeNr;
@@ -459,9 +467,15 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
                           child: TextField(
                             controller: _haltbarkeit,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Haltbarkeit',
                               suffixText: 'Tage',
+                              // Steht sie schon in den Angaben, kommt sie
+                              // von dort.
+                              helperText: _haltbarkeitAngabe == null
+                                  ? null
+                                  : 'Angaben: $_haltbarkeitAngabe',
+                              helperMaxLines: 2,
                             ),
                             onChanged: (_) => setState(() {}),
                           ),

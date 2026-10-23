@@ -14,12 +14,15 @@ import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import '../spezifikation/spez_angaben.dart'
+    show SpezAngaben, haltbarkeitInTagen;
 
 // Freigabe: Ein Projekt wird zum Artikel des Planers. Aus dem
 // abgeschlossenen Rezepturstand kommen die Allergene, aus dem Projekt
-// Nummer, Bezeichnung und aw-Wert; Produktgruppe und Haltbarkeit trägt man
-// dabei ein. Den Verlust des Stands nimmt die Planung als Vorgabe, solange
-// keine Produktion erfasst ist (core/services/entwicklung_vorgabe.dart).
+// Nummer, Bezeichnung, Haltbarkeit (aus den Angaben im Reiter „Produkt")
+// und aw-Wert; nur die Produktgruppe trägt man dabei ein. Den Verlust des
+// Stands nimmt die Planung als Vorgabe, solange keine Produktion erfasst
+// ist (core/services/entwicklung_vorgabe.dart).
 //
 // Danach vergleicht der Abgleich den Verlust der erfassten Produktionen
 // mit dem der Rezeptur — weicht er ab, stimmt auch der Fleischanteil auf
@@ -308,11 +311,17 @@ class FreigabeDienst {
     final nummer = projekt.artikelnummer?.trim().isNotEmpty == true
         ? projekt.artikelnummer!.trim()
         : (rezeptur?.artikelnummer?.trim() ?? vorhanden?.artikelnummer ?? '');
+    // Was im Projekt schon steht, wird nicht noch einmal gefragt.
+    final angaben = SpezAngaben.aus(projekt.spezifikation);
+    final bezeichnung = angaben.bezeichnung.trim();
     return FreigabeWerte(
       artikelnummer: nummer,
-      bezeichnung: vorhanden?.artikelbezeichnung ?? projekt.name,
+      bezeichnung: bezeichnung.isNotEmpty
+          ? bezeichnung
+          : (vorhanden?.artikelbezeichnung ?? projekt.name),
       produktgruppe: vorhanden?.produktgruppe,
-      haltbarkeitTage: vorhanden?.haltbarkeitTage,
+      haltbarkeitTage: haltbarkeitInTagen(angaben.haltbarkeit) ??
+          vorhanden?.haltbarkeitTage,
       allergene: allergene,
       verlustProzent: verlust,
       aw: projekt.grenzeAw,
@@ -390,12 +399,15 @@ class FreigabeDienst {
         );
       }
 
-      final checkliste = checklisteAus(projekt.checkliste)
-        ..add('artikelAngelegt');
       // Geht das Projekt damit in Produktion, hält der Meilenstein den
       // Wechsel fest — wie ein Statuswechsel von Hand (Phasen im Verlauf).
-      final vorher = ProjektStatus.aus(
-        (await _projekte.projekt(projekt.id))?.status ?? projekt.status,
+      final aktuell = await _projekte.projekt(projekt.id);
+      final vorher = ProjektStatus.aus(aktuell?.status ?? projekt.status);
+      // Nur den Punkt setzen — zurückgestellte bleiben zurückgestellt.
+      final checkliste = checklisteMit(
+        aktuell?.checkliste ?? projekt.checkliste,
+        'artikelAngelegt',
+        true,
       );
       await _projekte.projektAendern(
         projekt.id,
@@ -405,7 +417,7 @@ class FreigabeDienst {
           freigabeVersionId: Value(versionId),
           freigegebenAm: Value(jetzt),
           status: Value(ProjektStatus.produktion.schluessel),
-          checkliste: Value(checklisteZuJson(checkliste)),
+          checkliste: Value(checkliste),
         ),
       );
       final version = await _rezepte.version(versionId);

@@ -206,6 +206,22 @@ class Verpackung {
       );
 }
 
+/// Die Haltbarkeit aus den Angaben in Tagen — für den Artikel: „21",
+/// „21 Tage", „3 Wochen", „12 Monate" (ein Monat zu 365/12 Tagen). Null,
+/// wenn sie sich nicht in Tage fassen lässt.
+int? haltbarkeitInTagen(String text) {
+  final m = RegExp(
+    r'^(\d+)\s*(tage?|tg\.?|d|wochen?|wo\.?|monate?|mon\.?)?\s*$',
+    caseSensitive: false,
+  ).firstMatch(text.trim());
+  if (m == null) return null;
+  final zahl = int.parse(m.group(1)!);
+  final einheit = (m.group(2) ?? '').toLowerCase();
+  if (einheit.startsWith('w')) return zahl * 7;
+  if (einheit.startsWith('m')) return (zahl * 365 / 12).round();
+  return zahl;
+}
+
 /// Was ein Projekt für seine Spezifikation selbst angibt.
 class SpezAngaben {
   const SpezAngaben({

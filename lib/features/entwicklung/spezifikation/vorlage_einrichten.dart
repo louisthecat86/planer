@@ -16,6 +16,10 @@ import 'xlsx_vorlage.dart';
 // man Platzhalter auch von Hand eintragen. Platzhalter, die schon in der
 // Vorlage stehen, bleiben, wo sie sind — die App ergänzt nur, was fehlt,
 // und schreibt nie in eine Zelle, in der schon einer steht.
+//
+// Das Produktfoto ({{produktbild}}) kommt in den großen leeren Bereich
+// rechts neben dem Sensorik-Block — auch in Vorlagen, die schon früher
+// eingerichtet wurden: Beim nächsten Erstellen ergänzt die App ihn.
 
 /// Was beim Einrichten herauskam.
 class EinrichtenErgebnis {
@@ -158,6 +162,46 @@ const Map<String, List<String>> _nebenan = {
   'naehrwert.eiweiss': ['eiweiß', 'eiweiss', 'protein'],
   'naehrwert.salz': ['salz', 'salt'],
 };
+
+/// Überschriften des Sensorik-Blocks — rechts daneben ist Platz für das
+/// Produktfoto.
+const List<String> _sensorikKopf = [
+  'sensorik',
+  'sensorische eigenschaften',
+  'sensorische merkmale',
+  'organoleptik',
+  'organoleptische eigenschaften',
+  'sensory',
+  'sensory properties',
+  'sensory characteristics',
+  'organoleptic properties',
+  'organoleptic characteristics',
+];
+
+/// Wo in einer Spezifikation das Produktfoto hingehört: der größte leere
+/// verbundene Bereich, der auf Höhe der Überschrift „Sensorik" (oder eine
+/// Zeile darunter) rechts von ihr beginnt — mindestens drei Zeilen hoch
+/// und zwei Spalten breit. Null, wenn es keinen gibt.
+Bereich? produktbildBereich(XlsxBlatt blatt) {
+  for (final z in blatt.zellen) {
+    if (!_sensorikKopf.contains(beschriftungNorm(z.text))) continue;
+    final kopf = blatt.bereichVon(z.zeile, z.spalte);
+    Bereich? beste;
+    var groesste = 0;
+    for (final b in blatt.bereiche) {
+      if (b.z1 < kopf.z1 || b.z1 > kopf.z1 + 1 || b.s1 <= kopf.s2) continue;
+      if (b.z2 - b.z1 < 2 || b.s2 - b.s1 < 1) continue;
+      if ((blatt.zelle(b.z1, b.s1)?.text.trim() ?? '').isNotEmpty) continue;
+      final flaeche = (b.z2 - b.z1 + 1) * (b.s2 - b.s1 + 1);
+      if (flaeche > groesste) {
+        groesste = flaeche;
+        beste = b;
+      }
+    }
+    if (beste != null) return beste;
+  }
+  return null;
+}
 
 /// Überschriften der Produkthinweise — darunter je Zeile ein Hinweis.
 const List<String> _hinweisKopf = [
@@ -468,6 +512,7 @@ class _Einrichten {
 
   String ausfuehren(String xml) {
     _einfacheFelder();
+    _produktbild();
     _hinweise();
     _hilfsstoffe();
     _allergene();
@@ -489,6 +534,12 @@ class _Einrichten {
         break;
       }
     }
+  }
+
+  /// Das Produktfoto: in den leeren Bereich neben der Sensorik.
+  void _produktbild() {
+    final b = produktbildBereich(blatt);
+    if (b != null) _feld('produktbild', b);
   }
 
   void _hinweise() {

@@ -9,7 +9,7 @@ import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
-import '../haccp/prozess_ansicht.dart' show TextEingabeDialog;
+import '../haccp/eingabe_dialoge.dart' show TextEingabeDialog;
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rueckrechnung.dart';

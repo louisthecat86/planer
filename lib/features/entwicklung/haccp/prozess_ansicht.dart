@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 // `show Value`: drift bringt eine eigene Klasse `Column` mit.
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -10,48 +8,25 @@ import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
-import '../daten/dateien.dart';
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
+import 'anlagen_katalog.dart';
+import 'eingabe_dialoge.dart';
+import 'kette_ansicht.dart';
+import 'kette_bausteine.dart';
+import 'prozess_kette.dart';
 import 'prozess_modell.dart';
-import 'prozess_vorlage.dart';
+import 'schritt_blatt.dart';
 
-// Die Prozessparameter eines Projekts: Abschnitte mit Feldern, frei
-// erweiterbar. Geändert wird eine Arbeitskopie; „Neue Version speichern"
-// legt sie mit Versionsnummer und Notiz ab — im Projekt, in seinen
-// früheren Ständen und als Eintrag im Verlauf.
-
-/// Die eigene Vorlage — verschlüsselt bei den Entwicklungsdateien, damit
-/// sie mit ins Backup wandert und nicht im Code steht.
-class ProzessVorlageDienst {
-  ProzessVorlageDienst(this._dateien);
-
-  final EntwicklungDateienDienst _dateien;
-
-  /// Die gespeicherte eigene Vorlage — null, wenn es keine gibt.
-  Future<Prozessparameter?> eigene() async =>
-      vorlageAus(await _dateien.lesen(kProzessVorlageDateiId));
-
-  /// Die eigene Vorlage oder sonst die eingebaute.
-  Future<Prozessparameter> vorlage() async =>
-      await eigene() ?? kNeutraleProzessVorlage;
-
-  /// Speichert die Abschnitte und Felder von [p] — ohne Werte — als
-  /// eigene Vorlage.
-  Future<void> speichern(Prozessparameter p) => _dateien.speichern(
-        id: kProzessVorlageDateiId,
-        name: 'Prozessvorlage.json',
-        mimeTyp: 'application/json',
-        inhalt: utf8.encode(alsVorlage(p).alsJson() ?? '{}'),
-      );
-
-  /// Löscht die eigene Vorlage; danach gilt wieder die eingebaute.
-  Future<void> zuruecksetzen() => _dateien.loeschen(kProzessVorlageDateiId);
-}
-
-final prozessVorlageProvider = Provider<ProzessVorlageDienst>(
-  (ref) => ProzessVorlageDienst(ref.watch(entwicklungDateienProvider)),
-);
+// Der Prozess eines Projekts im Reiter „Herstellung": eine Kette wie im
+// Artikel — Stationen nach Abteilung, je Schritt eine Anlage aus dem
+// Katalog der Planung mit ihren Werten (F32). Ohne Personen und
+// Leistungsdaten, die bekommt der Artikel (F33).
+//
+// Der Arbeitsstand speichert sich selbst (F29). „Version festhalten" legt
+// ihn mit Nummer und Notiz ab: bei den festgehaltenen Versionen und als
+// Eintrag im Verlauf. Abschnitte aus der Zeit vor der Kette werden beim
+// ersten Öffnen zur Kette — samt den festgehaltenen Versionen (F34).
 
 /// Der Prozess eines Projekts — im Reiter „Herstellung".
 class ProjektProzess extends ConsumerStatefulWidget {
@@ -67,174 +42,126 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
     with AutomaticKeepAliveClientMixin {
   late Prozessparameter _arbeit = Prozessparameter.aus(widget.projekt.prozess);
 
-  /// Es gibt Änderungen, die noch nicht als Version gespeichert sind.
-  bool _geaendert = false;
+  /// Was in der Datenbank steht oder schon dorthin unterwegs ist.
+  late String? _gespeichert = widget.projekt.prozess;
 
-  /// Hält die Arbeitskopie, solange sie ungespeichert ist — auch wenn man
-  /// den Reiter wechselt.
+  /// Die festgehaltenen Versionen, wie sie hier zuletzt geschrieben wurden
+  /// — bis das Projekt sie neu liefert.
+  List<ProzessStand>? _historieLokal;
+
+  /// Speichervorgänge, die noch laufen.
+  int _laufend = 0;
+
+  /// Ist das Umsetzen früherer Abschnitte schon angestoßen?
+  bool _umsetzungGeplant = false;
+
+  /// Was beim Umsetzen geschah — für den Hinweis darüber.
+  ProzessUmsetzung? _umgesetzt;
+
+  // Beim ersten Ändern geholt: Auch wenn der Reiter schließt, wird noch
+  // gespeichert — dann ohne `ref`.
+  ProjektRepository? _repo;
+  AutoBackupTrigger? _sicherung;
+
   @override
-  bool get wantKeepAlive => _geaendert;
+  bool get wantKeepAlive => true;
+
+  List<ProzessStand> get _historie =>
+      _historieLokal ?? ProzessStand.listeAus(widget.projekt.prozessHistorie);
 
   @override
   void didUpdateWidget(ProjektProzess alt) {
     super.didUpdateWidget(alt);
-    if (!_geaendert && alt.projekt.prozess != widget.projekt.prozess) {
-      _arbeit = Prozessparameter.aus(widget.projekt.prozess);
+    if (widget.projekt.prozessHistorie != alt.projekt.prozessHistorie) {
+      _historieLokal = null;
+    }
+    final neu = widget.projekt.prozess;
+    // Von woanders geändert — übernehmen, solange hier nichts aussteht.
+    if (neu != alt.projekt.prozess && neu != _gespeichert && _laufend == 0) {
+      _arbeit = Prozessparameter.aus(neu);
+      _gespeichert = neu;
     }
   }
 
-  void _setze(Prozessparameter neu) {
-    setState(() {
-      _arbeit = neu;
-      _geaendert = true;
-    });
-    updateKeepAlive();
+  void _dienste() {
+    _repo ??= ref.read(projektRepositoryProvider);
+    _sicherung ??= ref.read(autoBackupTriggerProvider);
   }
 
-  void _verwerfen() {
-    setState(() {
-      _arbeit = Prozessparameter.aus(widget.projekt.prozess);
-      _geaendert = false;
-    });
-    updateKeepAlive();
+  /// Übernimmt [neu] und speichert ihn.
+  void _setze(Prozessparameter neu) {
+    _dienste();
+    setState(() => _arbeit = neu);
+    _sichern();
+  }
+
+  Future<void> _sichern() async {
+    final json = _arbeit.alsJson();
+    final repo = _repo;
+    if (json == _gespeichert || repo == null) return;
+    _gespeichert = json;
+    _laufend++;
+    try {
+      await repo.projektAendern(
+        widget.projekt.id,
+        EntwicklungProjekteCompanion(prozess: Value(json)),
+      );
+      _sicherung?.fireDebounced(reason: 'Prozess');
+    } catch (e) {
+      if (mounted) _melde('Speichern fehlgeschlagen: ${fehlerText(e)}');
+    } finally {
+      _laufend--;
+    }
   }
 
   void _melde(String text) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
-  // ── Abschnitte und Felder ───────────────────────────────────────────
+  // ── Kette und Schritte ──────────────────────────────────────────────
 
-  void _abschnittErsetzen(ProzessAbschnitt neu) => _setze(
-        _arbeit.kopie(
-          abschnitte: [
-            for (final a in _arbeit.abschnitte) a.id == neu.id ? neu : a,
-          ],
-        ),
+  void _kette(List<ProzessSchritt> neu) => _setze(_arbeit.kopie(schritte: neu));
+
+  void _schrittAendern(ProzessSchritt neu) =>
+      _kette(ProjektKette(_arbeit.schritte).ersetzen(neu));
+
+  void _schrittEntfernen(String id) =>
+      _kette(ProjektKette(_arbeit.schritte).entfernen(id));
+
+  void _oeffnen(
+    ProzessSchritt s,
+    List<KatalogAnlage> katalog,
+    GrenzenKatalog grenzen,
+  ) =>
+      schrittOeffnen(
+        context,
+        schritt: s,
+        nummer: ProjektKette(_arbeit.schritte).indexVon(s.id) + 1,
+        katalog: katalog,
+        grenzen: grenzen,
+        onAenderung: _schrittAendern,
+        onEntfernen: () => _schrittEntfernen(s.id),
       );
 
-  void _wert(ProzessAbschnitt a, ProzessFeld f, String wert) =>
-      _abschnittErsetzen(
-        a.kopie(
-          felder: [for (final x in a.felder) x.id == f.id ? x.mitWert(wert) : x],
-        ),
-      );
-
-  Future<void> _abschnittNeu() async {
-    final titel = await showDialog<String>(
-      context: context,
-      builder: (_) => const TextEingabeDialog(
-        titel: 'Neuer Abschnitt',
-        label: 'Bezeichnung',
-        bestaetigen: 'Hinzufügen',
-      ),
-    );
-    if (titel == null || titel.trim().isEmpty) return;
-    final id = neueParameterId(titel, _arbeit.abschnitte.map((a) => a.id));
-    _setze(
-      _arbeit.kopie(
-        abschnitte: [
-          ..._arbeit.abschnitte,
-          ProzessAbschnitt(id: id, titel: titel.trim()),
-        ],
-      ),
-    );
+  Future<void> _ersterSchritt(List<KatalogAnlage> katalog) async {
+    final neu = await neuerSchritt(context, katalog: katalog);
+    if (neu == null || !mounted) return;
+    _kette([..._arbeit.schritte, neu]);
   }
 
-  Future<void> _abschnittUmbenennen(ProzessAbschnitt a) async {
-    final titel = await showDialog<String>(
-      context: context,
-      builder: (_) => TextEingabeDialog(
-        titel: 'Abschnitt umbenennen',
-        label: 'Bezeichnung',
-        wert: a.titel,
-      ),
-    );
-    if (titel == null || titel.trim().isEmpty) return;
-    _abschnittErsetzen(a.kopie(titel: titel.trim()));
-  }
-
-  void _abschnittVerschieben(ProzessAbschnitt a, int richtung) {
-    final liste = [..._arbeit.abschnitte];
-    final i = liste.indexWhere((x) => x.id == a.id);
-    final j = i + richtung;
-    if (i < 0 || j < 0 || j >= liste.length) return;
-    liste
-      ..removeAt(i)
-      ..insert(j, a);
-    _setze(_arbeit.kopie(abschnitte: liste));
-  }
-
-  void _abschnittLoeschen(ProzessAbschnitt a) => _setze(
-        _arbeit.kopie(
-          abschnitte: [
-            for (final x in _arbeit.abschnitte)
-              if (x.id != a.id) x,
-          ],
-        ),
-      );
-
-  Future<void> _feldBearbeiten(ProzessAbschnitt a, ProzessFeld? f) async {
-    final neu = await showDialog<ProzessFeld>(
-      context: context,
-      builder: (_) => FeldDialog(
-        feld: f,
-        vorhandeneIds: a.felder.map((x) => x.id).toList(),
-      ),
-    );
-    if (neu == null) return;
-    _abschnittErsetzen(
-      a.kopie(
-        felder: f == null
-            ? [...a.felder, neu]
-            : [for (final x in a.felder) x.id == f.id ? neu : x],
-      ),
-    );
-  }
-
-  void _feldLoeschen(ProzessAbschnitt a, ProzessFeld f) => _abschnittErsetzen(
-        a.kopie(
-          felder: [
-            for (final x in a.felder)
-              if (x.id != f.id) x,
-          ],
-        ),
-      );
-
-  void _feldVerschieben(ProzessAbschnitt a, ProzessFeld f, int richtung) {
-    final liste = [...a.felder];
-    final i = liste.indexWhere((x) => x.id == f.id);
-    final j = i + richtung;
-    if (i < 0 || j < 0 || j >= liste.length) return;
-    liste
-      ..removeAt(i)
-      ..insert(j, f);
-    _abschnittErsetzen(a.kopie(felder: liste));
-  }
-
-  // ── Vorlage und Versionen ───────────────────────────────────────────
-
-  Future<void> _vorlageVerwenden() async {
-    try {
-      final v = await ref.read(prozessVorlageProvider).vorlage();
-      if (!mounted) return;
-      _setze(v);
-    } catch (e) {
-      if (mounted) {
-        _melde('Die Vorlage ließ sich nicht laden: ${fehlerText(e)}');
-      }
-    }
-  }
-
-  Future<void> _alsVorlage() async {
+  /// Fragt nach, bevor eine Kette die jetzige ersetzt — ohne jetzige
+  /// gleich ja.
+  Future<bool> _ersetzenBestaetigt(String quelle) async {
+    final n = _arbeit.schritte.length;
+    if (n == 0) return true;
     final ja = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Als Vorlage speichern?'),
-        content: const Text(
-          'Abschnitte und Felder dieses Projekts — ohne die Werte — werden '
-          'die Vorlage für neue Projekte. Eine frühere eigene Vorlage wird '
-          'ersetzt.',
+        title: const Text('Kette ersetzen?'),
+        content: Text(
+          'Die jetzige Kette mit ${n == 1 ? 'einem Schritt' : '$n Schritten'} '
+          'wird durch die von $quelle ersetzt. Festgehaltene Versionen '
+          'bleiben, wie sie sind.',
         ),
         actions: [
           TextButton(
@@ -243,65 +170,180 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
           ),
           FilledButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Speichern'),
+            child: const Text('Ersetzen'),
           ),
         ],
       ),
     );
-    if (ja != true) return;
+    return ja == true;
+  }
+
+  Future<void> _ausArtikel() async {
+    final wahl = await showDialog<ArtikelMitKette>(
+      context: context,
+      builder: (_) => const _ArtikelWahl(),
+    );
+    if (wahl == null || !mounted) return;
+    final name = 'Artikel ${wahl.nummer}';
+    if (!await _ersetzenBestaetigt(name) || !mounted) return;
     try {
-      await ref.read(prozessVorlageProvider).speichern(_arbeit);
-      ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Vorlage');
-      if (mounted) _melde('Als Vorlage gespeichert.');
-    } catch (e) {
-      if (mounted) {
-        _melde('Die Vorlage ließ sich nicht speichern: ${fehlerText(e)}');
+      final katalog = ref.read(anlagenKatalogProvider).valueOrNull ??
+          const <KatalogAnlage>[];
+      final schritte = await ref.read(anlagenQuelleProvider).kette(
+            wahl.id,
+            katalog: katalog,
+            neueId: neueSchrittId,
+          );
+      if (!mounted) return;
+      if (schritte.isEmpty) {
+        _melde('$name hat keine Prozesskette mehr.');
+        return;
       }
+      _kette(schritte);
+      _melde('Kette von $name übernommen — ${_anzahl(schritte.length)}.');
+    } catch (e) {
+      if (mounted) _melde('Die Kette ließ sich nicht lesen: ${fehlerText(e)}');
     }
   }
 
-  Future<void> _vorlageZuruecksetzen() async {
-    await ref.read(prozessVorlageProvider).zuruecksetzen();
-    if (mounted) _melde('Ab jetzt gilt wieder die eingebaute Vorlage.');
+  Future<void> _ausProjekt() async {
+    final wahl = await showDialog<EntwicklungsProjekt>(
+      context: context,
+      builder: (_) => _ProjektWahl(ohne: widget.projekt.id),
+    );
+    if (wahl == null || !mounted) return;
+    final name = '„${wahl.name}"';
+    if (!await _ersetzenBestaetigt(name) || !mounted) return;
+    var p = Prozessparameter.aus(wahl.prozess);
+    // Hat das andere Projekt noch Abschnitte, werden sie hier zur Kette.
+    if (p.abschnitte.isNotEmpty) {
+      final katalog = ref.read(anlagenKatalogProvider).valueOrNull ??
+          const <KatalogAnlage>[];
+      p = prozessUmsetzen(p, katalog).prozess;
+    }
+    final schritte = mitNeuenIds(p.schritte, neueSchrittId);
+    if (schritte.isEmpty) {
+      _melde('$name hat keine Kette mit Inhalt.');
+      return;
+    }
+    _kette(schritte);
+    _melde('Kette von $name übernommen — ${_anzahl(schritte.length)}.');
   }
 
-  Future<void> _speichern() async {
+  static String _anzahl(int n) => n == 1 ? '1 Schritt' : '$n Schritte';
+
+  // ── Frühere Abschnitte (F34) ────────────────────────────────────────
+
+  /// Setzt frühere Abschnitte um, sobald der Katalog da ist — nach dem
+  /// Bild, nicht mitten im Aufbau.
+  void _umsetzenPlanen(List<KatalogAnlage> katalog) {
+    if (_umsetzungGeplant) return;
+    _umsetzungGeplant = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _umsetzen(katalog);
+    });
+  }
+
+  Future<void> _umsetzen(List<KatalogAnlage> katalog) async {
+    _umsetzungGeplant = false;
+    if (_arbeit.abschnitte.isEmpty) return;
+    final r = prozessUmsetzen(_arbeit, katalog);
+    // Die festgehaltenen Versionen mit — so bleibt „seit Version …"
+    // richtig, und Vergleiche finden dieselben Schritte.
+    final historie = _historie;
+    final mitAbschnitten =
+        historie.any((s) => s.parameter.abschnitte.isNotEmpty);
+    final neueHistorie = [
+      for (final s in historie)
+        s.parameter.abschnitte.isEmpty
+            ? s
+            : s.mitParameter(prozessUmsetzen(s.parameter, katalog).prozess),
+    ];
+    _dienste();
+    setState(() {
+      _arbeit = r.prozess;
+      if (mitAbschnitten) _historieLokal = neueHistorie;
+      _umgesetzt = r;
+    });
+    final json = r.prozess.alsJson();
+    _gespeichert = json;
+    _laufend++;
+    try {
+      await _repo!.projektAendern(
+        widget.projekt.id,
+        EntwicklungProjekteCompanion(
+          prozess: Value(json),
+          prozessHistorie: mitAbschnitten
+              ? Value(ProzessStand.listeZuJson(neueHistorie))
+              : const Value.absent(),
+        ),
+      );
+      _sicherung?.fireDebounced(reason: 'Prozess');
+    } catch (e) {
+      if (mounted) _melde('Speichern fehlgeschlagen: ${fehlerText(e)}');
+    } finally {
+      _laufend--;
+    }
+  }
+
+  String _umsetzungText(ProzessUmsetzung r) {
+    if (r.schritte == 0) {
+      return 'Die bisherigen Abschnitte waren leer und sind entfallen.';
+    }
+    final entfallen = switch (r.entfallen) {
+      0 => '',
+      1 => ', ein leerer Abschnitt ist entfallen',
+      final n => ', $n leere Abschnitte sind entfallen',
+    };
+    return 'Die bisherigen Abschnitte sind jetzt Schritte der Kette: '
+        '${_anzahl(r.schritte)}$entfallen. Prüf Abteilungen und Anlagen — '
+        'was im Katalog keine Anlage fand, steht als Text da.';
+  }
+
+  // ── Versionen ───────────────────────────────────────────────────────
+
+  /// Hält den Arbeitsstand als nächste Version fest — mit Notiz, bei den
+  /// festgehaltenen Versionen und im Verlauf.
+  Future<void> _festhalten() async {
+    final p = widget.projekt;
+    final historie = _historie;
+    final version = naechsteProzessVersion(_arbeit, historie);
     final notiz = await showDialog<String>(
       context: context,
-      builder: (_) => const TextEingabeDialog(
-        titel: 'Neue Version speichern',
+      builder: (_) => TextEingabeDialog(
+        titel: 'Version $version festhalten',
         label: 'Was hat sich geändert?',
         mehrzeilig: true,
-        bestaetigen: 'Speichern',
+        bestaetigen: 'Festhalten',
         leerErlaubt: true,
       ),
     );
     if (notiz == null || !mounted) return;
-    final p = widget.projekt;
-    final gespeichert = Prozessparameter.aus(p.prozess);
-    final historie = ProzessStand.listeAus(p.prozessHistorie);
-    final version = gespeichert.leer && historie.isEmpty
-        ? '1.0'
-        : naechsteVersion(gespeichert.version);
+    final repo = ref.read(projektRepositoryProvider);
+    final sicherung = ref.read(autoBackupTriggerProvider);
     final jetzt = DateTime.now();
     final neu = _arbeit.kopie(version: version, stand: jetzt);
+    final liste = [
+      ...historie,
+      ProzessStand(
+        version: version,
+        datum: jetzt,
+        notiz: notiz.trim(),
+        parameter: neu,
+      ),
+    ];
+    setState(() {
+      _arbeit = neu;
+      _historieLokal = liste;
+    });
+    _gespeichert = neu.alsJson();
+    _laufend++;
     try {
-      final repo = ref.read(projektRepositoryProvider);
       await repo.projektAendern(
         p.id,
         EntwicklungProjekteCompanion(
           prozess: Value(neu.alsJson()),
-          prozessHistorie: Value(
-            ProzessStand.listeZuJson([
-              ...historie,
-              ProzessStand(
-                version: version,
-                datum: jetzt,
-                notiz: notiz.trim(),
-                parameter: neu,
-              ),
-            ]),
-          ),
+          prozessHistorie: Value(ProzessStand.listeZuJson(liste)),
         ),
       );
       await repo.eintragAnlegen(
@@ -313,28 +355,59 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
         status: EintragStatus.erledigt,
         wert: neu.alsJson(),
       );
-      ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Prozess');
-      if (!mounted) return;
-      setState(() {
-        _arbeit = neu;
-        _geaendert = false;
-      });
-      updateKeepAlive();
+      sicherung.fireDebounced(reason: 'Prozess');
+      if (mounted) {
+        _melde('Version $version festgehalten — sie steht im Verlauf.');
+      }
     } catch (e) {
-      if (mounted) _melde('Speichern fehlgeschlagen: ${fehlerText(e)}');
+      if (mounted) _melde('Festhalten fehlgeschlagen: ${fehlerText(e)}');
+    } finally {
+      _laufend--;
     }
   }
 
+  /// Setzt den Arbeitsstand auf die festgehaltene Version [s] zurück.
+  Future<void> _zurueck(ProzessStand s) async {
+    final ja = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Zurück zu Version ${s.version}?'),
+        content: Text(
+          'Was seit dem ${Format.datum(s.datum)} geändert wurde, geht '
+          'verloren.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Zurücksetzen'),
+          ),
+        ],
+      ),
+    );
+    if (ja != true || !mounted) return;
+    _setze(s.parameter.kopie(version: s.version, stand: s.datum));
+  }
+
   Future<void> _vergleichen() async {
-    final p = widget.projekt;
-    final staende = ProzessStand.listeAus(p.prozessHistorie);
+    final staende = _historie;
+    final fassung = prozessFassung(_arbeit, staende);
     final liste = <({String label, Prozessparameter parameter})>[
       for (final s in staende)
         (
           label: 'Version ${s.version} · ${Format.datum(s.datum)}',
           parameter: s.parameter,
         ),
-      if (_geaendert) (label: 'Arbeitsstand (ungespeichert)', parameter: _arbeit),
+      if (fassung.geaendert)
+        (
+          label: staende.isEmpty
+              ? 'Arbeitsstand'
+              : 'Arbeitsstand (seit Version ${staende.last.version})',
+          parameter: _arbeit,
+        ),
     ];
     if (liste.length < 2) {
       _melde('Zum Vergleichen braucht es mindestens zwei Stände.');
@@ -346,29 +419,132 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
     );
   }
 
+  // ── Aufbau ──────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
-    final p = widget.projekt;
-    final gespeichert = Prozessparameter.aus(p.prozess);
-    final historie = ProzessStand.listeAus(p.prozessHistorie);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final katalogStand = ref.watch(anlagenKatalogProvider);
+    final katalog = katalogStand.valueOrNull ?? const <KatalogAnlage>[];
+    final grenzen = ref.watch(parameterGrenzenProvider).valueOrNull ??
+        const GrenzenKatalog();
+    final umsetzen = _arbeit.abschnitte.isNotEmpty;
+    if (umsetzen && katalogStand.hasValue) _umsetzenPlanen(katalog);
 
-    if (_arbeit.leer && !_geaendert) {
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        children: [
+    final historie = _historie;
+    final fassung = prozessFassung(_arbeit, historie);
+    final letzte = historie.lastOrNull;
+    final versionen = <MenueEintrag>[
+      if (historie.length + (fassung.geaendert ? 1 : 0) >= 2)
+        MenueEintrag(
+          'Versionen vergleichen…',
+          icon: Icons.compare_arrows,
+          aktion: _vergleichen,
+        ),
+      if (letzte != null && fassung.geaendert)
+        MenueEintrag(
+          'Zurück zu Version ${letzte.version}…',
+          icon: Icons.undo,
+          aktion: () => _zurueck(letzte),
+        ),
+    ];
+    final schritte = _arbeit.schritte;
+    final fehler = katalogStand.error;
+    final umgesetzt = _umgesetzt;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        if (schritte.isNotEmpty || historie.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                fassung.text,
+                key: const ValueKey('prozess-fassung'),
+                style: theme.textTheme.titleSmall,
+              ),
+              // Festhalten lohnt erst mit einer Kette, und nur, wenn sich
+              // seit der letzten Version etwas geändert hat.
+              if (fassung.geaendert && schritte.isNotEmpty)
+                FilledButton.icon(
+                  key: const ValueKey('prozess-festhalten'),
+                  onPressed: _festhalten,
+                  icon: const Icon(Icons.bookmark_add_outlined, size: 18),
+                  label: Text(
+                    'Version ${naechsteProzessVersion(_arbeit, historie)} '
+                    'festhalten…',
+                  ),
+                ),
+              MenueKnopf(
+                key: const ValueKey('prozess-mehr'),
+                eintraege: [
+                  ...versionen,
+                  if (versionen.isNotEmpty) null,
+                  MenueEintrag(
+                    'Kette aus einem Artikel übernehmen…',
+                    icon: Icons.inventory_2_outlined,
+                    aktion: _ausArtikel,
+                    key: const ValueKey('prozess-mehr-artikel'),
+                  ),
+                  MenueEintrag(
+                    'Kette aus einem Projekt übernehmen…',
+                    icon: Icons.content_copy_outlined,
+                    aktion: _ausProjekt,
+                    key: const ValueKey('prozess-mehr-projekt'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Änderungen speichern sich selbst. „Version festhalten" legt den '
+            'Stand mit Nummer und Notiz im Verlauf ab; bei der Freigabe kommt '
+            'die Kette in den Artikel.',
+            style: theme.textTheme.bodySmall?.copyWith(color: grau),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (fehler != null) ...[
+          HinweisBox(
+            'Der Katalog der Anlagen ließ sich nicht laden: '
+            '${fehlerText(fehler)}',
+            art: StatusArt.fehler,
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (umgesetzt != null) ...[
+          HinweisBox(
+            _umsetzungText(umgesetzt),
+            key: const ValueKey('prozess-umgesetzt'),
+            onSchliessen: () => setState(() => _umgesetzt = null),
+          ),
+          const SizedBox(height: 12),
+        ],
+        if (umsetzen)
+          LeerHinweis(
+            'Die bisherigen Abschnitte (${_arbeit.abschnitte.length}) werden '
+            'zur Kette, sobald der Katalog der Anlagen geladen ist.',
+            icon: Icons.account_tree_outlined,
+          )
+        else if (schritte.isEmpty)
           Bereich(
-            titel: 'Prozessparameter',
-            icon: Icons.precision_manufacturing_outlined,
+            titel: 'Prozesskette',
+            icon: Icons.account_tree_outlined,
             innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 14),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Noch keine Prozessparameter. Beginne mit der Vorlage — '
-                  'Rohware, Verarbeitung, Garen, Kühlen, Verpackung — oder '
-                  'leer mit eigenen Abschnitten.',
+                  'Noch keine Prozesskette. Stell sie aus den Anlagen der '
+                  'Planung zusammen — Station für Station, wie im Artikel — '
+                  'oder übernimm die Kette eines Artikels oder eines '
+                  'anderen Projekts.',
                 ),
                 const SizedBox(height: 12),
                 Wrap(
@@ -376,108 +552,40 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
                   runSpacing: 8,
                   children: [
                     FilledButton.icon(
-                      onPressed: _vorlageVerwenden,
-                      icon: const Icon(Icons.library_add_outlined, size: 18),
-                      label: const Text('Vorlage verwenden'),
+                      key: const ValueKey('prozess-erste-anlage'),
+                      onPressed: () => _ersterSchritt(katalog),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Anlage hinzufügen…'),
                     ),
                     OutlinedButton.icon(
-                      onPressed: _abschnittNeu,
-                      icon: const Icon(Icons.add, size: 18),
-                      label: const Text('Leer beginnen'),
+                      key: const ValueKey('prozess-aus-artikel'),
+                      onPressed: _ausArtikel,
+                      icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                      label: const Text('Aus einem Artikel…'),
+                    ),
+                    OutlinedButton.icon(
+                      key: const ValueKey('prozess-aus-projekt'),
+                      onPressed: _ausProjekt,
+                      icon: const Icon(Icons.content_copy_outlined, size: 18),
+                      label: const Text('Aus einem Projekt…'),
                     ),
                   ],
                 ),
               ],
             ),
+          )
+        else
+          ProzessKetteAnsicht(
+            schritte: schritte,
+            katalog: katalog,
+            katalogGeladen: katalogStand.hasValue,
+            onKette: _kette,
+            onOeffnen: (s) => _oeffnen(s, katalog, grenzen),
           ),
-        ],
-      );
-    }
-
-    final stand = gespeichert.stand;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              gespeichert.leer
-                  ? 'Noch nicht gespeichert'
-                  : 'Version ${gespeichert.version}'
-                      '${stand == null ? '' : ' · ${Format.datum(stand)}'}',
-              style: theme.textTheme.titleSmall,
-            ),
-            if (_geaendert)
-              const StatusMarke('ungespeichert', art: StatusArt.warnung),
-            FilledButton.icon(
-              onPressed: _geaendert ? _speichern : null,
-              icon: const Icon(Icons.save_outlined, size: 18),
-              label: const Text('Neue Version speichern'),
-            ),
-            if (_geaendert)
-              TextButton.icon(
-                onPressed: _verwerfen,
-                icon: const Icon(Icons.undo, size: 18),
-                label: const Text('Verwerfen'),
-              ),
-            OutlinedButton.icon(
-              onPressed: _abschnittNeu,
-              icon: const Icon(Icons.playlist_add, size: 18),
-              label: const Text('Abschnitt'),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Mehr',
-              icon: const Icon(Icons.more_vert),
-              onSelected: (wahl) {
-                switch (wahl) {
-                  case 'vergleichen':
-                    _vergleichen();
-                  case 'vorlage':
-                    _alsVorlage();
-                  case 'zuruecksetzen':
-                    _vorlageZuruecksetzen();
-                }
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(
-                  value: 'vergleichen',
-                  child: Text('Versionen vergleichen'),
-                ),
-                PopupMenuItem(
-                  value: 'vorlage',
-                  child: Text('Als Vorlage speichern'),
-                ),
-                PopupMenuItem(
-                  value: 'zuruecksetzen',
-                  child: Text('Eingebaute Vorlage wieder verwenden'),
-                ),
-              ],
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        for (final (i, a) in _arbeit.abschnitte.indexed) ...[
-          _AbschnittKarte(
-            key: ValueKey('abschnitt-${a.id}'),
-            abschnitt: a,
-            erster: i == 0,
-            letzter: i == _arbeit.abschnitte.length - 1,
-            onWert: (f, w) => _wert(a, f, w),
-            onUmbenennen: () => _abschnittUmbenennen(a),
-            onVerschieben: (r) => _abschnittVerschieben(a, r),
-            onLoeschen: () => _abschnittLoeschen(a),
-            onFeld: (f) => _feldBearbeiten(a, f),
-            onFeldLoeschen: (f) => _feldLoeschen(a, f),
-            onFeldVerschieben: (f, r) => _feldVerschieben(a, f, r),
-          ),
-          const SizedBox(height: 12),
-        ],
-        if (historie.isNotEmpty)
+        if (historie.isNotEmpty) ...[
+          const SizedBox(height: 16),
           Bereich(
-            titel: 'Versionen',
+            titel: 'Festgehaltene Versionen',
             icon: Icons.history,
             untertitel: '${historie.length}',
             child: Column(
@@ -495,361 +603,93 @@ class _ProjektProzessState extends ConsumerState<ProjektProzess>
               ],
             ),
           ),
+        ],
       ],
     );
   }
 }
 
-class _AbschnittKarte extends StatelessWidget {
-  const _AbschnittKarte({
-    super.key,
-    required this.abschnitt,
-    required this.erster,
-    required this.letzter,
-    required this.onWert,
-    required this.onUmbenennen,
-    required this.onVerschieben,
-    required this.onLoeschen,
-    required this.onFeld,
-    required this.onFeldLoeschen,
-    required this.onFeldVerschieben,
-  });
-
-  final ProzessAbschnitt abschnitt;
-  final bool erster;
-  final bool letzter;
-  final void Function(ProzessFeld feld, String wert) onWert;
-  final VoidCallback onUmbenennen;
-  final ValueChanged<int> onVerschieben;
-  final VoidCallback onLoeschen;
-
-  /// Feld bearbeiten — null: ein neues.
-  final ValueChanged<ProzessFeld?> onFeld;
-  final ValueChanged<ProzessFeld> onFeldLoeschen;
-  final void Function(ProzessFeld feld, int richtung) onFeldVerschieben;
+/// Die Wahl eines Artikels mit Prozesskette — mit Suche nach Nummer und
+/// Bezeichnung.
+class _ArtikelWahl extends ConsumerStatefulWidget {
+  const _ArtikelWahl();
 
   @override
-  Widget build(BuildContext context) {
-    final a = abschnitt;
-    return Bereich(
-      titel: a.titel,
-      icon: Icons.settings_outlined,
-      aktionen: [
-        IconButton(
-          tooltip: 'Feld hinzufügen',
-          icon: const Icon(Icons.add, size: 18),
-          onPressed: () => onFeld(null),
-        ),
-        PopupMenuButton<String>(
-          tooltip: 'Abschnitt',
-          icon: const Icon(Icons.more_vert, size: 18),
-          onSelected: (wahl) {
-            switch (wahl) {
-              case 'umbenennen':
-                onUmbenennen();
-              case 'hoch':
-                onVerschieben(-1);
-              case 'runter':
-                onVerschieben(1);
-              case 'loeschen':
-                onLoeschen();
-            }
-          },
-          itemBuilder: (_) => [
-            const PopupMenuItem(value: 'umbenennen', child: Text('Umbenennen')),
-            PopupMenuItem(
-              value: 'hoch',
-              enabled: !erster,
-              child: const Text('Nach oben'),
-            ),
-            PopupMenuItem(
-              value: 'runter',
-              enabled: !letzter,
-              child: const Text('Nach unten'),
-            ),
-            const PopupMenuItem(value: 'loeschen', child: Text('Löschen')),
-          ],
-        ),
-      ],
-      innenAbstand: const EdgeInsets.fromLTRB(12, 8, 4, 10),
-      child: a.felder.isEmpty
-          ? const LeerHinweis('Noch keine Felder.')
-          : LayoutBuilder(
-              builder: (context, c) {
-                final breit = c.maxWidth >= 640;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (final (i, f) in a.felder.indexed)
-                      _FeldZeile(
-                        key: ValueKey('feld-${a.id}/${f.id}'),
-                        feld: f,
-                        breit: breit,
-                        erster: i == 0,
-                        letzter: i == a.felder.length - 1,
-                        onWert: (w) => onWert(f, w),
-                        onBearbeiten: () => onFeld(f),
-                        onLoeschen: () => onFeldLoeschen(f),
-                        onVerschieben: (r) => onFeldVerschieben(f, r),
-                      ),
-                  ],
-                );
-              },
-            ),
-    );
-  }
+  ConsumerState<_ArtikelWahl> createState() => _ArtikelWahlState();
 }
 
-class _FeldZeile extends StatelessWidget {
-  const _FeldZeile({
-    super.key,
-    required this.feld,
-    required this.breit,
-    required this.erster,
-    required this.letzter,
-    required this.onWert,
-    required this.onBearbeiten,
-    required this.onLoeschen,
-    required this.onVerschieben,
-  });
-
-  final ProzessFeld feld;
-  final bool breit;
-  final bool erster;
-  final bool letzter;
-  final ValueChanged<String> onWert;
-  final VoidCallback onBearbeiten;
-  final VoidCallback onLoeschen;
-  final ValueChanged<int> onVerschieben;
+class _ArtikelWahlState extends ConsumerState<_ArtikelWahl> {
+  String _suche = '';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final label = Text(
-      feld.label,
-      style: theme.textTheme.bodyMedium?.copyWith(
-        color: theme.colorScheme.onSurfaceVariant,
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final stand = ref.watch(artikelMitKetteProvider);
+    final s = _suche.trim().toLowerCase();
+    final Widget liste = stand.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => LeerHinweis(
+        'Die Artikel ließen sich nicht laden: ${fehlerText(e)}',
       ),
-    );
-    final eingabe = FeldEingabe(feld: feld, onWert: onWert);
-    final menue = PopupMenuButton<String>(
-      tooltip: 'Feld',
-      icon: const Icon(Icons.more_vert, size: 16),
-      onSelected: (wahl) {
-        switch (wahl) {
-          case 'bearbeiten':
-            onBearbeiten();
-          case 'hoch':
-            onVerschieben(-1);
-          case 'runter':
-            onVerschieben(1);
-          case 'loeschen':
-            onLoeschen();
+      data: (alle) {
+        final treffer = [
+          for (final a in alle)
+            if (s.isEmpty ||
+                a.nummer.toLowerCase().contains(s) ||
+                a.bezeichnung.toLowerCase().contains(s))
+              a,
+        ];
+        if (treffer.isEmpty) {
+          return LeerHinweis(
+            alle.isEmpty
+                ? 'Noch kein Artikel hat eine Prozesskette.'
+                : 'Kein Artikel passt zur Suche.',
+          );
         }
+        return ListView(
+          children: [
+            for (final a in treffer)
+              ListTile(
+                key: ValueKey('artikel-${a.id}'),
+                dense: true,
+                title: Text('${a.nummer} · ${a.bezeichnung}'),
+                subtitle: Text(
+                  a.schritte == 1 ? '1 Schritt' : '${a.schritte} Schritte',
+                  style: TextStyle(color: grau),
+                ),
+                onTap: () => Navigator.of(context).pop(a),
+              ),
+          ],
+        );
       },
-      itemBuilder: (_) => [
-        const PopupMenuItem(value: 'bearbeiten', child: Text('Bearbeiten')),
-        PopupMenuItem(
-          value: 'hoch',
-          enabled: !erster,
-          child: const Text('Nach oben'),
-        ),
-        PopupMenuItem(
-          value: 'runter',
-          enabled: !letzter,
-          child: const Text('Nach unten'),
-        ),
-        const PopupMenuItem(value: 'loeschen', child: Text('Löschen')),
-      ],
     );
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: breit
-          ? Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 240,
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10, right: 12),
-                    child: label,
-                  ),
-                ),
-                Expanded(child: eingabe),
-                menue,
-              ],
-            )
-          : Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [label, const SizedBox(height: 4), eingabe],
-                  ),
-                ),
-                menue,
-              ],
-            ),
-    );
-  }
-}
-
-/// Die Eingabe eines Felds je nach Typ.
-class FeldEingabe extends StatefulWidget {
-  const FeldEingabe({super.key, required this.feld, required this.onWert});
-
-  final ProzessFeld feld;
-  final ValueChanged<String> onWert;
-
-  @override
-  State<FeldEingabe> createState() => _FeldEingabeState();
-}
-
-class _FeldEingabeState extends State<FeldEingabe> {
-  late final TextEditingController _text =
-      TextEditingController(text: widget.feld.wert);
-
-  @override
-  void didUpdateWidget(FeldEingabe alt) {
-    super.didUpdateWidget(alt);
-    // Von außen geändert (Verwerfen, Vorlage) — sonst bleibt die Eingabe.
-    if (widget.feld.wert != _text.text) _text.text = widget.feld.wert;
-  }
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final f = widget.feld;
-    if (f.typ == FeldTyp.auswahl && f.optionen.isNotEmpty) {
-      return Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        children: [
-          for (final o in f.optionen)
-            ChoiceChip(
-              label: Text(o),
-              selected: f.wert == o,
-              // Ein zweiter Klick nimmt die Wahl wieder weg.
-              onSelected: (_) => widget.onWert(f.wert == o ? '' : o),
-            ),
-        ],
-      );
-    }
-    final lang = f.typ == FeldTyp.langtext;
-    return TextField(
-      controller: _text,
-      minLines: lang ? 2 : 1,
-      maxLines: lang ? 6 : 1,
-      keyboardType: f.typ == FeldTyp.zahl
-          ? const TextInputType.numberWithOptions(decimal: true)
-          : null,
-      decoration: const InputDecoration(isDense: true),
-      onChanged: widget.onWert,
-    );
-  }
-}
-
-/// Ein Feld anlegen oder ändern: Bezeichnung, Typ, Möglichkeiten.
-class FeldDialog extends StatefulWidget {
-  const FeldDialog({super.key, this.feld, this.vorhandeneIds = const []});
-
-  /// null: ein neues Feld.
-  final ProzessFeld? feld;
-
-  /// IDs der Felder im Abschnitt — eine neue ID weicht ihnen aus.
-  final List<String> vorhandeneIds;
-
-  @override
-  State<FeldDialog> createState() => _FeldDialogState();
-}
-
-class _FeldDialogState extends State<FeldDialog> {
-  late final TextEditingController _label =
-      TextEditingController(text: widget.feld?.label ?? '');
-  late final TextEditingController _optionen =
-      TextEditingController(text: widget.feld?.optionen.join(', ') ?? '');
-  late FeldTyp _typ = widget.feld?.typ ?? FeldTyp.text;
-
-  @override
-  void dispose() {
-    _label.dispose();
-    _optionen.dispose();
-    super.dispose();
-  }
-
-  static const Map<FeldTyp, String> _typen = {
-    FeldTyp.text: 'Text',
-    FeldTyp.langtext: 'Langer Text',
-    FeldTyp.zahl: 'Zahl',
-    FeldTyp.auswahl: 'Auswahl',
-  };
-
-  void _fertig() {
-    final label = _label.text.trim();
-    if (label.isEmpty) return;
-    final alt = widget.feld;
-    final optionen = _typ == FeldTyp.auswahl
-        ? [
-            for (final o in _optionen.text.split(RegExp('[,;\n]')))
-              if (o.trim().isNotEmpty) o.trim(),
-          ]
-        : const <String>[];
-    Navigator.of(context).pop(
-      ProzessFeld(
-        id: alt?.id ?? neueParameterId(label, widget.vorhandeneIds),
-        label: label,
-        wert: alt?.wert ?? '',
-        typ: _typ,
-        optionen: optionen,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.feld == null ? 'Neues Feld' : 'Feld bearbeiten'),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, minWidth: 340),
+      title: const Text('Kette aus einem Artikel übernehmen'),
+      content: SizedBox(
+        width: 460,
+        height: 440,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             TextField(
-              controller: _label,
+              key: const ValueKey('artikel-suche'),
               autofocus: true,
-              decoration: const InputDecoration(labelText: 'Bezeichnung'),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final MapEntry(:key, :value) in _typen.entries)
-                  ChoiceChip(
-                    label: Text(value),
-                    selected: _typ == key,
-                    onSelected: (_) => setState(() => _typ = key),
-                  ),
-              ],
-            ),
-            if (_typ == FeldTyp.auswahl) ...[
-              const SizedBox(height: 12),
-              TextField(
-                controller: _optionen,
-                decoration: const InputDecoration(
-                  labelText: 'Möglichkeiten',
-                  helperText: 'Durch Komma getrennt, etwa „Vakuum, offen"',
-                ),
+              decoration: const InputDecoration(
+                labelText: 'Suchen',
+                hintText: 'Artikelnummer oder Bezeichnung',
+                prefixIcon: Icon(Icons.search),
               ),
-            ],
+              onChanged: (t) => setState(() => _suche = t),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Übernommen werden Abteilungen, Anlagen und Werte — ohne '
+              'Personen und Leistungsdaten.',
+              style: theme.textTheme.bodySmall?.copyWith(color: grau),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: liste),
           ],
         ),
       ),
@@ -858,13 +698,103 @@ class _FeldDialogState extends State<FeldDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Abbrechen'),
         ),
-        FilledButton(onPressed: _fertig, child: const Text('Übernehmen')),
       ],
     );
   }
 }
 
-/// Zwei Stände der Prozessparameter nebeneinander: was sich geändert hat.
+/// Die Wahl eines anderen Projekts, das einen Prozess hat.
+class _ProjektWahl extends ConsumerStatefulWidget {
+  const _ProjektWahl({required this.ohne});
+
+  /// Das Projekt, in das übernommen wird — es steht nicht zur Wahl.
+  final String ohne;
+
+  @override
+  ConsumerState<_ProjektWahl> createState() => _ProjektWahlState();
+}
+
+class _ProjektWahlState extends ConsumerState<_ProjektWahl> {
+  String _suche = '';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final stand = ref.watch(projekteProvider);
+    final s = _suche.trim().toLowerCase();
+    final Widget liste = stand.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => LeerHinweis(
+        'Die Projekte ließen sich nicht laden: ${fehlerText(e)}',
+      ),
+      data: (alle) {
+        final mitProzess = [
+          for (final p in alle)
+            if (p.id != widget.ohne) (p, Prozessparameter.aus(p.prozess)),
+        ].where((e) => e.$2.beschrieben).toList();
+        final treffer = [
+          for (final e in mitProzess)
+            if (s.isEmpty || e.$1.name.toLowerCase().contains(s)) e,
+        ];
+        if (treffer.isEmpty) {
+          return LeerHinweis(
+            mitProzess.isEmpty
+                ? 'Kein anderes Projekt hat bisher einen Prozess.'
+                : 'Kein Projekt passt zur Suche.',
+          );
+        }
+        return ListView(
+          children: [
+            for (final (p, prozess) in treffer)
+              ListTile(
+                key: ValueKey('projekt-${p.id}'),
+                dense: true,
+                title: Text(p.name),
+                subtitle: Text(
+                  prozessKurztext(prozess),
+                  style: TextStyle(color: grau),
+                ),
+                onTap: () => Navigator.of(context).pop(p),
+              ),
+          ],
+        );
+      },
+    );
+    return AlertDialog(
+      title: const Text('Kette aus einem Projekt übernehmen'),
+      content: SizedBox(
+        width: 460,
+        height: 440,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              key: const ValueKey('projekt-suche'),
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Suchen',
+                hintText: 'Name des Projekts',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: (t) => setState(() => _suche = t),
+            ),
+            const SizedBox(height: 8),
+            Expanded(child: liste),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Zwei Stände des Prozesses nebeneinander: was sich geändert hat.
 class ParameterVergleichDialog extends StatefulWidget {
   const ParameterVergleichDialog({super.key, required this.staende});
 
@@ -888,6 +818,7 @@ class _ParameterVergleichDialogState extends State<ParameterVergleichDialog> {
       liste[_a].parameter,
       liste[_b].parameter,
     );
+    String zeigen(String? w) => w == null || w.trim().isEmpty ? '—' : w;
     DropdownButton<int> wahl(int wert, ValueChanged<int> onWahl) =>
         DropdownButton<int>(
           value: wert,
@@ -940,9 +871,7 @@ class _ParameterVergleichDialogState extends State<ParameterVergleichDialog> {
                                   style: theme.textTheme.labelMedium,
                                 ),
                                 Text(
-                                  '${a.alt == null || a.alt!.trim().isEmpty ? '—' : a.alt}'
-                                  '  →  '
-                                  '${a.neu == null || a.neu!.trim().isEmpty ? '—' : a.neu}',
+                                  '${zeigen(a.alt)}  →  ${zeigen(a.neu)}',
                                   style: theme.textTheme.bodySmall,
                                 ),
                               ],
@@ -959,72 +888,6 @@ class _ParameterVergleichDialogState extends State<ParameterVergleichDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Schließen'),
         ),
-      ],
-    );
-  }
-}
-
-/// Ein Text in einem kleinen Fenster — für Namen und Notizen.
-class TextEingabeDialog extends StatefulWidget {
-  const TextEingabeDialog({
-    super.key,
-    required this.titel,
-    required this.label,
-    this.wert = '',
-    this.mehrzeilig = false,
-    this.bestaetigen = 'Speichern',
-    this.leerErlaubt = false,
-  });
-
-  final String titel;
-  final String label;
-  final String wert;
-  final bool mehrzeilig;
-  final String bestaetigen;
-
-  /// Darf leer bestätigt werden (etwa eine Notiz)?
-  final bool leerErlaubt;
-
-  @override
-  State<TextEingabeDialog> createState() => _TextEingabeDialogState();
-}
-
-class _TextEingabeDialogState extends State<TextEingabeDialog> {
-  late final TextEditingController _text =
-      TextEditingController(text: widget.wert);
-
-  @override
-  void dispose() {
-    _text.dispose();
-    super.dispose();
-  }
-
-  void _fertig() {
-    if (!widget.leerErlaubt && _text.text.trim().isEmpty) return;
-    Navigator.of(context).pop(_text.text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.titel),
-      content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460, minWidth: 320),
-        child: TextField(
-          controller: _text,
-          autofocus: true,
-          minLines: widget.mehrzeilig ? 3 : 1,
-          maxLines: widget.mehrzeilig ? 6 : 1,
-          decoration: InputDecoration(labelText: widget.label),
-          onSubmitted: widget.mehrzeilig ? null : (_) => _fertig(),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(onPressed: _fertig, child: Text(widget.bestaetigen)),
       ],
     );
   }

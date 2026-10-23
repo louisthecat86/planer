@@ -12,12 +12,16 @@ import '../rechenkern/rechenkern.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart' show projekteProvider;
 
-// Die Projekt-Checkliste rechnet sich selbst (F25): Sieben ihrer acht
+// Die Projekt-Checkliste rechnet sich selbst (F25): Acht ihrer neun
 // Punkte sieht die App dem Projekt an — Artikel, Rezeptur, Nährwerte,
-// Spezifikation, Prozess, Sensorik und das Etikett an seinen
+// Sensorik, Produktfoto, Prozess, Spezifikation und das Etikett an seinen
 // Pflichtangaben (F28). Von Hand bleibt nur Navision. Gezählt wird
 // überall gleich: in der Projektliste, in der Übersicht, in den Zahlen
 // der Entwicklung und im Bericht.
+//
+// Das Produktfoto lässt sich zurückstellen, solange es keins gibt (F37):
+// Es bleibt offen, „Als Nächstes" geht aber weiter, und der Kopf zeigt
+// dezent, dass es noch fehlt.
 
 /// Die Punkte, die man von Hand abhakt — die übrigen rechnet die App.
 const Set<String> kChecklisteVonHand = {'navisionAngelegt'};
@@ -27,11 +31,17 @@ const Map<String, String> kCheckAufgabe = {
   'rezepturErstellt': 'Rezeptur erstellen',
   'naehrwerteErstellt': 'Nährwerte vervollständigen',
   'sensorikErstellt': 'Sensorik beschreiben',
+  'produktfotoHinterlegt': 'Produktfoto hinterlegen',
   'prozessErstellt': 'Prozess beschreiben',
   'spezifikationErstellt': 'Spezifikation erstellen',
   'etikettErstellt': 'Pflichtangaben des Etiketts prüfen',
   'artikelAngelegt': 'Als Artikel freigeben',
   'navisionAngelegt': 'In Navision anlegen und abhaken',
+};
+
+/// Was ein zurückgestellter Punkt im Kopf sagt.
+const Map<String, String> kCheckFehlt = {
+  'produktfotoHinterlegt': 'Produktfoto fehlt noch',
 };
 
 /// Ein Punkt der Projekt-Checkliste, wie er gerade steht.
@@ -41,10 +51,15 @@ class CheckStand {
     required this.erledigt,
     this.text,
     this.rezepturId,
+    this.zurueckgestellt = false,
   });
 
   final CheckPunkt punkt;
   final bool erledigt;
+
+  /// Offen, aber mit „Später" zurückgestellt (F37): „Als Nächstes" geht
+  /// an ihm vorbei.
+  final bool zurueckgestellt;
 
   /// Woran die App den Punkt erkennt oder was noch fehlt — null, wenn es
   /// nichts zu sagen gibt (und bei Punkten von Hand).
@@ -56,6 +71,9 @@ class CheckStand {
 
   /// Von Hand abzuhaken: Navision.
   bool get vonHand => kChecklisteVonHand.contains(punkt.schluessel);
+
+  /// Lässt sich mit „Später" zurückstellen: das Produktfoto.
+  bool get zurueckstellbar => kCheckZurueckstellbar.contains(punkt.schluessel);
 }
 
 /// Die Projekt-Checkliste, wie sie gerade steht.
@@ -74,14 +92,29 @@ class ProjektCheckStand {
   CheckStand? punkt(String schluessel) =>
       punkte.where((p) => p.punkt.schluessel == schluessel).firstOrNull;
 
-  /// Der erste offene Punkt in der Reihenfolge der Arbeit — null, wenn
-  /// alles erledigt ist.
-  CheckStand? get naechster => punkte.where((p) => !p.erledigt).firstOrNull;
+  /// Alles erledigt — auch nichts zurückgestellt.
+  bool get fertig => anzahl > 0 && erledigt == anzahl;
+
+  /// Der erste offene Punkt in der Reihenfolge der Arbeit, der nicht
+  /// zurückgestellt ist — null, wenn es keinen mehr gibt.
+  CheckStand? get naechster =>
+      punkte.where((p) => !p.erledigt && !p.zurueckgestellt).firstOrNull;
+
+  /// Offene Punkte, die zurückgestellt sind — für den Hinweis im Kopf.
+  List<CheckStand> get zurueckgestellt => [
+        for (final p in punkte)
+          if (!p.erledigt && p.zurueckgestellt) p,
+      ];
 }
 
 /// Was für [c] zu tun ist: „Sensorik beschreiben".
 String checkAufgabe(CheckStand c) =>
     kCheckAufgabe[c.punkt.schluessel] ?? c.punkt.label;
+
+/// Was ein zurückgestellter Punkt [c] im Kopf sagt: „Produktfoto fehlt
+/// noch".
+String checkFehlt(CheckStand c) =>
+    kCheckFehlt[c.punkt.schluessel] ?? '${c.punkt.label}: zurückgestellt';
 
 /// Was ein abgeschlossener Stand über seine Nährwerte sagt: ob er Mengen
 /// hat und welche Zutaten ohne Nährwerte sind.
@@ -152,6 +185,7 @@ ProjektCheckStand projektCheckStand({
       abgeschlossen.where((v) => v.id == p.freigabeVersionId).firstOrNull ??
           abgeschlossen.firstOrNull;
   final haken = checklisteAus(p.checkliste);
+  final spaeter = checklisteZurueckgestellt(p.checkliste);
   final rezepturId =
       bezug?.rezepturId ?? (eigene.length == 1 ? eigene.keys.single : null);
 
@@ -224,20 +258,36 @@ ProjektCheckStand projektCheckStand({
 
       case 'prozessErstellt':
         final prozess = Prozessparameter.aus(p.prozess);
-        final mitWerten = prozess.abschnitte
-            .any((a) => a.felder.any((f) => f.wert.trim().isNotEmpty));
-        if (mitWerten) {
-          final am = prozess.stand;
+        // Eine Kette mit Schritten — oder frühere Abschnitte mit Werten,
+        // solange sie noch nicht zur Kette wurden (F34). Der Arbeitsstand
+        // speichert sich selbst (F29); dazu, wie er zur zuletzt
+        // festgehaltenen Version steht.
+        if (prozess.beschrieben) {
           return erledigt(
-            'Version ${prozess.version}'
-            '${am == null ? '' : ' vom ${Format.datum(am)}'}',
+            prozessFassung(
+              prozess,
+              ProzessStand.listeAus(p.prozessHistorie),
+            ).text,
           );
         }
         return offen(
           prozess.leer
-              ? 'Im Reiter „Herstellung" eintragen und speichern'
+              ? 'Im Reiter „Herstellung" eintragen'
               : 'Noch keine Werte eingetragen',
         );
+
+      case 'produktfotoHinterlegt':
+        if (p.bildDateiId != null) return erledigt();
+        // Solange es keins gibt, lässt es sich zurückstellen (F37).
+        if (spaeter.contains(c.schluessel)) {
+          return CheckStand(
+            punkt: c,
+            erledigt: false,
+            text: 'Zurückgestellt, bis es ein Foto gibt',
+            zurueckgestellt: true,
+          );
+        }
+        return offen('Im Reiter „Produkt" hinterlegen');
 
       case 'sensorikErstellt':
         final s = Sensorik.aus(p.sensorik);

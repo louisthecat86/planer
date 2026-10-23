@@ -12,6 +12,7 @@ import '../../../core/utils/format.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
 import '../etikett/etikett_dialog.dart';
+import '../haccp/prozess_kette.dart';
 import '../haccp/prozess_modell.dart';
 import '../rezepturen/rezepturen_ansicht.dart';
 import 'datei_aktionen.dart';
@@ -501,8 +502,7 @@ class EintragKarte extends ConsumerWidget {
                     const SizedBox(height: 6),
                     Text(
                       'Prozessparameter Version ${parameter.version} · '
-                      '${parameter.abschnitte.length} '
-                      '${parameter.abschnitte.length == 1 ? 'Abschnitt' : 'Abschnitte'}',
+                      '${prozessKurztext(parameter)}',
                       style: theme.textTheme.bodySmall,
                     ),
                   ],

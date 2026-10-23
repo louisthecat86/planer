@@ -113,6 +113,7 @@ const List<CheckPunkt> kProjektCheckliste = [
   (schluessel: 'rezepturErstellt', label: 'Rezeptur erstellt'),
   (schluessel: 'naehrwerteErstellt', label: 'Nährwerte berechnet'),
   (schluessel: 'sensorikErstellt', label: 'Sensorik beschrieben'),
+  (schluessel: 'produktfotoHinterlegt', label: 'Produktfoto hinterlegt'),
   (schluessel: 'prozessErstellt', label: 'Prozess beschrieben'),
   (schluessel: 'spezifikationErstellt', label: 'Spezifikation erstellt'),
   (schluessel: 'etikettErstellt', label: 'Etikett erstellt'),
@@ -182,6 +183,55 @@ Set<String> checklisteAus(String? json) {
 String? checklisteZuJson(Set<String> erledigt) => erledigt.isEmpty
     ? null
     : jsonEncode({for (final s in erledigt.toList()..sort()) s: true});
+
+/// So steht „Später" im JSON der Projekt-Checkliste (F37): Der Punkt
+/// bleibt offen, „Als Nächstes" geht aber an ihm vorbei. Ein erledigter
+/// Punkt steht dort als `true`.
+const String kCheckSpaeter = 'spaeter';
+
+/// Die Punkte, die sich zurückstellen lassen — das Produktfoto, das es oft
+/// erst gibt, wenn das Produkt fertig ist.
+const Set<String> kCheckZurueckstellbar = {'produktfotoHinterlegt'};
+
+/// Die zurückgestellten Punkte einer Checkliste.
+Set<String> checklisteZurueckgestellt(String? json) {
+  if (json == null || json.trim().isEmpty) return <String>{};
+  try {
+    final daten = jsonDecode(json);
+    if (daten is! Map<String, dynamic>) return <String>{};
+    return {
+      for (final MapEntry(:key, :value) in daten.entries)
+        if (value == kCheckSpaeter) key,
+    };
+  } on FormatException {
+    return <String>{};
+  }
+}
+
+/// Setzt [schluessel] im JSON einer Checkliste auf [wert]: `true`
+/// (erledigt), [kCheckSpaeter] (zurückgestellt) oder null (offen). Alle
+/// anderen Punkte bleiben, wie sie sind — null, wenn danach keiner mehr
+/// drinsteht.
+String? checklisteMit(String? json, String schluessel, Object? wert) {
+  final daten = <String, Object?>{};
+  if (json != null && json.trim().isNotEmpty) {
+    try {
+      final d = jsonDecode(json);
+      if (d is Map<String, dynamic>) daten.addAll(d);
+    } on FormatException {
+      // Unlesbar: Es zählt, was jetzt gesetzt wird.
+    }
+  }
+  if (wert == null) {
+    daten.remove(schluessel);
+  } else {
+    daten[schluessel] = wert;
+  }
+  if (daten.isEmpty) return null;
+  return jsonEncode({
+    for (final k in daten.keys.toList()..sort()) k: daten[k],
+  });
+}
 
 /// Wie eine Pflichtangabe des Etiketts steht (F28): offen, abgehakt oder
 /// für dieses Produkt nicht zutreffend — etwa die Schutzatmosphäre bei

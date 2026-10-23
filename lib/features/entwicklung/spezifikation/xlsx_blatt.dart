@@ -8,8 +8,9 @@ import '../../../core/utils/fehler_text.dart';
 // Eine Excel-Mappe (.xlsx) ist ein ZIP mit XML. Hier wird sie gerade so
 // weit gelesen, wie Vorlage und Einrichten es brauchen: Texte, Zellen,
 // verbundene Bereiche, Kopf- und Fußzeilen und die Kontrollkästchen
-// (Formularsteuerelemente). Geändert wird nur, was sich ändern soll — die
-// übrigen Dateien der Mappe bleiben Byte für Byte, wie sie waren.
+// (Formularsteuerelemente); Bilder setzt xlsx_bild.dart dazu. Geändert
+// wird nur, was sich ändern soll — die übrigen Dateien der Mappe bleiben
+// Byte für Byte, wie sie waren.
 
 /// Zeile und Spalte, beide ab 0: „C5" ist (zeile: 4, spalte: 2).
 typedef Zellort = ({int zeile, int spalte});
@@ -208,6 +209,13 @@ class XlsxMappe {
     if (!_dateien.containsKey(pfad)) _reihenfolge.add(pfad);
     _texte[pfad] = text;
     _dateien[pfad] = Uint8List.fromList(utf8.encode(text));
+  }
+
+  /// Legt [bytes] unter [pfad] ab — etwa ein Bild.
+  void schreibeBytes(String pfad, Uint8List bytes) {
+    if (!_dateien.containsKey(pfad)) _reihenfolge.add(pfad);
+    _texte.remove(pfad);
+    _dateien[pfad] = bytes;
   }
 
   /// Die Mappe wieder als .xlsx.

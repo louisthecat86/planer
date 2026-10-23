@@ -9,6 +9,7 @@ import '../../../core/utils/pdf_text.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
 import '../haccp/haccp_modell.dart';
+import '../haccp/prozess_kette.dart';
 import '../haccp/prozess_modell.dart';
 import '../projekte/entwicklungsstrang.dart';
 import '../projekte/fliessdiagramm_liste.dart';
@@ -213,6 +214,31 @@ Future<String?> _fliessdiagrammText(AppDatabase db, String? fdId) async {
 
 const PdfColor _grau = PdfColors.grey700;
 const PdfColor _linie = PdfColors.grey400;
+
+/// Ein Schritt der Prozesskette: Nummer, Name und Prozessschritt, darunter
+/// seine Werte — eingerückt unter seiner Station.
+List<pw.Widget> _schritt(List<ProzessSchritt> kette, ProzessSchritt s) {
+  final nummer = kette.indexOf(s) + 1;
+  final prozess = s.prozessschritt.trim();
+  final titel = s.maschine.trim().isNotEmpty && prozess.isNotEmpty
+      ? '${s.bezeichnung(nummer)} — $prozess'
+      : s.bezeichnung(nummer);
+  final zeilen = schrittZeilen(s);
+  return [
+    pw.Padding(
+      padding: const pw.EdgeInsets.only(left: 10, top: 3, bottom: 1),
+      child: pw.Text(
+        pdfText('$nummer. $titel'),
+        style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+      ),
+    ),
+    if (zeilen.isNotEmpty)
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(left: 22),
+        child: _zeilen(zeilen),
+      ),
+  ];
+}
 
 pw.Widget _abschnitt(String titel) => pw.Padding(
       padding: const pw.EdgeInsets.only(top: 14, bottom: 6),
@@ -683,7 +709,37 @@ Future<Uint8List> baueProjektPdf(
 
         // ── Prozess ───────────────────────────────────────────────────
         if (!prozess.leer) ...[
-          _abschnitt('Prozessparameter — Version ${prozess.version}'),
+          _abschnitt('Prozess'),
+          _text(
+            [
+              prozessKurztext(prozess),
+              prozessFassung(
+                prozess,
+                ProzessStand.listeAus(p.prozessHistorie),
+              ).text,
+            ].join(' · '),
+            farbe: _grau,
+          ),
+          // Die Kette nach Stationen, je Schritt seine Werte.
+          for (final (k, station)
+              in stationenAus(prozess.schritte).indexed) ...[
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 6, bottom: 1),
+              child: pw.Text(
+                pdfText(
+                  'Station ${k + 1} · '
+                  '${abteilungsName(station.first.abteilung)}',
+                ),
+                style: pw.TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            for (final s in station) ..._schritt(prozess.schritte, s),
+          ],
+          // Abschnitte aus der Zeit vor der Kette — bis das Projekt im
+          // Reiter „Herstellung" geöffnet wird (F34).
           for (final a in prozess.abschnitte) ...[
             pw.Padding(
               padding: const pw.EdgeInsets.only(top: 4, bottom: 2),

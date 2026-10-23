@@ -14,15 +14,17 @@ import '../spezifikation/spezifikation_dialog.dart';
 import '../spezifikation/spezifikation_dienst.dart';
 import '../spezifikation/spezifikation_vorschau.dart';
 import '../spezifikation/spezifikation_werte.dart';
+import 'produkt_foto.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
+import 'verpackung_eingabe.dart';
 
 // Der Reiter „Produkt" eines Projekts (F26): links, wie das fertige
-// Produkt ist (Sensorik mit Maßen und Stückgewicht) und was die
-// Spezifikation darüber hinaus braucht (Angaben, Verpackung); rechts, was
-// mit einem Rezepturstand in der Spezifikation stünde — mit dem einen Weg
-// zum Erstellen. Zutaten, Allergene, Nährwerte und Hilfsstoffe kommen aus
-// dem Stand, die Artikelnummer aus den Stammdaten.
+// Produkt ist (Sensorik mit Produktfoto, Maßen und Stückgewicht — F38) und
+// was die Spezifikation darüber hinaus braucht (Angaben, Verpackung);
+// rechts, was mit einem Rezepturstand in der Spezifikation stünde — mit
+// dem einen Weg zum Erstellen. Zutaten, Allergene, Nährwerte und
+// Hilfsstoffe kommen aus dem Stand, die Artikelnummer aus den Stammdaten.
 
 /// Das Produkt eines Projekts.
 class ProjektProdukt extends ConsumerStatefulWidget {
@@ -117,7 +119,11 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
       _spezifikationBereich(context),
       if (versionId != null) ...[
         const SizedBox(height: 16),
-        SpezVorschau(projektId: widget.projekt.id, versionId: versionId),
+        SpezVorschau(
+          projektId: widget.projekt.id,
+          versionId: versionId,
+          produktfoto: widget.projekt.bildDateiId != null,
+        ),
       ],
     ];
     return LayoutBuilder(
@@ -197,6 +203,40 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
           ),
         );
 
+    final beschreibung = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        text(
+          'aussehen',
+          s.aussehen,
+          'Aussehen',
+          (t) => _sensorik.kopie(aussehen: t),
+        ),
+        abstand,
+        text(
+          'geruch',
+          s.geruch,
+          'Geruch',
+          (t) => _sensorik.kopie(geruch: t),
+        ),
+        abstand,
+        text(
+          'geschmack',
+          s.geschmack,
+          'Geschmack',
+          (t) => _sensorik.kopie(geschmack: t),
+        ),
+        abstand,
+        text(
+          'konsistenz',
+          s.konsistenz,
+          'Konsistenz',
+          (t) => _sensorik.kopie(konsistenz: t),
+        ),
+      ],
+    );
+    final foto = ProduktFoto(projekt: widget.projekt);
+
     return Bereich(
       titel: 'Sensorik',
       icon: Icons.restaurant_menu,
@@ -205,32 +245,22 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          text(
-            'aussehen',
-            s.aussehen,
-            'Aussehen',
-            (t) => _sensorik.kopie(aussehen: t),
-          ),
-          abstand,
-          text(
-            'geruch',
-            s.geruch,
-            'Geruch',
-            (t) => _sensorik.kopie(geruch: t),
-          ),
-          abstand,
-          text(
-            'geschmack',
-            s.geschmack,
-            'Geschmack',
-            (t) => _sensorik.kopie(geschmack: t),
-          ),
-          abstand,
-          text(
-            'konsistenz',
-            s.konsistenz,
-            'Konsistenz',
-            (t) => _sensorik.kopie(konsistenz: t),
+          // Das Foto neben der Beschreibung — so steht es auch in der
+          // Spezifikation; schmal darunter.
+          LayoutBuilder(
+            builder: (context, c) => c.maxWidth >= 520
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: beschreibung),
+                      const SizedBox(width: 12),
+                      SizedBox(width: 220, child: foto),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [beschreibung, abstand, foto],
+                  ),
           ),
           abstand,
           // Maße und Stückgewicht — einmal für Sensorik und Spezifikation.
@@ -359,194 +389,15 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
     );
   }
 
-  Widget _verpackungBereich(BuildContext context) {
-    final theme = Theme.of(context);
-    final v = _angaben.verpackung;
-    const abstand = SizedBox(height: 10);
-
-    Widget mehrfach(
-      List<SpezWahl> liste,
-      Set<String> gewaehlt,
-      ValueChanged<Set<String>> neu,
-    ) =>
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          children: [
-            for (final w in liste)
-              FilterChip(
-                label: Text(w.label),
-                selected: gewaehlt.contains(w.schluessel),
-                onSelected: (an) => neu(
-                  an
-                      ? {...gewaehlt, w.schluessel}
-                      : (gewaehlt.toSet()..remove(w.schluessel)),
-                ),
-              ),
-          ],
-        );
-
-    Widget einfach(
-      String titel,
-      List<SpezWahl> liste,
-      String gewaehlt,
-      ValueChanged<String> neu,
-    ) =>
-        Wrap(
-          spacing: 6,
-          runSpacing: 6,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            SizedBox(
-              width: 92,
-              child: Text(titel, style: theme.textTheme.bodySmall),
-            ),
-            for (final w in liste)
-              ChoiceChip(
-                label: Text(w.label),
-                selected: gewaehlt == w.schluessel,
-                // Noch einmal tippen nimmt die Wahl zurück.
-                onSelected: (an) => neu(an ? w.schluessel : ''),
-              ),
-          ],
-        );
-
-    Widget feld(
-      String schluessel,
-      String wert,
-      String label,
-      ValueChanged<String> neu, {
-      double breite = 150,
-    }) =>
-        SizedBox(
-          width: breite,
-          child: TextFeld(
-            key: ValueKey('spez-$schluessel'),
-            wert: wert,
-            label: label,
-            onFertig: neu,
-          ),
-        );
-
-    return Bereich(
-      titel: 'Verpackung',
-      icon: Icons.inventory_2_outlined,
-      innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Umverpackung', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 6),
-          mehrfach(
-            kUmverpackungen,
-            v.um,
-            (neu) => _verpackung(_angaben.verpackung.kopie(um: neu)),
-          ),
-          abstand,
-          einfach(
-            'Karton',
-            kKartonAufmachungen,
-            v.karton,
-            (neu) => _verpackung(_angaben.verpackung.kopie(karton: neu)),
-          ),
-          const SizedBox(height: 6),
-          einfach(
-            'Befüllung',
-            kUmFuellungen,
-            v.umFuellung,
-            (neu) => _verpackung(_angaben.verpackung.kopie(umFuellung: neu)),
-          ),
-          abstand,
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              feld(
-                'um-tara',
-                v.umTara,
-                'Taragewicht',
-                (t) => _verpackung(_angaben.verpackung.kopie(umTara: t)),
-              ),
-              feld(
-                'um-netto',
-                v.umNetto,
-                'Nettogewicht',
-                (t) => _verpackung(_angaben.verpackung.kopie(umNetto: t)),
-              ),
-              feld(
-                'um-material',
-                v.umMaterial,
-                'Material',
-                (t) => _verpackung(_angaben.verpackung.kopie(umMaterial: t)),
-              ),
-            ],
-          ),
-          const Divider(height: 28),
-          Text('Einzelverpackung', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 6),
-          mehrfach(
-            kEinzelverpackungen,
-            v.einzel,
-            (neu) => _verpackung(_angaben.verpackung.kopie(einzel: neu)),
-          ),
-          abstand,
-          einfach(
-            'Atmosphäre',
-            kAtmosphaeren,
-            v.atmosphaere,
-            (neu) => _verpackung(_angaben.verpackung.kopie(atmosphaere: neu)),
-          ),
-          const SizedBox(height: 6),
-          einfach(
-            'Befüllung',
-            kEinzelFuellungen,
-            v.einzelFuellung,
-            (neu) =>
-                _verpackung(_angaben.verpackung.kopie(einzelFuellung: neu)),
-          ),
-          abstand,
-          Wrap(
-            spacing: 12,
-            runSpacing: 10,
-            children: [
-              feld(
-                'anzahl',
-                v.anzahl,
-                'Anzahl je Umverpackung',
-                (t) => _verpackung(_angaben.verpackung.kopie(anzahl: t)),
-                breite: 200,
-              ),
-              feld(
-                'stueckzahl',
-                v.stueckzahl,
-                'Stückzahl',
-                (t) => _verpackung(_angaben.verpackung.kopie(stueckzahl: t)),
-              ),
-              feld(
-                'einzel-tara',
-                v.einzelTara,
-                'Taragewicht',
-                (t) => _verpackung(_angaben.verpackung.kopie(einzelTara: t)),
-              ),
-              feld(
-                'einzel-netto',
-                v.einzelNetto,
-                'Nettogewicht',
-                (t) => _verpackung(_angaben.verpackung.kopie(einzelNetto: t)),
-              ),
-              feld(
-                'einzel-material',
-                v.einzelMaterial,
-                'Material',
-                (t) =>
-                    _verpackung(_angaben.verpackung.kopie(einzelMaterial: t)),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _verpackungBereich(BuildContext context) => Bereich(
+        titel: 'Verpackung',
+        icon: Icons.inventory_2_outlined,
+        innenAbstand: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+        child: VerpackungEingabe(
+          wert: _angaben.verpackung,
+          onAenderung: _verpackung,
+        ),
+      );
 
   /// Der Stand für Vorschau und Spezifikation und der eine Weg zum
   /// Erstellen: das Fenster mit Sprache, Vorlage, Kürzel und Datum.

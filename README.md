@@ -61,23 +61,47 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 
 - **Projekte** in fünf Reitern: **Verlauf** (mit Kommentaren),
   **Übersicht** (Stammdaten mit Artikelnummer und Fließdiagramm, Ziele für
-  Fett, Eiweiß und aw, Notizen, Freigabe, Bild, Rezepturen, Checkliste),
-  **Produkt** (Sensorik mit Maßen, Stückgewicht und Toleranz, Angaben und
-  Verpackung für die Spezifikation, daneben was mit einem Stand in der
-  Spezifikation stünde), **Herstellung** (Prozess mit Versionen und die
-  HACCP-Gefahrenanalyse — breit nebeneinander, schmal zum Umschalten) und
-  **Dateien**. Jede Angabe gibt es nur einmal.
+  Fett, Eiweiß und aw, Notizen, Freigabe, Produktfoto klein, Rezepturen,
+  Checkliste), **Produkt** (Sensorik mit Produktfoto, Maßen, Stückgewicht
+  und Toleranz, Angaben und Verpackung für die Spezifikation, daneben was
+  mit einem Stand in der Spezifikation stünde), **Herstellung** (Prozess
+  und die HACCP-Gefahrenanalyse — breit nebeneinander, schmal zum
+  Umschalten) und
+  **Dateien**. Jede Angabe gibt es nur einmal. Der **Prozess** ist eine
+  Kette wie im Artikel: Stationen nach Abteilung an einer nummerierten
+  Leiste, darin die Anlagen aus dem Katalog der Planung („+ Anlage", auch
+  aus einer anderen Abteilung, oder ein Schritt ohne Anlage wie
+  „Abkühlen"); Anlagen und ganze Stationen lassen sich ziehen. Antippen
+  öffnet einen Schritt mit seinen Werten: Plattenschema an Bratstraße und
+  Kombiofen, sonst die Maschineneinstellungen, dazu der Steckbrief der
+  Anlage (mit den Grenzen aus den Einstellungen) und eigene Werte — ohne
+  Personen und Leistungsdaten, die bekommt der Artikel. Die Kette lässt
+  sich aus einem Artikel oder einem anderen Projekt übernehmen; frühere
+  Abschnitte werden beim ersten Öffnen zur Kette. Der Prozess speichert
+  sich selbst; „Version festhalten" legt den Stand mit Nummer und Notiz ab
+  und trägt ihn in den Verlauf ein, „seitdem geändert" zeigt, wenn der
+  Arbeitsstand davon abweicht (zurück zur Version und Vergleichen unter
+  „Mehr").
   Über jedem Reiter steht der **Projektkopf**: die Phase (Entwicklung ›
   Validierung › Produktion — antippen wechselt nach einer Rückfrage, der
   Wechsel steht als Meilenstein im Verlauf), der Fortschritt der
-  Checkliste, „Als Nächstes" mit dem Weg dorthin und die offenen Einträge
-  im Verlauf. Spezifikation, Etikett und Projektbericht stehen oben unter
-  „Erstellen", Umbenennen, Archivieren (und Wiederaufnehmen) und Löschen
-  im Menü daneben. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
+  Checkliste, „Als Nächstes" mit dem Weg dorthin, dezent was
+  zurückgestellt ist und noch fehlt, wie viele Angaben fehlen, und die
+  offenen Einträge im Verlauf. „3 Angaben fehlen — ergänzen…" startet einen
+  **Assistenten**, der nur fragt, was fehlt (Artikelnummer, Sensorik,
+  Produktfoto, Lagerung, Haltbarkeit, Verpackung) — eine Angabe nach der
+  anderen, mit „Weiter" und „Später"; das Fenster der Spezifikation bietet
+  ihn an, wenn dort etwas leer bliebe.
+  Spezifikation, Etikett und Projektbericht stehen oben unter „Erstellen",
+  Umbenennen, Archivieren (und Wiederaufnehmen) und Löschen im Menü
+  daneben. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
   (ein abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit
-  Werten), Spezifikation, Prozess, Sensorik (Aussehen, Geruch, Geschmack,
-  Konsistenz) und Artikel (Freigabe) sieht die App dem Projekt an; „Etikett
-  erstellt" klappt die zwölf Pflichtangaben nach LMIV auf und ist erledigt,
+  Werten), Sensorik (Aussehen, Geruch, Geschmack, Konsistenz),
+  Produktfoto, Prozess, Spezifikation und Artikel (Freigabe) sieht die App
+  dem Projekt an. Das Produktfoto lässt sich mit „Später" zurückstellen,
+  solange es keins gibt: Es bleibt offen, „Als Nächstes" geht aber weiter,
+  und der Kopf zeigt „Produktfoto fehlt noch". „Etikett erstellt" klappt
+  die zwölf Pflichtangaben nach LMIV auf und ist erledigt,
   sobald jede abgehakt ist oder „trifft nicht zu" (ein früherer Haken von
   Hand gilt weiter) — von Hand bleibt nur Navision. Liste, Übersicht,
   Zahlen und Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
@@ -141,9 +165,13 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   sie beim Erstellen. Was nicht aus Rezeptur oder Sensorik kommt
   (Artikelbezeichnung, Lagerung, Haltbarkeit, Produkthinweise, Spuren,
   Verpackung), steht im Reiter „Produkt", die Artikelnummer in den
-  Stammdaten; Kürzel und Datum fragt das Fenster. Im Reiter „Produkt"
-  zeigt eine Vorschau, was mit dem gewählten Stand hineinkommt, und was
-  noch fehlt — mit dem Ort, an dem man es einträgt. Dazu ein
+  Stammdaten; Kürzel und Datum fragt das Fenster. Das **Produktfoto**
+  kommt ins freie Feld neben der Sensorik (`{{produktbild}}`, beim
+  Einrichten erkannt): gedreht, wie die Kamera es vermerkt, auf 1200 Pixel
+  verkleinert, ohne EXIF-Daten; fehlt es, fragt das Fenster danach. Im
+  Reiter „Produkt" zeigt eine Vorschau, was mit dem gewählten Stand
+  hineinkommt, und was noch fehlt — mit dem Ort, an dem man es einträgt.
+  Dazu ein
   **Projektbericht** als PDF mit Checklisten und dem Entwicklungsweg
   (Stationen mit Grund, Änderungen, Kennzahlen und Rückmeldungen, Phasen,
   Freigabe).

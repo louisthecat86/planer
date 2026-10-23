@@ -30,6 +30,9 @@ dependencies:
   archive: ^3.6.1
   printing: ^5.14.3
   pdf: ^3.12.0
+  # Das Produktfoto für die Spezifikation drehen, verkleinern und als JPEG
+  # ablegen (spezifikation/xlsx_bild.dart) — kam schon mit pdf mit.
+  image: ^4.3.0
   shared_preferences: ^2.5.5
   # Kreis- und Säulendiagramme der Statistik (features/statistik).
   fl_chart: ^1.1.1

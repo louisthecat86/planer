@@ -4,13 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_modell.dart';
-import 'package:produktion_planer/features/entwicklung/haccp/prozess_vorlage.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_checkliste.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 
-/// Tests für die Projekt-Checkliste, die sich selbst rechnet (F25), und
-/// den Eintragsstatus mit nur noch offen und erledigt (F24). Rein, ohne
+/// Tests für die Projekt-Checkliste, die sich selbst rechnet (F25), mit
+/// dem Produktfoto, das sich zurückstellen lässt (F37), und den
+/// Eintragsstatus mit nur noch offen und erledigt (F24). Rein, ohne
 /// Datenbank. Alles erfunden.
 void main() {
   final zeit = DateTime(2026, 10, 1);
@@ -24,7 +24,10 @@ void main() {
     String? freigabeVersionId,
     Sensorik sensorik = const Sensorik(),
     String? prozess,
+    String? prozessHistorie,
     Map<String, LmivStand> etikett = const {},
+    String? bildDateiId,
+    Set<String> spaeter = const {},
   }) =>
       EntwicklungsProjekt(
         id: id,
@@ -36,10 +39,15 @@ void main() {
         artikelnummer: artikelnummer,
         freigegebenAm: freigegebenAm,
         freigabeVersionId: freigabeVersionId,
-        checkliste: checklisteZuJson(haken),
+        checkliste: spaeter.fold(
+          checklisteZuJson(haken),
+          (json, k) => checklisteMit(json, k, kCheckSpaeter),
+        ),
+        bildDateiId: bildDateiId,
         etikettCheckliste: lmivZuJson(etikett),
         sensorik: sensorik.alsJson(),
         prozess: prozess,
+        prozessHistorie: prozessHistorie,
         createdAt: zeit,
         updatedAt: zeit,
       );
@@ -129,6 +137,50 @@ void main() {
     });
   });
 
+  group('Checkliste im JSON: erledigt und „Später" (F37)', () {
+    test('ein Punkt ändert sich, die anderen bleiben', () {
+      expect(
+        checklisteMit(null, 'rezepturErstellt', true),
+        '{"rezepturErstellt":true}',
+      );
+      final beide = checklisteMit(
+        '{"rezepturErstellt":true}',
+        'produktfotoHinterlegt',
+        kCheckSpaeter,
+      );
+      expect(
+        beide,
+        '{"produktfotoHinterlegt":"spaeter","rezepturErstellt":true}',
+      );
+      // Wer nur Haken liest, sieht das „Später" nicht.
+      expect(checklisteAus(beide), {'rezepturErstellt'});
+      expect(checklisteZurueckgestellt(beide), {'produktfotoHinterlegt'});
+      // Einen anderen Punkt setzen oder lösen lässt „Später" stehen.
+      final weiter = checklisteMit(beide, 'navisionAngelegt', true);
+      expect(checklisteZurueckgestellt(weiter), {'produktfotoHinterlegt'});
+      expect(checklisteAus(weiter), {'rezepturErstellt', 'navisionAngelegt'});
+      final ohne = checklisteMit(weiter, 'rezepturErstellt', null);
+      expect(checklisteAus(ohne), {'navisionAngelegt'});
+      expect(checklisteZurueckgestellt(ohne), {'produktfotoHinterlegt'});
+      // Nichts mehr drin: null.
+      expect(
+        checklisteMit(
+          checklisteMit(ohne, 'navisionAngelegt', null),
+          'produktfotoHinterlegt',
+          null,
+        ),
+        isNull,
+      );
+      // Unlesbar: Es zählt, was jetzt gesetzt wird.
+      expect(
+        checklisteMit('{kaputt', 'navisionAngelegt', true),
+        '{"navisionAngelegt":true}',
+      );
+      expect(checklisteZurueckgestellt('{kaputt'), isEmpty);
+      expect(checklisteZurueckgestellt(null), isEmpty);
+    });
+  });
+
   group('Etiketten-Checkliste (F28)', () {
     test('abgehakt, trifft nicht zu, offen — hin und zurück', () {
       final staende = {
@@ -179,7 +231,7 @@ void main() {
         rezepturen: const [],
         versionen: const [],
       );
-      expect(s.text, '0 von 8');
+      expect(s.text, '0 von 9');
       expect([for (final p in s.punkte) p.punkt.schluessel], [
         for (final c in kProjektCheckliste) c.schluessel,
       ]);
@@ -195,9 +247,13 @@ void main() {
       );
       expect(
         text(s, 'prozessErstellt'),
-        'Im Reiter „Herstellung" eintragen und speichern',
+        'Im Reiter „Herstellung" eintragen',
       );
       expect(text(s, 'sensorikErstellt'), 'Im Reiter „Produkt" beschreiben');
+      expect(
+        text(s, 'produktfotoHinterlegt'),
+        'Im Reiter „Produkt" hinterlegen',
+      );
       // Von Hand nur noch Navision; das Etikett an seinen Pflichtangaben.
       expect(
         [
@@ -220,6 +276,7 @@ void main() {
         'Rezeptur erstellen',
         'Nährwerte vervollständigen',
         'Sensorik beschreiben',
+        'Produktfoto hinterlegen',
         'Prozess beschreiben',
         'Spezifikation erstellen',
         'Pflichtangaben des Etiketts prüfen',
@@ -244,6 +301,7 @@ void main() {
           artikelId: 'a1',
           freigegebenAm: zeit,
           haken: {'navisionAngelegt'},
+          bildDateiId: 'b1',
           sensorik: const Sensorik(
             aussehen: 'a',
             geruch: 'g',
@@ -335,7 +393,7 @@ void main() {
         rezepturen: const [],
         versionen: const [],
       );
-      expect(s.text, '2 von 8');
+      expect(s.text, '2 von 9');
       // Vor F28 von Hand abgehakt: Das gilt weiter.
       expect(erledigt(s, 'etikettErstellt'), isTrue);
       expect(text(s, 'etikettErstellt'), 'Früher von Hand abgehakt');
@@ -344,9 +402,10 @@ void main() {
       expect(erledigt(s, 'sensorikErstellt'), isFalse);
     });
 
-    test('alles erfüllt: acht von acht, mit dem, woran es die App sieht', () {
+    test('alles erfüllt: neun von neun, mit dem, woran es die App sieht', () {
       final s = projektCheckStand(
         projekt: projekt(
+          bildDateiId: 'b1',
           artikelId: 'a1',
           artikelnummer: '4711',
           freigegebenAm: DateTime(2026, 10, 21),
@@ -387,8 +446,11 @@ void main() {
           ),
         ],
       );
-      expect(s.text, '8 von 8');
+      expect(s.text, '9 von 9');
       expect(s.anteil, 1);
+      expect(s.fertig, isTrue);
+      expect(s.naechster, isNull);
+      expect(text(s, 'produktfotoHinterlegt'), isNull);
       expect(
         text(s, 'artikelAngelegt'),
         'Artikel 4711 · freigegeben am 21.10.2026',
@@ -441,7 +503,7 @@ void main() {
         'Stand 1: ohne Nährwerte: Gewürz Testmischung',
       );
       expect(s.punkt('naehrwerteErstellt')!.rezepturId, 'r2');
-      expect(s.text, '1 von 8');
+      expect(s.text, '1 von 9');
     });
 
     test('Nährwerte: ohne Mengen, unlesbar, viele Lücken', () {
@@ -472,13 +534,92 @@ void main() {
       var s = projektCheckStand(
         projekt: projekt(
           sensorik: const Sensorik(aussehen: 'hell', geschmack: 'mild'),
-          prozess: kNeutraleProzessVorlage.alsJson(),
+          // Abschnitte von früher, nie ausgefüllt.
+          prozess: const Prozessparameter(
+            abschnitte: [
+              ProzessAbschnitt(
+                id: 'garen',
+                titel: 'Garen',
+                felder: [ProzessFeld(id: 'kern', label: 'Kerntemperatur')],
+              ),
+            ],
+          ).alsJson(),
         ),
         rezepturen: const [],
         versionen: const [],
       );
       expect(text(s, 'sensorikErstellt'), 'Fehlt: Geruch und Konsistenz');
       expect(text(s, 'prozessErstellt'), 'Noch keine Werte eingetragen');
+
+      // Der Prozess speichert sich selbst (F29): Mit Werten ist er
+      // beschrieben — dazu, wie er zur festgehaltenen Version steht.
+      const mitWert = Prozessparameter(
+        abschnitte: [
+          ProzessAbschnitt(
+            id: 'garen',
+            titel: 'Garen',
+            felder: [ProzessFeld(id: 'kern', label: 'Kern', wert: '72')],
+          ),
+        ],
+      );
+      String? prozessText(Prozessparameter p, [List<ProzessStand>? h]) => text(
+            projektCheckStand(
+              projekt: projekt(
+                prozess: p.alsJson(),
+                prozessHistorie: ProzessStand.listeZuJson(h ?? const []),
+              ),
+              rezepturen: const [],
+              versionen: const [],
+            ),
+            'prozessErstellt',
+          );
+      expect(prozessText(mitWert), 'Noch keine Version festgehalten');
+      final festgehalten = [
+        ProzessStand(
+          version: '1.0',
+          datum: DateTime(2026, 10, 2),
+          parameter: mitWert,
+        ),
+      ];
+      expect(
+        prozessText(
+          mitWert.kopie(version: '1.0', stand: DateTime(2026, 10, 2)),
+          festgehalten,
+        ),
+        'Version 1.0 vom 02.10.2026',
+      );
+      expect(
+        prozessText(
+          Prozessparameter(
+            version: '1.0',
+            stand: DateTime(2026, 10, 2),
+            abschnitte: [
+              mitWert.abschnitte.single.kopie(
+                felder: const [
+                  ProzessFeld(id: 'kern', label: 'Kern', wert: '75'),
+                ],
+              ),
+            ],
+          ),
+          festgehalten,
+        ),
+        'Version 1.0 vom 02.10.2026, seitdem geändert',
+      );
+      // Die Kette (F32) ist beschrieben, sobald sie einen Schritt hat.
+      expect(
+        prozessText(
+          const Prozessparameter(
+            schritte: [
+              ProzessSchritt(
+                id: 's1',
+                abteilung: 'bratstrasse',
+                maschine: 'Testbratstraße',
+              ),
+            ],
+          ),
+        ),
+        'Noch keine Version festgehalten',
+      );
 
       // Maße allein beschreiben das Produkt noch nicht.
       s = projektCheckStand(
@@ -487,6 +628,104 @@ void main() {
         versionen: const [],
       );
       expect(text(s, 'sensorikErstellt'), 'Im Reiter „Produkt" beschreiben');
+    });
+
+    test('Produktfoto: hinterlegt, offen oder zurückgestellt (F37)', () {
+      // Alles bis zum Foto erledigt: Es ist als Nächstes dran.
+      EntwicklungsProjekt bisZumFoto({
+        String? bild,
+        Set<String> spaeter = const {},
+      }) =>
+          projekt(
+            bildDateiId: bild,
+            spaeter: spaeter,
+            sensorik: const Sensorik(
+              aussehen: 'a',
+              geruch: 'g',
+              geschmack: 's',
+              konsistenz: 'k',
+            ),
+          );
+      ProjektCheckStand mit(EntwicklungsProjekt p) => projektCheckStand(
+            projekt: p,
+            rezepturen: [rezeptur('r1')],
+            versionen: [stand('v1')],
+          );
+
+      final offen = mit(bisZumFoto());
+      expect(offen.naechster!.punkt.schluessel, 'produktfotoHinterlegt');
+      expect(checkAufgabe(offen.naechster!), 'Produktfoto hinterlegen');
+      expect(offen.naechster!.zurueckstellbar, isTrue);
+      expect(offen.zurueckgestellt, isEmpty);
+
+      // „Später": bleibt offen und zählt nicht, „Als Nächstes" geht weiter.
+      final spaeter =
+          mit(bisZumFoto(spaeter: {'produktfotoHinterlegt'}));
+      final foto = spaeter.punkt('produktfotoHinterlegt')!;
+      expect(foto.erledigt, isFalse);
+      expect(foto.zurueckgestellt, isTrue);
+      expect(foto.text, 'Zurückgestellt, bis es ein Foto gibt');
+      expect(spaeter.text, offen.text);
+      expect(spaeter.naechster!.punkt.schluessel, 'prozessErstellt');
+      expect([for (final z in spaeter.zurueckgestellt) checkFehlt(z)], [
+        'Produktfoto fehlt noch',
+      ]);
+      expect(spaeter.fertig, isFalse);
+
+      // Mit Foto erledigt — ein altes „Später" zählt dann nicht mehr.
+      final mitFoto = mit(
+        bisZumFoto(bild: 'b1', spaeter: {'produktfotoHinterlegt'}),
+      );
+      expect(mitFoto.punkt('produktfotoHinterlegt')!.erledigt, isTrue);
+      expect(mitFoto.punkt('produktfotoHinterlegt')!.zurueckgestellt, isFalse);
+      expect(mitFoto.zurueckgestellt, isEmpty);
+      expect(mitFoto.naechster!.punkt.schluessel, 'prozessErstellt');
+
+      // Nur noch das Foto offen und zurückgestellt: nichts mehr als
+      // Nächstes, aber auch nicht fertig.
+      final rest = projektCheckStand(
+        projekt: projekt(
+          spaeter: {'produktfotoHinterlegt'},
+          artikelId: 'a1',
+          haken: {
+            'spezifikationErstellt',
+            'etikettErstellt',
+            'navisionAngelegt',
+          },
+          sensorik: const Sensorik(
+            aussehen: 'a',
+            geruch: 'g',
+            geschmack: 's',
+            konsistenz: 'k',
+          ),
+          prozess: const Prozessparameter(
+            abschnitte: [
+              ProzessAbschnitt(
+                id: 'garen',
+                titel: 'Garen',
+                felder: [ProzessFeld(id: 'kern', label: 'Kern', wert: '72')],
+              ),
+            ],
+          ).alsJson(),
+        ),
+        rezepturen: [rezeptur('r1')],
+        versionen: [stand('v1')],
+      );
+      expect(rest.text, '8 von 9');
+      expect(rest.naechster, isNull);
+      expect(rest.fertig, isFalse);
+      expect(
+        rest.zurueckgestellt.single.punkt.schluessel,
+        'produktfotoHinterlegt',
+      );
+      // Nur das Foto lässt sich zurückstellen.
+      expect(
+        [
+          for (final p in rest.punkte)
+            if (p.zurueckstellbar) p.punkt.schluessel,
+        ],
+        ['produktfotoHinterlegt'],
+      );
     });
 
     test('Artikel: Freigabe oder früher von Hand abgehakt', () {
@@ -516,7 +755,7 @@ void main() {
         versionen: [stand('v1'), stand('v2', rezepturId: 'r2')],
       );
       expect(text(s, 'rezepturErstellt'), 'Noch keine Rezeptur');
-      expect(s.text, '0 von 8');
+      expect(s.text, '0 von 9');
     });
 
     test('alle Projekte auf einmal: wie einzeln gezählt', () {
@@ -553,9 +792,9 @@ void main() {
         );
       }
       expect([for (final p in projekte) alle[p.id]!.text], [
-        '2 von 8',
-        '3 von 8',
-        '0 von 8',
+        '2 von 9',
+        '3 von 9',
+        '0 von 9',
       ]);
     });
   });

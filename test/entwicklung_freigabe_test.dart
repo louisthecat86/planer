@@ -15,6 +15,7 @@ import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.d
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
 
 import 'helpers/test_db.dart';
 
@@ -164,6 +165,59 @@ void main() {
       expect(w.aw, 0.97);
       final staende = await dienst.staende(a.projekt.id);
       expect(staende.single.version.id, a.versionId);
+    });
+
+    test('was im Projekt steht, fragt die Freigabe nicht noch einmal',
+        () async {
+      final a = await anlegen();
+      await projekte.projektAendern(
+        a.projekt.id,
+        EntwicklungProjekteCompanion(
+          spezifikation: Value(
+            const SpezAngaben(
+              bezeichnung: 'Schnitzel Wiener Art, paniert',
+              haltbarkeit: '21 Tage',
+            ).alsJson(),
+          ),
+        ),
+      );
+      final p = (await projekte.projekt(a.projekt.id))!;
+      final w = await dienst.vorschlag(p, a.versionId);
+      expect(w.bezeichnung, 'Schnitzel Wiener Art, paniert');
+      expect(w.haltbarkeitTage, 21);
+    });
+
+    test('die Freigabe lässt ein zurückgestelltes Foto zurückgestellt',
+        () async {
+      final a = await anlegen();
+      await projekte.checklisteZurueckstellen(
+        a.projekt.id,
+        schluessel: 'produktfotoHinterlegt',
+        zurueck: true,
+      );
+      final p = (await projekte.projekt(a.projekt.id))!;
+      final w = (await dienst.vorschlag(p, a.versionId))
+          .kopie(produktgruppe: 'bratstrasse_paniert');
+      await dienst.freigeben(projekt: p, versionId: a.versionId, werte: w);
+      final nach = (await projekte.projekt(a.projekt.id))!;
+      expect(checklisteAus(nach.checkliste), {'artikelAngelegt'});
+      expect(
+        checklisteZurueckgestellt(nach.checkliste),
+        {'produktfotoHinterlegt'},
+      );
+    });
+
+    test('Haltbarkeit in Tagen aus den Angaben', () {
+      expect(haltbarkeitInTagen('21'), 21);
+      expect(haltbarkeitInTagen(' 21 Tage '), 21);
+      expect(haltbarkeitInTagen('1 Tag'), 1);
+      expect(haltbarkeitInTagen('3 Wochen'), 21);
+      expect(haltbarkeitInTagen('12 Monate'), 365);
+      expect(haltbarkeitInTagen('6 Mon.'), 183);
+      // Was sich nicht in Tage fassen lässt, bleibt offen.
+      expect(haltbarkeitInTagen('12 Monate bei -18 °C'), isNull);
+      expect(haltbarkeitInTagen(''), isNull);
+      expect(haltbarkeitInTagen('ca. 3 Wochen'), isNull);
     });
 
     test('ein neuer Artikel entsteht, das Projekt geht in Produktion',

@@ -12,15 +12,21 @@ import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../freigabe/freigabe.dart' show FreigabeStand;
+import '../projekte/angaben_assistent.dart' show angabenErgaenzen;
+import '../projekte/angaben_luecken.dart';
 import '../projekte/datei_aktionen.dart' show groesseText;
+import '../projekte/produkt_foto.dart' show FotoAnsicht, produktfotoWaehlen;
+import '../projekte/projekt_repository.dart' show projektProvider;
 import 'beispielvorlage.dart';
 import 'spezifikation_dienst.dart';
 import 'spezifikation_werte.dart';
 
 // Das Fenster „Spezifikation erstellen": Rezepturstand und Sprache wählen,
-// die eigene Excel-Vorlage hinterlegen (die App richtet ein Formblatt
-// selbst ein), für Englisch auf Wunsch mit DeepL übersetzen — dann wird
-// die gefüllte Mappe gespeichert.
+// das Produktfoto (es kommt ins Feld neben der Sensorik — fehlt es, lässt
+// es sich hier gleich wählen), was sonst noch leer bliebe (der Assistent
+// fragt es ab), die eigene Excel-Vorlage hinterlegen (die App richtet ein
+// Formblatt selbst ein), für Englisch auf Wunsch mit DeepL übersetzen —
+// dann wird die gefüllte Mappe gespeichert.
 
 /// Öffnet das Fenster für [projekt] — auf Wunsch mit dem Stand
 /// [versionId] vorgewählt, sonst mit dem vorgeschlagenen.
@@ -172,7 +178,8 @@ Future<SpezMeldung?> spezifikationErstellenUndSpeichern(
     final hinweise = [
       'Gespeicherte Datei: $ziel',
       '${e.ersetzt} Felder gefüllt'
-          '${e.kaestchen > 0 ? ', ${e.kaestchen} Kästchen angekreuzt' : ''}.',
+          '${e.kaestchen > 0 ? ', ${e.kaestchen} Kästchen angekreuzt' : ''}'
+          '${e.produktfoto ? ', Produktfoto eingesetzt' : ''}.',
       if (e.uebersetzt)
         'Die Texte sind mit DeepL übersetzt — bitte prüfen, besonders die '
             'Zutatenliste mit den hervorgehobenen Allergenen.',
@@ -425,6 +432,11 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     if (gewaehlt != null && mounted) setState(() => _datum = gewaehlt);
   }
 
+  /// Das Projekt, wie es gerade ist — mit einem eben gewählten Foto.
+  EntwicklungsProjekt get _projekt =>
+      ref.read(projektProvider(widget.projekt.id)).valueOrNull ??
+      widget.projekt;
+
   Future<void> _erstellen() async {
     final staende =
         ref.read(spezStaendeProvider(widget.projekt.id)).valueOrNull ??
@@ -440,7 +452,7 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     });
     final m = await spezifikationErstellenUndSpeichern(
       ref,
-      projekt: widget.projekt,
+      projekt: _projekt,
       versionId: versionId,
       sprache: _sprache,
       uebersetzen: _uebersetzen && hinterlegt,
@@ -463,6 +475,15 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
     final freigegeben = widget.projekt.freigabeVersionId;
+    final projekt =
+        ref.watch(projektProvider(widget.projekt.id)).valueOrNull ??
+            widget.projekt;
+    // Was in der Spezifikation leer bliebe — das Foto hat eine eigene
+    // Zeile.
+    final offen = [
+      for (final s in fehlendeAngaben(projekt))
+        if (s != AngabeSchritt.produktfoto) s,
+    ];
     final staende = ref.watch(spezStaendeProvider(widget.projekt.id));
     final vorlage = ref.watch(spezVorlageProvider(_sprache));
     final felder =
@@ -532,6 +553,25 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
                             : (id) => setState(() => _versionId = id),
                       ),
               ),
+              const SizedBox(height: 12),
+              _ProduktfotoZeile(projekt: projekt, aktiv: !_laeuft),
+              if (offen.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                HinweisBox(
+                  'Noch offen: ${angabenAufzaehlen(offen)} — '
+                  '${offen.length == 1 ? 'es bliebe' : 'sie blieben'} in der '
+                  'Spezifikation leer.',
+                  art: StatusArt.warnung,
+                  icon: Icons.edit_note,
+                  aktion: TextButton(
+                    key: const ValueKey('spez-angaben'),
+                    onPressed: _laeuft
+                        ? null
+                        : () => angabenErgaenzen(context, projekt),
+                    child: const Text('Ergänzen…'),
+                  ),
+                ),
+              ],
               const SizedBox(height: 16),
               Wrap(
                 spacing: 16,
@@ -752,6 +792,60 @@ class _SpezifikationDialogState extends ConsumerState<SpezifikationDialog> {
                 )
               : const Icon(Icons.download_outlined, size: 18),
           label: const Text('Erstellen…'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Das Produktfoto vor dem Erstellen: Es kommt ins Feld neben der
+/// Sensorik — fehlt es, lässt es sich hier gleich wählen.
+class _ProduktfotoZeile extends ConsumerWidget {
+  const _ProduktfotoZeile({required this.projekt, required this.aktiv});
+
+  final EntwicklungsProjekt projekt;
+  final bool aktiv;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final bildId = projekt.bildDateiId;
+    final waehlen =
+        aktiv ? () => produktfotoWaehlen(context, ref, projekt) : null;
+    if (bildId == null) {
+      return HinweisBox(
+        'Noch kein Produktfoto. Es kommt in der Spezifikation ins Feld neben '
+        'der Sensorik — ohne Foto bleibt das Feld leer.',
+        art: StatusArt.warnung,
+        icon: Icons.add_a_photo_outlined,
+        aktion: TextButton(
+          key: const ValueKey('spez-foto-waehlen'),
+          onPressed: waehlen,
+          child: const Text('Foto wählen…'),
+        ),
+      );
+    }
+    return Row(
+      key: const ValueKey('spez-foto'),
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            width: 64,
+            height: 48,
+            child: FotoAnsicht(dateiId: bildId, klein: true),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Produktfoto — kommt ins Feld neben der Sensorik',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        ),
+        TextButton(
+          key: const ValueKey('spez-foto-anderes'),
+          onPressed: waehlen,
+          child: const Text('Anderes Foto…'),
         ),
       ],
     );

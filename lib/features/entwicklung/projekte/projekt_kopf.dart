@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/database.dart';
 import '../../../core/theme/app_stil.dart';
 import '../daten/entwicklung_repository.dart';
+import 'angaben_assistent.dart';
+import 'angaben_luecken.dart';
 import 'entwicklungsstrang.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
@@ -13,8 +15,9 @@ import 'zeitstrahl.dart' show phasenFarbe;
 
 // Der Kopf einer Projektseite — auf jedem Reiter gleich: in welcher Phase
 // das Projekt ist (zum Weiterschalten), wie weit die Checkliste ist, was
-// als Nächstes zu tun ist (mit dem Weg dorthin) und wie viele Einträge im
-// Verlauf noch offen sind.
+// als Nächstes zu tun ist (mit dem Weg dorthin), was zurückgestellt ist
+// und noch fehlt (dezent, F37), wie viele Angaben fehlen (antippen startet
+// den Assistenten, F39) und wie viele Einträge im Verlauf noch offen sind.
 
 /// Die Phasen der Reihe nach — das Archiv steht im Menü.
 const List<ProjektStatus> _phasen = [
@@ -120,7 +123,17 @@ class ProjektKopf extends ConsumerWidget {
         phaseVorDemArchiv(eintraege),
       ),
     );
-    final fortschritt = _Fortschritt(check: check, offen: offen);
+    // Archiviert ruht das Projekt — dann fragt der Kopf nach nichts.
+    final archiviert =
+        ProjektStatus.aus(projekt.status) == ProjektStatus.archiviert;
+    final fehlend =
+        archiviert ? const <AngabeSchritt>[] : fehlendeAngaben(projekt);
+    final fortschritt = _Fortschritt(
+      check: check,
+      offen: offen,
+      fehlend: fehlend,
+      onAngaben: () => angabenErgaenzen(context, projekt),
+    );
     return Container(
       key: const ValueKey('projekt-kopf'),
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -261,10 +274,19 @@ class _PhasenKnopf extends StatelessWidget {
 /// Wie weit die Checkliste ist, was als Nächstes kommt und was im Verlauf
 /// offen ist.
 class _Fortschritt extends StatelessWidget {
-  const _Fortschritt({required this.check, required this.offen});
+  const _Fortschritt({
+    required this.check,
+    required this.offen,
+    this.fehlend = const [],
+    this.onAngaben,
+  });
 
   final ProjektCheckStand? check;
   final int offen;
+
+  /// Angaben, die dem Projekt noch fehlen.
+  final List<AngabeSchritt> fehlend;
+  final VoidCallback? onAngaben;
 
   @override
   Widget build(BuildContext context) {
@@ -273,6 +295,7 @@ class _Fortschritt extends StatelessWidget {
     final farben = AppFarben.von(context);
     final c = check;
     final naechster = c?.naechster;
+    final zurueckgestellt = c?.zurueckgestellt ?? const <CheckStand>[];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -310,7 +333,7 @@ class _Fortschritt extends StatelessWidget {
           runSpacing: 2,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            if (c != null && naechster == null)
+            if (c != null && c.fertig)
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -338,6 +361,36 @@ class _Fortschritt extends StatelessWidget {
                   iconAlignment: IconAlignment.end,
                   icon: const Icon(Icons.arrow_forward, size: 16),
                   label: Text('Als Nächstes: ${checkAufgabe(naechster)}'),
+                ),
+              ),
+            // Zurückgestellt: dezent, aber nicht vergessen.
+            for (final z in zurueckgestellt)
+              TextButton.icon(
+                key: ValueKey('kopf-fehlt-${z.punkt.schluessel}'),
+                style: TextButton.styleFrom(
+                  foregroundColor: grau,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
+                onPressed: () => checkpunktOeffnen(context, z),
+                icon: const Icon(Icons.schedule, size: 16),
+                label: Text(checkFehlt(z)),
+              ),
+            if (fehlend.isNotEmpty)
+              Tooltip(
+                message: 'Fehlt: ${angabenAufzaehlen(fehlend)}',
+                child: TextButton.icon(
+                  key: const ValueKey('kopf-angaben'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: farben.warnung,
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: onAngaben,
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: Text(
+                    '${angabenFehlenText(fehlend.length)} — ergänzen…',
+                  ),
                 ),
               ),
             if (offen > 0)
