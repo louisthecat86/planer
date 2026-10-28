@@ -7,6 +7,7 @@ import '../daten/entwicklung_repository.dart';
 import 'angaben_assistent.dart';
 import 'angaben_luecken.dart';
 import 'entwicklungsstrang.dart';
+import 'faellig.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -17,7 +18,8 @@ import 'zeitstrahl.dart' show phasenFarbe;
 // das Projekt ist (zum Weiterschalten), wie weit die Checkliste ist, was
 // als Nächstes zu tun ist (mit dem Weg dorthin), was zurückgestellt ist
 // und noch fehlt (dezent, F37), wie viele Angaben fehlen (antippen startet
-// den Assistenten, F39) und wie viele Einträge im Verlauf noch offen sind.
+// den Assistenten, F39) und wie viele Einträge im Verlauf noch offen sind
+// (überfällige in der Farbe für Fehler).
 
 /// Die Phasen der Reihe nach — das Archiv steht im Menü.
 const List<ProjektStatus> _phasen = [
@@ -109,9 +111,7 @@ class ProjektKopf extends ConsumerWidget {
     final check = r == null || v == null
         ? null
         : projektCheckStand(projekt: projekt, rezepturen: r, versionen: v);
-    final offen = eintraege
-        .where((e) => EintragStatus.aus(e.status) == EintragStatus.offen)
-        .length;
+    final offen = offeneZaehlen(eintraege, heute: DateTime.now());
 
     final phase = _PhasenLeiste(
       projekt: projekt,
@@ -285,7 +285,9 @@ class _Fortschritt extends StatelessWidget {
 
   final String projektId;
   final ProjektCheckStand? check;
-  final int offen;
+  /// Die offenen Einträge im Verlauf — und wie viele davon überfällig
+  /// sind.
+  final OffeneEintraege offen;
 
   /// Angaben, die dem Projekt noch fehlen.
   final List<AngabeSchritt> fehlend;
@@ -401,11 +403,14 @@ class _Fortschritt extends StatelessWidget {
                   ),
                 ),
               ),
-            if (offen > 0)
+            if (offen.offen > 0)
               TextButton.icon(
                 key: const ValueKey('kopf-offen'),
                 style: TextButton.styleFrom(
-                  foregroundColor: farben.warnung,
+                  // Ist etwas überfällig, in der Farbe für Fehler.
+                  foregroundColor: offen.ueberfaellig > 0
+                      ? farben.fehler
+                      : farben.warnung,
                   padding: const EdgeInsets.symmetric(horizontal: 6),
                   visualDensity: VisualDensity.compact,
                 ),
@@ -414,11 +419,7 @@ class _Fortschritt extends StatelessWidget {
                   ProjektReiter.verlauf,
                 ),
                 icon: const Icon(Icons.error_outline, size: 16),
-                label: Text(
-                  offen == 1
-                      ? '1 offener Eintrag im Verlauf'
-                      : '$offen offene Einträge im Verlauf',
-                ),
+                label: Text(offeneEintraegeText(offen, imVerlauf: true)),
               ),
           ],
         ),

@@ -2,21 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/database/database.dart' show Rezeptur;
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
-import '../entwicklung_screen.dart'
-    show EntwicklungsReiter, entwicklungReiterProvider;
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import '../projekte/projekte_ansicht.dart' show oeffneProjekt;
+import '../rezepturen/fleischanteil_dialog.dart';
+import '../rezepturen/rezeptur_wahl.dart';
+import '../rezepturen/rezepturen_ansicht.dart' show oeffneRezeptur;
 import 'entwicklung_statistik.dart';
 
 /// Öffnet die Rückrechnung.
 Future<void> oeffneRueckrechnung(BuildContext context) =>
     context.pushNamed<void>('entwicklungRueckrechnung');
+
+/// „Fleischanteil einstellen" aus den Werkzeugen: erst die Rezeptur
+/// wählen, dann ihren neuesten Stand einstellen — danach öffnet sich die
+/// Rezeptur mit dem Ergebnis. Ist der Stand abgeschlossen, entsteht im
+/// Fenster ein neuer.
+Future<void> fleischanteilMitWahl(BuildContext context, WidgetRef ref) async {
+  final rezepturen = await ref.read(rezepturenProvider.future);
+  final versionen = await ref.read(alleVersionenProvider.future);
+  if (!context.mounted) return;
+  final staende = neuesteStaende(versionen);
+  final rezeptur = await showDialog<Rezeptur>(
+    context: context,
+    builder: (_) => RezepturWahlDialog(
+      titel: 'Fleischanteil einstellen',
+      hinweis: 'Für welche Rezeptur? Eingestellt wird ihr neuester Stand — '
+          'ist er abgeschlossen, entsteht daraus ein neuer.',
+      rezepturen: rezepturen,
+      staende: staende,
+    ),
+  );
+  final stand = rezeptur == null ? null : staende[rezeptur.id];
+  if (rezeptur == null || stand == null || !context.mounted) return;
+  final id = await fleischanteilOeffnen(
+    context,
+    rezepturId: rezeptur.id,
+    version: stand,
+  );
+  if (id == null || !context.mounted) return;
+  await oeffneRezeptur(context, rezeptur.id);
+}
 
 /// Der Reiter „Werkzeuge": Rückrechnung, Fleischanteil und die Zahlen der
 /// Entwicklung.
@@ -69,23 +101,19 @@ class WerkzeugeAnsicht extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'In jeder Rezeptur über „Fleischanteil einstellen…" '
-                      'in der Leiste der Stände: Fleisch wird gemeinsam '
-                      'größer oder kleiner, Wasser oder Eis gleicht aus — '
-                      'bis der Anteil laut Etikett oder im Rohgemisch '
-                      'stimmt.',
+                      'Fleisch wird gemeinsam größer oder kleiner, Wasser '
+                      'oder Eis gleicht aus — bis der Anteil laut Etikett '
+                      'oder im Rohgemisch stimmt. Eingestellt wird der '
+                      'neueste Stand der Rezeptur; in der Rezeptur selbst '
+                      'steht es in der Leiste der Stände.',
                       style: klein,
                     ),
                     const SizedBox(height: 10),
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        ref.read(entwicklungReiterProvider.notifier).state =
-                            EntwicklungsReiter.rezepturen;
-                        DefaultTabController.maybeOf(context)
-                            ?.animateTo(EntwicklungsReiter.rezepturen.index);
-                      },
-                      icon: const Icon(Icons.menu_book_outlined, size: 18),
-                      label: const Text('Zu den Rezepturen'),
+                    FilledButton.icon(
+                      key: const ValueKey('werkzeug-fleischanteil'),
+                      onPressed: () => fleischanteilMitWahl(context, ref),
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: const Text('Rezeptur wählen…'),
                     ),
                   ],
                 ),

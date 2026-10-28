@@ -17,6 +17,7 @@ import '../haccp/prozess_modell.dart';
 import 'datei_aktionen.dart';
 import 'entwicklungsstrang.dart';
 import 'entwicklungsweg_ansicht.dart';
+import 'faellig.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -40,7 +41,31 @@ final projektStandWahlenProvider =
 
 /// Wie der Verlauf aussieht: als Zeitstrahl, als Entwicklungsweg (von
 /// der Idee über die Stände zum Artikel) oder als Liste der Karten.
-enum VerlaufAnsicht { zeitstrahl, entwicklungsweg, liste }
+enum VerlaufAnsicht {
+  zeitstrahl(
+    'Zeitstrahl',
+    Icons.timeline,
+    'Alle Einträge nach Datum, der älteste links — mit den Phasen',
+  ),
+  entwicklungsweg(
+    'Entwicklungsweg',
+    Icons.route_outlined,
+    'Von der Idee über die Rezepturstände bis zum Artikel',
+  ),
+  liste(
+    'Liste',
+    Icons.view_agenda_outlined,
+    'Alle Einträge als Karten, der neueste zuerst',
+  );
+
+  const VerlaufAnsicht(this.label, this.icon, this.hinweis);
+
+  final String label;
+  final IconData icon;
+
+  /// Was die Ansicht zeigt — als Hinweis am Knopf.
+  final String hinweis;
+}
 
 /// Die gewählte Ansicht des Verlaufs — gilt, bis die App schließt.
 final verlaufAnsichtProvider =
@@ -102,7 +127,6 @@ class ProjektVerlauf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final eintraege = ref.watch(projektEintraegeProvider(projekt.id));
     // Hält die Stände für „Zu Stand" bereit.
     ref.watch(projektStandWahlenProvider(projekt.id));
@@ -152,64 +176,11 @@ class ProjektVerlauf extends ConsumerWidget {
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
           children: [
-            Row(
-              children: [
-                SegmentedButton<VerlaufAnsicht>(
-                  segments: const [
-                    ButtonSegment(
-                      value: VerlaufAnsicht.zeitstrahl,
-                      icon: Icon(Icons.timeline),
-                      tooltip: 'Zeitstrahl',
-                    ),
-                    ButtonSegment(
-                      value: VerlaufAnsicht.entwicklungsweg,
-                      icon: Icon(Icons.route_outlined),
-                      tooltip: 'Entwicklungsweg',
-                    ),
-                    ButtonSegment(
-                      value: VerlaufAnsicht.liste,
-                      icon: Icon(Icons.view_agenda_outlined),
-                      tooltip: 'Liste',
-                    ),
-                  ],
-                  selected: {ansicht},
-                  showSelectedIcon: false,
-                  onSelectionChanged: (s) => ref
-                      .read(verlaufAnsichtProvider.notifier)
-                      .state = s.first,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    '${liste.length} '
-                    '${liste.length == 1 ? 'Eintrag' : 'Einträge'}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                // In schmalen Fenstern rutschen die Knöpfe untereinander.
-                Flexible(
-                  child: Wrap(
-                    alignment: WrapAlignment.end,
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: () =>
-                            dateiAlsEintrag(context, ref, projekt.id),
-                        icon: const Icon(Icons.attach_file, size: 18),
-                        label: const Text('Datei ablegen'),
-                      ),
-                      FilledButton.icon(
-                        onPressed: () => _neu(context, ref),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: const Text('Neuer Eintrag'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            _Leiste(
+              anzahl: liste.length,
+              ansicht: ansicht,
+              onDatei: () => dateiAlsEintrag(context, ref, projekt.id),
+              onNeu: () => _neu(context, ref),
             ),
             if (ansicht != VerlaufAnsicht.entwicklungsweg &&
                 arten.length > 1) ...[
@@ -277,6 +248,156 @@ class ProjektVerlauf extends ConsumerWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Über dem Verlauf: die drei Ansichten — beschriftet, erst ganz schmal
+/// nur mit Symbol —, die Zahl der Einträge und die Knöpfe. Breit in einer
+/// Zeile, sonst die Ansichten unter den Knöpfen.
+class _Leiste extends ConsumerWidget {
+  const _Leiste({
+    required this.anzahl,
+    required this.ansicht,
+    required this.onDatei,
+    required this.onNeu,
+  });
+
+  final int anzahl;
+  final VerlaufAnsicht ansicht;
+  final VoidCallback onDatei;
+  final VoidCallback onNeu;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    return LayoutBuilder(
+      builder: (context, c) {
+        final wahl = SegmentedButton<VerlaufAnsicht>(
+          key: const ValueKey('verlauf-ansicht'),
+          segments: [
+            for (final a in VerlaufAnsicht.values)
+              ButtonSegment(
+                value: a,
+                icon: Icon(a.icon),
+                label: c.maxWidth >= 520 ? Text(a.label) : null,
+                tooltip: a.hinweis,
+              ),
+          ],
+          selected: {ansicht},
+          showSelectedIcon: false,
+          onSelectionChanged: (s) =>
+              ref.read(verlaufAnsichtProvider.notifier).state = s.first,
+        );
+        final zahl = Text(
+          '$anzahl ${anzahl == 1 ? 'Eintrag' : 'Einträge'}',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        );
+        final datei = OutlinedButton.icon(
+          onPressed: onDatei,
+          icon: const Icon(Icons.attach_file, size: 18),
+          label: const Text('Datei ablegen'),
+        );
+        final neu = FilledButton.icon(
+          onPressed: onNeu,
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Neuer Eintrag'),
+        );
+        if (c.maxWidth >= 980) {
+          return Row(
+            children: [
+              wahl,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Wrap(
+                  alignment: WrapAlignment.end,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: zahl,
+                    ),
+                    datei,
+                    neu,
+                  ],
+                ),
+              ),
+            ],
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(child: zahl),
+                const SizedBox(width: 12),
+                // In schmalen Fenstern rutschen die Knöpfe untereinander.
+                Flexible(
+                  flex: 3,
+                  child: Wrap(
+                    alignment: WrapAlignment.end,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [datei, neu],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            wahl,
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// „Fällig bis …" an einem Eintrag — überfällig in der Farbe für Fehler.
+class FaelligZeile extends StatelessWidget {
+  const FaelligZeile({
+    super.key,
+    required this.text,
+    this.ueberfaellig = false,
+  });
+
+  /// Wie es im Eintrag steht: „30.11.2026", „KW 48" oder ein Satz.
+  final String text;
+  final bool ueberfaellig;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farbe = ueberfaellig
+        ? AppFarben.von(context).fehler
+        : theme.colorScheme.onSurfaceVariant;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          ueberfaellig ? Icons.event_busy_outlined : Icons.event_outlined,
+          size: 14,
+          color: farbe,
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            ueberfaellig
+                ? 'Fällig bis $text — überfällig'
+                : 'Fällig bis $text',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: ueberfaellig ? farbe : null,
+              fontWeight: ueberfaellig ? FontWeight.w600 : null,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -483,9 +604,12 @@ class EintragKarte extends ConsumerWidget {
                   ],
                   if (ziel.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text(
-                      'Ziel: $ziel',
-                      style: theme.textTheme.bodySmall,
+                    FaelligZeile(
+                      text: ziel,
+                      ueberfaellig: eintragUeberfaellig(
+                        e,
+                        heute: DateTime.now(),
+                      ),
                     ),
                   ],
                   if (aenderungen.isNotEmpty) ...[
@@ -676,6 +800,9 @@ class EintragEingabe {
   final EintragStatus status;
   final String? benutzer;
   final String? beschreibung;
+
+  /// „Fällig bis" — frei geschrieben: ein Datum, eine Kalenderwoche oder
+  /// ein Satz.
   final String? ziel;
 
   /// Eine neu gewählte Datei — nur beim Anlegen.
@@ -761,6 +888,25 @@ class _EintragDialogState extends State<EintragDialog> {
       lastDate: DateTime(2100),
     );
     if (gewaehlt != null && mounted) setState(() => _datum = gewaehlt);
+  }
+
+  /// Der Tag für „Fällig bis" aus dem Kalender — steht schon einer im
+  /// Feld, beginnt der Kalender dort.
+  Future<void> _faelligWaehlen() async {
+    final erster = DateTime(2000);
+    final letzter = DateTime(2100);
+    var start = faelligAm(_ziel.text, bezug: _datum) ?? _datum;
+    if (start.isBefore(erster) || start.isAfter(letzter)) start = _datum;
+    final gewaehlt = await showDatePicker(
+      context: context,
+      initialDate: start,
+      firstDate: erster,
+      lastDate: letzter,
+      helpText: 'Fällig bis',
+    );
+    if (gewaehlt != null && mounted) {
+      setState(() => _ziel.text = Format.datum(gewaehlt));
+    }
   }
 
   Future<void> _dateiWaehlen() async {
@@ -880,10 +1026,19 @@ class _EintragDialogState extends State<EintragDialog> {
                   const SizedBox(width: 10),
                   Expanded(
                     child: TextField(
+                      key: const ValueKey('eintrag-faellig'),
                       controller: _ziel,
-                      decoration: const InputDecoration(
-                        labelText: 'Ziel',
-                        hintText: 'z. B. KW 12',
+                      decoration: InputDecoration(
+                        labelText: 'Fällig bis',
+                        hintText: 'z. B. 30.11. oder KW 48',
+                        suffixIcon: IconButton(
+                          tooltip: 'Tag im Kalender wählen',
+                          icon: const Icon(
+                            Icons.edit_calendar_outlined,
+                            size: 18,
+                          ),
+                          onPressed: _faelligWaehlen,
+                        ),
                       ),
                     ),
                   ),

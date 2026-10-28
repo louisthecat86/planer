@@ -37,15 +37,27 @@ class EntwicklungScreen extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('Produktentwicklung'),
           actions: [
-            IconButton(
-              tooltip: 'Aus der Development-Suite übernehmen',
-              icon: const Icon(Icons.move_to_inbox_outlined),
-              onPressed: () => suiteImportStarten(context),
-            ),
-            IconButton(
-              tooltip: 'Passwort ändern',
-              icon: const Icon(Icons.password_outlined),
-              onPressed: () => _passwortAendern(context, ref),
+            // Was man selten braucht, liegt im Menü — Sperren bleibt vorn.
+            PopupMenuButton<VoidCallback>(
+              key: const ValueKey('entwicklung-mehr'),
+              tooltip: 'Passwort ändern oder aus der Suite übernehmen',
+              onSelected: (aktion) => aktion(),
+              itemBuilder: (_) => [
+                PopupMenuItem(
+                  value: () => _passwortAendern(context, ref),
+                  child: const ListTile(
+                    leading: Icon(Icons.password_outlined),
+                    title: Text('Passwort ändern…'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: () => suiteImportStarten(context),
+                  child: const ListTile(
+                    leading: Icon(Icons.move_to_inbox_outlined),
+                    title: Text('Aus der Development-Suite übernehmen…'),
+                  ),
+                ),
+              ],
             ),
             IconButton(
               tooltip: 'Sperren',

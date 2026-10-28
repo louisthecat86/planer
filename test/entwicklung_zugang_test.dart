@@ -264,6 +264,8 @@ void main() {
             rezepturenProvider.overrideWith((ref) => Stream.value(const [])),
             alleVersionenProvider
                 .overrideWith((ref) => Stream.value(const [])),
+            alleEintraegeProvider
+                .overrideWith((ref) => Stream.value(const [])),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),
@@ -338,6 +340,20 @@ void main() {
       await tester.tap(find.text('Öffnen'));
       await warte(tester);
       expect(offen(), findsOneWidget);
+
+      // Passwort und Übernahme aus der Suite liegen im Menü.
+      await tester.tap(find.byKey(const ValueKey('entwicklung-mehr')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Passwort ändern…'), findsOneWidget);
+      expect(
+        find.text('Aus der Development-Suite übernehmen…'),
+        findsOneWidget,
+      );
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('Passwort ändern…'), findsNothing);
 
       await tester.tap(find.byTooltip('Sperren'));
       await warte(tester);

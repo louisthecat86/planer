@@ -100,9 +100,10 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   daneben; ist das Projekt freigegeben, führt „Artikel …" davor mit einem
   Klick zum Artikel der Planung. In der Projektliste steht die
   Artikelnummer vorn — bei freigegebenen Projekten ein Verweis auf den
-  Artikel. Die Projekt-Checkliste rechnet sich selbst: Rezeptur
-  (ein abgeschlossener Stand), Nährwerte (alle Zutaten des Stands mit
-  Werten), Sensorik (Aussehen, Geruch, Geschmack, Konsistenz),
+  Artikel —, unter dem Namen, was als Nächstes zu tun ist und wie viele
+  Einträge im Verlauf offen sind. Die Projekt-Checkliste rechnet sich
+  selbst: Rezeptur (ein abgeschlossener Stand), Nährwerte (alle Zutaten des
+  Stands mit Werten), Sensorik (Aussehen, Geruch, Geschmack, Konsistenz),
   Produktfoto, Prozess, Spezifikation und Artikel (Freigabe) sieht die App
   dem Projekt an. Das Produktfoto lässt sich mit „Später" zurückstellen,
   solange es keins gibt: Es bleibt offen, „Als Nächstes" geht aber weiter,
@@ -111,7 +112,10 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   sobald jede abgehakt ist oder „trifft nicht zu" (ein früherer Haken von
   Hand gilt weiter) — von Hand bleibt nur Navision. Liste, Übersicht,
   Zahlen und Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
-  (antippen schaltet um).
+  (antippen schaltet um). „Fällig bis" nimmt ein Datum, eine Kalenderwoche
+  oder einen Satz; ist der Tag vorbei und der Eintrag noch offen, steht er
+  als überfällig da — in der Karte, auf dem Zeitstrahl, im Kopf, in der
+  Projektliste und im Bericht.
 - **HACCP-Entscheidungsbaum** wie im HACCP-Konzept: Frage 1 (Kontroll-
   maßnahmen vorhanden?) mit Zusatzfrage (Kontrolle hier aus
   Sicherheitsgründen nötig? ja → Schritt, Verfahren oder Produkt
@@ -138,8 +142,9 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Verlust, Fleischanteil, Nährwerte wie auf dem Etikett, Allergene,
   Mengenangaben) — beides steht mit dem Namen der Rezeptur im Verlauf.
   Statuswechsel (auch durch die Freigabe) werden zu Meilensteinen,
-  Einträge lassen sich einem Stand zuordnen („Zu Stand"). Der Zeitstrahl
-  zeigt die Stände als Stationen, zugeordnete Einträge mit einer Linie zu
+  Einträge lassen sich einem Stand zuordnen („Zu Stand"). Der Verlauf hat
+  drei beschriftete Ansichten: Zeitstrahl, Entwicklungsweg und Liste. Der
+  Zeitstrahl zeigt die Stände als Stationen, zugeordnete Einträge mit einer Linie zu
   ihrer Station, die Phasen als Band und filtert nach Art; die Ansicht
   „Entwicklungsweg" führt von der Idee über jede Station (Grund,
   Änderungen, Kennzahlen, Rückmeldungen) bis zur Freigabe.
@@ -157,8 +162,9 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   PDF-Entwurf.
 - **Zutaten-Katalog** mit Nährwerten, Allergenen, Tierart, Bindegewebe und
   Unterzutaten.
-- **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil auf
-  ein Ziel einstellen, Entwicklung in Zahlen.
+- **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil
+  einer Rezeptur (nach Wahl, ihr neuester Stand) auf ein Ziel einstellen,
+  Entwicklung in Zahlen.
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
   Die Prozesskette des Projekts wird die des Artikels: Schritte derselben
@@ -185,11 +191,25 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   verkleinert, ohne EXIF-Daten; fehlt es, fragt das Fenster danach. Im
   Reiter „Produkt" zeigt eine Vorschau, was mit dem gewählten Stand
   hineinkommt, und was noch fehlt — mit dem Ort, an dem man es einträgt.
-  Dazu ein
-  **Projektbericht** als PDF mit Checklisten und dem Entwicklungsweg
-  (Stationen mit Grund, Änderungen, Kennzahlen und Rückmeldungen, Phasen,
-  Freigabe).
-- Übernahme aus der Development-Suite (ZIP oder JSON).
+- **Projektbericht** (PDF, oben unter „Erstellen"): die Projektakte zum
+  Nachschlagen — für ein laufendes wie für ein abgeschlossenes Projekt.
+  Vorn ein Steckbrief mit Phase, Produktfoto, dem Stand auf einen Blick
+  (Freigabe, Rezeptur, Checkliste, Prozess, HACCP, offene Punkte, Ziele)
+  und dem Inhalt mit Seitenzahlen; die Kapitel stehen auch als Lesezeichen
+  im PDF. Dahinter: Projekt (Stammdaten, Phasen, Ziele gegen die Rezeptur,
+  Anfrage und Notizen), Rezeptur (Zusammensetzung mit Mengen und Anteilen,
+  Zutatenverzeichnis, Allergene, Nährwerte, Fleisch nach LMIV, die Stände im
+  Vergleich), Produkt und Spezifikation (Sensorik, Angaben, Verpackung,
+  Etikett nach LMIV), Herstellung und HACCP (Prozesskette nach Stationen mit
+  Werten und Platten, festgehaltene Versionen, — wenn der Artikel davon
+  abweicht — der Prozess im Artikel, Gefahrenanalyse und Lenkungspunkte),
+  Freigabe und Checkliste (Artikel, Verlust der Produktion gegen die
+  Rezeptur), der Entwicklungsweg (die Stände im Überblick, jede Station mit
+  Grund, Kennzahlen, Änderungen und Rückmeldungen), der ganze Verlauf und
+  die Dateien. Was fehlt, steht als Hinweis da; Kapitel ohne Inhalt
+  beginnen keine eigene Seite.
+- Übernahme aus der Development-Suite (ZIP oder JSON) — im Menü oben neben
+  „Sperren", wo auch „Passwort ändern" steht.
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
 in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine

@@ -16,6 +16,7 @@ import '../import/suite_import_dialog.dart';
 import '../mail/mail.dart';
 import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart' show dateienWaehlen, groesseText;
+import 'faellig.dart';
 import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -152,6 +153,10 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
     final theme = Theme.of(context);
     final projekte = ref.watch(projekteProvider);
     final checklisten = ref.watch(projektChecklistenProvider);
+    final eintraege = ref.watch(alleEintraegeProvider).valueOrNull;
+    final offen = eintraege == null
+        ? const <String, OffeneEintraege>{}
+        : offeneJeProjekt(eintraege, heute: DateTime.now());
     return projekte.when(
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Padding(
@@ -301,6 +306,7 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                                       itemBuilder: (_, i) => _Zeile(
                                         projekt: treffer[i],
                                         checkliste: checklisten?[treffer[i].id],
+                                        offen: offen[treffer[i].id],
                                         breit: breit,
                                       ),
                                     ),
@@ -385,31 +391,54 @@ class _Kopf extends StatelessWidget {
   }
 }
 
+/// Eine Zeile der Projektliste. Unter dem Namen steht, was als Nächstes
+/// zu tun ist und was im Verlauf offen ist — ruht das Projekt oder ist
+/// nichts mehr zu tun, die Produktidee.
 class _Zeile extends StatelessWidget {
   const _Zeile({
     required this.projekt,
     required this.checkliste,
     required this.breit,
+    this.offen,
   });
 
   final EntwicklungsProjekt projekt;
 
   /// Wie die Checkliste steht — null, solange sie noch rechnet.
   final ProjektCheckStand? checkliste;
+
+  /// Die offenen Einträge im Verlauf — null: keine.
+  final OffeneEintraege? offen;
   final bool breit;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final farben = AppFarben.von(context);
     final grau = theme.colorScheme.onSurfaceVariant;
     final stil = theme.textTheme.bodyMedium;
     final p = projekt;
     final status = ProjektStatus.aus(p.status);
-    final idee = p.produktidee?.trim();
-    final unterzeile = [
-      if (!breit && (p.kunde ?? '').trim().isNotEmpty) p.kunde!.trim(),
-      if (idee != null && idee.isNotEmpty) idee,
-    ].join(' · ');
+    final ruht = status == ProjektStatus.archiviert;
+    final naechster = ruht ? null : checkliste?.naechster;
+    final o = ruht ? null : offen;
+    final kunde = p.kunde?.trim() ?? '';
+    final idee = p.produktidee?.trim() ?? '';
+    // Die Teile der zweiten Zeile — mit Farbe, wo etwas offen ist.
+    final teile = <(String, TextStyle?)>[
+      if (!breit && kunde.isNotEmpty) (kunde, null),
+      if (naechster != null) ('Als Nächstes: ${checkAufgabe(naechster)}', null),
+      if (o != null && o.offen > 0)
+        (
+          offeneEintraegeText(o),
+          TextStyle(
+            color: o.ueberfaellig > 0 ? farben.fehler : farben.warnung,
+            fontWeight: o.ueberfaellig > 0 ? FontWeight.w600 : null,
+          ),
+        ),
+      if (naechster == null && (o == null || o.offen == 0) && idee.isNotEmpty)
+        (idee, null),
+    ];
 
     return Material(
       color: Colors.transparent,
@@ -444,9 +473,17 @@ class _Zeile extends StatelessWidget {
                         color: theme.colorScheme.primary,
                       ),
                     ),
-                    if (unterzeile.isNotEmpty)
-                      Text(
-                        unterzeile,
+                    if (teile.isNotEmpty)
+                      Text.rich(
+                        TextSpan(
+                          children: [
+                            for (final (i, (text, farbe)) in teile.indexed) ...[
+                              if (i > 0) const TextSpan(text: ' · '),
+                              TextSpan(text: text, style: farbe),
+                            ],
+                          ],
+                        ),
+                        key: ValueKey('projekt-unterzeile-${p.id}'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(

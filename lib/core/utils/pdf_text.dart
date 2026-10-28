@@ -30,6 +30,8 @@ const Map<String, String> _ersatz = {
   '×': 'x',
   '€': 'EUR',
   '→': '->',
+  '≥': '>=',
+  '≤': '<=',
 };
 
 /// [s] so umgeschrieben, dass die PDF-Standardschrift jedes Zeichen

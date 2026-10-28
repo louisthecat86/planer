@@ -324,16 +324,6 @@ class ArticlePrintService {
         '(${_fmt(l.kgProStunde.roundToDouble())} kg/h)';
   }
 
-  /// Das Abteilungsband im Artikel-Prozessblattstil.
-  static pw.Widget berichtAbteilungsBand(
-    String abteilungDb,
-    List<ProductStep> schritte,
-  ) =>
-      _abteilungsBand(
-        abteilungDb,
-        leistung: _leistungText(schritte),
-      );
-
   static pw.Widget _abteilungsBand(String abteilungDb, {String? leistung}) {
     final abt = Abteilung.fromDbValue(abteilungDb);
     final farbe = PdfColor.fromInt(abt.farbe.toARGB32());
@@ -568,14 +558,6 @@ class ArticlePrintService {
       ),
     );
   }
-
-  /// Die vollständige Maschinenkarte im Artikel-Prozessblattstil.
-  static pw.Widget berichtSchrittBlock({
-    required ProductStep step,
-    required Machine? maschine,
-    required List<ProductStepParameter> parameter,
-  }) =>
-      _schrittBlock(step: step, maschine: maschine, parameter: parameter);
 
   static List<(String, String)> _legacyMaschinenWerte(String? json) {
     final raw = json?.trim() ?? '';

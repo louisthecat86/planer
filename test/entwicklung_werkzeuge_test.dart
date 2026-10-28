@@ -15,6 +15,7 @@ import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rueckrechnung.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/fleischanteil_dialog.dart';
+import 'package:produktion_planer/features/entwicklung/rezepturen/rezeptur_wahl.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/entwicklung_statistik.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/werkzeuge_ansicht.dart';
@@ -726,6 +727,110 @@ void main() {
         find.text('Alle Zutaten haben Nährwerte und Allergene.'),
         findsOneWidget,
       );
+    });
+
+    testWidgets('Werkzeuge: Fleischanteil — erst die Rezeptur wählen',
+        (tester) async {
+      RezepturVersion stand(String id, int nummer, String status) =>
+          RezepturVersion(
+            id: id,
+            rezepturId: 'r1',
+            nummer: nummer,
+            status: status,
+            verlustProzent: 10,
+            fettVerlustProzent: 0,
+            verlustArt: 'garen',
+            createdAt: zeit,
+            updatedAt: zeit,
+          );
+      await zeige(
+        tester,
+        const WerkzeugeAnsicht(),
+        overrides: [
+          projekteProvider.overrideWith((ref) => Stream.value(const [])),
+          rezepturenProvider.overrideWith(
+            (ref) => Stream.value([
+              Rezeptur(
+                id: 'r1',
+                name: 'Brühwurst',
+                createdAt: zeit,
+                updatedAt: zeit,
+              ),
+              Rezeptur(
+                id: 'r2',
+                name: 'Leberkäse',
+                artikelnummer: '0815',
+                createdAt: zeit,
+                updatedAt: zeit,
+              ),
+            ]),
+          ),
+          alleVersionenProvider.overrideWith(
+            (ref) => Stream.value([
+              stand('v1', 1, VersionStatus.abgeschlossen),
+              stand('v2', 2, VersionStatus.entwurf),
+            ]),
+          ),
+          zutatenProvider.overrideWith((ref) => Stream.value(const [])),
+          alleEintraegeProvider.overrideWith((ref) => Stream.value(const [])),
+          rechenRezepturProvider.overrideWith(
+            (ref, id) async => RechenRezeptur(
+              id: 'r1',
+              name: 'Brühwurst',
+              verlustProzent: 10,
+              verlustart: Verlustart.garen,
+              positionen: [
+                RechenPosition.zutat(schwein, mengeKg: 60),
+                RechenPosition.zutat(wasser, mengeKg: 30),
+                RechenPosition.zutat(salz, mengeKg: 2),
+                RechenPosition.zutat(gewuerz, mengeKg: 8),
+              ],
+            ),
+          ),
+        ],
+      );
+      Future<void> bilder() async {
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+      }
+
+      await tester.tap(find.byKey(const ValueKey('werkzeug-fleischanteil')));
+      await bilder();
+      final wahl = find.byType(RezepturWahlDialog);
+      expect(wahl, findsOneWidget);
+      // Jede Rezeptur mit ihrem neuesten Stand — ohne Stand nicht wählbar.
+      expect(
+        find.descendant(of: wahl, matching: find.text('Stand 2 · Entwurf')),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: wahl, matching: find.text('Noch kein Stand')),
+        findsOneWidget,
+      );
+      ListTile zeile(String id) => tester.widget<ListTile>(
+            find.byKey(ValueKey('rezeptur-wahl-$id')),
+          );
+      expect(zeile('r1').enabled, isTrue);
+      expect(zeile('r2').enabled, isFalse);
+
+      // Gesucht wird nach Name und Artikelnummer.
+      final suche = find.byKey(const ValueKey('rezeptur-wahl-suche'));
+      await tester.enterText(suche, '0815');
+      await tester.pump();
+      expect(find.byKey(const ValueKey('rezeptur-wahl-r1')), findsNothing);
+      expect(find.byKey(const ValueKey('rezeptur-wahl-r2')), findsOneWidget);
+      await tester.enterText(suche, 'brüh');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('rezeptur-wahl-r1')));
+      await bilder();
+
+      // Weiter geht es im Fenster zum Einstellen.
+      expect(wahl, findsNothing);
+      expect(find.byType(FleischanteilDialog), findsOneWidget);
+      await tester.tap(find.text('Abbrechen'));
+      await bilder();
+      expect(find.byType(FleischanteilDialog), findsNothing);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Fleischanteil einstellen: Vorschau und Übernehmen',

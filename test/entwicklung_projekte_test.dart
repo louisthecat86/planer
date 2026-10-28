@@ -441,11 +441,13 @@ void main() {
 
     /// [seite]: das Projekt der Projektseite, sonst das Schnitzel;
     /// [verlauf]: seine Einträge, sonst die drei oben; [liste]: die
-    /// Projekte der Liste, sonst die drei oben.
+    /// Projekte der Liste, sonst die drei oben; [alle]: die Einträge aller
+    /// Projekte für die Liste, sonst die des Verlaufs.
     List<Override> overrides({
       EntwicklungsProjekt? seite,
       List<ProjektEintrag>? verlauf,
       List<EntwicklungsProjekt>? liste,
+      List<ProjektEintrag>? alle,
     }) =>
         [
           projekteProvider.overrideWith(
@@ -454,6 +456,9 @@ void main() {
           projektProvider.overrideWith((ref, id) => Stream.value(seite ?? p1)),
           projektEintraegeProvider.overrideWith(
             (ref, id) => Stream.value(verlauf ?? eintraege),
+          ),
+          alleEintraegeProvider.overrideWith(
+            (ref) => Stream.value(alle ?? verlauf ?? eintraege),
           ),
           projektDateienProvider.overrideWith((ref, id) => Stream.value([datei])),
           projektRezepturenProvider.overrideWith(
@@ -498,6 +503,7 @@ void main() {
       EntwicklungsProjekt? projekt,
       List<ProjektEintrag>? verlauf,
       List<EntwicklungsProjekt>? liste,
+      List<ProjektEintrag>? alle,
       List<Override> dazu = const [],
     }) async {
       tester.view.physicalSize = groesse;
@@ -506,7 +512,12 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            ...overrides(seite: projekt, verlauf: verlauf, liste: liste),
+            ...overrides(
+              seite: projekt,
+              verlauf: verlauf,
+              liste: liste,
+              alle: alle,
+            ),
             ...dazu,
           ],
           child: MaterialApp(
@@ -555,6 +566,58 @@ void main() {
       await tester.pump();
       expect(find.text('Schnitzel Wiener Art'), findsOneWidget);
       expect(find.text('Bratwurst fein'), findsNothing);
+    });
+
+    testWidgets('Projekte: was als Nächstes kommt und was im Verlauf offen '
+        'ist', (tester) async {
+      ProjektEintrag offen(String id, String projektId, {String? ziel}) =>
+          ProjektEintrag(
+            id: id,
+            projektId: projektId,
+            art: EintragArt.notiz.schluessel,
+            titel: 'Muster $id',
+            datum: zeit,
+            status: EintragStatus.offen.schluessel,
+            ziel: ziel,
+            createdAt: zeit,
+            updatedAt: zeit,
+          );
+      await zeige(
+        tester,
+        const ProjekteAnsicht(),
+        alle: [
+          ...eintraege,
+          offen('o1', 'p1', ziel: 'nach der Verkostung'),
+          // Längst vorbei: überfällig.
+          offen('o2', 'p2', ziel: '01.01.2026'),
+          offen('o3', 'p2'),
+          // Das Archiv ruht — dort zählt nichts.
+          offen('o4', 'p3', ziel: '01.01.2026'),
+        ],
+      );
+      expect(
+        find.text('Als Nächstes: Sensorik beschreiben · 1 offener Eintrag'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'Als Nächstes: Rezeptur erstellen · 2 offene Einträge, '
+          '1 überfällig',
+        ),
+        findsOneWidget,
+      );
+      // Im Archiv die Produktidee.
+      await tester.tap(find.text('Archiv (1)'));
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('projekt-unterzeile-p3')),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Paniertes Schnitzel aus der Oberschale'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Projekte: die Artikelnummer vorn — freigegeben ein Verweis '
@@ -865,6 +928,14 @@ void main() {
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
       expect(find.text('3 Einträge'), findsOneWidget);
       expect(find.text('passt so'), findsNothing);
+      // Die drei Ansichten sind beschriftet.
+      final ansichten = find.byKey(const ValueKey('verlauf-ansicht'));
+      for (final a in VerlaufAnsicht.values) {
+        expect(
+          find.descendant(of: ansichten, matching: find.text(a.label)),
+          findsOneWidget,
+        );
+      }
 
       // Antippen öffnet den Eintrag mit allem, was die Karte kann.
       await tester.tap(find.text('Datenblatt erhalten'));
@@ -878,7 +949,7 @@ void main() {
       expect(find.byType(EintragKarte), findsNothing);
 
       // Als Liste: die Karten mit Kommentar, Datei und Rezepturstand.
-      await tester.tap(find.byTooltip('Liste'));
+      await tester.tap(find.byTooltip(VerlaufAnsicht.liste.hinweis));
       await tester.pump();
       expect(find.byType(Zeitstrahl), findsNothing);
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
@@ -940,7 +1011,7 @@ void main() {
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
 
       // Der Entwicklungsweg: die Idee, der Stand als Station.
-      await tester.tap(find.byTooltip('Entwicklungsweg'));
+      await tester.tap(find.byTooltip(VerlaufAnsicht.entwicklungsweg.hinweis));
       await tester.pump();
       await tester.pump();
       expect(find.text('Idee und Anfrage'), findsOneWidget);
@@ -1038,9 +1109,10 @@ void main() {
       await reiter(tester, 'Verlauf');
       expect(find.byType(Zeitstrahl), findsOneWidget);
       expect(find.text('Datenblatt erhalten'), findsOneWidget);
-      await tester.tap(find.byTooltip('Liste'));
+      await tester.tap(find.byTooltip(VerlaufAnsicht.liste.hinweis));
       await tester.pump();
       expect(find.text('passt so'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 

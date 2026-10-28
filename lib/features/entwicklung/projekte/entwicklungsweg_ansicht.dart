@@ -10,6 +10,7 @@ import '../etikett/etikett_dialog.dart';
 import '../rezepturen/rezepturen_ansicht.dart';
 import '../rezepturen/versionsvergleich.dart';
 import 'entwicklungsstrang.dart';
+import 'faellig.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_rezeptur.dart' show projektRezepturZeigen;
@@ -540,6 +541,7 @@ class _EintragZeile extends StatelessWidget {
     final e = eintrag;
     final art = EintragArt.aus(e.art);
     final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
+    final vorbei = offen && eintragUeberfaellig(e, heute: DateTime.now());
     return InkWell(
       borderRadius: AppMasse.ecken,
       onTap: () => eintragZeigen(context, projektId: projektId, eintragId: e.id),
@@ -558,7 +560,9 @@ class _EintragZeile extends StatelessWidget {
             ),
             if (offen) ...[
               const SizedBox(width: 6),
-              const StatusMarke('offen', art: StatusArt.warnung),
+              vorbei
+                  ? const StatusMarke('überfällig', art: StatusArt.fehler)
+                  : const StatusMarke('offen', art: StatusArt.warnung),
             ],
             const SizedBox(width: 8),
             Text(

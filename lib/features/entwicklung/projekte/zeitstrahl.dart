@@ -10,6 +10,7 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import 'entwicklungsstrang.dart';
+import 'faellig.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_verlauf.dart';
@@ -580,6 +581,7 @@ class _Beschriftung extends StatelessWidget {
         ? theme.colorScheme.onPrimary.withValues(alpha: 0.85)
         : theme.colorScheme.onSurfaceVariant;
     final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
+    final vorbei = offen && eintragUeberfaellig(e, heute: DateTime.now());
     return Material(
       color: hinten,
       shape: RoundedRectangleBorder(
@@ -616,9 +618,11 @@ class _Beschriftung extends StatelessWidget {
               ),
               if (offen)
                 Text(
-                  'offen',
+                  vorbei ? 'überfällig' : 'offen',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: meilenstein ? schrift : f.warnung,
+                    color: meilenstein
+                        ? schrift
+                        : (vorbei ? f.fehler : f.warnung),
                     fontWeight: FontWeight.w700,
                   ),
                 ),

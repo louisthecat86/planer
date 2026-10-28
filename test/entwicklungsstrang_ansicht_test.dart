@@ -189,11 +189,18 @@ void main() {
         find.widgetWithText(TextField, 'Titel'),
         'Rückmeldung Kunde',
       );
+      // „Fällig bis" — frei geschrieben, der Kalender steht daneben.
+      expect(find.byTooltip('Tag im Kalender wählen'), findsOneWidget);
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Fällig bis'),
+        'KW 48',
+      );
       await antippen(tester, find.text('— keinem —'));
       await antippen(tester, find.text('Frikadelle · Stand 1').last);
       await antippen(tester, find.text('Anlegen'));
       expect(eingabe?.titel, 'Rückmeldung Kunde');
       expect(eingabe?.versionId, 'v1');
+      expect(eingabe?.ziel, 'KW 48');
     });
 
     testWidgets('ohne Stände keine Auswahl, ein alter Bezug bleibt sichtbar',

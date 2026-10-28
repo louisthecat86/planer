@@ -917,6 +917,37 @@ void main() {
         expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
       });
 
+      test('Kapitel mit Lesezeichen — ein junges Projekt bleibt kurz',
+          () async {
+        final a = await anlegen();
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+        // Ohne Freigabe: der neueste abgeschlossene Stand — mit seiner
+        // Zusammensetzung für die Tabelle.
+        expect(b.eingabe?.positionen, hasLength(2));
+        expect(b.eingaben.keys, containsAll([a.v1, a.v2]));
+        expect(b.dateien, isEmpty);
+
+        final pdf = await baueProjektPdf(b, gedrucktAm: datum);
+        final roh = latin1.decode(pdf);
+        for (final titel in [
+          '1  Projekt',
+          '2  Rezeptur',
+          '3  Produkt und Spezifikation',
+          '4  Herstellung und HACCP',
+          '5  Freigabe und Checkliste',
+          '6  Entwicklungsweg',
+          '7  Verlauf',
+        ]) {
+          expect(roh, contains('($titel)'));
+        }
+        // Ohne Dateien kein Kapitel dafür.
+        expect(roh, isNot(contains('Dateien)')));
+        // Kapitel ohne Inhalt beginnen keine eigene Seite.
+        final seiten = RegExp(r'/Type\s*/Page\b').allMatches(roh).length;
+        expect(seiten, inInclusiveRange(3, 8));
+      });
+
       test('der freigegebene Stand geht vor', () async {
         final a = await anlegen();
         await projekte.projektAendern(
