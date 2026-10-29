@@ -72,6 +72,25 @@ Standard. Strg+P druckt.
     Abteilung ein Blatt, welche Abteilungen und Tage, sonstige Aufgaben,
     Erledigtes, Kästchen zum Abhaken, Anlagen ohne Aufträge, Dauer und
     Belegung.
+  - **Erfassungsliste** (Produktionserfassung): die noch nicht erfassten
+    Produktionen der Woche mit leeren Spalten für die Ist-Werte —
+    Rohware, Fertigware, Start und Ende, dazu Charge, Kürzel und
+    Bemerkung —, welche Tage und Abteilungen, die Tage untereinander oder
+    jeder auf eigenem Blatt zum Aushängen, was geplant ist, leere Zeilen
+    zum Nachtragen.
+  - **Auftragsbestand**: nach Artikel (mit Versandtagen, Aufträgen,
+    Vormerkungen und Produktionen), nach Versandtag oder nach Kunde; nur
+    mit Handlungsbedarf, alles nicht Gedeckte oder alles; Versandtage bis
+    Ende dieser oder nächster Woche; auf die gefilterte Liste beschränkt;
+    Kennzahlen. Vorgewählt ist, was die Liste zeigt.
+  - **Bedarfsliste**: offene oder auch erledigte Bedarfe, nach Termin
+    (Überfälliges zuerst, dann je Kalenderwoche) oder nach Artikelnummer,
+    welche Herkunft, Herkunft und Notiz.
+  - **Planungsvorschlag**: so, wie er in der Ansicht steht — auch von Hand
+    angepasst —, welche Tage, untereinander oder je Tag ein Blatt,
+    Hinweise und Regelbrüche, Aufträge aus dem Auftragsbestand, was nicht
+    eingeplant werden konnte. Bis ein Tag ins Board übernommen ist, steht
+    er als Entwurf auf dem Blatt.
   - **Prozessblatt** (Artikel): Abteilungen und Schritte, jede Abteilung
     auf eigener Seite, Leistungsdaten, Kennwerte, Plattenraster,
     Maschineneinstellungen, Parameter, Notizen, Linien für Notizen von
@@ -87,7 +106,10 @@ Standard. Strg+P druckt.
 
 Der Satz (`lib/core/druck/`) legt jedes Blatt auf eine gedachte, größere
 Seite und verkleinert beim Zeichnen — so bricht der Text über die volle
-Breite um, und Links und Lesezeichen im PDF stimmen auch verkleinert.
+Breite um, und Links und Lesezeichen im PDF stimmen auch verkleinert. Die
+Listen der Produktion teilen sich Kopf, Fuß, Tabellen und Leisten
+(`druck_bausteine.dart`): schwarz und grau, Farbe nur als Kante oder Punkt
+neben dem Text.
 
 ## Produktentwicklung
 

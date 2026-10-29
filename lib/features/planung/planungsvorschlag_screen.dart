@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart' show AppDatabase;
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show teileBezuegeZu;
@@ -15,6 +16,7 @@ import '../bedarf/bedarf_screen.dart' show bedarfProvider;
 import '../datenblatt/datenblatt.dart';
 import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
+import 'planungsvorschlag_druck.dart';
 import 'planungsvorschlag_service.dart';
 
 /// Vorschlagsansicht: fragt zuerst, welche offenen Bedarfe hinein sollen,
@@ -370,6 +372,26 @@ class _PlanungsvorschlagScreenState
     );
   }
 
+  // ── Drucken ──────────────────────────────────────────────────────────
+
+  /// Öffnet das Druckfenster mit dem Vorschlag, wie er gerade dasteht —
+  /// auch von Hand angepasst. Übernommene Tage sind als solche vermerkt.
+  void _drucken() {
+    druckFensterOeffnen(
+      context,
+      vorschlagDruckAuftrag(
+        tage: [..._tage],
+        einstellungen: _berechnetMit ?? _einstellungen,
+        nichtPlanbar: [..._nichtPlanbar],
+        uebernommen: {
+          for (final t in _tage)
+            if (_uebernommen.contains(_key(t.tag))) t.tag,
+        },
+        angepasst: _geaendert,
+      ),
+    );
+  }
+
   // ── Auswahl ──────────────────────────────────────────────────────────
 
   void _waehle(String bedarfId, bool an) {
@@ -406,6 +428,15 @@ class _PlanungsvorschlagScreenState
       appBar: AppBar(
         title: const Text('Planungsvorschlag'),
         actions: [
+          IconButton(
+            onPressed: !_laedt &&
+                    _berechnet &&
+                    _tage.any((t) => t.posten.isNotEmpty)
+                ? _drucken
+                : null,
+            icon: const Icon(Icons.print),
+            tooltip: 'Vorschlag drucken',
+          ),
           IconButton(
             onPressed: _oeffneEinstellungen,
             icon: const Icon(Icons.tune_rounded),

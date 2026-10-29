@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pdf/pdf.dart';
@@ -315,6 +316,38 @@ void main() {
       expect(latin1.decode(klein.bytes), contains('(ZielSeite1)'));
     });
 
+    test('Kopf erst ab Seite 2: Der Inhalt bleibt über der Fußzeile',
+        () async {
+      // Wie im Projektbericht: Auf Seite 1 steht kein Kopf. Seine Höhe muss
+      // schon beim Setzen stimmen, sonst rutscht der Inhalt beim Zeichnen
+      // nach unten — bis in die Fußzeile.
+      final unten = <double>[];
+      final e = await druckSetzen(
+        DruckDokument(
+          blaetter: [
+            blatt(3),
+            DruckBlatt(
+              rand: const pw.EdgeInsets.all(30),
+              bauen: (r) => DruckSeiten(
+                kopf: (ctx) => r.seiteImBlatt(ctx) == 1
+                    ? pw.SizedBox()
+                    : pw.SizedBox(height: 100),
+                fuss: (ctx) => pw.SizedBox(height: 20),
+                inhalt: (_) => [
+                  for (var i = 0; i < 60; i++) _Unten(unten, 30),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const DruckLayout(),
+      );
+      expect(e.blattSeiten.last, greaterThan(2));
+      expect(unten, hasLength(60));
+      // Keine Unterkante unter Rand und Fußzeile.
+      expect(unten.reduce(math.min), greaterThanOrEqualTo(30 + 20 - 0.01));
+    });
+
     test('Ohne Blätter gibt es nichts zu drucken', () {
       expect(
         () => druckSetzen(
@@ -370,5 +403,29 @@ class _Marke extends pw.StatelessWidget {
   void paint(pw.Context context) {
     super.paint(context);
     rahmen.merke('ziel', context.pageNumber);
+  }
+}
+
+/// Ein Kasten fester Höhe, der beim Zeichnen meldet, wo seine Unterkante
+/// liegt — von unten gemessen, wie im PDF.
+class _Unten extends pw.Widget {
+  _Unten(this.liste, this.hoehe);
+
+  final List<double> liste;
+  final double hoehe;
+
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    box = PdfRect(0, 0, constraints.maxWidth, hoehe);
+  }
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    liste.add(box!.bottom);
   }
 }

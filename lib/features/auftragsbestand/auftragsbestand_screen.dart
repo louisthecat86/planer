@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/artikel_providers.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/artikel_anlage_service.dart';
@@ -25,6 +26,8 @@ import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show Ausbeute, AusbeuteQuelle, dailyTasksProvider, ermittleAusbeute;
 import 'auftrags_einplanung.dart';
+import 'auftragsbestand_ansicht.dart';
+import 'auftragsbestand_druck.dart';
 import 'planung_pruefen.dart'
     show
         PlanungsKonflikt,
@@ -36,78 +39,6 @@ import 'planung_pruefen.dart'
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten für die Ansicht
 // ═══════════════════════════════════════════════════════════════════════════
-
-/// Ein Artikel des Auftragsbestands samt Deckung aus Lager und Produktion.
-class AuftragsbestandZeile {
-  const AuftragsbestandZeile({
-    required this.artikel,
-    required this.positionen,
-    required this.zugaenge,
-    required this.deckung,
-    this.vormerkungen = const [],
-    this.verschoben = const {},
-  });
-
-  final AuftragsArtikel artikel;
-  final List<AuftragsPosition> positionen;
-
-  /// Produktionen der App für diesen Artikel — auch die, die nicht
-  /// mitzählen (vor dem Bericht fertig, Menge unbekannt).
-  final List<ProduktionsZugang> zugaenge;
-
-  final ArtikelDeckung deckung;
-
-  /// Offene Planungsaufträge für diesen Artikel: an den Planungsvorschlag
-  /// übergeben, noch nicht (ganz) eingeplant.
-  final List<Vormerkung> vormerkungen;
-
-  /// Verschobene Aufträge, deren Planung noch am alten Tag hängt:
-  /// Schlüssel der Zeile am neuen Tag → Konflikt. Diese Zeilen sind
-  /// gesperrt, bis die Verschiebung geklärt ist.
-  final Map<String, PlanungsKonflikt> verschoben;
-
-  Set<String> get belege => {for (final p in positionen) p.beleg};
-  Set<String> get kunden => {for (final p in positionen) p.debitor};
-
-  /// Hier ist etwas zu tun: noch zu bündeln, zu spät eingeplant — oder
-  /// ein verschobener Auftrag zu klären.
-  bool get handlungsbedarf => !deckung.erledigt || verschoben.isNotEmpty;
-
-  /// Eingeplante Produktionen ohne Fertigmenge — sie zählen nicht mit.
-  int get ohneMenge => zugaenge
-      .where((z) => z.kg == null && z.art != ZugangsArt.imLager)
-      .length;
-}
-
-/// Der zuletzt eingelesene Auftragsbestand.
-class AuftragsbestandAnsicht {
-  const AuftragsbestandAnsicht({
-    required this.zeilen,
-    this.stand,
-    this.von,
-    this.bis,
-    this.importiertAm,
-    this.berichtTag,
-    this.konflikte = const [],
-  });
-
-  final List<AuftragsbestandZeile> zeilen;
-  final DateTime? stand;
-  final DateTime? von;
-  final DateTime? bis;
-  final DateTime? importiertAm;
-
-  /// Tag, gegen den die Produktionen eingeordnet wurden: der Tag des
-  /// Berichts, ersatzweise der Tag des Einlesens.
-  final DateTime? berichtTag;
-
-  /// Planung, die nicht mehr zum Bericht passt — Planungsaufträge und
-  /// Produktionen an verschobenen, verringerten oder entfallenen
-  /// Aufträgen. Anzupassen in der Änderungsansicht.
-  final List<PlanungsKonflikt> konflikte;
-
-  bool get leer => zeilen.isEmpty;
-}
 
 /// Lädt den Auftragsbestand und rechnet je Artikel die Deckung: erst das
 /// Lager, dann die Produktionen der App, zuletzt die Vormerkungen für den
@@ -214,17 +145,6 @@ AuftragsbestandZeile _zeile(
 // Screen
 // ═══════════════════════════════════════════════════════════════════════════
 
-/// Sortierungen der Artikelliste.
-enum _Sortierung {
-  engpass('Frühester Engpass'),
-  fehlmenge('Noch zu bündeln ↓'),
-  auftrag('Auftragsmenge ↓'),
-  nummer('Artikelnummer');
-
-  const _Sortierung(this.label);
-  final String label;
-}
-
 /// Auftragsbestand aus Navision: Aufträge je Artikel nach Warenausgang,
 /// dagegen gerechnet das Lager und die Produktionen der App — und was
 /// danach noch einzuplanen ist.
@@ -248,7 +168,7 @@ class _AuftragsbestandScreenState
   /// das ist die Arbeit. Der Zähler zeigt, wie viele es sind.
   bool _nurOffene = true;
   String? _abteilung;
-  _Sortierung _sortierung = _Sortierung.engpass;
+  BestandSortierung _sortierung = BestandSortierung.engpass;
   final Set<String> _offen = {};
 
   /// Abgehakte Versandtage je Artikelnummer — die Auswahl für „Zur
@@ -258,6 +178,9 @@ class _AuftragsbestandScreenState
   bool _liest = false;
   bool _legtAn = false;
   bool _plant = false;
+
+  /// Das Druckfenster ist offen oder wird gerade geöffnet.
+  bool _druckLaeuft = false;
   String? _fehler;
   List<String> _hinweise = const [];
 
@@ -706,67 +629,95 @@ class _AuftragsbestandScreenState
     List<AuftragsbestandZeile> alle,
     Map<String, Set<String>> abteilungen,
   ) {
-    final suche = _suche.text.trim().toLowerCase();
-    final liste = alle.where((z) {
-      if (_nurOffene && !z.handlungsbedarf) return false;
-      final abteilung = _abteilung;
-      if (abteilung != null &&
-          !(abteilungen[z.artikel.artikelnummer]?.contains(abteilung) ??
-              false)) {
-        return false;
-      }
-      if (suche.isEmpty) return true;
-      final a = z.artikel;
-      if (a.artikelnummer.toLowerCase().contains(suche)) return true;
-      if (a.bezeichnung.toLowerCase().contains(suche)) return true;
-      if ((a.bezeichnung2 ?? '').toLowerCase().contains(suche)) return true;
-      return z.positionen.any(
-        (p) =>
-            p.debitor.toLowerCase().contains(suche) ||
-            p.beleg.toLowerCase().contains(suche),
-      );
-    }).toList();
+    final liste = alle.where(
+      (z) =>
+          (!_nurOffene || z.handlungsbedarf) && _passt(z, abteilungen),
+    );
+    return sortiereBestand(liste, _sortierung);
+  }
 
-    int nachNummer(AuftragsbestandZeile a, AuftragsbestandZeile b) =>
-        a.artikel.artikelnummer.compareTo(b.artikel.artikelnummer);
-
-    switch (_sortierung) {
-      case _Sortierung.engpass:
-        // Erst, was hier Arbeit macht — nach dem frühesten Tag, an dem
-        // etwas zu bündeln ist oder zu spät kommt. Danach, was beim
-        // Planungsvorschlag liegt oder gedeckt ist.
-        liste.sort((a, b) {
-          if (a.handlungsbedarf != b.handlungsbedarf) {
-            return a.handlungsbedarf ? -1 : 1;
-          }
-          final x = a.deckung;
-          final y = b.deckung;
-          if (x.erledigt != y.erledigt) return x.erledigt ? 1 : -1;
-          final ea = x.erledigt ? x.ersterEngpass : _handlungstag(x);
-          final eb = y.erledigt ? y.ersterEngpass : _handlungstag(y);
-          if (ea != null && eb != null) {
-            final t = ea.compareTo(eb);
-            if (t != 0) return t;
-            return y.offenKg.compareTo(x.offenKg);
-          }
-          if (ea != null) return -1;
-          if (eb != null) return 1;
-          return nachNummer(a, b);
-        });
-      case _Sortierung.fehlmenge:
-        liste.sort((a, b) {
-          final f = b.deckung.offenKg.compareTo(a.deckung.offenKg);
-          return f != 0 ? f : nachNummer(a, b);
-        });
-      case _Sortierung.auftrag:
-        liste.sort((a, b) {
-          final f = b.deckung.auftragKg.compareTo(a.deckung.auftragKg);
-          return f != 0 ? f : nachNummer(a, b);
-        });
-      case _Sortierung.nummer:
-        liste.sort(nachNummer);
+  /// Ob [z] zu Abteilung und Suche passt.
+  bool _passt(
+    AuftragsbestandZeile z,
+    Map<String, Set<String>> abteilungen,
+  ) {
+    final abteilung = _abteilung;
+    if (abteilung != null &&
+        !(abteilungen[z.artikel.artikelnummer]?.contains(abteilung) ??
+            false)) {
+      return false;
     }
-    return liste;
+    final suche = _suche.text.trim().toLowerCase();
+    if (suche.isEmpty) return true;
+    final a = z.artikel;
+    if (a.artikelnummer.toLowerCase().contains(suche)) return true;
+    if (a.bezeichnung.toLowerCase().contains(suche)) return true;
+    if ((a.bezeichnung2 ?? '').toLowerCase().contains(suche)) return true;
+    return z.positionen.any(
+      (p) =>
+          p.debitor.toLowerCase().contains(suche) ||
+          p.beleg.toLowerCase().contains(suche),
+    );
+  }
+
+  // ── Drucken ──────────────────────────────────────────────────────────
+
+  /// Öffnet das Druckfenster. Vorgewählt ist, was die Liste zeigt: der
+  /// Filter „Nur mit Handlungsbedarf" und die Sortierung. Sind Abteilung
+  /// oder Suche gesetzt, lässt sich der Ausdruck auf die gefilterte Liste
+  /// beschränken.
+  Future<void> _drucken() async {
+    // Ein Doppelklick öffnete sonst zwei Fenster.
+    if (_druckLaeuft) return;
+    _druckLaeuft = true;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final ansicht = await ref.read(auftragsbestandProvider.future);
+      if (!mounted) return;
+      final abteilungen = ref.read(abteilungenJeArtikelProvider).valueOrNull ??
+          const <String, Set<String>>{};
+      final suche = _suche.text.trim();
+      final abteilung = _abteilung;
+      final filter = [
+        if (abteilung != null)
+          'Abteilung ${_abteilungName(abteilung)}',
+        if (suche.isNotEmpty) 'Suche „$suche“',
+      ];
+      await druckFensterOeffnen(
+        context,
+        bestandDruckAuftrag(
+          ansicht,
+          heute: ref.read(heuteProvider),
+          nurHandlung: _nurOffene,
+          sortierung: _sortierung,
+          gefiltert: filter.isEmpty
+              ? null
+              : {
+                  for (final z in ansicht.zeilen)
+                    if (_passt(z, abteilungen)) z.artikel.artikelnummer,
+                },
+          filterText: filter.isEmpty ? null : filter.join(' · '),
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Der Auftragsbestand ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    } finally {
+      _druckLaeuft = false;
+    }
+  }
+
+  static String _abteilungName(String wert) {
+    for (final a in Abteilung.values) {
+      if (a.dbValue == wert) return a.anzeigeName;
+    }
+    return wert;
   }
 
   // ── Aufbau ───────────────────────────────────────────────────────────
@@ -803,6 +754,11 @@ class _AuftragsbestandScreenState
                 label: const Text('Änderungen'),
               ),
             ),
+          IconButton(
+            onPressed: ansicht.valueOrNull?.leer ?? true ? null : _drucken,
+            icon: const Icon(Icons.print),
+            tooltip: 'Drucken',
+          ),
           IconButton(
             onPressed: () => ref.invalidate(auftragsbestandProvider),
             icon: const Icon(Icons.refresh),
@@ -1088,7 +1044,7 @@ class _AuftragsbestandScreenState
               ),
               SizedBox(
                 width: 210,
-                child: DropdownButtonFormField<_Sortierung>(
+                child: DropdownButtonFormField<BestandSortierung>(
                   initialValue: _sortierung,
                   isExpanded: true,
                   decoration: const InputDecoration(
@@ -1101,11 +1057,11 @@ class _AuftragsbestandScreenState
                     color: theme.colorScheme.onSurface,
                   ),
                   items: [
-                    for (final s in _Sortierung.values)
+                    for (final s in BestandSortierung.values)
                       DropdownMenuItem(value: s, child: Text(s.label)),
                   ],
                   onChanged: (v) => setState(
-                    () => _sortierung = v ?? _Sortierung.engpass,
+                    () => _sortierung = v ?? BestandSortierung.engpass,
                   ),
                 ),
               ),
@@ -1184,16 +1140,6 @@ Color _lila(ThemeData theme) => theme.brightness == Brightness.dark
 /// Ziffern gleich breit, damit Nummern und Mengen untereinander stehen.
 const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
 
-/// Erster Warenausgang, an dem hier etwas zu tun ist: noch zu bündeln
-/// oder zu spät eingeplant.
-DateTime? _handlungstag(ArtikelDeckung d) {
-  final offen = d.ersterOffenTag;
-  final spaet = d.ersterZuSpaet;
-  if (offen == null) return spaet;
-  if (spaet == null) return offen;
-  return offen.isBefore(spaet) ? offen : spaet;
-}
-
 /// Stand, Zeitraum und Kennzahlen des eingelesenen Berichts.
 class _Kopf extends StatelessWidget {
   const _Kopf({required this.ansicht, required this.heute});
@@ -1227,17 +1173,7 @@ class _Kopf extends StatelessWidget {
       if (z.handlungsbedarf) offene++;
     }
 
-    final stand = ansicht.stand;
-    final von = ansicht.von;
-    final bis = ansicht.bis;
-    final importiert = ansicht.importiertAm;
-    final zeile = [
-      if (stand != null) 'Stand ${_datumLang(stand)}, ${_uhrzeit(stand)}',
-      if (von != null && bis != null)
-        'Warenausgang ${_datumKurz(von)}–${_datumLang(bis)}',
-      if (importiert != null)
-        'eingelesen ${_datumKurz(importiert)}, ${_uhrzeit(importiert)}',
-    ].join(' · ');
+    final zeile = ansicht.herkunft;
     final berichtTag = ansicht.berichtTag;
     final veraltet = berichtTag != null && berichtTag.isBefore(heute);
     final f = _app(theme);
@@ -2045,33 +1981,17 @@ class _ArtikelEintrag extends StatelessWidget {
     final grau = farben.onSurfaceVariant;
     final a = zeile.artikel;
     final d = zeile.deckung;
-    final offenAb = d.ersterOffenTag;
-    final zuSpaetAb = d.ersterZuSpaet;
 
     // Der Status nennt das Dringendste: rot = fehlt, orange = zu spät
     // eingeplant, blau = beim Planungsvorschlag vorgemerkt, grün =
-    // rechtzeitig gedeckt.
-    final StatusArt art;
-    final String status;
-    if (offenAb != null) {
-      art = StatusArt.fehler;
-      status = 'fehlt ${_kg(d.offenKg)} kg ab ${_tagKurz(offenAb)}';
-    } else if (zuSpaetAb != null) {
-      art = StatusArt.warnung;
-      status = 'zu spät eingeplant · ${_tagKurz(zuSpaetAb)}';
-    } else if (d.vorgemerktKg >= 0.005) {
-      art = StatusArt.info;
-      final termin = d.fruehesterVormerkTermin;
-      status = termin == null
-          ? 'vorgemerkt'
-          : 'vorgemerkt · spätestens ${_tagKurz(termin)}';
-    } else if (d.lagerReicht) {
-      art = StatusArt.ok;
-      status = 'Lager reicht';
-    } else {
-      art = StatusArt.ok;
-      status = 'gedeckt mit Produktion';
-    }
+    // rechtzeitig gedeckt. Derselbe Text steht im Ausdruck.
+    final (:lage, text: status) = artikelLage(d);
+    final art = switch (lage) {
+      DeckungsLage.fehlt => StatusArt.fehler,
+      DeckungsLage.zuSpaet => StatusArt.warnung,
+      DeckungsLage.vorgemerkt => StatusArt.info,
+      DeckungsLage.lagerReicht || DeckungsLage.gedeckt => StatusArt.ok,
+    };
     final erklaerung = art == StatusArt.info
         ? 'An den Planungsvorschlag übergeben — er legt die Produktion in '
             'einen Tag, nie nach dem Termin.'
@@ -2423,7 +2343,7 @@ class _DetailsState extends State<_Details> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      _lagerSatz(d),
+                      lagerSatz(d),
                       style: theme.textTheme.bodyMedium,
                     ),
                   ),
@@ -2816,12 +2736,12 @@ class _DetailsState extends State<_Details> {
                     ),
                   if (z.geplant)
                     StatusMarke(
-                      'geplant ${_geplantText(z.eingeplantIn)}',
+                      'geplant ${geplantText(z.eingeplantIn)}',
                       art: StatusArt.ok,
                     ),
                   if (z.vorgemerkt)
                     StatusMarke(
-                      'vorgemerkt${_terminText(z.vorgemerktIn)}',
+                      'vorgemerkt${terminText(z.vorgemerktIn)}',
                       art: StatusArt.info,
                       hinweis: 'An den Planungsvorschlag übergeben — er legt '
                           'die Produktion in einen Tag, nie nach dem Termin.',
@@ -2928,14 +2848,14 @@ class _DetailsState extends State<_Details> {
     }
     if (t.eingeplantIn.isNotEmpty) {
       return Tooltip(
-        message: 'Eingeplant ${_geplantText(t.eingeplantIn)}',
+        message: 'Eingeplant ${geplantText(t.eingeplantIn)}',
         child: Icon(Icons.event_available, size: 18, color: f.lager),
       );
     }
     if (t.vorgemerktIn.isNotEmpty) {
       return Tooltip(
         message: 'Beim Planungsvorschlag vorgemerkt'
-            '${_terminText(t.vorgemerktIn)}',
+            '${terminText(t.vorgemerktIn)}',
         child: Icon(Icons.schedule_rounded, size: 18, color: f.vorgemerkt),
       );
     }
@@ -3051,44 +2971,6 @@ Color _zeilenFarbe(ZeilenDeckung z, _Farben f) {
   return f.lager;
 }
 
-/// Wie weit der Lagerbestand reicht. Das Lager geht in Versandreihenfolge
-/// an die Aufträge: Es deckt die ersten Tage ganz, höchstens einen Tag zum
-/// Teil und danach nichts mehr.
-String _lagerSatz(ArtikelDeckung d) {
-  final bestand = d.lagerKg;
-  if (bestand < 0.005) return 'Kein Lagerbestand.';
-  if (d.tage.isEmpty) return 'Lagerbestand ${_kg(bestand)} kg.';
-
-  TagesDeckung? letzterGanz;
-  TagesDeckung? teilweise;
-  for (final t in d.tage) {
-    if (t.ausLagerKg >= t.kg - 0.005) {
-      letzterGanz = t;
-      continue;
-    }
-    if (t.ausLagerKg >= 0.005) teilweise = t;
-    break;
-  }
-
-  final bestandText = 'Der Lagerbestand von ${_kg(bestand)} kg';
-  if (teilweise == null && identical(letzterGanz, d.tage.last)) {
-    final rest = bestand - d.ausLagerKg;
-    return '$bestandText deckt alle Aufträge'
-        '${rest >= 0.005 ? ' — ${_kg(rest)} kg bleiben übrig' : ''}.';
-  }
-  final teil = teilweise == null
-      ? ''
-      : 'am ${_tagKurz(teilweise.tag)} ${_kg(teilweise.ausLagerKg)} von '
-          '${_kg(teilweise.kg)} kg';
-  if (letzterGanz == null) {
-    return teil.isEmpty
-        ? 'Lagerbestand ${_kg(bestand)} kg.'
-        : '$bestandText deckt $teil.';
-  }
-  return '$bestandText reicht bis ${_tagKurz(letzterGanz.tag)}'
-      '${teil.isEmpty ? '' : ' und deckt $teil'}.';
-}
-
 /// Wie ein Tag gedeckt ist, als schmaler Balken in den Farben der Spalten.
 /// Der Hinweis nennt die Mengen.
 class _DeckungsBalken extends StatelessWidget {
@@ -3145,7 +3027,7 @@ class _Punkt extends StatelessWidget {
 
 /// „ · spätestens Mi 01.10." — der früheste Termin der Planungsaufträge,
 /// leer ohne Termin.
-String _terminText(List<Vormerkung> vormerkungen) {
+String terminText(List<Vormerkung> vormerkungen) {
   DateTime? frueh;
   for (final v in vormerkungen) {
     final t = v.termin;
@@ -3220,18 +3102,6 @@ class _VormerkungZeile extends StatelessWidget {
       ),
     );
   }
-}
-
-/// „Mi 01.10." oder „Mi 01.10.–Do 02.10." je Produktion, durch Komma
-/// getrennt.
-String _geplantText(List<ProduktionsZugang> produktionen) {
-  return produktionen.map((p) {
-    final von = p.beginn;
-    final bis = p.fertigAm;
-    return von.isAtSameMomentAs(bis)
-        ? _tagKurz(von)
-        : '${_tagKurz(von)}–${_tagKurz(bis)}';
-  }).join(', ');
 }
 
 /// Eine Produktion der App: wann fertig, wie viel, und ob sie mitzählt.
@@ -3449,17 +3319,6 @@ String _zweistellig(int n) => n.toString().padLeft(2, '0');
 String _tagKurz(DateTime d) =>
     '${_wochentage[d.weekday - 1]} ${_zweistellig(d.day)}.'
     '${_zweistellig(d.month)}.';
-
-/// „02.10."
-String _datumKurz(DateTime d) =>
-    '${_zweistellig(d.day)}.${_zweistellig(d.month)}.';
-
-/// „02.10.2026"
-String _datumLang(DateTime d) => '${_datumKurz(d)}${d.year}';
-
-/// „12:09"
-String _uhrzeit(DateTime d) =>
-    '${_zweistellig(d.hour)}:${_zweistellig(d.minute)}';
 
 /// Kilogramm mit deutschem Tausenderpunkt: ab 100 kg ganze Zahlen, darunter
 /// eine Nachkommastelle, wenn es eine gibt („2.156", „68,3", „4").

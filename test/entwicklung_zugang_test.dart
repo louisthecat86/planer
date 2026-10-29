@@ -260,6 +260,8 @@ void main() {
             ),
             // Der offene Bereich zeigt Listen aus der Datenbank — hier leer.
             projekteProvider.overrideWith((ref) => Stream.value(const [])),
+            gesamtprojekteProvider
+                .overrideWith((ref) => Stream.value(const [])),
             zutatenProvider.overrideWith((ref) => Stream.value(const [])),
             rezepturenProvider.overrideWith((ref) => Stream.value(const [])),
             alleVersionenProvider

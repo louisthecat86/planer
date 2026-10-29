@@ -2,7 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
@@ -13,25 +13,12 @@ import '../articles/article_detail_providers.dart'
     show productionHistoryProvider;
 import '../articles/production_entry_dialog.dart';
 import '../bedarf/bedarf_screen.dart' show heuteProvider;
+import 'erfassung_druck.dart';
+import 'geplante_produktion.dart';
 
 // ---------------------------------------------------------------------------
 // Modell + Provider
 // ---------------------------------------------------------------------------
-
-/// Eine geplante Produktion (Ketten-Wurzel) für die Erfassungs-Übersicht.
-class GeplanteProduktion {
-  const GeplanteProduktion({
-    required this.task,
-    required this.artikelName,
-    required this.artikelNummer,
-  });
-
-  final ProductionTask task;
-  final String artikelName;
-  final String artikelNummer;
-
-  double get mengeKg => task.fertigMengeKg ?? task.mengeKg;
-}
 
 /// Die zu erfassende Woche (Montag). Standard: aktuelle Woche.
 final erfassungWocheProvider = StateProvider<DateTime>((ref) {
@@ -117,6 +104,9 @@ class ProduktionErfassungScreen extends ConsumerStatefulWidget {
 
 class _ProduktionErfassungScreenState
     extends ConsumerState<ProduktionErfassungScreen> {
+  /// Das Druckfenster ist offen oder wird gerade geöffnet.
+  bool _druckLaeuft = false;
+
   @override
   void initState() {
     super.initState();
@@ -140,6 +130,11 @@ class _ProduktionErfassungScreenState
       appBar: AppBar(
         title: const Text('Produktionserfassung'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.print),
+            tooltip: 'Erfassungsliste drucken',
+            onPressed: () => _drucken(montag),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Aktualisieren',
@@ -276,6 +271,35 @@ class _ProduktionErfassungScreenState
         ),
       ),
     ];
+  }
+
+  /// Öffnet das Druckfenster mit der Erfassungsliste der Woche: die
+  /// geplanten Produktionen mit Spalten, in die die Ist-Werte von Hand
+  /// kommen.
+  Future<void> _drucken(DateTime montag) async {
+    // Ein Doppelklick öffnete sonst zwei Fenster.
+    if (_druckLaeuft) return;
+    _druckLaeuft = true;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final gruppen = await ref.read(erfassungWocheDatenProvider.future);
+      if (!mounted) return;
+      await druckFensterOeffnen(
+        context,
+        erfassungDruckAuftrag(montag: montag, gruppen: gruppen),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Erfassungsliste ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    } finally {
+      _druckLaeuft = false;
+    }
   }
 
   Future<void> _erfassen(GeplanteProduktion prod) async {
