@@ -453,6 +453,9 @@ void main() {
           projekteProvider.overrideWith(
             (ref) => Stream.value(liste ?? [p1, p2, p3]),
           ),
+          gesamtprojekteProvider.overrideWith(
+            (ref) => Stream.value(const <Gesamtprojekt>[]),
+          ),
           projektProvider.overrideWith((ref, id) => Stream.value(seite ?? p1)),
           projektEintraegeProvider.overrideWith(
             (ref, id) => Stream.value(verlauf ?? eintraege),

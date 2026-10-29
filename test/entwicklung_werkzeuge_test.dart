@@ -523,6 +523,7 @@ void main() {
         ProjektStatus.entwicklung: 1,
         ProjektStatus.validierung: 1,
         ProjektStatus.produktion: 1,
+        ProjektStatus.eingestellt: 0,
         ProjektStatus.archiviert: 1,
       });
       expect(s.freigaben, 1);

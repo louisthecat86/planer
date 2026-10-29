@@ -21,6 +21,9 @@ import '../rezepturen/rezepturen_ansicht.dart';
 import '../spezifikation/spezifikation_dialog.dart';
 import 'entwicklungsstrang.dart' show phaseVorDemArchiv;
 import 'fliessdiagramme_dialog.dart';
+import 'gesamtprojekt_dialoge.dart';
+import 'gesamtprojekt_modell.dart';
+import 'gesamtprojekt_screen.dart';
 import 'produkt_foto.dart';
 import 'produkt_reiter.dart';
 import 'projekt_checkliste.dart';
@@ -30,6 +33,7 @@ import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_rezeptur.dart';
 import 'projekt_verlauf.dart';
+import 'projekte_ansicht.dart' show oeffneProjekt, projektStatusArt;
 
 /// Die Reiter einer Projektseite — vorn der Verlauf mit dem Zeitstrahl:
 /// Wer ein Projekt öffnet, sieht zuerst, wie es sich entwickelt hat (F21).
@@ -111,16 +115,19 @@ Future<void> projektSpeichern(
   }
 }
 
-/// Ändert den Status und hält den Wechsel im Verlauf fest; Fehler
-/// erscheinen unten.
+/// Ändert den Status und hält den Wechsel im Verlauf fest — mit [grund],
+/// wenn einer genannt ist; Fehler erscheinen unten.
 Future<void> projektStatusAendern(
   BuildContext context,
   WidgetRef ref,
   String id,
-  ProjektStatus neu,
-) async {
+  ProjektStatus neu, {
+  String? grund,
+}) async {
   try {
-    await ref.read(projektRepositoryProvider).statusAendern(id, neu);
+    await ref
+        .read(projektRepositoryProvider)
+        .statusAendern(id, neu, grund: grund);
     ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Projektstatus');
   } catch (e) {
     if (context.mounted) {
@@ -158,6 +165,98 @@ class ProjektScreen extends ConsumerWidget {
     );
   }
 
+  /// Nimmt das Projekt in ein Gesamtprojekt auf — in ein bestehendes oder
+  /// ein neues — und öffnet es danach.
+  Future<void> _inGesamtprojekt(
+    BuildContext context,
+    EntwicklungsProjekt p,
+  ) async {
+    final id = await showDialog<String>(
+      context: context,
+      builder: (_) => InGesamtprojektDialog(projekt: p),
+    );
+    if (id == null || !context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Jetzt ein Muster des Gesamtprojekts.'),
+        action: SnackBarAction(
+          label: 'Gesamtprojekt öffnen',
+          onPressed: () => oeffneGesamtprojekt(context, id),
+        ),
+      ),
+    );
+  }
+
+  /// Löst ein Muster aus seinem Gesamtprojekt — es steht danach für sich.
+  Future<void> _loesen(
+    BuildContext context,
+    WidgetRef ref,
+    EntwicklungsProjekt p,
+    Gesamtprojekt? g,
+  ) async {
+    final ja = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Aus dem Gesamtprojekt lösen?'),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Text(
+            '„${p.name}" steht danach für sich. Mails und Unterlagen des '
+            'Gesamtprojekts${g == null ? '' : ' „${g.name}"'} bleiben dort '
+            'und stehen nicht mehr in seinem Verlauf — was nur dieses '
+            'Projekt betrifft, verschiebst du vorher hierher.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Lösen'),
+          ),
+        ],
+      ),
+    );
+    if (ja != true) return;
+    try {
+      await ref
+          .read(projektRepositoryProvider)
+          .inGesamtprojektVerschieben(p.id, null);
+      ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Projekt');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Das ging nicht: ${fehlerText(e)}')),
+        );
+      }
+    }
+  }
+
+  /// Legt Gezogenes ab. Auf einem Muster fragt es, ob es ins Gesamtprojekt
+  /// gehört oder nur zum Muster (F46).
+  Future<void> _ablegen(
+    BuildContext context,
+    WidgetRef ref,
+    EntwicklungsProjekt p,
+    Gesamtprojekt? g,
+    List<AbgelegteDatei> dateien,
+  ) async {
+    var ziel = p.id;
+    if (g != null) {
+      final wahl = await ablageZielFragen(
+        context,
+        gesamtprojekt: g,
+        muster: p,
+        dateien: dateien,
+      );
+      if (wahl == null || !context.mounted) return;
+      ziel = wahl;
+    }
+    await projektAblage(context, ref, ziel, dateien);
+  }
+
   Future<void> _loeschen(
     BuildContext context,
     WidgetRef ref,
@@ -166,7 +265,9 @@ class ProjektScreen extends ConsumerWidget {
     final ja = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Projekt löschen?'),
+        title: Text(
+          p.gesamtprojektId == null ? 'Projekt löschen?' : 'Muster löschen?',
+        ),
         content: Text(
           '„${p.name}" wird mit seinem Verlauf gelöscht. Seine Rezepturen '
           'bleiben und stehen danach ohne Projekt in der Liste. Statt zu '
@@ -238,17 +339,66 @@ class ProjektScreen extends ConsumerWidget {
     final p = projekt.valueOrNull;
     final kunde = p?.kunde?.trim();
     final theme = Theme.of(context);
+    // Nur ein Muster schaut auf sein Gesamtprojekt.
+    final gid = p?.gesamtprojektId;
+    final g = gid == null
+        ? null
+        : ref.watch(gesamtprojektProvider(gid)).valueOrNull;
+    final name = p == null
+        ? 'Projekt'
+        : (kunde == null || kunde.isEmpty ? p.name : '${p.name} · $kunde');
     return DefaultTabController(
       length: ProjektReiter.values.length,
       child: Scaffold(
         appBar: AppBar(
-          title: Text(
-            p == null
-                ? 'Projekt'
-                : (kunde == null || kunde.isEmpty
-                    ? p.name
-                    : '${p.name} · $kunde'),
-          ),
+          title: g == null
+              ? Text(name)
+              : Row(
+                  children: [
+                    // Das Gesamtprojekt vorn — ein Klick führt hin.
+                    Flexible(
+                      child: Tooltip(
+                        message: 'Zum Gesamtprojekt',
+                        child: InkWell(
+                          key: const ValueKey('projekt-zum-gesamtprojekt'),
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => oeffneGesamtprojekt(context, g.id),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder_outlined,
+                                  size: 20,
+                                  color: theme.colorScheme.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Flexible(
+                                  child: Text(
+                                    g.name,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right),
+                    Flexible(
+                      flex: 2,
+                      child: Text(name, overflow: TextOverflow.ellipsis),
+                    ),
+                  ],
+                ),
           actions: [
             if (p != null) ...[
               // Freigegeben: mit einem Klick zum Artikel in der Planung.
@@ -303,11 +453,12 @@ class ProjektScreen extends ConsumerWidget {
               ),
               PopupMenuButton<VoidCallback>(
                 key: const ValueKey('projekt-mehr'),
-                tooltip: 'Umbenennen, archivieren oder löschen',
+                tooltip: 'Umbenennen, nicht weiter verfolgen, archivieren, '
+                    'Gesamtprojekt oder löschen',
                 onSelected: (aktion) => aktion(),
                 itemBuilder: (_) {
-                  final archiviert =
-                      ProjektStatus.aus(p.status) == ProjektStatus.archiviert;
+                  final status = ProjektStatus.aus(p.status);
+                  final muster = p.gesamtprojektId != null;
                   return [
                     PopupMenuItem(
                       value: () => _umbenennen(context, ref, p),
@@ -316,37 +467,80 @@ class ProjektScreen extends ConsumerWidget {
                         title: Text('Umbenennen…'),
                       ),
                     ),
-                    PopupMenuItem(
-                      value: () => phaseWechseln(
-                        context,
-                        ref,
-                        p,
-                        archiviert
-                            ? phaseVorDemArchiv(
-                                ref
-                                        .read(projektEintraegeProvider(p.id))
-                                        .valueOrNull ??
-                                    const [],
-                              )
-                            : ProjektStatus.archiviert,
-                      ),
-                      child: ListTile(
-                        leading: Icon(
-                          archiviert
-                              ? Icons.unarchive_outlined
-                              : Icons.archive_outlined,
+                    if (status.ruht)
+                      PopupMenuItem(
+                        value: () => phaseWechseln(
+                          context,
+                          ref,
+                          p,
+                          phaseVorDemArchiv(
+                            ref
+                                    .read(projektEintraegeProvider(p.id))
+                                    .valueOrNull ??
+                                const [],
+                          ),
                         ),
+                        child: const ListTile(
+                          leading: Icon(Icons.unarchive_outlined),
+                          title: Text('Wieder aufnehmen…'),
+                        ),
+                      )
+                    else
+                      PopupMenuItem(
+                        key: const ValueKey('projekt-nicht-weiter'),
+                        value: () => phaseWechseln(
+                          context,
+                          ref,
+                          p,
+                          ProjektStatus.eingestellt,
+                        ),
+                        child: const ListTile(
+                          leading: Icon(Icons.do_not_disturb_on_outlined),
+                          title: Text('Nicht weiter verfolgen…'),
+                        ),
+                      ),
+                    if (status != ProjektStatus.archiviert)
+                      PopupMenuItem(
+                        value: () => phaseWechseln(
+                          context,
+                          ref,
+                          p,
+                          ProjektStatus.archiviert,
+                        ),
+                        child: const ListTile(
+                          leading: Icon(Icons.archive_outlined),
+                          title: Text('Archivieren…'),
+                        ),
+                      ),
+                    const PopupMenuDivider(),
+                    PopupMenuItem(
+                      key: const ValueKey('projekt-in-gesamtprojekt'),
+                      value: () => _inGesamtprojekt(context, p),
+                      child: ListTile(
+                        leading: const Icon(Icons.create_new_folder_outlined),
                         title: Text(
-                          archiviert ? 'Wieder aufnehmen…' : 'Archivieren…',
+                          muster
+                              ? 'In ein anderes Gesamtprojekt…'
+                              : 'In ein Gesamtprojekt aufnehmen…',
                         ),
                       ),
                     ),
+                    if (muster)
+                      PopupMenuItem(
+                        value: () => _loesen(context, ref, p, g),
+                        child: const ListTile(
+                          leading: Icon(Icons.folder_off_outlined),
+                          title: Text('Aus dem Gesamtprojekt lösen…'),
+                        ),
+                      ),
                     const PopupMenuDivider(),
                     PopupMenuItem(
                       value: () => _loeschen(context, ref, p),
-                      child: const ListTile(
-                        leading: Icon(Icons.delete_outline),
-                        title: Text('Projekt löschen…'),
+                      child: ListTile(
+                        leading: const Icon(Icons.delete_outline),
+                        title: Text(
+                          muster ? 'Muster löschen…' : 'Projekt löschen…',
+                        ),
                       ),
                     ),
                   ];
@@ -396,7 +590,7 @@ class ProjektScreen extends ConsumerWidget {
                         hinweis:
                             'Mail oder Datei loslassen — kommt in den Verlauf',
                         onAbgelegt: (dateien) =>
-                            projektAblage(context, ref, p.id, dateien),
+                            _ablegen(context, ref, p, g, dateien),
                         child: TabBarView(
                           children: [
                             ProjektVerlauf(projekt: p),
@@ -465,6 +659,10 @@ class ProjektUebersicht extends StatelessWidget {
       _Notizen(projekt: projekt),
     ];
     final rechts = <Widget>[
+      if (projekt.gesamtprojektId case final gid?) ...[
+        _ImGesamtprojekt(projekt: projekt, gesamtprojektId: gid),
+        const SizedBox(height: 16),
+      ],
       ProjektFreigabe(projekt: projekt),
       const SizedBox(height: 16),
       ProduktFotoUebersicht(projekt: projekt),
@@ -511,6 +709,104 @@ class ProjektUebersicht extends StatelessWidget {
   }
 }
 
+/// Bei einem Muster: das Gesamtprojekt, zu dem es gehört, und wie die
+/// anderen Muster stehen — zum Hinüberwechseln.
+class _ImGesamtprojekt extends ConsumerWidget {
+  const _ImGesamtprojekt({
+    required this.projekt,
+    required this.gesamtprojektId,
+  });
+
+  final EntwicklungsProjekt projekt;
+  final String gesamtprojektId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final g = ref.watch(gesamtprojektProvider(gesamtprojektId)).valueOrNull;
+    final muster = ref.watch(musterProvider(gesamtprojektId)).valueOrNull ??
+        const <EntwicklungsProjekt>[];
+    final andere = [
+      for (final m in muster)
+        if (m.id != projekt.id) m,
+    ];
+    return Bereich(
+      titel: 'Gesamtprojekt',
+      icon: Icons.folder_outlined,
+      untertitel: musterZusammenfassung([
+        for (final m in muster) ProjektStatus.aus(m.status),
+      ]),
+      aktionen: [
+        IconButton(
+          tooltip: 'Gesamtprojekt öffnen',
+          icon: const Icon(Icons.open_in_new, size: 18),
+          onPressed: () => oeffneGesamtprojekt(context, gesamtprojektId),
+        ),
+      ],
+      innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          InkWell(
+            borderRadius: AppMasse.ecken,
+            onTap: () => oeffneGesamtprojekt(context, gesamtprojektId),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(
+                g?.name ?? '…',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: theme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          if ((g?.anfrage ?? '').trim().isNotEmpty)
+            Text(
+              g!.anfrage!.trim(),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(color: grau),
+            ),
+          if (andere.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Die anderen Muster',
+              style: theme.textTheme.labelSmall?.copyWith(color: grau),
+            ),
+            for (final m in andere)
+              InkWell(
+                key: ValueKey('anderes-muster-${m.id}'),
+                borderRadius: AppMasse.ecken,
+                onTap: () => oeffneProjekt(context, m.id),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          m.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      StatusMarke(
+                        ProjektStatus.aus(m.status).label,
+                        art: projektStatusArt(ProjektStatus.aus(m.status)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// Kunde, Artikelnummer, Idee, Vereinbarungen, Fließdiagramm und was neu
 /// ist.
 class ProjektStammdaten extends ConsumerWidget {
@@ -546,8 +842,14 @@ class ProjektStammdaten extends ConsumerWidget {
               SizedBox(
                 width: 240,
                 child: TextFeld(
+                  key: const ValueKey('stamm-kunde'),
                   wert: p.kunde ?? '',
                   label: 'Kunde',
+                  // Beim Muster gilt der Kunde des Gesamtprojekts.
+                  bearbeitbar: p.gesamtprojektId == null,
+                  hinweis: p.gesamtprojektId == null
+                      ? null
+                      : 'vom Gesamtprojekt',
                   onFertig: (t) => speichern(
                     EntwicklungProjekteCompanion(kunde: Value(_oderNull(t))),
                   ),

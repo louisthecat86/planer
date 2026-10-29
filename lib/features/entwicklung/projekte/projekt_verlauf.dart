@@ -18,6 +18,8 @@ import 'datei_aktionen.dart';
 import 'entwicklungsstrang.dart';
 import 'entwicklungsweg_ansicht.dart';
 import 'faellig.dart';
+import 'gesamtprojekt_dialoge.dart';
+import 'gesamtprojekt_modell.dart';
 import 'projekt_dateien.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -76,6 +78,23 @@ final verlaufAnsichtProvider =
 final verlaufFilterProvider =
     StateProvider<Set<EintragArt>>((ref) => EintragArt.values.toSet());
 
+/// Ob der Verlauf eines Musters die Einträge seines Gesamtprojekts zeigt
+/// (F45) — gilt, bis die App schließt.
+final verlaufMitGesamtprojektProvider = StateProvider<bool>((ref) => true);
+
+/// Ob der Verlauf eines Gesamtprojekts die Meilensteine seiner Muster
+/// zeigt — gilt, bis die App schließt.
+final verlaufMitMusternProvider = StateProvider<bool>((ref) => true);
+
+/// Ein Schalter über dem Verlauf, der Einträge aus einem anderen Verlauf
+/// zeigt oder verbirgt.
+typedef HerkunftSchalter = ({
+  String label,
+  IconData icon,
+  bool an,
+  ValueChanged<bool> onChanged,
+});
+
 /// Die Farbe eines Eintragsstatus.
 StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
       EintragStatus.offen => StatusArt.warnung,
@@ -84,18 +103,159 @@ StatusArt eintragStatusArt(EintragStatus s) => switch (s) {
 
 /// Der Verlauf eines Projekts: Meilensteine, Rezepturstände, Mails,
 /// Parameter, Dateien und Notizen — als Zeitstrahl (ältester links), als
-/// Entwicklungsweg oder als Liste (neuester zuerst).
+/// Entwicklungsweg oder als Liste (neuester zuerst). Gehört das Projekt
+/// als Muster zu einem Gesamtprojekt, stehen dessen Einträge mit darin —
+/// gekennzeichnet und abschaltbar (F45).
 class ProjektVerlauf extends ConsumerWidget {
   const ProjektVerlauf({super.key, required this.projekt});
 
   final EntwicklungsProjekt projekt;
+
+  /// „Datei ablegen" auf einem Muster: Wie beim Ziehen fragt die App, ob
+  /// die Datei ins Gesamtprojekt gehört oder nur zum Muster (F46).
+  Future<void> _dateiFuerMuster(
+    BuildContext context,
+    WidgetRef ref,
+    Gesamtprojekt g,
+  ) async {
+    final d = await dateiWaehlen(context);
+    if (d == null || !context.mounted) return;
+    final ziel = await ablageZielFragen(
+      context,
+      gesamtprojekt: g,
+      muster: projekt,
+      dateien: [d],
+    );
+    if (ziel == null || !context.mounted) return;
+    await projektAblage(context, ref, ziel, [d]);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gid = projekt.gesamtprojektId;
+    final g = gid == null
+        ? null
+        : ref.watch(gesamtprojektProvider(gid)).valueOrNull;
+    final eintraege = ref.watch(projektEintraegeProvider(projekt.id));
+    final mitGesamt = ref.watch(verlaufMitGesamtprojektProvider);
+    final gesamt = gid == null
+        ? const <ProjektEintrag>[]
+        : ref.watch(projektEintraegeProvider(gid)).valueOrNull ??
+            const <ProjektEintrag>[];
+    final ziele = gid == null
+        ? const <VerschiebeZiel>[]
+        : ref.watch(verschiebeZieleProvider(gid));
+    List<EntwicklungsDatei> dateienVon(String id) =>
+        ref.watch(projektDateienProvider(id)).valueOrNull ??
+        const <EntwicklungsDatei>[];
+    final dateien = {
+      for (final d in dateienVon(projekt.id)) d.id: d,
+      if (gid != null)
+        for (final d in dateienVon(gid)) d.id: d,
+    };
+    final versionen = {
+      for (final v in ref.watch(alleVersionenProvider).valueOrNull ??
+          const <RezepturVersion>[])
+        v.id: v,
+    };
+    return eintraege.when(
+      skipLoadingOnReload: true,
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: HinweisBox(
+          fehlerText(e),
+          art: StatusArt.fehler,
+          titel: 'Der Verlauf ließ sich nicht laden',
+          auswaehlbar: true,
+        ),
+      ),
+      data: (liste) {
+        final z = musterVerlauf(liste, gesamt, mitGesamtprojekt: mitGesamt);
+        return VerlaufInhalt(
+          zielId: projekt.id,
+          eintraege: z.eintraege,
+          herkunft: z.herkunft,
+          dateien: dateien,
+          versionen: versionen,
+          phasen: statusJeEintrag(
+            z.eintraege,
+            ProjektStatus.aus(projekt.status),
+          ),
+          ziele: ziele,
+          onDatei: g == null ? null : () => _dateiFuerMuster(context, ref, g),
+          schalter: gesamt.isEmpty
+              ? null
+              : (
+                  label: 'Aus dem Gesamtprojekt (${gesamt.length})',
+                  icon: Icons.folder_outlined,
+                  an: mitGesamt,
+                  onChanged: (an) => ref
+                      .read(verlaufMitGesamtprojektProvider.notifier)
+                      .state = an,
+                ),
+          weg: (eintraege) => EntwicklungswegAnsicht(
+            projekt: projekt,
+            eintraege: eintraege,
+            versionen: versionen,
+            herkunft: z.herkunft,
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Der Inhalt eines Verlaufs — eines Projekts oder eines Gesamtprojekts:
+/// die Leiste mit Ansicht und Knöpfen, die Filter und die Einträge. Neue
+/// Einträge und Dateien kommen nach [zielId].
+class VerlaufInhalt extends ConsumerWidget {
+  const VerlaufInhalt({
+    super.key,
+    required this.zielId,
+    required this.eintraege,
+    this.herkunft = const {},
+    this.dateien = const {},
+    this.versionen = const {},
+    this.phasen = const {},
+    this.ziele = const [],
+    this.schalter,
+    this.weg,
+    this.onDatei,
+  });
+
+  /// Der Verlauf, in den neue Einträge kommen.
+  final String zielId;
+
+  /// Alle Einträge, der neueste zuerst.
+  final List<ProjektEintrag> eintraege;
+
+  /// Woher ein Eintrag aus einem anderen Verlauf kommt.
+  final Map<String, String> herkunft;
+  final Map<String, EntwicklungsDatei> dateien;
+  final Map<String, RezepturVersion> versionen;
+
+  /// Die Phase bei jedem Eintrag — leer: kein Phasenband.
+  final Map<String, ProjektStatus> phasen;
+
+  /// Wohin sich Einträge verschieben lassen.
+  final List<VerschiebeZiel> ziele;
+
+  /// Zeigt oder verbirgt die Einträge aus dem anderen Verlauf.
+  final HerkunftSchalter? schalter;
+
+  /// Der Entwicklungsweg — null: Den gibt es hier nicht.
+  final Widget Function(List<ProjektEintrag> eintraege)? weg;
+
+  /// „Datei ablegen" — null: Die Datei kommt nach [zielId].
+  final VoidCallback? onDatei;
 
   Future<void> _neu(BuildContext context, WidgetRef ref) async {
     final eingabe = await showDialog<EintragEingabe>(
       context: context,
       builder: (_) => EintragDialog(
         name: ref.read(entwicklungNameProvider),
-        staende: ref.read(projektStandWahlenProvider(projekt.id)),
+        staende: ref.read(projektStandWahlenProvider(zielId)),
       ),
     );
     if (eingabe == null || !context.mounted) return;
@@ -103,9 +263,9 @@ class ProjektVerlauf extends ConsumerWidget {
       final datei = eingabe.datei;
       final dateiId = datei == null
           ? null
-          : await dateiAblegen(ref, datei, projektId: projekt.id);
+          : await dateiAblegen(ref, datei, projektId: zielId);
       await ref.read(projektRepositoryProvider).eintragAnlegen(
-            projektId: projekt.id,
+            projektId: zielId,
             art: eingabe.art,
             titel: eingabe.titel,
             datum: eingabe.datum,
@@ -127,144 +287,139 @@ class ProjektVerlauf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eintraege = ref.watch(projektEintraegeProvider(projekt.id));
     // Hält die Stände für „Zu Stand" bereit.
-    ref.watch(projektStandWahlenProvider(projekt.id));
-    final dateien = {
-      for (final d in ref.watch(projektDateienProvider(projekt.id)).valueOrNull ??
-          const <EntwicklungsDatei>[])
-        d.id: d,
+    ref.watch(projektStandWahlenProvider(zielId));
+    final liste = eintraege;
+    final ansichten = [
+      for (final a in VerlaufAnsicht.values)
+        if (a != VerlaufAnsicht.entwicklungsweg || weg != null) a,
+    ];
+    final gewaehlt = ref.watch(verlaufAnsichtProvider);
+    final ansicht = ansichten.contains(gewaehlt) ? gewaehlt : ansichten.first;
+    final filter = ref.watch(verlaufFilterProvider);
+    // Die Arten, die vorkommen, mit ihrer Zahl — in fester Reihenfolge.
+    final arten = <EintragArt, int>{
+      for (final a in EintragArt.values)
+        if (liste.any((e) => EintragArt.aus(e.art) == a))
+          a: liste.where((e) => EintragArt.aus(e.art) == a).length,
     };
-    final versionen = {
-      for (final v in ref.watch(alleVersionenProvider).valueOrNull ??
-          const <RezepturVersion>[])
-        v.id: v,
-    };
-    return eintraege.when(
-      skipLoadingOnReload: true,
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: HinweisBox(
-          fehlerText(e),
-          art: StatusArt.fehler,
-          titel: 'Der Verlauf ließ sich nicht laden',
-          auswaehlbar: true,
+    final sichtbar = [
+      for (final e in liste)
+        if (filter.contains(EintragArt.aus(e.art))) e,
+    ];
+    // Die Phasen, die auf dem Zeitstrahl vorkommen, in ihrer Folge.
+    final legende = {
+      for (final a in phasenAbschnitte(zeitlichSortiert(sichtbar), phasen))
+        a.status,
+    }.toList();
+    final s = schalter;
+    final artFilter =
+        ansicht != VerlaufAnsicht.entwicklungsweg && arten.length > 1;
+    final wegBauen = weg;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        _Leiste(
+          anzahl: liste.length,
+          ansicht: ansicht,
+          ansichten: ansichten,
+          onDatei: onDatei ?? () => dateiAlsEintrag(context, ref, zielId),
+          onNeu: () => _neu(context, ref),
         ),
-      ),
-      data: (liste) {
-        final ansicht = ref.watch(verlaufAnsichtProvider);
-        final filter = ref.watch(verlaufFilterProvider);
-        // Die Arten, die vorkommen, mit ihrer Zahl — in fester Reihenfolge.
-        final arten = <EintragArt, int>{
-          for (final a in EintragArt.values)
-            if (liste.any((e) => EintragArt.aus(e.art) == a))
-              a: liste.where((e) => EintragArt.aus(e.art) == a).length,
-        };
-        final sichtbar = [
-          for (final e in liste)
-            if (filter.contains(EintragArt.aus(e.art))) e,
-        ];
-        final phasen =
-            statusJeEintrag(liste, ProjektStatus.aus(projekt.status));
-        // Die Phasen, die auf dem Zeitstrahl vorkommen, in ihrer Folge.
-        final legende = {
-          for (final a
-              in phasenAbschnitte(zeitlichSortiert(sichtbar), phasen))
-            a.status,
-        }.toList();
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          children: [
-            _Leiste(
-              anzahl: liste.length,
-              ansicht: ansicht,
-              onDatei: () => dateiAlsEintrag(context, ref, projekt.id),
-              onNeu: () => _neu(context, ref),
-            ),
-            if (ansicht != VerlaufAnsicht.entwicklungsweg &&
-                arten.length > 1) ...[
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final MapEntry(key: art, value: anzahl)
-                      in arten.entries)
-                    FilterChip(
-                      avatar: Icon(art.icon, size: 16),
-                      label: Text('${art.label} ($anzahl)'),
-                      selected: filter.contains(art),
-                      onSelected: (an) => ref
-                          .read(verlaufFilterProvider.notifier)
-                          .state = an
-                          ? {...filter, art}
-                          : (filter.toSet()..remove(art)),
-                    ),
-                ],
-              ),
-            ],
-            const SizedBox(height: 12),
-            if (liste.isEmpty)
-              const LeerHinweis(
-                'Noch keine Einträge.',
-                icon: Icons.history,
-              )
-            else if (ansicht == VerlaufAnsicht.entwicklungsweg)
-              EntwicklungswegAnsicht(
-                projekt: projekt,
-                eintraege: liste,
-                versionen: versionen,
-              )
-            else if (sichtbar.isEmpty)
-              const LeerHinweis(
-                'Keine Einträge dieser Arten.',
-                icon: Icons.filter_alt_outlined,
-              )
-            else if (ansicht == VerlaufAnsicht.zeitstrahl) ...[
-              Zeitstrahl(
-                eintraege: sichtbar,
-                dateien: dateien,
-                versionen: versionen,
-                phasen: phasen,
-                onTippen: (e) => eintragZeigen(
-                  context,
-                  projektId: projekt.id,
-                  eintragId: e.id,
-                ),
-              ),
-              const SizedBox(height: 4),
-              PhasenLegende(phasen: legende),
-            ] else
-              for (final e in sichtbar)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: EintragKarte(
-                    eintrag: e,
-                    datei: dateien[e.dateiId],
-                    version: versionen[e.versionId],
+        if (artFilter || s != null) ...[
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (artFilter)
+                for (final MapEntry(key: art, value: anzahl) in arten.entries)
+                  FilterChip(
+                    avatar: Icon(art.icon, size: 16),
+                    label: Text('${art.label} ($anzahl)'),
+                    selected: filter.contains(art),
+                    onSelected: (an) =>
+                        ref.read(verlaufFilterProvider.notifier).state = an
+                            ? {...filter, art}
+                            : (filter.toSet()..remove(art)),
                   ),
+              if (s != null)
+                FilterChip(
+                  key: const ValueKey('verlauf-herkunft'),
+                  avatar: Icon(s.icon, size: 16),
+                  label: Text(s.label),
+                  selected: s.an,
+                  onSelected: s.onChanged,
                 ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (liste.isEmpty)
+          const LeerHinweis(
+            'Noch keine Einträge.',
+            icon: Icons.history,
+          )
+        else if (ansicht == VerlaufAnsicht.entwicklungsweg && wegBauen != null)
+          wegBauen(liste)
+        else if (sichtbar.isEmpty)
+          const LeerHinweis(
+            'Keine Einträge dieser Arten.',
+            icon: Icons.filter_alt_outlined,
+          )
+        else if (ansicht == VerlaufAnsicht.zeitstrahl) ...[
+          Zeitstrahl(
+            eintraege: sichtbar,
+            dateien: dateien,
+            versionen: versionen,
+            phasen: phasen,
+            herkunft: herkunft,
+            onTippen: (e) => eintragZeigen(
+              context,
+              projektId: e.projektId,
+              eintragId: e.id,
+              herkunft: herkunft[e.id],
+              ziele: ziele,
+            ),
+          ),
+          if (legende.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            PhasenLegende(phasen: legende),
           ],
-        );
-      },
+        ] else
+          for (final e in sichtbar)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: EintragKarte(
+                eintrag: e,
+                datei: dateien[e.dateiId],
+                version: versionen[e.versionId],
+                herkunft: herkunft[e.id],
+                ziele: ziele,
+              ),
+            ),
+      ],
     );
   }
 }
 
-/// Über dem Verlauf: die drei Ansichten — beschriftet, erst ganz schmal
-/// nur mit Symbol —, die Zahl der Einträge und die Knöpfe. Breit in einer
+/// Über dem Verlauf: die Ansichten — beschriftet, erst ganz schmal nur
+/// mit Symbol —, die Zahl der Einträge und die Knöpfe. Breit in einer
 /// Zeile, sonst die Ansichten unter den Knöpfen.
 class _Leiste extends ConsumerWidget {
   const _Leiste({
     required this.anzahl,
     required this.ansicht,
+    required this.ansichten,
     required this.onDatei,
     required this.onNeu,
   });
 
   final int anzahl;
   final VerlaufAnsicht ansicht;
+
+  /// Die Ansichten, die es hier gibt.
+  final List<VerlaufAnsicht> ansichten;
   final VoidCallback onDatei;
   final VoidCallback onNeu;
 
@@ -276,7 +431,7 @@ class _Leiste extends ConsumerWidget {
         final wahl = SegmentedButton<VerlaufAnsicht>(
           key: const ValueKey('verlauf-ansicht'),
           segments: [
-            for (final a in VerlaufAnsicht.values)
+            for (final a in ansichten)
               ButtonSegment(
                 value: a,
                 icon: Icon(a.icon),
@@ -415,6 +570,9 @@ class EintragKarte extends ConsumerWidget {
     required this.eintrag,
     this.datei,
     this.version,
+    this.herkunft,
+    this.ziele = const [],
+    this.nachVerschieben,
   });
 
   final ProjektEintrag eintrag;
@@ -424,6 +582,55 @@ class EintragKarte extends ConsumerWidget {
 
   /// Der Rezepturstand, um den es geht.
   final RezepturVersion? version;
+
+  /// Woher der Eintrag kommt, wenn er in einem anderen Verlauf steht —
+  /// etwa „Gesamtprojekt".
+  final String? herkunft;
+
+  /// Wohin sich der Eintrag verschieben lässt — der eigene Verlauf zählt
+  /// nicht mit.
+  final List<VerschiebeZiel> ziele;
+
+  /// Nach dem Verschieben — etwa das Fenster schließen.
+  final VoidCallback? nachVerschieben;
+
+  /// Verschieben lassen sich Mails, Dateien und Notizen — Meilensteine,
+  /// Rezepturstände und Parameter gehören zu ihrem Projekt.
+  List<VerschiebeZiel> get _moeglich => switch (EintragArt.aus(eintrag.art)) {
+        EintragArt.email || EintragArt.datei || EintragArt.notiz => [
+            for (final z in ziele)
+              if (z.id != eintrag.projektId) z,
+          ],
+        _ => const [],
+      };
+
+  Future<void> _verschieben(BuildContext context, WidgetRef ref) async {
+    final mail = EintragArt.aus(eintrag.art) == EintragArt.email;
+    final ziel = await zielWaehlen(
+      context,
+      _moeglich,
+      titel: '„${eintrag.titel}" verschieben',
+      hinweis: mail
+          ? 'Die Mail wandert mit ihren Anhängen.'
+          : datei == null
+              ? null
+              : 'Die Datei wandert mit.',
+    );
+    if (ziel == null || !context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(projektRepositoryProvider)
+          .eintragVerschieben(eintrag.id, ziel.id);
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Eintrag verschoben');
+      nachVerschieben?.call();
+      messenger.showSnackBar(SnackBar(content: Text(verschobenText(ziel))));
+    } catch (e) {
+      if (context.mounted) _fehler(context, e);
+    }
+  }
 
   Future<void> _bearbeiten(BuildContext context, WidgetRef ref) async {
     final eingabe = await showDialog<EintragEingabe>(
@@ -581,6 +788,19 @@ class EintragKarte extends ConsumerWidget {
                           ),
                         ),
                       ),
+                      if (herkunft case final h?) ...[
+                        const SizedBox(width: 8),
+                        StatusMarke(
+                          h,
+                          key: const ValueKey('eintrag-herkunft'),
+                          icon: h == kHerkunftGesamtprojekt
+                              ? Icons.folder_outlined
+                              : Icons.science_outlined,
+                          hinweis: h == kHerkunftGesamtprojekt
+                              ? 'Aus dem Verlauf des Gesamtprojekts'
+                              : 'Aus dem Verlauf des Musters „$h"',
+                        ),
+                      ],
                       const SizedBox(width: 8),
                       StatusMarke(
                         status.label,
@@ -699,6 +919,8 @@ class EintragKarte extends ConsumerWidget {
                     _umschalten(context, ref);
                   case 'kommentieren':
                     _kommentieren(context, ref);
+                  case 'verschieben':
+                    _verschieben(context, ref);
                   case 'loeschen':
                     _loeschen(context, ref);
                 }
@@ -720,6 +942,11 @@ class EintragKarte extends ConsumerWidget {
                   value: 'bearbeiten',
                   child: Text('Bearbeiten'),
                 ),
+                if (_moeglich.isNotEmpty)
+                  const PopupMenuItem(
+                    value: 'verschieben',
+                    child: Text('Verschieben …'),
+                  ),
                 const PopupMenuItem(value: 'loeschen', child: Text('Löschen')),
               ],
             ),

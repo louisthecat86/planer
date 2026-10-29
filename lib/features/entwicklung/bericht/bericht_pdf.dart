@@ -58,12 +58,14 @@ const PdfColor _ok = PdfColor.fromInt(0xFF2E7D32);
 const PdfColor _warn = PdfColor.fromInt(0xFFA35F00);
 const PdfColor _fehler = PdfColor.fromInt(0xFFC62828);
 const PdfColor _station = PdfColor.fromInt(0xFF6A3FA0);
+const PdfColor _eingestellt = PdfColor.fromInt(0xFF8D6E63);
 
 /// Die Farbe einer Phase.
 PdfColor _phasenFarbe(ProjektStatus s) => switch (s) {
   ProjektStatus.entwicklung => const PdfColor.fromInt(0xFF1565C0),
   ProjektStatus.validierung => _warn,
   ProjektStatus.produktion => _ok,
+  ProjektStatus.eingestellt => _eingestellt,
   ProjektStatus.archiviert => _grau,
 };
 
@@ -72,6 +74,7 @@ String _phasenName(ProjektStatus s) => switch (s) {
   ProjektStatus.entwicklung => 'Entwicklung',
   ProjektStatus.validierung => 'Validierung',
   ProjektStatus.produktion => 'Produktion',
+  ProjektStatus.eingestellt => 'Nicht weiter verfolgt',
   ProjektStatus.archiviert => 'Archiviert',
 };
 
@@ -588,6 +591,7 @@ class BerichtInhalt {
     this.zeitstrahl = true,
     this.verlaufEinzeln = true,
     this.neueSeiten = true,
+    this.gesamtKorrespondenz = true,
   });
 
   /// Diese Kapitel ([BerichtKapitel]) — null: alle.
@@ -607,6 +611,10 @@ class BerichtInhalt {
 
   /// Kapitel mit Inhalt beginnen auf einer neuen Seite.
   final bool neueSeiten;
+
+  /// Beim Muster: die Mails und Unterlagen des Gesamtprojekts im Verlauf
+  /// und auf dem Weg — gekennzeichnet.
+  final bool gesamtKorrespondenz;
 }
 
 /// Die Kapitel des Berichts — Schlüssel für [BerichtInhalt.kapitel].
@@ -629,6 +637,7 @@ abstract final class BerichtWahl {
   static const zeitstrahl = 'zeitstrahl';
   static const verlaufEinzeln = 'verlaufEinzeln';
   static const neueSeiten = 'neueSeiten';
+  static const gesamtKorrespondenz = 'gesamtKorrespondenz';
 }
 
 /// Die Kapitel, die es für [b] gibt — mit Titel, in ihrer Reihenfolge.
@@ -682,6 +691,13 @@ DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
               w.mehrere(BerichtWahl.kapitel).contains(BerichtKapitel.verlauf),
         ),
       ],
+      if (b.gesamtVerlauf.isNotEmpty)
+        const DruckSchalter(
+          schluessel: BerichtWahl.gesamtKorrespondenz,
+          titel: 'Mails und Unterlagen aus dem Gesamtprojekt',
+          hinweis: 'Im Verlauf und auf dem Weg — mit „(Gesamtprojekt)"',
+          gruppe: gruppe,
+        ),
       const DruckSchalter(
         schluessel: BerichtWahl.neueSeiten,
         titel: 'Kapitel auf neuen Seiten',
@@ -698,6 +714,8 @@ DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
         zeitstrahl: wahl.an(BerichtWahl.zeitstrahl),
         verlaufEinzeln: wahl.an(BerichtWahl.verlaufEinzeln),
         neueSeiten: wahl.an(BerichtWahl.neueSeiten),
+        gesamtKorrespondenz: b.gesamtVerlauf.isNotEmpty &&
+            wahl.an(BerichtWahl.gesamtKorrespondenz),
       );
       if (_kapitelFuer(b, inhalt).isEmpty &&
           !inhalt.steckbrief &&
@@ -804,10 +822,12 @@ List<_Kapitel> _kapitelFuer(ProjektBericht b, BerichtInhalt inhalt) {
 /// Der Bericht zum Drucken: ein Blatt, das über viele Seiten läuft — mit
 /// Lesezeichen für jedes Kapitel.
 DruckDokument berichtDruck(
-  ProjektBericht b, {
+  ProjektBericht bericht, {
   BerichtInhalt inhalt = const BerichtInhalt(),
   DateTime? gedrucktAm,
 }) {
+  // Beim Muster auf Wunsch mit dem Verlauf des Gesamtprojekts.
+  final b = inhalt.gesamtKorrespondenz ? bericht.mitGesamtVerlauf() : bericht;
   final jetzt = gedrucktAm ?? DateTime.now();
   final p = b.projekt;
   final kunde = _oderNull(p.kunde);
@@ -936,6 +956,16 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
+              // Ein Muster: das Gesamtprojekt darüber.
+              if (b.gesamtprojekt case final g?)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 2),
+                  child: _t(
+                    'Muster im Gesamtprojekt „${g.name}"',
+                    groesse: 9,
+                    farbe: _akzent,
+                  ),
+                ),
               _t(p.name, groesse: 22, fett: true),
               if (unterzeile.isNotEmpty)
                 pw.Padding(
@@ -984,7 +1014,8 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
 }
 
 /// Entwicklung » Validierung » Produktion — erledigte mit Haken, die
-/// jetzige farbig.
+/// jetzige farbig. Ein Muster, das nicht weiter verfolgt wird, trägt das
+/// als Marke dahinter.
 pw.Widget _phasenLeiste(ProjektStatus status) {
   const folge = [
     ProjektStatus.entwicklung,
@@ -1022,6 +1053,10 @@ pw.Widget _phasenLeiste(ProjektStatus status) {
       if (archiviert) ...[
         pw.SizedBox(width: 10),
         _marke('ARCHIVIERT', _grau, voll: true),
+      ],
+      if (status == ProjektStatus.eingestellt) ...[
+        pw.SizedBox(width: 10),
+        _marke('NICHT WEITER VERFOLGT', _eingestellt, voll: true),
       ],
     ],
   );
@@ -1335,6 +1370,7 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
       ? 'nein'
       : 'ja${_oderNull(p.neueZutatenDetails) == null ? '' : ': ${p.neueZutatenDetails!.trim()}'}';
   final felder = [
+    if (b.gesamtprojekt case final g?) ('Gesamtprojekt', g.name),
     ('Kunde', p.kunde ?? ''),
     ('Artikelnummer', b.artikel?.artikelnummer ?? p.artikelnummer ?? ''),
     ('Fließdiagramm', b.fliessdiagramm ?? p.fliessdiagramm ?? ''),
@@ -1364,7 +1400,9 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
       (
         datum: p.createdAt,
         phase: _phasenName(ProjektStatus.entwicklung),
-        anlass: 'Projekt angelegt',
+        anlass: b.gesamtprojekt == null
+            ? 'Projekt angelegt'
+            : 'Muster angelegt',
       ),
     );
   }
@@ -1375,9 +1413,41 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
   }
 
   final ziele = _zielPruefungen(s);
+  final g = b.gesamtprojekt;
   return [
     ..._kapitelKopf(s, k),
     _felderZweispaltig(felder),
+    // Ein Muster: das Gesamtprojekt und wie seine Muster stehen.
+    if (g != null)
+      ..._mitTitel(
+        _abschnitt('Gesamtprojekt', zusatz: g.name),
+        zeilen: b.muster.length + 2,
+        [
+          if (_oderNull(g.anfrage) case final a?) ...[
+            _fliess(a),
+            pw.SizedBox(height: 5),
+          ],
+          _tabelle(
+            kopf: const ['Muster', 'Phase', 'Art.-Nr.'],
+            breiten: const {
+              0: pw.FlexColumnWidth(),
+              1: pw.FixedColumnWidth(110),
+              2: pw.FixedColumnWidth(80),
+            },
+            zeilen: [
+              for (final m in b.muster)
+                [
+                  _zelle(
+                    m.id == p.id ? '${m.name}  (dieser Bericht)' : m.name,
+                    fett: m.id == p.id,
+                  ),
+                  _zelle(_phasenName(ProjektStatus.aus(m.status))),
+                  _zelle(_oderNull(m.artikelnummer) ?? '-'),
+                ],
+            ],
+          ),
+        ],
+      ),
     if (phasen.length > 1)
       ..._mitTitel(_abschnitt('Phasen'), zeilen: phasen.length, [
         _tabelle(

@@ -21,14 +21,16 @@ import 'zeitstrahl.dart' show phasenFarbe;
 // den Assistenten, F39) und wie viele Einträge im Verlauf noch offen sind
 // (überfällige in der Farbe für Fehler).
 
-/// Die Phasen der Reihe nach — das Archiv steht im Menü.
+/// Die Phasen der Reihe nach — „Nicht weiter verfolgen" und das Archiv
+/// stehen im Menü.
 const List<ProjektStatus> _phasen = [
   ProjektStatus.entwicklung,
   ProjektStatus.validierung,
   ProjektStatus.produktion,
 ];
 
-/// Fragt, ob das Projekt in [neu] wechseln soll, und wechselt dann.
+/// Fragt, ob das Projekt in [neu] wechseln soll, und wechselt dann. Für
+/// „Nicht weiter verfolgt" fragt es nach dem Grund.
 Future<void> phaseWechseln(
   BuildContext context,
   WidgetRef ref,
@@ -37,17 +39,32 @@ Future<void> phaseWechseln(
 ) async {
   final alt = ProjektStatus.aus(projekt.status);
   if (alt == neu) return;
-  final ausDemArchiv = alt == ProjektStatus.archiviert;
+  if (neu == ProjektStatus.eingestellt) {
+    final grund = await showDialog<String>(
+      context: context,
+      builder: (_) => _NichtWeiterDialog(
+        muster: projekt.gesamtprojektId != null,
+        name: projekt.name,
+      ),
+    );
+    if (grund == null || !context.mounted) return;
+    await projektStatusAendern(context, ref, projekt.id, neu, grund: grund);
+    return;
+  }
+  final ausDerRuhe = alt.ruht && !neu.ruht;
   final zurueck =
-      !ausDemArchiv && _phasen.indexOf(neu) < _phasen.indexOf(alt);
-  final titel = ausDemArchiv
-      ? 'Projekt wieder aufnehmen?'
+      !alt.ruht && _phasen.indexOf(neu) < _phasen.indexOf(alt);
+  final titel = ausDerRuhe
+      ? (projekt.gesamtprojektId == null
+          ? 'Projekt wieder aufnehmen?'
+          : 'Muster wieder aufnehmen?')
       : switch (neu) {
           ProjektStatus.entwicklung =>
             zurueck ? 'Zurück in die Entwicklung?' : 'In die Entwicklung?',
           ProjektStatus.validierung =>
             zurueck ? 'Zurück in die Validierung?' : 'Validierung beginnen?',
           ProjektStatus.produktion => 'In Produktion setzen?',
+          ProjektStatus.eingestellt => 'Nicht weiter verfolgen?',
           ProjektStatus.archiviert => 'Projekt archivieren?',
         };
   final ja = await showDialog<bool>(
@@ -58,7 +75,7 @@ Future<void> phaseWechseln(
         constraints: const BoxConstraints(maxWidth: 420),
         child: Text(
           [
-            if (ausDemArchiv)
+            if (ausDerRuhe)
               'Es geht in der Phase „${neu.label}" weiter.',
             'Der Wechsel steht danach als Meilenstein im Verlauf.',
             if (neu == ProjektStatus.produktion && projekt.artikelId == null)
@@ -80,7 +97,7 @@ Future<void> phaseWechseln(
           child: Text(
             switch (neu) {
               ProjektStatus.archiviert => 'Archivieren',
-              _ when ausDemArchiv => 'Wieder aufnehmen',
+              _ when ausDerRuhe => 'Wieder aufnehmen',
               _ => 'Wechseln',
             },
           ),
@@ -90,6 +107,79 @@ Future<void> phaseWechseln(
   );
   if (ja != true || !context.mounted) return;
   await projektStatusAendern(context, ref, projekt.id, neu);
+}
+
+/// Fragt, ob ein Projekt oder Muster nicht weiter verfolgt werden soll —
+/// mit dem Grund, der danach im Verlauf steht. Gibt den Grund zurück
+/// (leer, wenn keiner genannt ist), bei „Abbrechen" null.
+class _NichtWeiterDialog extends StatefulWidget {
+  const _NichtWeiterDialog({required this.muster, required this.name});
+
+  final bool muster;
+  final String name;
+
+  @override
+  State<_NichtWeiterDialog> createState() => _NichtWeiterDialogState();
+}
+
+class _NichtWeiterDialogState extends State<_NichtWeiterDialog> {
+  final _grund = TextEditingController();
+
+  @override
+  void dispose() {
+    _grund.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final was = widget.muster ? 'Das Muster' : 'Das Projekt';
+    return AlertDialog(
+      title: Text(
+        widget.muster
+            ? 'Muster nicht weiter verfolgen?'
+            : 'Projekt nicht weiter verfolgen?',
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440, minWidth: 340),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              '$was „${widget.name}" ruht danach — mit allem, was dazu '
+              'gehört. Es steht in der Liste unter „Nicht weiter verfolgt" '
+              'und lässt sich jederzeit wieder aufnehmen.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const ValueKey('nicht-weiter-grund'),
+              controller: _grund,
+              autofocus: true,
+              minLines: 2,
+              maxLines: 5,
+              decoration: const InputDecoration(
+                labelText: 'Grund',
+                hintText: 'z. B. Der Kunde hat sich für ein anderes Muster '
+                    'entschieden.',
+                helperText: 'Steht als Meilenstein im Verlauf',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_grund.text.trim()),
+          child: const Text('Nicht weiter verfolgen'),
+        ),
+      ],
+    );
+  }
 }
 
 /// Der Kopf über den Reitern.
@@ -123,11 +213,10 @@ class ProjektKopf extends ConsumerWidget {
         phaseVorDemArchiv(eintraege),
       ),
     );
-    // Archiviert ruht das Projekt — dann fragt der Kopf nach nichts.
-    final archiviert =
-        ProjektStatus.aus(projekt.status) == ProjektStatus.archiviert;
+    // Ruht das Projekt, fragt der Kopf nach nichts.
+    final ruht = ProjektStatus.aus(projekt.status).ruht;
     final fehlend =
-        archiviert ? const <AngabeSchritt>[] : fehlendeAngaben(projekt);
+        ruht ? const <AngabeSchritt>[] : fehlendeAngaben(projekt);
     final fortschritt = _Fortschritt(
       projektId: projekt.id,
       check: check,
@@ -181,14 +270,25 @@ class _PhasenLeiste extends StatelessWidget {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
     final status = ProjektStatus.aus(projekt.status);
-    final archiviert = status == ProjektStatus.archiviert;
+    final ruht = status.ruht;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          archiviert ? 'Phase · archiviert' : 'Phase',
-          style: theme.textTheme.labelSmall?.copyWith(color: grau),
+          switch (status) {
+            ProjektStatus.archiviert => 'Phase · archiviert',
+            ProjektStatus.eingestellt => 'Phase · nicht weiter verfolgt',
+            _ => 'Phase',
+          },
+          key: const ValueKey('kopf-phase-titel'),
+          style: theme.textTheme.labelSmall?.copyWith(
+            color: status == ProjektStatus.eingestellt
+                ? phasenFarbe(context, status)
+                : grau,
+            fontWeight:
+                status == ProjektStatus.eingestellt ? FontWeight.w600 : null,
+          ),
         ),
         const SizedBox(height: 4),
         Wrap(
@@ -201,11 +301,11 @@ class _PhasenLeiste extends StatelessWidget {
               _PhasenKnopf(
                 status: s,
                 aktuell: s == status,
-                // Archiviert: erst wieder aufnehmen.
-                onTap: archiviert || s == status ? null : () => onWahl(s),
+                // Ruht das Projekt: erst wieder aufnehmen.
+                onTap: ruht || s == status ? null : () => onWahl(s),
               ),
             ],
-            if (archiviert) ...[
+            if (ruht) ...[
               const SizedBox(width: 8),
               TextButton.icon(
                 key: const ValueKey('kopf-wieder-aufnehmen'),

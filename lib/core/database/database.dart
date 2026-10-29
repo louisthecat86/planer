@@ -63,6 +63,7 @@ part 'database.g.dart';
     EntwicklungRezepturen,
     EntwicklungRezepturVersionen,
     EntwicklungRezepturPositionen,
+    EntwicklungGesamtprojekte,
     EntwicklungProjekte,
     EntwicklungProjektEintraege,
     EntwicklungDateien,
@@ -85,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 33;
+  int get schemaVersion => 34;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -539,6 +540,20 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists(
               'entwicklung_projekte',
               'spezifikation',
+              'TEXT',
+            );
+          }
+
+          // --- v33 → v34: Gesamtprojekte mit Mustern ------------------
+          // Eine Anfrage, aus der mehrere Muster entstehen: Das
+          // Gesamtprojekt sammelt Korrespondenz und Unterlagen, jedes Muster
+          // ist ein Projekt mit Verweis darauf. createTable arbeitet mit
+          // IF NOT EXISTS.
+          if (from < 34) {
+            await m.createTable(entwicklungGesamtprojekte);
+            await _addColumnIfNotExists(
+              'entwicklung_projekte',
+              'gesamtprojekt_id',
               'TEXT',
             );
           }

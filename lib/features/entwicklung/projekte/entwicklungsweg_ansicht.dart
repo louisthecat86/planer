@@ -11,6 +11,7 @@ import '../rezepturen/rezepturen_ansicht.dart';
 import '../rezepturen/versionsvergleich.dart';
 import 'entwicklungsstrang.dart';
 import 'faellig.dart';
+import 'gesamtprojekt_modell.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_rezeptur.dart' show projektRezepturZeigen;
@@ -32,6 +33,7 @@ class EntwicklungswegAnsicht extends ConsumerWidget {
     required this.projekt,
     required this.eintraege,
     this.versionen = const {},
+    this.herkunft = const {},
   });
 
   final EntwicklungsProjekt projekt;
@@ -39,6 +41,10 @@ class EntwicklungswegAnsicht extends ConsumerWidget {
 
   /// Alle Rezepturstände nach ID.
   final Map<String, RezepturVersion> versionen;
+
+  /// Woher ein Eintrag aus einem anderen Verlauf kommt — etwa aus dem
+  /// Gesamtprojekt.
+  final Map<String, String> herkunft;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -76,7 +82,11 @@ class EntwicklungswegAnsicht extends ConsumerWidget {
         switch (p) {
           WegAnfang() => (
               knoten: const _Knoten(icon: Icons.lightbulb_outline),
-              inhalt: _AnfangKarte(projekt: projekt, eintraege: p.eintraege),
+              inhalt: _AnfangKarte(
+                projekt: projekt,
+                eintraege: p.eintraege,
+                herkunft: herkunft,
+              ),
               klein: false,
             ),
           WegStation() => (
@@ -86,6 +96,7 @@ class EntwicklungswegAnsicht extends ConsumerWidget {
               ),
               inhalt: _StationKarte(
                 station: p,
+                herkunft: herkunft,
                 version: versionen[p.versionId],
                 vorherId: vorher[p.versionId],
                 versionen: versionen,
@@ -290,10 +301,15 @@ class _Hinweis extends StatelessWidget {
 /// Die Idee: Produktidee, Kunde, Vereinbarungen und was vor dem ersten
 /// Stand geschah.
 class _AnfangKarte extends StatelessWidget {
-  const _AnfangKarte({required this.projekt, required this.eintraege});
+  const _AnfangKarte({
+    required this.projekt,
+    required this.eintraege,
+    this.herkunft = const {},
+  });
 
   final EntwicklungsProjekt projekt;
   final List<ProjektEintrag> eintraege;
+  final Map<String, String> herkunft;
 
   @override
   Widget build(BuildContext context) {
@@ -334,7 +350,7 @@ class _AnfangKarte extends StatelessWidget {
           if (eintraege.isNotEmpty) ...[
             const SizedBox(height: 8),
             for (final e in eintraege)
-              _EintragZeile(projektId: p.id, eintrag: e),
+              _EintragZeile(eintrag: e, herkunft: herkunft[e.id]),
           ],
         ],
       ),
@@ -351,10 +367,14 @@ class _StationKarte extends ConsumerWidget {
     required this.vorherId,
     required this.versionen,
     required this.freigegeben,
+    this.herkunft = const {},
   });
 
   final WegStation station;
   final RezepturVersion? version;
+
+  /// Woher Rückmeldungen aus einem anderen Verlauf kommen.
+  final Map<String, String> herkunft;
 
   /// Der vorige Stand derselben Rezeptur — null beim ersten.
   final String? vorherId;
@@ -476,7 +496,8 @@ class _StationKarte extends ConsumerWidget {
                 : 'Danach',
             style: theme.textTheme.labelMedium?.copyWith(color: grau),
           ),
-          for (final r in rueck) _EintragZeile(projektId: e.projektId, eintrag: r),
+          for (final r in rueck)
+            _EintragZeile(eintrag: r, herkunft: herkunft[r.id]),
         ],
       ),
     );
@@ -529,11 +550,15 @@ class _KennzahlMarke extends StatelessWidget {
 
 /// Ein Eintrag als Zeile: Symbol, Titel, Datum, offen — antippen öffnet
 /// ihn.
+/// Ein Eintrag auf dem Weg: Symbol, Titel, offen, Herkunft und Datum —
+/// antippen öffnet ihn.
 class _EintragZeile extends StatelessWidget {
-  const _EintragZeile({required this.projektId, required this.eintrag});
+  const _EintragZeile({required this.eintrag, this.herkunft});
 
-  final String projektId;
   final ProjektEintrag eintrag;
+
+  /// Woher er kommt, wenn nicht aus dem eigenen Verlauf.
+  final String? herkunft;
 
   @override
   Widget build(BuildContext context) {
@@ -544,7 +569,12 @@ class _EintragZeile extends StatelessWidget {
     final vorbei = offen && eintragUeberfaellig(e, heute: DateTime.now());
     return InkWell(
       borderRadius: AppMasse.ecken,
-      onTap: () => eintragZeigen(context, projektId: projektId, eintragId: e.id),
+      onTap: () => eintragZeigen(
+        context,
+        projektId: e.projektId,
+        eintragId: e.id,
+        herkunft: herkunft,
+      ),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
         child: Row(
@@ -563,6 +593,15 @@ class _EintragZeile extends StatelessWidget {
               vorbei
                   ? const StatusMarke('überfällig', art: StatusArt.fehler)
                   : const StatusMarke('offen', art: StatusArt.warnung),
+            ],
+            if (herkunft case final h?) ...[
+              const SizedBox(width: 6),
+              StatusMarke(
+                h,
+                icon: h == kHerkunftGesamtprojekt
+                    ? Icons.folder_outlined
+                    : Icons.science_outlined,
+              ),
             ],
             const SizedBox(width: 8),
             Text(

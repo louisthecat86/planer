@@ -9,12 +9,12 @@ import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import 'mail.dart';
 
-// Mails und Dateien in ein Projekt legen — gezogen oder gewählt: Eine Mail
-// kommt als E-Mail in den Verlauf (Betreff, Absender, Datum, Text, die
-// Mail selbst als Datei zum Öffnen in Outlook), ihre Anhänge zu den
-// Dateien des Projekts; jede andere Datei als Datei in den Verlauf. Aus
-// einer Mail entsteht auf Wunsch auch ein neues Projekt — die Anfrage
-// steht dann am Anfang seines Wegs.
+// Mails und Dateien in ein Projekt oder Gesamtprojekt legen — gezogen
+// oder gewählt: Eine Mail kommt als E-Mail in den Verlauf (Betreff,
+// Absender, Datum, Text, die Mail selbst als Datei zum Öffnen in
+// Outlook), ihre Anhänge zu den Dateien; jede andere Datei als Datei in
+// den Verlauf. Aus einer Mail entsteht auf Wunsch auch ein neues Projekt
+// oder Gesamtprojekt — die Anfrage steht dann am Anfang des Wegs.
 
 /// Eine Datei, die abgelegt wird: Name und Inhalt.
 typedef AblageDatei = ({String name, Uint8List inhalt});
@@ -208,6 +208,29 @@ class MailAblage {
       kunde: kunde,
       artikelnummer: artikelnummer,
       produktidee: produktidee,
+      jetzt: jetzt,
+    );
+    await mailAblegen(id, mail, datei, jetzt: jetzt);
+    return id;
+  }
+
+  /// Legt aus einer Mail ein neues Gesamtprojekt mit den Mustern [muster]
+  /// an — die Mail steht danach als Anfrage in seinem Verlauf und damit in
+  /// dem jedes Musters. Gibt die ID des Gesamtprojekts zurück.
+  Future<String> gesamtprojektAusMail({
+    required Mail mail,
+    required AblageDatei datei,
+    required String name,
+    String? kunde,
+    String? anfrage,
+    List<String> muster = const [],
+    DateTime? jetzt,
+  }) async {
+    final id = await _projekte.gesamtprojektAnlegen(
+      name: name,
+      kunde: kunde,
+      anfrage: anfrage,
+      muster: muster,
       jetzt: jetzt,
     );
     await mailAblegen(id, mail, datei, jetzt: jetzt);

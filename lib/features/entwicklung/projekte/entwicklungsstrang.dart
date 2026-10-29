@@ -23,6 +23,7 @@ String statusMeilensteinTitel(ProjektStatus neu) => switch (neu) {
       ProjektStatus.entwicklung => 'Wieder in Entwicklung',
       ProjektStatus.validierung => 'Validierung begonnen',
       ProjektStatus.produktion => 'In Produktion',
+      ProjektStatus.eingestellt => 'Nicht weiter verfolgt',
       ProjektStatus.archiviert => 'Archiviert',
     };
 
@@ -42,17 +43,17 @@ String statusMeilensteinTitel(ProjektStatus neu) => switch (neu) {
   );
 }
 
-/// Die Phase vor dem Archivieren — dort geht es beim Wiederaufnehmen
-/// weiter. Ohne Angabe im Verlauf: die Entwicklung.
+/// Die Phase, bevor das Projekt zu ruhen begann (archiviert oder nicht
+/// weiter verfolgt) — dort geht es beim Wiederaufnehmen weiter. Ging es
+/// von einem Ruhen ins andere, zählt die Phase davor. Ohne Angabe im
+/// Verlauf: die Entwicklung.
 ProjektStatus phaseVorDemArchiv(Iterable<ProjektEintrag> eintraege) {
   for (final e in zeitlichSortiert(eintraege).reversed) {
     final w = statusWechsel(e);
-    if (w != null && w.neu == ProjektStatus.archiviert) {
-      final alt = w.alt;
-      return alt == null || alt == ProjektStatus.archiviert
-          ? ProjektStatus.entwicklung
-          : alt;
-    }
+    if (w == null || !w.neu.ruht) continue;
+    final alt = w.alt;
+    if (alt == null) return ProjektStatus.entwicklung;
+    if (!alt.ruht) return alt;
   }
   return ProjektStatus.entwicklung;
 }

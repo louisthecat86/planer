@@ -132,8 +132,8 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   anderen, mit „Weiter" und „Später"; das Fenster der Spezifikation bietet
   ihn an, wenn dort etwas leer bliebe.
   Spezifikation, Etikett und Projektbericht stehen oben unter „Erstellen",
-  Umbenennen, Archivieren (und Wiederaufnehmen) und Löschen im Menü
-  daneben; ist das Projekt freigegeben, führt „Artikel …" davor mit einem
+  Umbenennen, Nicht weiter verfolgen, Archivieren (und Wiederaufnehmen),
+  Gesamtprojekt und Löschen im Menü daneben; ist das Projekt freigegeben, führt „Artikel …" davor mit einem
   Klick zum Artikel der Planung. In der Projektliste steht die
   Artikelnummer vorn — bei freigegebenen Projekten ein Verweis auf den
   Artikel —, unter dem Namen, was als Nächstes zu tun ist und wie viele
@@ -152,6 +152,30 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   oder einen Satz; ist der Tag vorbei und der Eintrag noch offen, steht er
   als überfällig da — in der Karte, auf dem Zeitstrahl, im Kopf, in der
   Projektliste und im Bericht.
+- **Gesamtprojekte mit Mustern:** Geht es in einer Anfrage um mehrere
+  Produkte, wird sie ein Gesamtprojekt („Neues Projekt" → „Mehrere
+  Muster", mit den Namen der Muster). Das Gesamtprojekt sammelt, was alle
+  betrifft — Kunde, Anfrage, Notizen, Mails und Unterlagen — in drei
+  Reitern: **Übersicht** (die Muster als Karten mit Phase, „Als Nächstes",
+  Checkliste und — bei einem, das nicht weiter verfolgt wird — dem
+  Grund; „Neues Muster"), **Verlauf** (Korrespondenz und Dateien, dazu die
+  Meilensteine der Muster mit deren Namen, abschaltbar) und **Dateien**.
+  Jedes Muster ist ein Projekt mit eigenen Rezepturen, eigener Herstellung
+  und eigener Freigabe; der Kunde kommt vom Gesamtprojekt. Oben steht der
+  Weg zurück zum Gesamtprojekt, in der Übersicht die anderen Muster. Sein
+  Verlauf zeigt die Einträge des Gesamtprojekts mit, gekennzeichnet und
+  abschaltbar („Aus dem Gesamtprojekt"). Eine Mail auf ein Muster gezogen:
+  Die App fragt, ob sie ins Gesamtprojekt gehört (vorgewählt) oder nur zum
+  Muster. Einträge und Dateien lassen sich zwischen Gesamtprojekt und
+  Mustern verschieben (eine Mail mit ihren Anhängen). Ein bestehendes
+  Projekt kommt über das Menü in ein Gesamtprojekt — in ein bestehendes
+  oder in ein neues, dann auf Wunsch mit seinen Mails. Ein Muster, das
+  nicht weiter verfolgt wird, ruht mit Grund (er steht im Verlauf) und
+  lässt sich wieder aufnehmen. In der Projektliste steht ein
+  Gesamtprojekt mit seinen Mustern darunter (zuklappbar) und „5 Muster:
+  1 in Produktion, …"; der Filter „Nicht weiter verfolgt" zeigt die
+  ruhenden. Der Projektbericht eines Musters nennt das Gesamtprojekt mit
+  allen Mustern und nimmt auf Wunsch dessen Mails in den Verlauf.
 - **HACCP-Entscheidungsbaum** wie im HACCP-Konzept: Frage 1 (Kontroll-
   maßnahmen vorhanden?) mit Zusatzfrage (Kontrolle hier aus
   Sicherheitsgründen nötig? ja → Schritt, Verfahren oder Produkt
@@ -189,7 +213,8 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Verlauf (Betreff, Absender, Datum, Text, die Mail selbst zum Öffnen),
   ihre Anhänge bei den Dateien; andere Dateien kommen als Datei in den
   Verlauf. Auf die Projektliste gezogen, wird aus der Mail ein neues
-  Projekt (Name, Kunde und Anfrage vorbelegt). Ohne Ziehen: „Aus Mail…" in
+  Projekt oder Gesamtprojekt (Name, Kunde und Anfrage vorbelegt) — oder
+  sie kommt in ein bestehendes Gesamtprojekt. Ohne Ziehen: „Aus Mail…" in
   der Projektliste, „Datei ablegen" im Verlauf. Die App liest .msg und
   .eml selbst; das Ziehen nimmt unter Windows das Fenster entgegen
   (`windows/runner/ablage_ziel.cpp`).
@@ -257,7 +282,7 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 33.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 34.
 - **Backups** (`.planerbackup`) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute, die letzten 30 bleiben) und beim
@@ -281,7 +306,7 @@ Firmenangaben.
 | Planung            | `production_tasks`, `task_dependencies`, `demands`, `tagesaufgaben`, `auftragsbestand_artikel`, `auftragsbestand_positionen` (dazu je `…_vorher` für den Vergleich) |
 | Ist und Archiv     | `production_runs`, `production_history`, `week_snapshots`                                                    |
 | Sonstiges          | `app_settings`, `order_list_items`                                                                           |
-| Produktentwicklung | `entwicklung_zutaten`, `entwicklung_rezepturen`, `entwicklung_rezeptur_versionen`, `entwicklung_rezeptur_positionen`, `entwicklung_projekte`, `entwicklung_projekt_eintraege`, `entwicklung_dateien`, `entwicklung_datei_inhalte`, `entwicklung_fliessdiagramme` |
+| Produktentwicklung | `entwicklung_zutaten`, `entwicklung_rezepturen`, `entwicklung_rezeptur_versionen`, `entwicklung_rezeptur_positionen`, `entwicklung_gesamtprojekte`, `entwicklung_projekte`, `entwicklung_projekt_eintraege`, `entwicklung_dateien`, `entwicklung_datei_inhalte`, `entwicklung_fliessdiagramme` |
 
 ## Entwickeln
 

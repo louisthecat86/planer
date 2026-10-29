@@ -24,6 +24,7 @@ import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/entwicklung/entwicklung_auto_sperre.dart';
 import 'features/entwicklung/entwicklung_screen.dart';
+import 'features/entwicklung/projekte/gesamtprojekt_screen.dart';
 import 'features/entwicklung/projekte/projekt_screen.dart';
 import 'features/entwicklung/rezepturen/rezeptur_screen.dart';
 import 'features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
@@ -229,6 +230,19 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: EntwicklungGeschuetzt(
                 child: ProjektScreen(
                   projektId: state.pathParameters['id']!,
+                ),
+              ),
+            ),
+          ),
+          // Ein Gesamtprojekt mit seinen Mustern — nur bei offener
+          // Entwicklung.
+          GoRoute(
+            path: '/entwicklung/gesamtprojekt/:id',
+            name: 'entwicklungGesamtprojekt',
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: EntwicklungGeschuetzt(
+                child: GesamtprojektScreen(
+                  gesamtprojektId: state.pathParameters['id']!,
                 ),
               ),
             ),

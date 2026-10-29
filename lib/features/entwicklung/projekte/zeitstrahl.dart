@@ -11,6 +11,7 @@ import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import 'entwicklungsstrang.dart';
 import 'faellig.dart';
+import 'gesamtprojekt_modell.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
 import 'projekt_verlauf.dart';
@@ -28,6 +29,10 @@ export 'entwicklungsstrang.dart' show zeitlichSortiert;
 // der Achse (mit ihrer Nummer), Einträge zu einem Stand hängen mit einer
 // Linie an ihrer Station, und die Achse trägt die Farbe der Phase — in
 // Entwicklung, Validierung, Produktion.
+//
+// Einträge aus einem anderen Verlauf — beim Muster die des
+// Gesamtprojekts, beim Gesamtprojekt die Meilensteine der Muster — tragen
+// unter dem Datum, woher sie kommen.
 
 /// Die Farbe einer Eintragsart auf dem Zeitstrahl.
 Color eintragFarbe(BuildContext context, EintragArt art) {
@@ -54,13 +59,18 @@ Color _auf(Color hinten) =>
         ? Colors.white
         : const Color(0xFF1B1B1B);
 
-/// Die Farbe einer Phase auf dem Zeitstrahl.
+/// Die Farbe einer Phase auf dem Zeitstrahl. Ein Muster, das nicht weiter
+/// verfolgt wird, steht in gedecktem Braun — es ruht wie ein archiviertes
+/// Projekt, ist aber von ihm zu unterscheiden.
 Color phasenFarbe(BuildContext context, ProjektStatus status) {
   final f = AppFarben.von(context);
+  final dunkel = Theme.of(context).brightness == Brightness.dark;
   return switch (status) {
     ProjektStatus.entwicklung => f.info,
     ProjektStatus.validierung => f.warnung,
     ProjektStatus.produktion => f.ok,
+    ProjektStatus.eingestellt =>
+      dunkel ? const Color(0xFFBCAAA4) : const Color(0xFF8D6E63),
     ProjektStatus.archiviert => Theme.of(context).colorScheme.outline,
   };
 }
@@ -81,10 +91,15 @@ class Zeitstrahl extends StatefulWidget {
     this.dateien = const {},
     this.versionen = const {},
     this.phasen = const {},
+    this.herkunft = const {},
   });
 
   /// Die Einträge in beliebiger Reihenfolge.
   final List<ProjektEintrag> eintraege;
+
+  /// Woher ein Eintrag kommt, der nicht aus dem eigenen Verlauf stammt —
+  /// nach seiner ID, etwa „Gesamtprojekt" oder der Name eines Musters.
+  final Map<String, String> herkunft;
 
   /// Angehängte Dateien nach ID — für die Vorschau beim Darüberfahren.
   final Map<String, EntwicklungsDatei> dateien;
@@ -105,8 +120,9 @@ class Zeitstrahl extends StatefulWidget {
   static const double symbol = 40;
   static const double beschriftung = 168;
 
-  /// Platz über und unter der Achse: Stiel, Symbol, Beschriftung, Rand.
-  static const double haelfte = stielLang + symbol + 6 + 76 + 8;
+  /// Platz über und unter der Achse: Stiel, Symbol, Beschriftung (Titel in
+  /// zwei Zeilen, Datum, Herkunft, offen), Rand.
+  static const double haelfte = stielLang + symbol + 6 + 90 + 8;
   static const double hoehe = 2 * haelfte;
 
   @override
@@ -187,6 +203,7 @@ class _ZeitstrahlState extends State<Zeitstrahl> {
                     dateien: widget.dateien,
                     versionen: widget.versionen,
                     phasen: widget.phasen,
+                    herkunft: widget.herkunft,
                     onTippen: widget.onTippen,
                   ),
                 ),
@@ -206,6 +223,7 @@ class _Strahl extends StatelessWidget {
     required this.dateien,
     required this.versionen,
     required this.phasen,
+    required this.herkunft,
     required this.onTippen,
   });
 
@@ -214,6 +232,7 @@ class _Strahl extends StatelessWidget {
   final Map<String, EntwicklungsDatei> dateien;
   final Map<String, RezepturVersion> versionen;
   final Map<String, ProjektStatus> phasen;
+  final Map<String, String> herkunft;
   final void Function(ProjektEintrag eintrag) onTippen;
 
   @override
@@ -367,6 +386,7 @@ class _Strahl extends StatelessWidget {
             child: _Beschriftung(
               eintrag: e,
               meilenstein: meilenstein,
+              herkunft: herkunft[e.id],
               onTippen: () => onTippen(e),
             ),
           ),
@@ -562,11 +582,15 @@ class _Beschriftung extends StatelessWidget {
     required this.eintrag,
     required this.meilenstein,
     required this.onTippen,
+    this.herkunft,
   });
 
   final ProjektEintrag eintrag;
   final bool meilenstein;
   final VoidCallback onTippen;
+
+  /// Woher der Eintrag kommt — null: aus dem eigenen Verlauf.
+  final String? herkunft;
 
   @override
   Widget build(BuildContext context) {
@@ -616,6 +640,32 @@ class _Beschriftung extends StatelessWidget {
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
+              if (herkunft case final h?)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      h == kHerkunftGesamtprojekt
+                          ? Icons.folder_outlined
+                          : Icons.science_outlined,
+                      size: 11,
+                      color: grau,
+                    ),
+                    const SizedBox(width: 3),
+                    Flexible(
+                      child: Text(
+                        h,
+                        key: ValueKey('herkunft-${e.id}'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: grau,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               if (offen)
                 Text(
                   vorbei ? 'überfällig' : 'offen',
@@ -635,24 +685,40 @@ class _Beschriftung extends StatelessWidget {
 }
 
 /// Öffnet einen Eintrag als Fenster — mit allem, was die Karte im
-/// Verlauf kann: kommentieren, bearbeiten, löschen, Rezeptur oder Datei
-/// öffnen. Das Fenster bleibt auf dem neuesten Stand.
+/// Verlauf kann: kommentieren, bearbeiten, verschieben, löschen, Rezeptur
+/// oder Datei öffnen. Das Fenster bleibt auf dem neuesten Stand.
+/// [projektId] ist der Verlauf, in dem der Eintrag steht; [herkunft] sagt,
+/// woher er kommt, wenn er in einem anderen Verlauf gezeigt wird; [ziele]
+/// sind, wohin er sich verschieben lässt.
 Future<void> eintragZeigen(
   BuildContext context, {
   required String projektId,
   required String eintragId,
+  String? herkunft,
+  List<VerschiebeZiel> ziele = const [],
 }) =>
     showDialog<void>(
       context: context,
-      builder: (_) =>
-          _EintragFenster(projektId: projektId, eintragId: eintragId),
+      builder: (_) => _EintragFenster(
+        projektId: projektId,
+        eintragId: eintragId,
+        herkunft: herkunft,
+        ziele: ziele,
+      ),
     );
 
 class _EintragFenster extends ConsumerWidget {
-  const _EintragFenster({required this.projektId, required this.eintragId});
+  const _EintragFenster({
+    required this.projektId,
+    required this.eintragId,
+    this.herkunft,
+    this.ziele = const [],
+  });
 
   final String projektId;
   final String eintragId;
+  final String? herkunft;
+  final List<VerschiebeZiel> ziele;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -689,6 +755,10 @@ class _EintragFenster extends ConsumerWidget {
                   eintrag: e,
                   datei: dateien[e.dateiId],
                   version: versionen[e.versionId],
+                  herkunft: herkunft,
+                  ziele: ziele,
+                  // Verschoben: Das Fenster hat seinen Dienst getan.
+                  nachVerschieben: () => Navigator.of(context).pop(),
                 ),
               const SizedBox(height: 8),
               Align(

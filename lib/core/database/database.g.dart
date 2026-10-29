@@ -19193,6 +19193,431 @@ class EntwicklungRezepturPositionenCompanion
   }
 }
 
+class $EntwicklungGesamtprojekteTable extends EntwicklungGesamtprojekte
+    with TableInfo<$EntwicklungGesamtprojekteTable, Gesamtprojekt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $EntwicklungGesamtprojekteTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+      'name', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _kundeMeta = const VerificationMeta('kunde');
+  @override
+  late final GeneratedColumn<String> kunde = GeneratedColumn<String>(
+      'kunde', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _anfrageMeta =
+      const VerificationMeta('anfrage');
+  @override
+  late final GeneratedColumn<String> anfrage = GeneratedColumn<String>(
+      'anfrage', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _notizenMeta =
+      const VerificationMeta('notizen');
+  @override
+  late final GeneratedColumn<String> notizen = GeneratedColumn<String>(
+      'notizen', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _updatedAtMeta =
+      const VerificationMeta('updatedAt');
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+      'updated_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  static const VerificationMeta _deletedAtMeta =
+      const VerificationMeta('deletedAt');
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+      'deleted_at', aliasedName, true,
+      type: DriftSqlType.dateTime, requiredDuringInsert: false);
+  @override
+  List<GeneratedColumn> get $columns =>
+      [id, name, kunde, anfrage, notizen, createdAt, updatedAt, deletedAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'entwicklung_gesamtprojekte';
+  @override
+  VerificationContext validateIntegrity(Insertable<Gesamtprojekt> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+          _nameMeta, name.isAcceptableOrUnknown(data['name']!, _nameMeta));
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('kunde')) {
+      context.handle(
+          _kundeMeta, kunde.isAcceptableOrUnknown(data['kunde']!, _kundeMeta));
+    }
+    if (data.containsKey('anfrage')) {
+      context.handle(_anfrageMeta,
+          anfrage.isAcceptableOrUnknown(data['anfrage']!, _anfrageMeta));
+    }
+    if (data.containsKey('notizen')) {
+      context.handle(_notizenMeta,
+          notizen.isAcceptableOrUnknown(data['notizen']!, _notizenMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(_updatedAtMeta,
+          updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta));
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(_deletedAtMeta,
+          deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  Gesamtprojekt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return Gesamtprojekt(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      name: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}name'])!,
+      kunde: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kunde']),
+      anfrage: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}anfrage']),
+      notizen: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}notizen']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      updatedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}updated_at'])!,
+      deletedAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}deleted_at']),
+    );
+  }
+
+  @override
+  $EntwicklungGesamtprojekteTable createAlias(String alias) {
+    return $EntwicklungGesamtprojekteTable(attachedDatabase, alias);
+  }
+}
+
+class Gesamtprojekt extends DataClass implements Insertable<Gesamtprojekt> {
+  final String id;
+  final String name;
+
+  /// Der Kunde — gilt für alle Muster.
+  final String? kunde;
+
+  /// Worum es geht — meist aus der ersten Mail.
+  final String? anfrage;
+  final String? notizen;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final DateTime? deletedAt;
+  const Gesamtprojekt(
+      {required this.id,
+      required this.name,
+      this.kunde,
+      this.anfrage,
+      this.notizen,
+      required this.createdAt,
+      required this.updatedAt,
+      this.deletedAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    if (!nullToAbsent || kunde != null) {
+      map['kunde'] = Variable<String>(kunde);
+    }
+    if (!nullToAbsent || anfrage != null) {
+      map['anfrage'] = Variable<String>(anfrage);
+    }
+    if (!nullToAbsent || notizen != null) {
+      map['notizen'] = Variable<String>(notizen);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    return map;
+  }
+
+  EntwicklungGesamtprojekteCompanion toCompanion(bool nullToAbsent) {
+    return EntwicklungGesamtprojekteCompanion(
+      id: Value(id),
+      name: Value(name),
+      kunde:
+          kunde == null && nullToAbsent ? const Value.absent() : Value(kunde),
+      anfrage: anfrage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(anfrage),
+      notizen: notizen == null && nullToAbsent
+          ? const Value.absent()
+          : Value(notizen),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+    );
+  }
+
+  factory Gesamtprojekt.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return Gesamtprojekt(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      kunde: serializer.fromJson<String?>(json['kunde']),
+      anfrage: serializer.fromJson<String?>(json['anfrage']),
+      notizen: serializer.fromJson<String?>(json['notizen']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'kunde': serializer.toJson<String?>(kunde),
+      'anfrage': serializer.toJson<String?>(anfrage),
+      'notizen': serializer.toJson<String?>(notizen),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+    };
+  }
+
+  Gesamtprojekt copyWith(
+          {String? id,
+          String? name,
+          Value<String?> kunde = const Value.absent(),
+          Value<String?> anfrage = const Value.absent(),
+          Value<String?> notizen = const Value.absent(),
+          DateTime? createdAt,
+          DateTime? updatedAt,
+          Value<DateTime?> deletedAt = const Value.absent()}) =>
+      Gesamtprojekt(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        kunde: kunde.present ? kunde.value : this.kunde,
+        anfrage: anfrage.present ? anfrage.value : this.anfrage,
+        notizen: notizen.present ? notizen.value : this.notizen,
+        createdAt: createdAt ?? this.createdAt,
+        updatedAt: updatedAt ?? this.updatedAt,
+        deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+      );
+  Gesamtprojekt copyWithCompanion(EntwicklungGesamtprojekteCompanion data) {
+    return Gesamtprojekt(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      kunde: data.kunde.present ? data.kunde.value : this.kunde,
+      anfrage: data.anfrage.present ? data.anfrage.value : this.anfrage,
+      notizen: data.notizen.present ? data.notizen.value : this.notizen,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('Gesamtprojekt(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kunde: $kunde, ')
+          ..write('anfrage: $anfrage, ')
+          ..write('notizen: $notizen, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      id, name, kunde, anfrage, notizen, createdAt, updatedAt, deletedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is Gesamtprojekt &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.kunde == this.kunde &&
+          other.anfrage == this.anfrage &&
+          other.notizen == this.notizen &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.deletedAt == this.deletedAt);
+}
+
+class EntwicklungGesamtprojekteCompanion
+    extends UpdateCompanion<Gesamtprojekt> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String?> kunde;
+  final Value<String?> anfrage;
+  final Value<String?> notizen;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<DateTime?> deletedAt;
+  final Value<int> rowid;
+  const EntwicklungGesamtprojekteCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.kunde = const Value.absent(),
+    this.anfrage = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  EntwicklungGesamtprojekteCompanion.insert({
+    required String id,
+    required String name,
+    this.kunde = const Value.absent(),
+    this.anfrage = const Value.absent(),
+    this.notizen = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        name = Value(name);
+  static Insertable<Gesamtprojekt> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? kunde,
+    Expression<String>? anfrage,
+    Expression<String>? notizen,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<DateTime>? deletedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (kunde != null) 'kunde': kunde,
+      if (anfrage != null) 'anfrage': anfrage,
+      if (notizen != null) 'notizen': notizen,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  EntwicklungGesamtprojekteCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? name,
+      Value<String?>? kunde,
+      Value<String?>? anfrage,
+      Value<String?>? notizen,
+      Value<DateTime>? createdAt,
+      Value<DateTime>? updatedAt,
+      Value<DateTime?>? deletedAt,
+      Value<int>? rowid}) {
+    return EntwicklungGesamtprojekteCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      kunde: kunde ?? this.kunde,
+      anfrage: anfrage ?? this.anfrage,
+      notizen: notizen ?? this.notizen,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (kunde.present) {
+      map['kunde'] = Variable<String>(kunde.value);
+    }
+    if (anfrage.present) {
+      map['anfrage'] = Variable<String>(anfrage.value);
+    }
+    if (notizen.present) {
+      map['notizen'] = Variable<String>(notizen.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('EntwicklungGesamtprojekteCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('kunde: $kunde, ')
+          ..write('anfrage: $anfrage, ')
+          ..write('notizen: $notizen, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $EntwicklungProjekteTable extends EntwicklungProjekte
     with TableInfo<$EntwicklungProjekteTable, EntwicklungsProjekt> {
   @override
@@ -19342,6 +19767,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
   late final GeneratedColumn<String> spezifikation = GeneratedColumn<String>(
       'spezifikation', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _gesamtprojektIdMeta =
+      const VerificationMeta('gesamtprojektId');
+  @override
+  late final GeneratedColumn<String> gesamtprojektId = GeneratedColumn<String>(
+      'gesamtprojekt_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _artikelIdMeta =
       const VerificationMeta('artikelId');
   @override
@@ -19407,6 +19838,7 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
         prozessHistorie,
         haccp,
         spezifikation,
+        gesamtprojektId,
         artikelId,
         freigabeVersionId,
         freigegebenAm,
@@ -19546,6 +19978,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           spezifikation.isAcceptableOrUnknown(
               data['spezifikation']!, _spezifikationMeta));
     }
+    if (data.containsKey('gesamtprojekt_id')) {
+      context.handle(
+          _gesamtprojektIdMeta,
+          gesamtprojektId.isAcceptableOrUnknown(
+              data['gesamtprojekt_id']!, _gesamtprojektIdMeta));
+    }
     if (data.containsKey('artikel_id')) {
       context.handle(_artikelIdMeta,
           artikelId.isAcceptableOrUnknown(data['artikel_id']!, _artikelIdMeta));
@@ -19629,6 +20067,8 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           .read(DriftSqlType.string, data['${effectivePrefix}haccp']),
       spezifikation: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}spezifikation']),
+      gesamtprojektId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}gesamtprojekt_id']),
       artikelId: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}artikel_id']),
       freigabeVersionId: attachedDatabase.typeMapping.read(
@@ -19657,7 +20097,8 @@ class EntwicklungsProjekt extends DataClass
   final String? kunde;
   final String? artikelnummer;
 
-  /// 'entwicklung', 'validierung', 'produktion' oder 'archiviert'.
+  /// 'entwicklung', 'validierung', 'produktion', 'eingestellt' (nicht
+  /// weiter verfolgt) oder 'archiviert'.
   final String status;
   final String? produktidee;
   final String? kundenvereinbarungen;
@@ -19699,6 +20140,10 @@ class EntwicklungsProjekt extends DataClass
   /// Haltbarkeit, Produkthinweise, Spuren und Verpackung.
   final String? spezifikation;
 
+  /// Das Gesamtprojekt, zu dem das Projekt als Muster gehört — null für
+  /// ein Projekt für sich.
+  final String? gesamtprojektId;
+
   /// Der Artikel im Planer (products.id), sobald freigegeben.
   final String? artikelId;
 
@@ -19732,6 +20177,7 @@ class EntwicklungsProjekt extends DataClass
       this.prozessHistorie,
       this.haccp,
       this.spezifikation,
+      this.gesamtprojektId,
       this.artikelId,
       this.freigabeVersionId,
       this.freigegebenAm,
@@ -19799,6 +20245,9 @@ class EntwicklungsProjekt extends DataClass
     }
     if (!nullToAbsent || spezifikation != null) {
       map['spezifikation'] = Variable<String>(spezifikation);
+    }
+    if (!nullToAbsent || gesamtprojektId != null) {
+      map['gesamtprojekt_id'] = Variable<String>(gesamtprojektId);
     }
     if (!nullToAbsent || artikelId != null) {
       map['artikel_id'] = Variable<String>(artikelId);
@@ -19876,6 +20325,9 @@ class EntwicklungsProjekt extends DataClass
       spezifikation: spezifikation == null && nullToAbsent
           ? const Value.absent()
           : Value(spezifikation),
+      gesamtprojektId: gesamtprojektId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gesamtprojektId),
       artikelId: artikelId == null && nullToAbsent
           ? const Value.absent()
           : Value(artikelId),
@@ -19923,6 +20375,7 @@ class EntwicklungsProjekt extends DataClass
       prozessHistorie: serializer.fromJson<String?>(json['prozessHistorie']),
       haccp: serializer.fromJson<String?>(json['haccp']),
       spezifikation: serializer.fromJson<String?>(json['spezifikation']),
+      gesamtprojektId: serializer.fromJson<String?>(json['gesamtprojektId']),
       artikelId: serializer.fromJson<String?>(json['artikelId']),
       freigabeVersionId:
           serializer.fromJson<String?>(json['freigabeVersionId']),
@@ -19959,6 +20412,7 @@ class EntwicklungsProjekt extends DataClass
       'prozessHistorie': serializer.toJson<String?>(prozessHistorie),
       'haccp': serializer.toJson<String?>(haccp),
       'spezifikation': serializer.toJson<String?>(spezifikation),
+      'gesamtprojektId': serializer.toJson<String?>(gesamtprojektId),
       'artikelId': serializer.toJson<String?>(artikelId),
       'freigabeVersionId': serializer.toJson<String?>(freigabeVersionId),
       'freigegebenAm': serializer.toJson<DateTime?>(freigegebenAm),
@@ -19992,6 +20446,7 @@ class EntwicklungsProjekt extends DataClass
           Value<String?> prozessHistorie = const Value.absent(),
           Value<String?> haccp = const Value.absent(),
           Value<String?> spezifikation = const Value.absent(),
+          Value<String?> gesamtprojektId = const Value.absent(),
           Value<String?> artikelId = const Value.absent(),
           Value<String?> freigabeVersionId = const Value.absent(),
           Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -20033,6 +20488,9 @@ class EntwicklungsProjekt extends DataClass
         haccp: haccp.present ? haccp.value : this.haccp,
         spezifikation:
             spezifikation.present ? spezifikation.value : this.spezifikation,
+        gesamtprojektId: gesamtprojektId.present
+            ? gesamtprojektId.value
+            : this.gesamtprojektId,
         artikelId: artikelId.present ? artikelId.value : this.artikelId,
         freigabeVersionId: freigabeVersionId.present
             ? freigabeVersionId.value
@@ -20089,6 +20547,9 @@ class EntwicklungsProjekt extends DataClass
       spezifikation: data.spezifikation.present
           ? data.spezifikation.value
           : this.spezifikation,
+      gesamtprojektId: data.gesamtprojektId.present
+          ? data.gesamtprojektId.value
+          : this.gesamtprojektId,
       artikelId: data.artikelId.present ? data.artikelId.value : this.artikelId,
       freigabeVersionId: data.freigabeVersionId.present
           ? data.freigabeVersionId.value
@@ -20128,6 +20589,7 @@ class EntwicklungsProjekt extends DataClass
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
           ..write('spezifikation: $spezifikation, ')
+          ..write('gesamtprojektId: $gesamtprojektId, ')
           ..write('artikelId: $artikelId, ')
           ..write('freigabeVersionId: $freigabeVersionId, ')
           ..write('freigegebenAm: $freigegebenAm, ')
@@ -20163,6 +20625,7 @@ class EntwicklungsProjekt extends DataClass
         prozessHistorie,
         haccp,
         spezifikation,
+        gesamtprojektId,
         artikelId,
         freigabeVersionId,
         freigegebenAm,
@@ -20197,6 +20660,7 @@ class EntwicklungsProjekt extends DataClass
           other.prozessHistorie == this.prozessHistorie &&
           other.haccp == this.haccp &&
           other.spezifikation == this.spezifikation &&
+          other.gesamtprojektId == this.gesamtprojektId &&
           other.artikelId == this.artikelId &&
           other.freigabeVersionId == this.freigabeVersionId &&
           other.freigegebenAm == this.freigegebenAm &&
@@ -20230,6 +20694,7 @@ class EntwicklungProjekteCompanion
   final Value<String?> prozessHistorie;
   final Value<String?> haccp;
   final Value<String?> spezifikation;
+  final Value<String?> gesamtprojektId;
   final Value<String?> artikelId;
   final Value<String?> freigabeVersionId;
   final Value<DateTime?> freigegebenAm;
@@ -20261,6 +20726,7 @@ class EntwicklungProjekteCompanion
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
     this.spezifikation = const Value.absent(),
+    this.gesamtprojektId = const Value.absent(),
     this.artikelId = const Value.absent(),
     this.freigabeVersionId = const Value.absent(),
     this.freigegebenAm = const Value.absent(),
@@ -20293,6 +20759,7 @@ class EntwicklungProjekteCompanion
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
     this.spezifikation = const Value.absent(),
+    this.gesamtprojektId = const Value.absent(),
     this.artikelId = const Value.absent(),
     this.freigabeVersionId = const Value.absent(),
     this.freigegebenAm = const Value.absent(),
@@ -20326,6 +20793,7 @@ class EntwicklungProjekteCompanion
     Expression<String>? prozessHistorie,
     Expression<String>? haccp,
     Expression<String>? spezifikation,
+    Expression<String>? gesamtprojektId,
     Expression<String>? artikelId,
     Expression<String>? freigabeVersionId,
     Expression<DateTime>? freigegebenAm,
@@ -20360,6 +20828,7 @@ class EntwicklungProjekteCompanion
       if (prozessHistorie != null) 'prozess_historie': prozessHistorie,
       if (haccp != null) 'haccp': haccp,
       if (spezifikation != null) 'spezifikation': spezifikation,
+      if (gesamtprojektId != null) 'gesamtprojekt_id': gesamtprojektId,
       if (artikelId != null) 'artikel_id': artikelId,
       if (freigabeVersionId != null) 'freigabe_version_id': freigabeVersionId,
       if (freigegebenAm != null) 'freigegeben_am': freigegebenAm,
@@ -20394,6 +20863,7 @@ class EntwicklungProjekteCompanion
       Value<String?>? prozessHistorie,
       Value<String?>? haccp,
       Value<String?>? spezifikation,
+      Value<String?>? gesamtprojektId,
       Value<String?>? artikelId,
       Value<String?>? freigabeVersionId,
       Value<DateTime?>? freigegebenAm,
@@ -20425,6 +20895,7 @@ class EntwicklungProjekteCompanion
       prozessHistorie: prozessHistorie ?? this.prozessHistorie,
       haccp: haccp ?? this.haccp,
       spezifikation: spezifikation ?? this.spezifikation,
+      gesamtprojektId: gesamtprojektId ?? this.gesamtprojektId,
       artikelId: artikelId ?? this.artikelId,
       freigabeVersionId: freigabeVersionId ?? this.freigabeVersionId,
       freigegebenAm: freigegebenAm ?? this.freigegebenAm,
@@ -20508,6 +20979,9 @@ class EntwicklungProjekteCompanion
     if (spezifikation.present) {
       map['spezifikation'] = Variable<String>(spezifikation.value);
     }
+    if (gesamtprojektId.present) {
+      map['gesamtprojekt_id'] = Variable<String>(gesamtprojektId.value);
+    }
     if (artikelId.present) {
       map['artikel_id'] = Variable<String>(artikelId.value);
     }
@@ -20558,6 +21032,7 @@ class EntwicklungProjekteCompanion
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
           ..write('spezifikation: $spezifikation, ')
+          ..write('gesamtprojektId: $gesamtprojektId, ')
           ..write('artikelId: $artikelId, ')
           ..write('freigabeVersionId: $freigabeVersionId, ')
           ..write('freigegebenAm: $freigegebenAm, ')
@@ -22243,6 +22718,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $EntwicklungRezepturVersionenTable(this);
   late final $EntwicklungRezepturPositionenTable entwicklungRezepturPositionen =
       $EntwicklungRezepturPositionenTable(this);
+  late final $EntwicklungGesamtprojekteTable entwicklungGesamtprojekte =
+      $EntwicklungGesamtprojekteTable(this);
   late final $EntwicklungProjekteTable entwicklungProjekte =
       $EntwicklungProjekteTable(this);
   late final $EntwicklungProjektEintraegeTable entwicklungProjektEintraege =
@@ -22285,6 +22762,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         entwicklungRezepturen,
         entwicklungRezepturVersionen,
         entwicklungRezepturPositionen,
+        entwicklungGesamtprojekte,
         entwicklungProjekte,
         entwicklungProjektEintraege,
         entwicklungDateien,
@@ -32856,6 +33334,231 @@ typedef $$EntwicklungRezepturPositionenTableProcessedTableManager
         ),
         RezepturPosition,
         PrefetchHooks Function()>;
+typedef $$EntwicklungGesamtprojekteTableCreateCompanionBuilder
+    = EntwicklungGesamtprojekteCompanion Function({
+  required String id,
+  required String name,
+  Value<String?> kunde,
+  Value<String?> anfrage,
+  Value<String?> notizen,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+typedef $$EntwicklungGesamtprojekteTableUpdateCompanionBuilder
+    = EntwicklungGesamtprojekteCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String?> kunde,
+  Value<String?> anfrage,
+  Value<String?> notizen,
+  Value<DateTime> createdAt,
+  Value<DateTime> updatedAt,
+  Value<DateTime?> deletedAt,
+  Value<int> rowid,
+});
+
+class $$EntwicklungGesamtprojekteTableFilterComposer
+    extends Composer<_$AppDatabase, $EntwicklungGesamtprojekteTable> {
+  $$EntwicklungGesamtprojekteTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kunde => $composableBuilder(
+      column: $table.kunde, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get anfrage => $composableBuilder(
+      column: $table.anfrage, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$EntwicklungGesamtprojekteTableOrderingComposer
+    extends Composer<_$AppDatabase, $EntwicklungGesamtprojekteTable> {
+  $$EntwicklungGesamtprojekteTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get name => $composableBuilder(
+      column: $table.name, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kunde => $composableBuilder(
+      column: $table.kunde, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get anfrage => $composableBuilder(
+      column: $table.anfrage, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get notizen => $composableBuilder(
+      column: $table.notizen, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+      column: $table.updatedAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+      column: $table.deletedAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$EntwicklungGesamtprojekteTableAnnotationComposer
+    extends Composer<_$AppDatabase, $EntwicklungGesamtprojekteTable> {
+  $$EntwicklungGesamtprojekteTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get kunde =>
+      $composableBuilder(column: $table.kunde, builder: (column) => column);
+
+  GeneratedColumn<String> get anfrage =>
+      $composableBuilder(column: $table.anfrage, builder: (column) => column);
+
+  GeneratedColumn<String> get notizen =>
+      $composableBuilder(column: $table.notizen, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+}
+
+class $$EntwicklungGesamtprojekteTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $EntwicklungGesamtprojekteTable,
+    Gesamtprojekt,
+    $$EntwicklungGesamtprojekteTableFilterComposer,
+    $$EntwicklungGesamtprojekteTableOrderingComposer,
+    $$EntwicklungGesamtprojekteTableAnnotationComposer,
+    $$EntwicklungGesamtprojekteTableCreateCompanionBuilder,
+    $$EntwicklungGesamtprojekteTableUpdateCompanionBuilder,
+    (
+      Gesamtprojekt,
+      BaseReferences<_$AppDatabase, $EntwicklungGesamtprojekteTable,
+          Gesamtprojekt>
+    ),
+    Gesamtprojekt,
+    PrefetchHooks Function()> {
+  $$EntwicklungGesamtprojekteTableTableManager(
+      _$AppDatabase db, $EntwicklungGesamtprojekteTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$EntwicklungGesamtprojekteTableFilterComposer(
+                  $db: db, $table: table),
+          createOrderingComposer: () =>
+              $$EntwicklungGesamtprojekteTableOrderingComposer(
+                  $db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$EntwicklungGesamtprojekteTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> name = const Value.absent(),
+            Value<String?> kunde = const Value.absent(),
+            Value<String?> anfrage = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungGesamtprojekteCompanion(
+            id: id,
+            name: name,
+            kunde: kunde,
+            anfrage: anfrage,
+            notizen: notizen,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String name,
+            Value<String?> kunde = const Value.absent(),
+            Value<String?> anfrage = const Value.absent(),
+            Value<String?> notizen = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<DateTime> updatedAt = const Value.absent(),
+            Value<DateTime?> deletedAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              EntwicklungGesamtprojekteCompanion.insert(
+            id: id,
+            name: name,
+            kunde: kunde,
+            anfrage: anfrage,
+            notizen: notizen,
+            createdAt: createdAt,
+            updatedAt: updatedAt,
+            deletedAt: deletedAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$EntwicklungGesamtprojekteTableProcessedTableManager
+    = ProcessedTableManager<
+        _$AppDatabase,
+        $EntwicklungGesamtprojekteTable,
+        Gesamtprojekt,
+        $$EntwicklungGesamtprojekteTableFilterComposer,
+        $$EntwicklungGesamtprojekteTableOrderingComposer,
+        $$EntwicklungGesamtprojekteTableAnnotationComposer,
+        $$EntwicklungGesamtprojekteTableCreateCompanionBuilder,
+        $$EntwicklungGesamtprojekteTableUpdateCompanionBuilder,
+        (
+          Gesamtprojekt,
+          BaseReferences<_$AppDatabase, $EntwicklungGesamtprojekteTable,
+              Gesamtprojekt>
+        ),
+        Gesamtprojekt,
+        PrefetchHooks Function()>;
 typedef $$EntwicklungProjekteTableCreateCompanionBuilder
     = EntwicklungProjekteCompanion Function({
   required String id,
@@ -32881,6 +33584,7 @@ typedef $$EntwicklungProjekteTableCreateCompanionBuilder
   Value<String?> prozessHistorie,
   Value<String?> haccp,
   Value<String?> spezifikation,
+  Value<String?> gesamtprojektId,
   Value<String?> artikelId,
   Value<String?> freigabeVersionId,
   Value<DateTime?> freigegebenAm,
@@ -32914,6 +33618,7 @@ typedef $$EntwicklungProjekteTableUpdateCompanionBuilder
   Value<String?> prozessHistorie,
   Value<String?> haccp,
   Value<String?> spezifikation,
+  Value<String?> gesamtprojektId,
   Value<String?> artikelId,
   Value<String?> freigabeVersionId,
   Value<DateTime?> freigegebenAm,
@@ -33005,6 +33710,10 @@ class $$EntwicklungProjekteTableFilterComposer
 
   ColumnFilters<String> get spezifikation => $composableBuilder(
       column: $table.spezifikation, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get gesamtprojektId => $composableBuilder(
+      column: $table.gesamtprojektId,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get artikelId => $composableBuilder(
       column: $table.artikelId, builder: (column) => ColumnFilters(column));
@@ -33112,6 +33821,10 @@ class $$EntwicklungProjekteTableOrderingComposer
       column: $table.spezifikation,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get gesamtprojektId => $composableBuilder(
+      column: $table.gesamtprojektId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get artikelId => $composableBuilder(
       column: $table.artikelId, builder: (column) => ColumnOrderings(column));
 
@@ -33211,6 +33924,9 @@ class $$EntwicklungProjekteTableAnnotationComposer
   GeneratedColumn<String> get spezifikation => $composableBuilder(
       column: $table.spezifikation, builder: (column) => column);
 
+  GeneratedColumn<String> get gesamtprojektId => $composableBuilder(
+      column: $table.gesamtprojektId, builder: (column) => column);
+
   GeneratedColumn<String> get artikelId =>
       $composableBuilder(column: $table.artikelId, builder: (column) => column);
 
@@ -33283,6 +33999,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
             Value<String?> spezifikation = const Value.absent(),
+            Value<String?> gesamtprojektId = const Value.absent(),
             Value<String?> artikelId = const Value.absent(),
             Value<String?> freigabeVersionId = const Value.absent(),
             Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -33315,6 +34032,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             prozessHistorie: prozessHistorie,
             haccp: haccp,
             spezifikation: spezifikation,
+            gesamtprojektId: gesamtprojektId,
             artikelId: artikelId,
             freigabeVersionId: freigabeVersionId,
             freigegebenAm: freigegebenAm,
@@ -33347,6 +34065,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
             Value<String?> spezifikation = const Value.absent(),
+            Value<String?> gesamtprojektId = const Value.absent(),
             Value<String?> artikelId = const Value.absent(),
             Value<String?> freigabeVersionId = const Value.absent(),
             Value<DateTime?> freigegebenAm = const Value.absent(),
@@ -33379,6 +34098,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             prozessHistorie: prozessHistorie,
             haccp: haccp,
             spezifikation: spezifikation,
+            gesamtprojektId: gesamtprojektId,
             artikelId: artikelId,
             freigabeVersionId: freigabeVersionId,
             freigegebenAm: freigegebenAm,
@@ -34328,6 +35048,9 @@ class $AppDatabaseManager {
       get entwicklungRezepturPositionen =>
           $$EntwicklungRezepturPositionenTableTableManager(
               _db, _db.entwicklungRezepturPositionen);
+  $$EntwicklungGesamtprojekteTableTableManager get entwicklungGesamtprojekte =>
+      $$EntwicklungGesamtprojekteTableTableManager(
+          _db, _db.entwicklungGesamtprojekte);
   $$EntwicklungProjekteTableTableManager get entwicklungProjekte =>
       $$EntwicklungProjekteTableTableManager(_db, _db.entwicklungProjekte);
   $$EntwicklungProjektEintraegeTableTableManager

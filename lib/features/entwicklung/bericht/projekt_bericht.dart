@@ -50,6 +50,9 @@ class ProjektBericht {
     this.kennzahlen = const {},
     this.inArbeit = const [],
     this.dateien = const [],
+    this.gesamtprojekt,
+    this.muster = const [],
+    this.gesamtVerlauf = const [],
   });
 
   final EntwicklungsProjekt projekt;
@@ -108,6 +111,59 @@ class ProjektBericht {
 
   /// Die Dateien des Projekts, die älteste zuerst.
   final List<EntwicklungsDatei> dateien;
+
+  /// Das Gesamtprojekt, zu dem das Projekt als Muster gehört — null für
+  /// ein Projekt für sich.
+  final Gesamtprojekt? gesamtprojekt;
+
+  /// Alle Muster des Gesamtprojekts, in der Reihenfolge des Anlegens —
+  /// dieses eingeschlossen.
+  final List<EntwicklungsProjekt> muster;
+
+  /// Der Verlauf des Gesamtprojekts, der neueste Eintrag zuerst: die
+  /// Korrespondenz und Unterlagen, die alle Muster betreffen.
+  final List<ProjektEintrag> gesamtVerlauf;
+
+  /// So steht ein Eintrag aus dem Gesamtprojekt im Bericht eines Musters.
+  static const String gesamtMarke = ' (Gesamtprojekt)';
+
+  /// Der Bericht mit dem Verlauf des Gesamtprojekts im eigenen — dessen
+  /// Einträge mit „(Gesamtprojekt)" hinter dem Titel.
+  ProjektBericht mitGesamtVerlauf() {
+    if (gesamtVerlauf.isEmpty) return this;
+    final verlauf = [
+      ...this.verlauf,
+      for (final e in gesamtVerlauf)
+        e.copyWith(titel: '${e.titel}$gesamtMarke'),
+    ]..sort((a, b) {
+        final d = b.datum.compareTo(a.datum);
+        return d != 0 ? d : b.createdAt.compareTo(a.createdAt);
+      });
+    return ProjektBericht(
+      projekt: projekt,
+      rezepturName: rezepturName,
+      version: version,
+      eingabe: eingabe,
+      ergebnis: ergebnis,
+      verlauf: verlauf,
+      bild: bild,
+      artikel: artikel,
+      artikelSchritte: artikelSchritte,
+      abgleich: abgleich,
+      fliessdiagramm: fliessdiagramm,
+      checkliste: checkliste,
+      rezepturen: rezepturen,
+      versionen: versionen,
+      eingaben: eingaben,
+      ergebnisse: ergebnisse,
+      kennzahlen: kennzahlen,
+      inArbeit: inArbeit,
+      dateien: dateien,
+      gesamtprojekt: gesamtprojekt,
+      muster: muster,
+      gesamtVerlauf: gesamtVerlauf,
+    );
+  }
 }
 
 /// Lädt alles für den Bericht.
@@ -281,6 +337,33 @@ Future<ProjektBericht> berichtLaden(
             ..orderBy([(d) => OrderingTerm.asc(d.createdAt)]))
           .get();
 
+  // Ein Muster: sein Gesamtprojekt, die Muster und dessen Verlauf.
+  final gid = projekt.gesamtprojektId;
+  final gesamtprojekt = gid == null
+      ? null
+      : await (db.select(
+          db.entwicklungGesamtprojekte,
+        )..where((g) => g.id.equals(gid))).getSingleOrNull();
+  final muster = gesamtprojekt == null
+      ? const <EntwicklungsProjekt>[]
+      : await (db.select(db.entwicklungProjekte)
+              ..where((p) => p.gesamtprojektId.equals(gesamtprojekt.id))
+              ..where((p) => p.deletedAt.isNull())
+              ..orderBy([
+                (p) => OrderingTerm.asc(p.createdAt),
+                (p) => OrderingTerm.asc(p.name),
+              ]))
+            .get();
+  final gesamtVerlauf = gesamtprojekt == null
+      ? const <ProjektEintrag>[]
+      : await (db.select(db.entwicklungProjektEintraege)
+              ..where((e) => e.projektId.equals(gesamtprojekt.id))
+              ..orderBy([
+                (e) => OrderingTerm.desc(e.datum),
+                (e) => OrderingTerm.desc(e.createdAt),
+              ]))
+            .get();
+
   return ProjektBericht(
     projekt: projekt,
     rezepturName: rezeptur?.name,
@@ -305,6 +388,9 @@ Future<ProjektBericht> berichtLaden(
     kennzahlen: kennzahlen,
     inArbeit: inArbeit,
     dateien: projektDateien,
+    gesamtprojekt: gesamtprojekt,
+    muster: muster,
+    gesamtVerlauf: gesamtVerlauf,
   );
 }
 

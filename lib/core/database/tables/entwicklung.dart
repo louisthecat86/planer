@@ -189,6 +189,38 @@ class EntwicklungRezepturPositionen extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Ein Gesamtprojekt: eine Anfrage, aus der mehrere Muster entstehen —
+/// etwa drei Produktideen für denselben Kunden. Es sammelt, was alle Muster
+/// betrifft: die Korrespondenz und die Unterlagen. Jedes Muster ist ein
+/// Projekt für sich ([EntwicklungProjekte.gesamtprojektId]) mit eigenen
+/// Rezepturen, eigener Herstellung und eigener Freigabe.
+///
+/// Verlauf und Dateien des Gesamtprojekts stehen in denselben Tabellen wie
+/// die der Projekte — mit seiner ID als `projekt_id`.
+@DataClassName('Gesamtprojekt')
+class EntwicklungGesamtprojekte extends Table {
+  @override
+  String get tableName => 'entwicklung_gesamtprojekte';
+
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+
+  /// Der Kunde — gilt für alle Muster.
+  TextColumn get kunde => text().nullable()();
+
+  /// Worum es geht — meist aus der ersten Mail.
+  TextColumn get anfrage => text().nullable()();
+
+  TextColumn get notizen => text().nullable()();
+
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// Ein Entwicklungsprojekt: ein Produkt für einen Kunden, von der Idee bis
 /// zur Freigabe als Artikel im Planer.
 @DataClassName('EntwicklungsProjekt')
@@ -201,7 +233,8 @@ class EntwicklungProjekte extends Table {
   TextColumn get kunde => text().nullable()();
   TextColumn get artikelnummer => text().nullable()();
 
-  /// 'entwicklung', 'validierung', 'produktion' oder 'archiviert'.
+  /// 'entwicklung', 'validierung', 'produktion', 'eingestellt' (nicht
+  /// weiter verfolgt) oder 'archiviert'.
   TextColumn get status => text().withDefault(const Constant('entwicklung'))();
 
   TextColumn get produktidee => text().nullable()();
@@ -245,6 +278,10 @@ class EntwicklungProjekte extends Table {
   /// JSON: Angaben für die Spezifikation — Toleranz, Lagerung,
   /// Haltbarkeit, Produkthinweise, Spuren und Verpackung.
   TextColumn get spezifikation => text().nullable()();
+
+  /// Das Gesamtprojekt, zu dem das Projekt als Muster gehört — null für
+  /// ein Projekt für sich.
+  TextColumn get gesamtprojektId => text().nullable()();
 
   /// Der Artikel im Planer (products.id), sobald freigegeben.
   TextColumn get artikelId => text().nullable()();
@@ -344,7 +381,7 @@ class EntwicklungDateiInhalte extends Table {
   Set<Column> get primaryKey => {dateiId};
 }
 
-/// Ein Fließdiagramm des Betriebs, etwa „FD_009 Bratstraßenartikel".
+/// Ein Fließdiagramm des Betriebs, etwa „FD_009 Beispielprodukte".
 /// Die Liste pflegt jeder selbst — sie gehört nicht ins öffentliche Repo.
 @DataClassName('Fliessdiagramm')
 class EntwicklungFliessdiagramme extends Table {

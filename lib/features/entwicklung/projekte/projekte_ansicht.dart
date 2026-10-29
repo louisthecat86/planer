@@ -17,6 +17,8 @@ import '../mail/mail.dart';
 import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart' show dateienWaehlen, groesseText;
 import 'faellig.dart';
+import 'gesamtprojekt_modell.dart';
+import 'gesamtprojekt_screen.dart' show oeffneGesamtprojekt;
 import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -27,17 +29,20 @@ enum ProjektFilter {
   entwicklung('In Entwicklung'),
   validierung('Validierung'),
   produktion('In Produktion'),
+  eingestellt('Nicht weiter verfolgt'),
   archiv('Archiv');
 
   const ProjektFilter(this.label);
 
   final String label;
 
+  /// „Aktiv" sind alle, die nicht ruhen.
   bool passt(ProjektStatus s) => switch (this) {
-        ProjektFilter.aktiv => s != ProjektStatus.archiviert,
+        ProjektFilter.aktiv => !s.ruht,
         ProjektFilter.entwicklung => s == ProjektStatus.entwicklung,
         ProjektFilter.validierung => s == ProjektStatus.validierung,
         ProjektFilter.produktion => s == ProjektStatus.produktion,
+        ProjektFilter.eingestellt => s == ProjektStatus.eingestellt,
         ProjektFilter.archiv => s == ProjektStatus.archiviert,
       };
 }
@@ -47,7 +52,9 @@ StatusArt projektStatusArt(ProjektStatus s) => switch (s) {
       ProjektStatus.entwicklung => StatusArt.info,
       ProjektStatus.validierung => StatusArt.warnung,
       ProjektStatus.produktion => StatusArt.ok,
-      ProjektStatus.archiviert => StatusArt.neutral,
+      ProjektStatus.eingestellt ||
+      ProjektStatus.archiviert =>
+        StatusArt.neutral,
     };
 
 /// Öffnet ein Projekt auf seiner eigenen Seite.
@@ -57,7 +64,27 @@ Future<void> oeffneProjekt(BuildContext context, String id) =>
       pathParameters: {'id': id},
     );
 
-/// Die Projekte: Liste mit Suche und Filter nach Status.
+/// Was das Fenster „Neues Projekt" angelegt hat: ein Projekt oder ein
+/// Gesamtprojekt — dorthin geht es danach. [hinweis] sagt, was beim
+/// Ablegen einer Mail herauskam.
+typedef NeuAngelegt = ({String id, bool gesamtprojekt, String? hinweis});
+
+/// Öffnet, was das Fenster „Neues Projekt" angelegt hat.
+Future<void> oeffneAngelegt(BuildContext context, NeuAngelegt neu) {
+  if (neu.hinweis case final h? when h.isNotEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(h)));
+  }
+  return neu.gesamtprojekt
+      ? oeffneGesamtprojekt(context, neu.id)
+      : oeffneProjekt(context, neu.id);
+}
+
+/// Die zugeklappten Gesamtprojekte der Liste — gilt, bis die App schließt.
+final zugeklappteGesamtprojekteProvider =
+    StateProvider<Set<String>>((ref) => const {});
+
+/// Die Projekte: Liste mit Suche und Filter nach Status. Gesamtprojekte
+/// stehen mit ihren Mustern darin — aufgeklappt, zum Zuklappen.
 class ProjekteAnsicht extends ConsumerStatefulWidget {
   const ProjekteAnsicht({super.key});
 
@@ -76,13 +103,16 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
     super.dispose();
   }
 
+  List<Gesamtprojekt> get _gesamtprojekte =>
+      ref.read(gesamtprojekteProvider).valueOrNull ?? const [];
+
   Future<void> _neu() async {
-    final id = await showDialog<String>(
+    final neu = await showDialog<NeuAngelegt>(
       context: context,
-      builder: (_) => const NeuesProjektDialog(),
+      builder: (_) => NeuesProjektDialog(gesamtprojekte: _gesamtprojekte),
     );
-    if (id == null || !mounted) return;
-    await oeffneProjekt(context, id);
+    if (neu == null || !mounted) return;
+    await oeffneAngelegt(context, neu);
   }
 
   /// Ein neues Projekt aus der ersten Mail unter [dateien] — gezogen oder
@@ -99,7 +129,8 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
         const SnackBar(
           content: Text(
             'Hier entsteht aus einer Mail (.msg oder .eml) ein neues '
-            'Projekt. Andere Dateien ziehst du in ein Projekt hinein.',
+            'Projekt oder Gesamtprojekt. Andere Dateien ziehst du in ein '
+            'Projekt hinein.',
           ),
         ),
       );
@@ -109,8 +140,8 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            '${mails.length} Mails — das neue Projekt entsteht aus der '
-            'ersten; die übrigen ziehst du danach in das Projekt.',
+            '${mails.length} Mails — es geht mit der ersten weiter; die '
+            'übrigen ziehst du danach in das Projekt.',
           ),
         ),
       );
@@ -120,12 +151,15 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
   }
 
   Future<void> _neuAusMail(({Mail mail, AbgelegteDatei datei}) aus) async {
-    final id = await showDialog<String>(
+    final neu = await showDialog<NeuAngelegt>(
       context: context,
-      builder: (_) => NeuesProjektDialog(ausMail: aus),
+      builder: (_) => NeuesProjektDialog(
+        ausMail: aus,
+        gesamtprojekte: _gesamtprojekte,
+      ),
     );
-    if (id == null || !mounted) return;
-    await oeffneProjekt(context, id);
+    if (neu == null || !mounted) return;
+    await oeffneAngelegt(context, neu);
   }
 
   Future<void> _mailWaehlen() async {
@@ -139,19 +173,13 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
     await _ausMail(gewaehlt);
   }
 
-  bool _passt(EntwicklungsProjekt p) {
-    if (!_filter.passt(ProjektStatus.aus(p.status))) return false;
-    final t = _text.trim().toLowerCase();
-    if (t.isEmpty) return true;
-    return p.name.toLowerCase().contains(t) ||
-        (p.kunde ?? '').toLowerCase().contains(t) ||
-        (p.artikelnummer ?? '').toLowerCase().contains(t);
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final projekte = ref.watch(projekteProvider);
+    final gesamtprojekte = ref.watch(gesamtprojekteProvider).valueOrNull ??
+        const <Gesamtprojekt>[];
+    final zu = ref.watch(zugeklappteGesamtprojekteProvider);
     final checklisten = ref.watch(projektChecklistenProvider);
     final eintraege = ref.watch(alleEintraegeProvider).valueOrNull;
     final offen = eintraege == null
@@ -169,9 +197,62 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
         ),
       ),
       data: (alle) {
-        final treffer = alle.where(_passt).toList();
+        final punkte = projektListe(
+          projekte: alle,
+          gesamtprojekte: gesamtprojekte,
+          passt: _filter.passt,
+          leerPasst: _filter == ProjektFilter.aktiv,
+          suche: _text,
+        );
+        final gezeigt = punkte.fold<int>(
+          0,
+          (n, p) => n + (p is GesamtGruppe ? p.sichtbar.length : 1),
+        );
+        // Die Zeilen: je Gesamtprojekt seine Zeile und — aufgeklappt —
+        // die Muster darunter.
+        void klappen(String id) =>
+            ref.read(zugeklappteGesamtprojekteProvider.notifier).state =
+                zu.contains(id) ? ({...zu}..remove(id)) : {...zu, id};
+        final reihe = <Widget Function(bool breit)>[];
+        for (final p in punkte) {
+          switch (p) {
+            case EinzelProjekt(:final projekt):
+              reihe.add(
+                (breit) => _Zeile(
+                  projekt: projekt,
+                  checkliste: checklisten?[projekt.id],
+                  offen: offen[projekt.id],
+                  breit: breit,
+                ),
+              );
+            case GesamtGruppe(:final gesamtprojekt, :final sichtbar):
+              final id = gesamtprojekt.id;
+              reihe.add(
+                (breit) => _GesamtZeile(
+                  gruppe: p,
+                  zugeklappt: zu.contains(id),
+                  breit: breit,
+                  onKlappen: () => klappen(id),
+                ),
+              );
+              if (!zu.contains(id)) {
+                for (final m in sichtbar) {
+                  reihe.add(
+                    (breit) => _Zeile(
+                      projekt: m,
+                      checkliste: checklisten?[m.id],
+                      offen: offen[m.id],
+                      breit: breit,
+                      muster: true,
+                    ),
+                  );
+                }
+              }
+          }
+        }
         return AblageZone(
-          hinweis: 'Mail loslassen — daraus wird ein neues Projekt',
+          hinweis: 'Mail loslassen — daraus wird ein neues Projekt oder '
+              'Gesamtprojekt',
           onAbgelegt: _ausMail,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -207,7 +288,7 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        '${treffer.length} von ${alle.length} Projekten',
+                        '$gezeigt von ${alle.length} Projekten',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.right,
@@ -275,7 +356,7 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                           children: [
                             _Kopf(breit: breit),
                             Expanded(
-                              child: treffer.isEmpty
+                              child: reihe.isEmpty
                                   ? Center(
                                       child: LeerHinweis(
                                         alle.isEmpty
@@ -302,13 +383,8 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                                       ),
                                     )
                                   : ListView.builder(
-                                      itemCount: treffer.length,
-                                      itemBuilder: (_, i) => _Zeile(
-                                        projekt: treffer[i],
-                                        checkliste: checklisten?[treffer[i].id],
-                                        offen: offen[treffer[i].id],
-                                        breit: breit,
-                                      ),
+                                      itemCount: reihe.length,
+                                      itemBuilder: (_, i) => reihe[i](breit),
                                     ),
                             ),
                           ],
@@ -391,15 +467,156 @@ class _Kopf extends StatelessWidget {
   }
 }
 
+/// Die Zeile eines Gesamtprojekts: Name, wie seine Muster stehen, der
+/// Kunde und wann sich zuletzt etwas getan hat. Vorn zum Auf- und
+/// Zuklappen der Muster; antippen öffnet das Gesamtprojekt.
+class _GesamtZeile extends StatelessWidget {
+  const _GesamtZeile({
+    required this.gruppe,
+    required this.zugeklappt,
+    required this.breit,
+    required this.onKlappen,
+  });
+
+  final GesamtGruppe gruppe;
+  final bool zugeklappt;
+  final bool breit;
+  final VoidCallback onKlappen;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final stil = theme.textTheme.bodyMedium;
+    final g = gruppe.gesamtprojekt;
+    final kunde = g.kunde?.trim() ?? '';
+    final zusammen = musterZusammenfassung([
+      for (final m in gruppe.muster) ProjektStatus.aus(m.status),
+    ]);
+    final verborgen = gruppe.muster.length - gruppe.sichtbar.length;
+    final unter = [
+      if (!breit && kunde.isNotEmpty) kunde,
+      zusammen,
+      if (verborgen > 0 && gruppe.sichtbar.isNotEmpty)
+        '$verborgen hier nicht gezeigt',
+    ].join(' · ');
+    return Material(
+      color: theme.colorScheme.surfaceContainerLow,
+      child: InkWell(
+        key: ValueKey('gesamtprojekt-${g.id}'),
+        onTap: () => oeffneGesamtprojekt(context, g.id),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: (breit ? _Spalten.nummer : _Spalten.nummerSchmal) + 8,
+                child: Row(
+                  children: [
+                    IconButton(
+                      key: ValueKey('klappen-${g.id}'),
+                      visualDensity: VisualDensity.compact,
+                      tooltip:
+                          zugeklappt ? 'Muster zeigen' : 'Muster verbergen',
+                      icon: Icon(
+                        zugeklappt ? Icons.chevron_right : Icons.expand_more,
+                        size: 20,
+                      ),
+                      onPressed: onKlappen,
+                    ),
+                    Icon(
+                      Icons.folder_outlined,
+                      size: 18,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _Spalten.luecke),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      g.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: stil?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: theme.colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      unter,
+                      key: ValueKey('gesamtprojekt-unterzeile-${g.id}'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: _Spalten.luecke),
+              if (breit) ...[
+                SizedBox(
+                  width: _Spalten.kunde,
+                  child: Text(
+                    kunde.isEmpty ? '—' : kunde,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: stil?.copyWith(color: kunde.isEmpty ? grau : null),
+                  ),
+                ),
+                const SizedBox(width: _Spalten.luecke),
+              ],
+              const SizedBox(
+                width: _Spalten.status,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  heightFactor: 1,
+                  child: StatusMarke(
+                    'Gesamtprojekt',
+                    icon: Icons.folder_outlined,
+                  ),
+                ),
+              ),
+              if (breit) ...[
+                const SizedBox(width: _Spalten.checkliste),
+                SizedBox(
+                  width: _Spalten.datum,
+                  child: Text(
+                    Format.datum(gruppe.zuletzt),
+                    textAlign: TextAlign.right,
+                    style: stil?.copyWith(color: grau),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Eine Zeile der Projektliste. Unter dem Namen steht, was als Nächstes
 /// zu tun ist und was im Verlauf offen ist — ruht das Projekt oder ist
-/// nichts mehr zu tun, die Produktidee.
+/// nichts mehr zu tun, die Produktidee. Ein Muster steht eingerückt unter
+/// seinem Gesamtprojekt, ohne Kunden — der steht dort.
 class _Zeile extends StatelessWidget {
   const _Zeile({
     required this.projekt,
     required this.checkliste,
     required this.breit,
     this.offen,
+    this.muster = false,
   });
 
   final EntwicklungsProjekt projekt;
@@ -411,6 +628,9 @@ class _Zeile extends StatelessWidget {
   final OffeneEintraege? offen;
   final bool breit;
 
+  /// Ein Muster unter seinem Gesamtprojekt.
+  final bool muster;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -419,14 +639,14 @@ class _Zeile extends StatelessWidget {
     final stil = theme.textTheme.bodyMedium;
     final p = projekt;
     final status = ProjektStatus.aus(p.status);
-    final ruht = status == ProjektStatus.archiviert;
+    final ruht = status.ruht;
     final naechster = ruht ? null : checkliste?.naechster;
     final o = ruht ? null : offen;
     final kunde = p.kunde?.trim() ?? '';
     final idee = p.produktidee?.trim() ?? '';
     // Die Teile der zweiten Zeile — mit Farbe, wo etwas offen ist.
     final teile = <(String, TextStyle?)>[
-      if (!breit && kunde.isNotEmpty) (kunde, null),
+      if (!breit && !muster && kunde.isNotEmpty) (kunde, null),
       if (naechster != null) ('Als Nächstes: ${checkAufgabe(naechster)}', null),
       if (o != null && o.offen > 0)
         (
@@ -459,6 +679,15 @@ class _Zeile extends StatelessWidget {
                 child: _Nummer(projekt: p),
               ),
               const SizedBox(width: _Spalten.luecke),
+              // Ein Muster: eingerückt, mit einer Linie zum Gesamtprojekt.
+              if (muster) ...[
+                Container(
+                  width: 2,
+                  height: 30,
+                  color: theme.colorScheme.outlineVariant,
+                ),
+                const SizedBox(width: 12),
+              ],
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -497,12 +726,16 @@ class _Zeile extends StatelessWidget {
               if (breit) ...[
                 SizedBox(
                   width: _Spalten.kunde,
-                  child: Text(
-                    p.kunde ?? '—',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: stil?.copyWith(color: p.kunde == null ? grau : null),
-                  ),
+                  child: muster
+                      ? null
+                      : Text(
+                          p.kunde ?? '—',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: stil?.copyWith(
+                            color: p.kunde == null ? grau : null,
+                          ),
+                        ),
                 ),
                 const SizedBox(width: _Spalten.luecke),
               ],
@@ -604,14 +837,35 @@ class _Nummer extends StatelessWidget {
   }
 }
 
-/// Ein neues Projekt: Name, Kunde, Artikelnummer, Idee. Gibt die ID
-/// zurück.
+/// Was das Fenster „Neues Projekt" anlegt.
+enum NeuArt {
+  /// Ein Projekt für ein Produkt.
+  produkt,
+
+  /// Ein Gesamtprojekt mit mehreren Mustern.
+  gesamtprojekt,
+
+  /// Nichts Neues — die Mail kommt in ein bestehendes Gesamtprojekt.
+  ablegen,
+}
+
+/// Ein neues Projekt — für ein Produkt (Name, Kunde, Artikelnummer, Idee)
+/// oder als Gesamtprojekt mit mehreren Mustern (Name, Kunde, Anfrage, die
+/// Namen der Muster). Aus einer Mail lässt sie sich auch in ein
+/// bestehendes Gesamtprojekt legen. Gibt zurück, was angelegt ist.
 class NeuesProjektDialog extends ConsumerStatefulWidget {
-  const NeuesProjektDialog({super.key, this.ausMail});
+  const NeuesProjektDialog({
+    super.key,
+    this.ausMail,
+    this.gesamtprojekte = const [],
+  });
 
   /// Die Mail, aus der das Projekt entsteht — sie füllt Name, Kunde und
   /// Idee vor und steht danach mit ihren Anhängen im Verlauf.
   final ({Mail mail, AbgelegteDatei datei})? ausMail;
+
+  /// Die Gesamtprojekte, in die sich eine Mail legen lässt.
+  final List<Gesamtprojekt> gesamtprojekte;
 
   @override
   ConsumerState<NeuesProjektDialog> createState() =>
@@ -623,6 +877,12 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
   final _kunde = TextEditingController();
   final _nummer = TextEditingController();
   final _idee = TextEditingController();
+  final List<TextEditingController> _muster = [
+    TextEditingController(),
+    TextEditingController(),
+  ];
+  NeuArt _art = NeuArt.produkt;
+  String? _ziel;
   bool _speichert = false;
   String? _fehler;
 
@@ -644,6 +904,9 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
     _kunde.dispose();
     _nummer.dispose();
     _idee.dispose();
+    for (final c in _muster) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -652,10 +915,32 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
     return t.isEmpty ? null : t;
   }
 
+  /// Das Gesamtprojekt, in das die Mail kommt — vorgeschlagen eines
+  /// desselben Kunden, sonst das zuletzt bewegte.
+  String? get _zielId {
+    final alle = widget.gesamtprojekte;
+    if (alle.isEmpty) return null;
+    if (_ziel case final z? when alle.any((g) => g.id == z)) return z;
+    final kunde = _kunde.text.trim().toLowerCase();
+    return (kunde.isEmpty
+                ? null
+                : alle
+                    .where((g) => (g.kunde ?? '').trim().toLowerCase() == kunde)
+                    .firstOrNull)
+            ?.id ??
+        alle.first.id;
+  }
+
   Future<void> _anlegen() async {
     final name = _name.text.trim();
-    if (name.isEmpty) {
+    if (_art != NeuArt.ablegen && name.isEmpty) {
       setState(() => _fehler = 'Bitte einen Namen eingeben.');
+      return;
+    }
+    final aus = widget.ausMail;
+    final ziel = _zielId;
+    if (_art == NeuArt.ablegen && (aus == null || ziel == null)) {
+      setState(() => _fehler = 'Bitte ein Gesamtprojekt wählen.');
       return;
     }
     setState(() {
@@ -663,26 +948,53 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
       _fehler = null;
     });
     try {
-      final aus = widget.ausMail;
-      final id = aus == null
-          ? await ref.read(projektRepositoryProvider).projektAnlegen(
-                name: name,
-                kunde: _oderNull(_kunde),
-                artikelnummer: _oderNull(_nummer),
-                produktidee: _oderNull(_idee),
-              )
-          : await ref.read(mailAblageProvider).projektAusMail(
-                mail: aus.mail,
-                datei: aus.datei,
-                name: name,
-                kunde: _oderNull(_kunde),
-                artikelnummer: _oderNull(_nummer),
-                produktidee: _oderNull(_idee),
-              );
+      final ablage = ref.read(mailAblageProvider);
+      final repo = ref.read(projektRepositoryProvider);
+      final NeuAngelegt neu;
+      switch (_art) {
+        case NeuArt.produkt:
+          final id = aus == null
+              ? await repo.projektAnlegen(
+                  name: name,
+                  kunde: _oderNull(_kunde),
+                  artikelnummer: _oderNull(_nummer),
+                  produktidee: _oderNull(_idee),
+                )
+              : await ablage.projektAusMail(
+                  mail: aus.mail,
+                  datei: aus.datei,
+                  name: name,
+                  kunde: _oderNull(_kunde),
+                  artikelnummer: _oderNull(_nummer),
+                  produktidee: _oderNull(_idee),
+                );
+          neu = (id: id, gesamtprojekt: false, hinweis: null);
+        case NeuArt.gesamtprojekt:
+          final muster = [for (final c in _muster) c.text];
+          final id = aus == null
+              ? await repo.gesamtprojektAnlegen(
+                  name: name,
+                  kunde: _oderNull(_kunde),
+                  anfrage: _oderNull(_idee),
+                  muster: muster,
+                )
+              : await ablage.gesamtprojektAusMail(
+                  mail: aus.mail,
+                  datei: aus.datei,
+                  name: name,
+                  kunde: _oderNull(_kunde),
+                  anfrage: _oderNull(_idee),
+                  muster: muster,
+                );
+          neu = (id: id, gesamtprojekt: true, hinweis: null);
+        case NeuArt.ablegen:
+          final bericht = await ablage.ablegen(ziel!, [aus!.datei]);
+          neu = (id: ziel, gesamtprojekt: true, hinweis: bericht.text);
+      }
       ref
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Projekt angelegt');
-      if (mounted) Navigator.of(context).pop(id);
+      if (mounted) Navigator.of(context).pop(neu);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -695,6 +1007,7 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
     final fehler = _fehler;
     // Kunden aus anderen Projekten zum Antippen — passend zur Eingabe.
     final eingabe = _kunde.text.trim().toLowerCase();
@@ -702,6 +1015,8 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
       for (final p in ref.watch(projekteProvider).valueOrNull ??
           const <EntwicklungsProjekt>[])
         if ((p.kunde ?? '').trim().isNotEmpty) p.kunde!.trim(),
+      for (final g in widget.gesamtprojekte)
+        if ((g.kunde ?? '').trim().isNotEmpty) g.kunde!.trim(),
     }.where(
       (k) => k.toLowerCase().contains(eingabe) && k.toLowerCase() != eingabe,
     ).toList()
@@ -709,57 +1024,187 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
         .take(6)
         .toList();
     final aus = widget.ausMail;
+    final ablegbar = aus != null && widget.gesamtprojekte.isNotEmpty;
+    final gesamt = _art == NeuArt.gesamtprojekt;
+    final ablegen = _art == NeuArt.ablegen;
+    final titel = switch (_art) {
+      NeuArt.produkt =>
+        aus == null ? 'Neues Projekt' : 'Neues Projekt aus Mail',
+      NeuArt.gesamtprojekt =>
+        aus == null ? 'Neues Gesamtprojekt' : 'Neues Gesamtprojekt aus Mail',
+      NeuArt.ablegen => 'Mail in ein Gesamtprojekt legen',
+    };
     return AlertDialog(
-      title: Text(aus == null ? 'Neues Projekt' : 'Neues Projekt aus Mail'),
+      title: Text(titel),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 460),
+        constraints: const BoxConstraints(maxWidth: 480),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              SegmentedButton<NeuArt>(
+                key: const ValueKey('neu-art'),
+                showSelectedIcon: false,
+                segments: [
+                  const ButtonSegment(
+                    value: NeuArt.produkt,
+                    icon: Icon(Icons.inventory_2_outlined),
+                    label: Text('Ein Produkt'),
+                    tooltip: 'Ein Projekt für ein Produkt',
+                  ),
+                  const ButtonSegment(
+                    value: NeuArt.gesamtprojekt,
+                    icon: Icon(Icons.folder_outlined),
+                    label: Text('Mehrere Muster'),
+                    tooltip: 'Ein Gesamtprojekt: eine Anfrage, aus der '
+                        'mehrere Muster entstehen',
+                  ),
+                  if (ablegbar)
+                    const ButtonSegment(
+                      value: NeuArt.ablegen,
+                      icon: Icon(Icons.drive_file_move_outline),
+                      label: Text('Ablegen'),
+                      tooltip: 'In ein bestehendes Gesamtprojekt',
+                    ),
+                ],
+                selected: {_art},
+                onSelectionChanged: (w) => setState(() {
+                  _art = w.first;
+                  _fehler = null;
+                }),
+              ),
+              const SizedBox(height: 12),
               if (aus != null) ...[
-                _MailZeile(mail: aus.mail),
+                _MailZeile(mail: aus.mail, art: _art),
                 const SizedBox(height: 12),
               ],
-              TextField(
-                controller: _name,
-                autofocus: true,
-                decoration: const InputDecoration(labelText: 'Projektname'),
-                onSubmitted: (_) => _anlegen(),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _kunde,
-                decoration: const InputDecoration(labelText: 'Kunde'),
-                onChanged: (_) => setState(() {}),
-              ),
-              if (vorschlaege.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final k in vorschlaege)
-                      ActionChip(
-                        label: Text(k),
-                        onPressed: () => setState(() => _kunde.text = k),
+              if (ablegen)
+                DropdownButtonFormField<String>(
+                  key: const ValueKey('neu-ablegen-ziel'),
+                  initialValue: _zielId,
+                  isExpanded: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Gesamtprojekt',
+                  ),
+                  items: [
+                    for (final g in widget.gesamtprojekte)
+                      DropdownMenuItem(
+                        value: g.id,
+                        child: Text(
+                          (g.kunde ?? '').trim().isEmpty
+                              ? g.name
+                              : '${g.name} · ${g.kunde!.trim()}',
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                   ],
+                  onChanged: (z) => setState(() => _ziel = z),
+                )
+              else ...[
+                TextField(
+                  key: const ValueKey('neu-name'),
+                  controller: _name,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText:
+                        gesamt ? 'Name des Gesamtprojekts' : 'Projektname',
+                    helperText:
+                        gesamt ? 'Etwa die Anfrage: „Grillsortiment"' : null,
+                  ),
+                  onSubmitted: (_) => _anlegen(),
                 ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _kunde,
+                  decoration: InputDecoration(
+                    labelText: 'Kunde',
+                    helperText: gesamt ? 'Gilt für alle Muster' : null,
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+                if (vorschlaege.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final k in vorschlaege)
+                        ActionChip(
+                          label: Text(k),
+                          onPressed: () => setState(() => _kunde.text = k),
+                        ),
+                    ],
+                  ),
+                ],
+                if (!gesamt) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _nummer,
+                    decoration:
+                        const InputDecoration(labelText: 'Artikelnummer'),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _idee,
+                  minLines: 2,
+                  maxLines: aus == null ? 4 : 8,
+                  decoration: InputDecoration(
+                    labelText: gesamt ? 'Worum es geht' : 'Produktidee',
+                  ),
+                ),
+                if (gesamt) ...[
+                  const SizedBox(height: 14),
+                  Text('Muster', style: theme.textTheme.titleSmall),
+                  Text(
+                    'Je Produkt, das aus der Anfrage entsteht, ein Muster — '
+                    'mit eigener Rezeptur und eigenem Weg. Weitere lassen '
+                    'sich jederzeit anlegen.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final (i, c) in _muster.indexed)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              key: ValueKey('neu-muster-$i'),
+                              controller: c,
+                              decoration: InputDecoration(
+                                isDense: true,
+                                labelText: 'Muster ${i + 1}',
+                                hintText: 'Name — leer: „Muster ${i + 1}"',
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Muster entfernen',
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: _muster.length <= 1
+                                ? null
+                                : () => setState(() {
+                                      _muster.removeAt(i).dispose();
+                                    }),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      key: const ValueKey('neu-muster-mehr'),
+                      onPressed: () => setState(
+                        () => _muster.add(TextEditingController()),
+                      ),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Weiteres Muster'),
+                    ),
+                  ),
+                ],
               ],
-              const SizedBox(height: 10),
-              TextField(
-                controller: _nummer,
-                decoration: const InputDecoration(labelText: 'Artikelnummer'),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _idee,
-                minLines: 2,
-                maxLines: aus == null ? 4 : 8,
-                decoration: const InputDecoration(labelText: 'Produktidee'),
-              ),
               if (fehler != null) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -780,7 +1225,7 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
         ),
         FilledButton(
           onPressed: _speichert ? null : _anlegen,
-          child: const Text('Anlegen'),
+          child: Text(ablegen ? 'Ablegen' : 'Anlegen'),
         ),
       ],
     );
@@ -790,9 +1235,10 @@ class _NeuesProjektDialogState extends ConsumerState<NeuesProjektDialog> {
 /// Die Mail, aus der ein Projekt entsteht: Betreff, Absender, Datum und
 /// was mit ihr geschieht.
 class _MailZeile extends StatelessWidget {
-  const _MailZeile({required this.mail});
+  const _MailZeile({required this.mail, this.art = NeuArt.produkt});
 
   final Mail mail;
+  final NeuArt art;
 
   @override
   Widget build(BuildContext context) {
@@ -802,6 +1248,8 @@ class _MailZeile extends StatelessWidget {
     final datum = m.datum;
     final anhaenge = m.anhaenge.length;
     final groesse = m.anhaenge.fold<int>(0, (s, a) => s + a.inhalt.length);
+    final anhangText =
+        anhaenge == 1 ? 'ihr Anhang' : 'ihre $anhaenge Anhänge';
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
       decoration: BoxDecoration(
@@ -832,11 +1280,20 @@ class _MailZeile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  anhaenge == 0
-                      ? 'Die Mail kommt als Anfrage in den Verlauf.'
-                      : 'Die Mail kommt als Anfrage in den Verlauf, '
-                          '${anhaenge == 1 ? 'ihr Anhang' : 'ihre $anhaenge Anhänge'} '
-                          '(${groesseText(groesse)}) zu den Dateien.',
+                  [
+                    switch (art) {
+                      NeuArt.produkt =>
+                        'Die Mail kommt als Anfrage in den Verlauf',
+                      NeuArt.gesamtprojekt => 'Die Mail kommt als Anfrage in '
+                          'den Verlauf des Gesamtprojekts — und damit zu '
+                          'allen Mustern',
+                      NeuArt.ablegen => 'Die Mail kommt in den Verlauf des '
+                          'Gesamtprojekts — und damit zu allen Mustern',
+                    },
+                    if (anhaenge > 0)
+                      ', $anhangText (${groesseText(groesse)}) zu den Dateien',
+                    '.',
+                  ].join(),
                   style: theme.textTheme.bodySmall?.copyWith(color: grau),
                 ),
               ],

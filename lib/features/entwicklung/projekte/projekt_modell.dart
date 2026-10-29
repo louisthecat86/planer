@@ -8,17 +8,24 @@ import 'package:flutter/material.dart';
 // In der Datenbank stehen Checklisten und Sensorik als JSON-Text
 // (EntwicklungProjekte) — hier die Schlüssel und das Lesen und Schreiben.
 
-/// Wo ein Projekt steht.
+/// Wo ein Projekt steht. Zwei Zustände ruhen: Ein Muster, das nicht
+/// weiter verfolgt wird (etwa weil der Kunde ein anderes gewählt hat), und
+/// ein archiviertes Projekt. Beide lassen sich wieder aufnehmen.
 enum ProjektStatus {
   entwicklung('entwicklung', 'In Entwicklung'),
   validierung('validierung', 'Validierung'),
   produktion('produktion', 'In Produktion'),
+  eingestellt('eingestellt', 'Nicht weiter verfolgt'),
   archiviert('archiviert', 'Archiviert');
 
   const ProjektStatus(this.schluessel, this.label);
 
   final String schluessel;
   final String label;
+
+  /// Ob das Projekt ruht — nicht weiter verfolgt oder archiviert.
+  bool get ruht =>
+      this == ProjektStatus.eingestellt || this == ProjektStatus.archiviert;
 
   static ProjektStatus aus(String? text) {
     switch (text?.trim().toLowerCase()) {
@@ -28,6 +35,8 @@ enum ProjektStatus {
       case 'produktion':
       case 'production':
         return ProjektStatus.produktion;
+      case 'eingestellt':
+        return ProjektStatus.eingestellt;
       case 'archiviert':
       case 'archived':
         return ProjektStatus.archiviert;

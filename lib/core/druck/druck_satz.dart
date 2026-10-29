@@ -82,11 +82,14 @@ class DruckRahmen {
 
   final List<PdfPage> _seiten = [];
 
-  /// Die Seite im Blatt, auf der [ctx] zeichnet — ab 1.
-  int seiteImBlatt(pw.Context ctx) {
-    final i = _seiten.indexOf(ctx.page);
-    return i < 0 ? 1 : i + 1;
-  }
+  /// Wie viele Seiten das Dokument vor diesem Blatt hat.
+  int _davor = 0;
+
+  /// Die Seite im Blatt, auf der [ctx] steht — ab 1. Das gilt schon beim
+  /// Setzen, nicht erst beim Zeichnen: Kopf- und Fußzeilen, die sich danach
+  /// richten (etwa ohne Kopf auf Seite 1), haben so beim Setzen dieselbe
+  /// Höhe wie beim Zeichnen. Sonst rutschte der Inhalt in die Fußzeile.
+  int seiteImBlatt(pw.Context ctx) => math.max(1, ctx.pageNumber - _davor);
 
   /// Wie viele Seiten das Blatt hat.
   int get seitenImBlatt => math.max(1, _seiten.length);
@@ -407,6 +410,7 @@ int _anlegen(
 }) {
   final liste = doc.document.pdfPageList.pages;
   final vorher = liste.length;
+  r._davor = vorher;
   doc.addPage(p.seiten(r, graustufen: graustufen));
   r._seiten.addAll(liste.sublist(vorher));
   return liste.length - vorher;

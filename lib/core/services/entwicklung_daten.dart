@@ -36,6 +36,10 @@ class EntwicklungDaten {
               in await db.select(db.entwicklungRezepturPositionen).get())
             p.toJson(),
         ],
+        'gesamtprojekte': [
+          for (final g in await db.select(db.entwicklungGesamtprojekte).get())
+            g.toJson(),
+        ],
         'projekte': [
           for (final p in await db.select(db.entwicklungProjekte).get())
             p.toJson(),
@@ -130,6 +134,14 @@ class EntwicklungDaten {
         mode: InsertMode.insertOrReplace,
       );
       b.insertAll(
+        db.entwicklungGesamtprojekte,
+        [
+          for (final z in zeilen('gesamtprojekte'))
+            Gesamtprojekt.fromJson(z).toCompanion(true),
+        ],
+        mode: InsertMode.insertOrReplace,
+      );
+      b.insertAll(
         db.entwicklungProjekte,
         [
           for (final z in zeilen('projekte'))
@@ -180,6 +192,7 @@ class EntwicklungDaten {
         db.entwicklungRezepturen,
         db.entwicklungRezepturVersionen,
         db.entwicklungRezepturPositionen,
+        db.entwicklungGesamtprojekte,
         db.entwicklungProjekte,
         db.entwicklungProjektEintraege,
         db.entwicklungDateien,
