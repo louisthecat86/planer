@@ -53,6 +53,42 @@ Die acht Abteilungen sind ein Dart-Enum in
 Kutterabteilung, Bratstraße, Schneideabteilung, Verpackung, Verpackung Tef1,
 Verpackung Tef2.
 
+## Drucken
+
+Jeder Druck öffnet dasselbe **Druckfenster**: links, was und wie gedruckt
+wird, rechts die Vorschau, die jeder Änderung folgt. Dann „Drucken …" (der
+Druckdialog von Windows) oder „Als PDF speichern …". Das Fenster merkt sich
+je Dokument, womit zuletzt gedruckt wurde; „Zurücksetzen" holt den
+Standard. Strg+P druckt.
+
+- **Wie:** Papier A4, A3 oder A5 (das ganze Blatt wird vergrößert oder
+  verkleinert, wie am Kopierer), Hoch- oder Querformat (oder wie das
+  Dokument es vorsieht), Originalgröße, verkleinert auf 90–50 %, **alles
+  auf eine Seite** oder auf höchstens zwei Seiten — je Blatt so groß wie
+  möglich —, schmale Ränder, Graustufen. Passt ein Blatt selbst bei 30 %
+  nicht, sagt es das Fenster.
+- **Was**, je Dokument:
+  - **Plan** (Planungsboard): Woche oder Tag, gesamte Übersicht oder je
+    Abteilung ein Blatt, welche Abteilungen und Tage, sonstige Aufgaben,
+    Erledigtes, Kästchen zum Abhaken, Anlagen ohne Aufträge, Dauer und
+    Belegung.
+  - **Prozessblatt** (Artikel): Abteilungen und Schritte, jede Abteilung
+    auf eigener Seite, Leistungsdaten, Kennwerte, Plattenraster,
+    Maschineneinstellungen, Parameter, Notizen, Linien für Notizen von
+    Hand.
+  - **Datenblatt** (Board, Bedarf, Auftragsbestand, Planungsvorschlag):
+    welche Blätter, Mengen und Tag, Stand, Merkmale, Notiz, Ablauf,
+    Aufträge — auch ohne Kundennamen zum Aushängen —, Feld für die
+    Rückmeldung.
+  - **Etikett-Entwurf**: Breite des Etiketts (80, 110 oder 150 mm), Kopf,
+    Nährwerttabelle, Platzhalter, was noch offen ist.
+  - **Projektbericht**: Kapitel, Steckbrief, Inhaltsverzeichnis, Verlauf als
+    Zeitstrahl und im Einzelnen, Kapitel auf neuen Seiten oder fortlaufend.
+
+Der Satz (`lib/core/druck/`) legt jedes Blatt auf eine gedachte, größere
+Seite und verkleinert beim Zeichnen — so bricht der Text über die volle
+Breite um, und Links und Lesezeichen im PDF stimmen auch verkleinert.
+
 ## Produktentwicklung
 
 Ein eigener Bereich für die Entwicklung neuer Produkte. Er ist mit einem

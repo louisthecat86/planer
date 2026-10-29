@@ -5,6 +5,9 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/druck/druck_layout.dart';
+import 'package:produktion_planer/core/druck/druck_optionen.dart';
+import 'package:produktion_planer/core/druck/druck_satz.dart';
 import 'package:produktion_planer/core/providers/database_provider.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/etikett/etikett.dart';
@@ -520,9 +523,46 @@ void main() {
         bezeichnung: 'Testware „mild"',
         ergebnis: berechne(rezeptur([(schwein, 9), (salz, 0.2)])),
       );
-      final pdf = await baueEtikettPdf(e, erstellt: DateTime(2026, 3, 5));
-      expect(ascii.decode(pdf.sublist(0, 5)), '%PDF-');
-      expect(pdf.length, greaterThan(1000));
+      Future<String> text(EtikettDruckInhalt inhalt) async => latin1.decode(
+            (await druckSetzen(
+              etikettDruck(e, inhalt: inhalt, erstellt: DateTime(2026, 3, 5)),
+              const DruckLayout(),
+              komprimiert: false,
+            ))
+                .bytes,
+          );
+
+      final alles = await text(const EtikettDruckInhalt());
+      for (final wort in ['ETIKETT-ENTWURF', 'Zutaten:', 'Los:', 'Noch']) {
+        expect(alles, contains('($wort)'), reason: wort);
+      }
+      expect(alles, contains('(Durchschnittliche)'));
+
+      final wenig = await text(
+        const EtikettDruckInhalt(
+          kopf: false,
+          naehrwerte: false,
+          platzhalter: false,
+          offen: false,
+          hinweis: false,
+        ),
+      );
+      expect(wenig, contains('(Zutaten:)'));
+      for (final wort in [
+        'ETIKETT-ENTWURF',
+        'Durchschnittliche',
+        'Los:',
+        'Noch',
+        'Entwurf',
+      ]) {
+        expect(wenig, isNot(contains('($wort)')), reason: wort);
+      }
+
+      final auftrag = etikettDruckAuftrag(e);
+      final wahl = DruckWahl.standard(auftrag.optionen);
+      expect(wahl.eins(EtikettWahl.breite), '110');
+      final schmal = await auftrag.bauen(wahl.mit(EtikettWahl.breite, '80'));
+      expect(schmal.dateiname, startsWith('Etikett_'));
     });
   });
 

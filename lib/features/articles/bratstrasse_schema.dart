@@ -2,7 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../core/constants/parameter_namen.dart'
+    show kBratstrasseZonen, kKombiofenZonen;
 import '../../core/theme/app_stil.dart';
+
+// Die Zahl der Zonen je Anlage steht bei den Parameternamen — so kennen
+// sie auch das Prozessblatt und der Projektbericht ohne Oberfläche.
+export '../../core/constants/parameter_namen.dart'
+    show kBratstrasseZonen, kKombiofenZonen;
 
 /// Schematische Darstellung der Plattentemperaturen einer Bratstraße bzw.
 /// eines Kombiofens — analog zur Excel-Vorlage:
@@ -17,9 +24,6 @@ import '../../core/theme/app_stil.dart';
 /// Welche Anlage dargestellt wird.
 enum BratschemaTyp { bratstrasse, kombiofen }
 
-/// Anzahl Zonen je Anlagentyp.
-const int kBratstrasseZonen = 10;
-const int kKombiofenZonen = 12;
 
 /// Plattentemperaturen als zwei Zonen-Listen (°C). `null` = nicht gesetzt.
 class PlattenTemperaturen {

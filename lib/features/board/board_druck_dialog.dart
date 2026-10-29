@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
-
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart' show Tagesaufgabe;
+import '../../core/druck/druck_optionen.dart';
 import '../../core/services/tagesaufgaben_service.dart' show AufgabenZelle;
-import '../../core/ui/bausteine.dart' show AbteilungsMarke;
+import '../../core/utils/format.dart';
+import '../../core/utils/kalenderwoche.dart';
+import 'board_print_service.dart';
 import 'board_providers.dart';
 
-// Druck-Auswahl im Planungsboard: Woche oder Tag, gesamte Übersicht oder
-// je Abteilung ein eigenes Blatt — damit sich der Plan gezielt an die
-// Abteilungen verteilen lässt.
+// Druck des Planungsboards: Woche oder Tag, gesamte Übersicht oder je
+// Abteilung ein eigenes Blatt — dazu, welche Abteilungen, welche Tage und
+// was auf dem Plan stehen soll. Das Druckfenster zeigt die Wahl gleich in
+// der Vorschau.
 
 /// Was gedruckt wird.
 enum DruckZeitraum { woche, tag }
@@ -16,18 +18,6 @@ enum DruckZeitraum { woche, tag }
 /// Wie viel eine Abteilung im Zeitraum zu tun hat — Aufträge (Karten im
 /// Board) und sonstige Aufgaben.
 typedef DruckUmfang = ({int auftraege, int aufgaben});
-
-/// Die Wahl im Druck-Dialog.
-class BoardDruckAuswahl {
-  const BoardDruckAuswahl({required this.zeitraum, this.abteilungen});
-
-  final DruckZeitraum zeitraum;
-
-  /// null: die gesamte Übersicht, alle Abteilungen auf einem Plan. Sonst
-  /// diese Abteilungen, jede auf einem eigenen Blatt — in der Reihenfolge
-  /// des Boards.
-  final List<Abteilung>? abteilungen;
-}
 
 /// Aufträge und sonstige Aufgaben je Abteilung in der Woche (Mo–Fr).
 Map<Abteilung, DruckUmfang> druckUmfangWoche(
@@ -72,224 +62,212 @@ Map<Abteilung, DruckUmfang> druckUmfangTag(
   };
 }
 
-/// Fragt, was gedruckt wird. null: abgebrochen.
+/// „3 Aufträge · 1 Aufgabe" — oder „nichts geplant".
+String druckUmfangText(DruckUmfang? u) {
+  if (u == null || u.auftraege + u.aufgaben == 0) return 'nichts geplant';
+  return [
+    if (u.auftraege > 0)
+      '${u.auftraege} ${u.auftraege == 1 ? 'Auftrag' : 'Aufträge'}',
+    if (u.aufgaben > 0)
+      '${u.aufgaben} ${u.aufgaben == 1 ? 'Aufgabe' : 'Aufgaben'}',
+  ].join(' · ');
+}
+
+/// Schlüssel der Wahl im Druckfenster.
+abstract final class PlanDruckWahl {
+  static const zeitraum = 'zeitraum';
+  static const umfang = 'umfang';
+  static const abteilungenWoche = 'abteilungenWoche';
+  static const abteilungenTag = 'abteilungenTag';
+  static const tage = 'tage';
+  static const aufgaben = 'aufgaben';
+  static const erledigte = 'erledigte';
+  static const kaestchen = 'kaestchen';
+  static const leere = 'leere';
+  static const belegung = 'belegung';
+}
+
+/// Der Druck des Plans für das Druckfenster.
 ///
-/// [zeitraum] ist vorgewählt — der, den das Board gerade zeigt. [woche]
-/// und [tag] beschriften die Wahl („KW 41", „Do 08.10.").
-Future<BoardDruckAuswahl?> zeigeBoardDruckDialog(
-  BuildContext context, {
+/// [zeitraum] ist vorgewählt — der, den das Board gerade zeigt. Die
+/// Abteilungen sind je Zeitraum vorgeschlagen: die, die dort etwas zu
+/// tun haben. Sie hängen an den Daten und werden deshalb nicht gemerkt;
+/// alles andere schon.
+DruckAuftrag planDruckAuftrag({
+  required WeekBoard woche,
+  required DayBoard tag,
+  required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
   required DruckZeitraum zeitraum,
-  required String woche,
-  required String tag,
-  required Map<Abteilung, DruckUmfang> umfangWoche,
-  required Map<Abteilung, DruckUmfang> umfangTag,
+  DateTime? gedrucktAm,
 }) {
-  return showDialog<BoardDruckAuswahl>(
-    context: context,
-    builder: (_) => BoardDruckDialog(
-      zeitraum: zeitraum,
-      woche: woche,
-      tag: tag,
-      umfangWoche: umfangWoche,
-      umfangTag: umfangTag,
-    ),
-  );
-}
+  final kw = isoKalenderwoche(woche.wochenStart);
+  final umfangWoche = druckUmfangWoche(woche, aufgaben);
+  final umfangTag = druckUmfangTag(tag, aufgaben);
 
-/// Der Dialog zu [zeigeBoardDruckDialog].
-class BoardDruckDialog extends StatefulWidget {
-  const BoardDruckDialog({
-    super.key,
-    required this.zeitraum,
-    required this.woche,
-    required this.tag,
-    required this.umfangWoche,
-    required this.umfangTag,
-  });
-
-  final DruckZeitraum zeitraum;
-  final String woche;
-  final String tag;
-  final Map<Abteilung, DruckUmfang> umfangWoche;
-  final Map<Abteilung, DruckUmfang> umfangTag;
-
-  @override
-  State<BoardDruckDialog> createState() => _BoardDruckDialogState();
-}
-
-class _BoardDruckDialogState extends State<BoardDruckDialog> {
-  late DruckZeitraum _zeitraum = widget.zeitraum;
-
-  /// Je Abteilung ein eigenes Blatt statt der gesamten Übersicht.
-  bool _einzeln = false;
-
-  /// Von Hand gewählte Abteilungen. null, solange niemand etwas
-  /// angeklickt hat oder der Zeitraum gewechselt wurde — dann gilt der
-  /// Vorschlag: alle Abteilungen, die im Zeitraum etwas zu tun haben.
-  Set<Abteilung>? _auswahl;
-
-  Map<Abteilung, DruckUmfang> get _umfang =>
-      _zeitraum == DruckZeitraum.woche ? widget.umfangWoche : widget.umfangTag;
-
-  bool _hatPlan(Abteilung abt) {
-    final u = _umfang[abt];
-    return u != null && u.auftraege + u.aufgaben > 0;
-  }
-
-  Set<Abteilung> get _gewaehlt =>
-      _auswahl ??
-      {
+  List<DruckWert> abteilungen(Map<Abteilung, DruckUmfang> umfang) => [
         for (final abt in Abteilung.values)
-          if (_hatPlan(abt)) abt,
-      };
-
-  void _waehle(Set<Abteilung> neu) => setState(() => _auswahl = neu);
-
-  void _drucken() {
-    final gewaehlt = _gewaehlt;
-    Navigator.of(context).pop(
-      BoardDruckAuswahl(
-        zeitraum: _zeitraum,
-        abteilungen: _einzeln
-            ? [
-                for (final abt in Abteilung.values)
-                  if (gewaehlt.contains(abt)) abt,
-              ]
-            : null,
-      ),
-    );
-  }
-
-  static String _umfangText(DruckUmfang? u) {
-    if (u == null || u.auftraege + u.aufgaben == 0) return 'nichts geplant';
-    return [
-      if (u.auftraege > 0)
-        '${u.auftraege} ${u.auftraege == 1 ? 'Auftrag' : 'Aufträge'}',
-      if (u.aufgaben > 0)
-        '${u.aufgaben} ${u.aufgaben == 1 ? 'Aufgabe' : 'Aufgaben'}',
-    ].join(' · ');
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final gewaehlt = _gewaehlt;
-    final anzahl = gewaehlt.length;
-
-    return AlertDialog(
-      title: const Text('Plan drucken'),
-      // Bei kleinem Fenster lässt sich die Liste der Abteilungen scrollen.
-      scrollable: true,
-      content: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SegmentedButton<DruckZeitraum>(
-              segments: [
-                ButtonSegment(
-                  value: DruckZeitraum.woche,
-                  icon: const Icon(Icons.calendar_view_week),
-                  label: Text('Woche · ${widget.woche}'),
-                ),
-                ButtonSegment(
-                  value: DruckZeitraum.tag,
-                  icon: const Icon(Icons.calendar_view_day),
-                  label: Text('Tag · ${widget.tag}'),
-                ),
-              ],
-              selected: {_zeitraum},
-              // Woche und Tag haben verschiedene Vorschläge — eine von Hand
-              // getroffene Auswahl gilt nur für den Zeitraum, in dem sie
-              // entstand.
-              onSelectionChanged: (s) => setState(() {
-                _zeitraum = s.first;
-                _auswahl = null;
-              }),
-            ),
-            const SizedBox(height: 8),
-            RadioGroup<bool>(
-              groupValue: _einzeln,
-              onChanged: (v) => setState(() => _einzeln = v ?? false),
-              child: const Column(
-                children: [
-                  RadioListTile<bool>(
-                    value: false,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Gesamte Übersicht'),
-                    subtitle: Text('Alle Abteilungen auf einem Plan'),
-                  ),
-                  RadioListTile<bool>(
-                    value: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: Text('Einzelne Abteilungen'),
-                    subtitle: Text(
-                      'Jede Abteilung auf einem eigenen Blatt — zum Verteilen',
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (_einzeln) ...[
-              const Divider(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Welche Abteilungen?',
-                      style: theme.textTheme.titleSmall,
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _waehle(Abteilung.values.toSet()),
-                    child: const Text('Alle'),
-                  ),
-                  TextButton(
-                    onPressed: () => _waehle(<Abteilung>{}),
-                    child: const Text('Keine'),
-                  ),
-                ],
-              ),
-              for (final abt in Abteilung.values)
-                CheckboxListTile(
-                  value: gewaehlt.contains(abt),
-                  onChanged: (an) {
-                    final neu = {...gewaehlt};
-                    if (an ?? false) {
-                      neu.add(abt);
-                    } else {
-                      neu.remove(abt);
-                    }
-                    _waehle(neu);
-                  },
-                  controlAffinity: ListTileControlAffinity.leading,
-                  contentPadding: EdgeInsets.zero,
-                  secondary: AbteilungsMarke(abteilung: abt),
-                  title: Text(abt.anzeigeName),
-                  subtitle: Text(_umfangText(_umfang[abt])),
-                ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton.icon(
-          onPressed: _einzeln && anzahl == 0 ? null : _drucken,
-          icon: const Icon(Icons.print),
-          label: Text(
-            !_einzeln
-                ? 'Drucken'
-                : anzahl == 1
-                    ? 'Drucken · 1 Abteilung'
-                    : 'Drucken · $anzahl Abteilungen',
+          DruckWert(
+            abt.dbValue,
+            abt.anzeigeName,
+            hinweis: druckUmfangText(umfang[abt]),
+            farbe: abt.farbwert,
+            kuerzel: abt.kurzcode,
           ),
-        ),
-      ],
-    );
+      ];
+
+  // Vorgeschlagen: alle mit Plan — ist nirgends etwas geplant, alle.
+  Set<String> vorschlag(Map<Abteilung, DruckUmfang> umfang) {
+    final mitPlan = {
+      for (final abt in Abteilung.values)
+        if (druckUmfangText(umfang[abt]) != 'nichts geplant') abt.dbValue,
+    };
+    return mitPlan.isNotEmpty
+        ? mitPlan
+        : {for (final abt in Abteilung.values) abt.dbValue};
   }
+
+  bool istWoche(DruckWahl w) =>
+      w.eins(PlanDruckWahl.zeitraum) != DruckZeitraum.tag.name;
+
+  return DruckAuftrag(
+    art: 'plan',
+    titel: 'Plan drucken',
+    untertitel: 'Planungsboard · KW $kw',
+    optionen: [
+      DruckWahlEins(
+        schluessel: PlanDruckWahl.zeitraum,
+        titel: 'Zeitraum',
+        werte: [
+          DruckWert(
+            DruckZeitraum.woche.name,
+            'Woche · KW $kw',
+            hinweis: '${Format.tagKurz(woche.tage.first)} bis '
+                '${Format.tagKurz(woche.tage.last)} — im Querformat',
+          ),
+          DruckWert(
+            DruckZeitraum.tag.name,
+            'Tag · ${Format.tagKurz(tag.tag)}',
+            hinweis: 'Mit Tabelle je Anlage — im Hochformat',
+          ),
+        ],
+        standard: zeitraum.name,
+        merken: false,
+      ),
+      const DruckWahlEins(
+        schluessel: PlanDruckWahl.umfang,
+        titel: 'Aufteilung',
+        werte: [
+          DruckWert(
+            'uebersicht',
+            'Gesamte Übersicht',
+            hinweis: 'Alle gewählten Abteilungen auf einem Plan',
+          ),
+          DruckWert(
+            'einzeln',
+            'Einzelne Abteilungen',
+            hinweis: 'Jede auf einem eigenen Blatt — zum Verteilen',
+          ),
+        ],
+        standard: 'uebersicht',
+      ),
+      DruckWahlMehrere(
+        schluessel: PlanDruckWahl.abteilungenWoche,
+        titel: 'Abteilungen',
+        werte: abteilungen(umfangWoche),
+        standard: vorschlag(umfangWoche),
+        merken: false,
+        sichtbar: istWoche,
+      ),
+      DruckWahlMehrere(
+        schluessel: PlanDruckWahl.abteilungenTag,
+        titel: 'Abteilungen',
+        werte: abteilungen(umfangTag),
+        standard: vorschlag(umfangTag),
+        merken: false,
+        sichtbar: (w) => !istWoche(w),
+      ),
+      DruckWahlMehrere(
+        schluessel: PlanDruckWahl.tage,
+        titel: 'Tage',
+        werte: [
+          for (final t in woche.tage)
+            DruckWert('${t.weekday}', Format.tagKurz(t)),
+        ],
+        standard: {for (final t in woche.tage) '${t.weekday}'},
+        sichtbar: istWoche,
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.aufgaben,
+        titel: 'Sonstige Aufgaben',
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.erledigte,
+        titel: 'Erledigtes',
+        hinweis: 'Grau, mit Haken',
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.kaestchen,
+        titel: 'Kästchen zum Abhaken',
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.leere,
+        titel: 'Anlagen ohne Aufträge',
+        hinweis: 'Als leere Zeilen — zum Nachtragen von Hand',
+        gruppe: 'Auf dem Plan',
+      ),
+      DruckSchalter(
+        schluessel: PlanDruckWahl.belegung,
+        titel: 'Dauer und Belegung',
+        gruppe: 'Auf dem Plan',
+        sichtbar: (w) => !istWoche(w),
+      ),
+    ],
+    bauen: (wahl) {
+      final alsWoche = istWoche(wahl);
+      final gewaehlt = wahl.mehrere(
+        alsWoche
+            ? PlanDruckWahl.abteilungenWoche
+            : PlanDruckWahl.abteilungenTag,
+      );
+      if (gewaehlt.isEmpty) {
+        throw const DruckNichtsGewaehlt('Wähle mindestens eine Abteilung.');
+      }
+      final wochentage = {
+        for (final t in wahl.mehrere(PlanDruckWahl.tage))
+          if (int.tryParse(t) case final nr?) nr,
+      };
+      if (alsWoche && wochentage.isEmpty) {
+        throw const DruckNichtsGewaehlt('Wähle mindestens einen Tag.');
+      }
+      final inhalt = PlanDruckInhalt(
+        abteilungen: {
+          for (final abt in Abteilung.values)
+            if (gewaehlt.contains(abt.dbValue)) abt,
+        },
+        einzeln: wahl.eins(PlanDruckWahl.umfang) == 'einzeln',
+        wochentage: alsWoche ? wochentage : null,
+        aufgaben: wahl.an(PlanDruckWahl.aufgaben),
+        erledigte: wahl.an(PlanDruckWahl.erledigte),
+        kaestchen: wahl.an(PlanDruckWahl.kaestchen),
+        leereSpuren: wahl.an(PlanDruckWahl.leere),
+        belegung: wahl.an(PlanDruckWahl.belegung),
+      );
+      return alsWoche
+          ? BoardPrintService.wochenDruck(
+              woche,
+              aufgaben: aufgaben,
+              inhalt: inhalt,
+              gedrucktAm: gedrucktAm,
+            )
+          : BoardPrintService.tagesDruck(
+              tag,
+              aufgaben: aufgaben,
+              inhalt: inhalt,
+              gedrucktAm: gedrucktAm,
+            );
+    },
+  );
 }

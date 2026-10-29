@@ -8,7 +8,7 @@ import '../../core/constants/parameter_namen.dart';
 // brauchen. Hier weitergereicht, damit alle bisherigen Nutzer dieser Datei
 // unverändert weiterlaufen.
 export '../../core/constants/parameter_namen.dart'
-    show istDampftunnelMaschine, istPlattenMaschine;
+    show istDampftunnelMaschine, istPlattenMaschine, istVerstecktesPlattenParam;
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
@@ -37,12 +37,6 @@ const String kAbteilungBratstrasseDb = 'bratstrasse';
 bool istBratstrasseMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('bratstra');
 
-/// `true` für Parameter, die das Schema verwaltet und die deshalb NICHT in der
-/// normalen Parameter-Liste auftauchen sollen.
-bool istVerstecktesPlattenParam(String name) =>
-    name == kPlattenSchemaParam ||
-    name == kMaschinenNotizParam ||
-    kPlattenParamMuster.hasMatch(name);
 
 // ---------------------------------------------------------------------------
 // Provider

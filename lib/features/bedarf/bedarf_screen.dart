@@ -19,6 +19,7 @@ import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../datenblatt/datenblatt.dart';
+import '../datenblatt/datenblatt_drucken.dart';
 
 // ---------------------------------------------------------------------------
 // Modell
@@ -371,7 +372,7 @@ class BedarfScreen extends ConsumerWidget {
   ) {
     final db = ref.read(databaseProvider);
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () => alsListe(datenblattFuerBedarf(db, info.bedarf.id)),
     );
   }

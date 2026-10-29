@@ -21,6 +21,7 @@ import '../articles/article_list_screen.dart' show articlesProvider;
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../../core/utils/fehler_text.dart';
 import '../datenblatt/datenblatt.dart';
+import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show Ausbeute, AusbeuteQuelle, dailyTasksProvider, ermittleAusbeute;
 import 'auftrags_einplanung.dart';
@@ -495,6 +496,9 @@ class _AuftragsbestandScreenState
     // jemand den Bildschirm währenddessen schließt.
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = ScaffoldMessenger.of(context);
+    // Auch der Navigator der App: Über ihn öffnet die Meldung das
+    // Druckfenster, selbst wenn dieser Bildschirm schon zu ist.
+    final navigator = Navigator.of(context, rootNavigator: true);
     final db = ref.read(databaseProvider);
     final heute = ref.read(heuteProvider);
 
@@ -591,7 +595,10 @@ class _AuftragsbestandScreenState
           content: Text(meldung),
           action: SnackBarAction(
             label: 'Datenblatt drucken',
-            onPressed: () => druckeDatenblaetterMitMeldung(messenger, blatt),
+            onPressed: () {
+              if (!navigator.mounted) return;
+              druckeDatenblaetterMitMeldung(navigator.context, blatt);
+            },
           ),
         ),
       );
@@ -679,7 +686,7 @@ class _AuftragsbestandScreenState
   Future<void> _datenblattVormerkung(Vormerkung v) {
     final db = ref.read(databaseProvider);
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () => alsListe(datenblattFuerBedarf(db, v.bedarfId, nurOffen: true)),
     );
   }
@@ -688,7 +695,7 @@ class _AuftragsbestandScreenState
   Future<void> _datenblattKette(ProduktionsZugang z) {
     final db = ref.read(databaseProvider);
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () => alsListe(datenblattFuerKette(db, z.kettenId)),
     );
   }

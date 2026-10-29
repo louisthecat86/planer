@@ -1,8 +1,13 @@
+import 'dart:convert' show latin1;
+
 // `show Value` statt eines vollen drift-Imports: drift bringt eine eigene
 // Klasse `Column` mit, die sich sonst mit der von Flutter beißen kann.
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/druck/druck_layout.dart';
+import 'package:produktion_planer/core/druck/druck_optionen.dart';
+import 'package:produktion_planer/core/druck/druck_satz.dart';
 import 'package:produktion_planer/core/services/auftragsbestand_deckung.dart';
 import 'package:produktion_planer/features/auftragsbestand/auftrags_einplanung.dart';
 import 'package:produktion_planer/features/datenblatt/datenblatt.dart';
@@ -336,59 +341,173 @@ void main() {
   });
 
   group('PDF', () {
+    Datenblatt beispiel() => Datenblatt(
+          artikelnummer: 'T-100',
+          bezeichnung: 'Testschinken „Spezial" – 2 × 500 g …',
+          bezeichnung2: 'mit Emoji 🥩 und €',
+          fertigKg: 1250,
+          rohwareKg: 1562.5,
+          ausbeuteProzent: 80,
+          tag: dienstag,
+          status: 'Eingeplant im Board',
+          bezuege: bezuege,
+          merkmale: const ['Allergene: Eier, Milch'],
+          schritte: [
+            DatenblattSchritt(
+              abteilung: 'Bratstraße',
+              tag: dienstag,
+              mengeKg: 1562.5,
+              dauerMinuten: 135,
+            ),
+          ],
+          haltbarkeitTage: 21,
+          notiz: 'Zeile 1\r\nZeile 2\tmit Tab',
+        );
+
+    Future<(DruckErgebnis, String)> setze(
+      DruckDokument dokument, [
+      DruckLayout layout = const DruckLayout(),
+    ]) async {
+      final e = await druckSetzen(dokument, layout, komprimiert: false);
+      return (e, latin1.decode(e.bytes));
+    }
+
     test('ein Blatt je Planung, auch mit Zeichen außerhalb von Latin-1',
         () async {
-      final blatt = Datenblatt(
-        artikelnummer: 'T-100',
-        bezeichnung: 'Testschinken „Spezial" – 2 × 500 g …',
-        bezeichnung2: 'mit Emoji 🥩 und €',
-        fertigKg: 1250,
-        rohwareKg: 1562.5,
-        ausbeuteProzent: 80,
-        tag: dienstag,
-        status: 'Eingeplant im Board',
-        bezuege: bezuege,
-        merkmale: const ['Allergene: Eier, Milch'],
-        schritte: [
-          DatenblattSchritt(
-            abteilung: 'Bratstraße',
-            tag: dienstag,
-            mengeKg: 1562.5,
-            dauerMinuten: 135,
-          ),
-        ],
-        haltbarkeitTage: 21,
-        notiz: 'Zeile 1\r\nZeile 2\tmit Tab',
-      );
-
-      final bytes = await baueDatenblattPdf(
-        [blatt, blatt],
+      final dokument = datenblattDruck(
+        [beispiel(), beispiel()],
         gedrucktAm: DateTime(2026, 10, 1, 8, 30),
       );
-      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
-      expect(bytes.length, greaterThan(1000));
+      final (e, t) = await setze(dokument);
+      expect(e.blattSeiten, [1, 1]);
+      expect(dokument.dateiname, 'Datenblaetter');
+      for (final wort in [
+        'T-100',
+        '"Spezial"',
+        'EUR',
+        '1.250',
+        'Kunde',
+        'Kunde A',
+        'VA-T1',
+        'Allergene:',
+        'MHD',
+        'Ablauf',
+        'Charge',
+        'Eingeplant',
+      ]) {
+        expect(t, contains('(${wort.split(' ').first})'), reason: wort);
+      }
+      expect(t, contains('(A)'));
+    });
+
+    test('nur, was gewählt ist — etwa ohne Kunden zum Aushängen', () async {
+      final (_, t) = await setze(
+        datenblattDruck(
+          [beispiel()],
+          inhalt: const DatenblattInhalt(
+            kunden: false,
+            rueckmeldung: false,
+            merkmale: false,
+            status: false,
+          ),
+        ),
+      );
+      expect(t, contains('(VA-T1)'));
+      expect(t, isNot(contains('(Kunde)')));
+      expect(t, isNot(contains('(Charge)')));
+      expect(t, isNot(contains('(Allergene:)')));
+      expect(t, isNot(contains('(Eingeplant)')));
+
+      final (_, ohne) = await setze(
+        datenblattDruck(
+          [beispiel()],
+          inhalt: const DatenblattInhalt(
+            auftraege: false,
+            ablauf: false,
+            mengen: false,
+            notiz: false,
+          ),
+        ),
+      );
+      expect(ohne, contains('(T-100)'));
+      expect(ohne, isNot(contains('(VA-T1)')));
+      expect(ohne, isNot(contains('(Ablauf)')));
+      expect(ohne, isNot(contains('(Rohware)')));
+      expect(ohne, isNot(contains('(Notiz:)')));
     });
 
     test('viele Aufträge laufen über mehrere Seiten', () async {
-      final viele = [
-        for (var i = 0; i < 150; i++)
-          AuftragsBezug(
-            beleg: 'VA$i',
-            warenausgang: DateTime(2026, 10, 8),
-            kg: 10,
-            debitor: 'Kunde $i',
-          ),
-      ];
-      final bytes = await baueDatenblattPdf([
-        Datenblatt(
-          artikelnummer: 'T-100',
-          bezeichnung: 'Test',
-          fertigKg: 1500,
-          tagArt: DatenblattTag.spaetestens,
-          bezuege: viele,
-        ),
+      Datenblatt mit(int auftraege) => Datenblatt(
+            artikelnummer: 'T-100',
+            bezeichnung: 'Test',
+            fertigKg: 1500,
+            tagArt: DatenblattTag.spaetestens,
+            bezuege: [
+              for (var i = 0; i < auftraege; i++)
+                AuftragsBezug(
+                  beleg: 'VA$i',
+                  warenausgang: DateTime(2026, 10, 8),
+                  kg: 10,
+                  debitor: 'Kunde $i',
+                ),
+            ],
+          );
+      final (e, t) = await setze(datenblattDruck([mit(150)]));
+      expect(e.seiten, greaterThan(1));
+      expect(t, contains('(Seite)'));
+
+      // Verkleinert passt mehr auf eine Seite.
+      final (zwei, _) = await setze(datenblattDruck([mit(60)]));
+      expect(zwei.seiten, 2);
+      final (eine, _) = await setze(
+        datenblattDruck([mit(60)]),
+        const DruckLayout(anpassung: DruckAnpassung.eineSeite),
+      );
+      expect(eine.seiten, 1);
+      expect(eine.massstaebe.single, lessThan(1));
+    });
+
+    test('Druckfenster: welche Blätter, gemerkt nur die Inhalte', () async {
+      final a = datenblattDruckAuftrag([
+        beispiel(),
+        const Datenblatt(artikelnummer: 'T-200', bezeichnung: 'Zweiter'),
       ]);
-      expect(String.fromCharCodes(bytes.take(5)), '%PDF-');
+      expect(a.titel, '2 Datenblätter drucken');
+      final wahl = DruckWahl.standard(a.optionen);
+      expect(wahl.mehrere(DatenblattWahl.blaetter), {'0', '1'});
+      expect(
+        wahl.toJson(a.optionen)['werte'],
+        isNot(contains(DatenblattWahl.blaetter)),
+      );
+
+      final (e, t) = await setze(
+        await a.bauen(wahl.mit(DatenblattWahl.blaetter, {'1'})),
+      );
+      expect(e.blaetter, 1);
+      expect(t, contains('(T-200)'));
+      expect(t, isNot(contains('(T-100)')));
+
+      expect(
+        () => a.bauen(wahl.mit(DatenblattWahl.blaetter, <String>{})),
+        throwsA(isA<DruckNichtsGewaehlt>()),
+      );
+
+      // Die Kunden lassen sich nur mit den Aufträgen abwählen.
+      final kunden = a.optionen.firstWhere(
+        (o) => o.schluessel == DatenblattWahl.kunden,
+      );
+      expect(kunden.istSichtbar(wahl), isTrue);
+      expect(
+        kunden.istSichtbar(wahl.mit(DatenblattWahl.auftraege, false)),
+        isFalse,
+      );
+
+      final einzeln = datenblattDruckAuftrag([beispiel()]);
+      expect(einzeln.titel, 'Datenblatt drucken');
+      expect(
+        einzeln.optionen.map((o) => o.schluessel),
+        isNot(contains(DatenblattWahl.blaetter)),
+      );
     });
   });
 }

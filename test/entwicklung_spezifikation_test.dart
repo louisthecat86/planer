@@ -9,8 +9,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/parameter_namen.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/druck/druck_layout.dart';
+import 'package:produktion_planer/core/druck/druck_optionen.dart';
+import 'package:produktion_planer/core/druck/druck_satz.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
+import 'package:produktion_planer/features/entwicklung/bericht/bericht_pdf.dart'
+    show
+        BerichtInhalt,
+        BerichtKapitel,
+        BerichtWahl,
+        berichtDruck,
+        berichtDruckAuftrag;
 import 'package:produktion_planer/features/entwicklung/bericht/projekt_bericht.dart';
 import 'package:produktion_planer/features/entwicklung/daten/dateien.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
@@ -1013,6 +1023,90 @@ void main() {
         expect(roh, contains('(überfällig)'));
         expect(roh, contains('(ÜBERFÄLLIG)'));
         expect(roh, isNot(contains('(ERLEDIGT)')));
+      });
+
+      test('die Wahl im Druckfenster: Kapitel, Steckbrief, Verlauf, quer',
+          () async {
+        final a = await anlegen();
+        await projekte.eintragAnlegen(
+          projektId: a.projekt.id,
+          art: EintragArt.notiz,
+          titel: 'Verkostung',
+          datum: DateTime(2026, 1, 2),
+        );
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+
+        Future<(DruckErgebnis, String)> setze(
+          BerichtInhalt inhalt, [
+          DruckLayout layout = const DruckLayout(),
+        ]) async {
+          final e = await druckSetzen(
+            berichtDruck(b, inhalt: inhalt, gedrucktAm: datum),
+            layout,
+            komprimiert: false,
+          );
+          return (e, latin1.decode(e.bytes));
+        }
+
+        final (alles, allesText) = await setze(const BerichtInhalt());
+        expect(allesText, contains('(Blick)'));
+        expect(allesText, contains('(Einzelnen)'));
+
+        final (wenig, text) = await setze(
+          const BerichtInhalt(
+            kapitel: {BerichtKapitel.projekt, BerichtKapitel.verlauf},
+            steckbrief: false,
+            zeitstrahl: false,
+          ),
+        );
+        // Neu durchgezählt: der Verlauf ist jetzt Kapitel 2.
+        expect(text, contains('(1  Projekt)'));
+        expect(text, contains('(2  Verlauf)'));
+        expect(text, isNot(contains('(2  Rezeptur)')));
+        // Ohne Steckbrief nur der Titel, ohne Zeitstrahl nur die Einträge
+        // — ohne eigene Überschrift.
+        expect(text, isNot(contains('(Blick)')));
+        expect(text, isNot(contains('(Einzelnen)')));
+        expect(text, contains('(Verkostung)'));
+        expect(wenig.seiten, lessThan(alles.seiten));
+
+        // Fortlaufend statt jedes Kapitel auf einer neuen Seite.
+        final (fortlaufend, _) = await setze(
+          const BerichtInhalt(neueSeiten: false),
+        );
+        expect(fortlaufend.seiten, lessThan(alles.seiten));
+
+        // Quer — der Zeitstrahl nimmt die volle Breite.
+        final (quer, _) = await setze(
+          const BerichtInhalt(),
+          const DruckLayout(ausrichtung: DruckAusrichtung.quer),
+        );
+        expect(quer.format.width, greaterThan(quer.format.height));
+
+        final auftrag = berichtDruckAuftrag(b, gedrucktAm: datum);
+        final wahl = DruckWahl.standard(auftrag.optionen);
+        expect(
+          wahl.mehrere(BerichtWahl.kapitel),
+          containsAll([BerichtKapitel.projekt, BerichtKapitel.verlauf]),
+        );
+        expect(
+          wahl.mehrere(BerichtWahl.kapitel),
+          isNot(contains(BerichtKapitel.dateien)),
+        );
+        expect(
+          () => auftrag.bauen(
+            wahl
+                .mit(BerichtWahl.kapitel, <String>{})
+                .mit(BerichtWahl.steckbrief, false)
+                .mit(BerichtWahl.inhaltsverzeichnis, false),
+          ),
+          throwsA(isA<DruckNichtsGewaehlt>()),
+        );
+        final nurSteckbrief = await auftrag.bauen(
+          wahl.mit(BerichtWahl.kapitel, <String>{}),
+        );
+        expect(nurSteckbrief.dateiname, startsWith('Projektbericht_'));
       });
 
       test('der freigegebene Stand geht vor', () async {

@@ -47,6 +47,19 @@ final RegExp kPlattenParamMuster = RegExp(
   r'^(Platte|Plattentemperatur)\s+(Oben|Unten)?\s*\d+(\s*\(°C\))?$',
 );
 
+/// Zonen je Plattenreihe: die Bratstraße hat 10 oben und 10 unten, der
+/// Kombiofen 12 unten.
+const int kBratstrasseZonen = 10;
+const int kKombiofenZonen = 12;
+
+/// `true` für Parameter, die die Plattenleiste und das Notizfeld verwalten
+/// und die deshalb NICHT in der normalen Parameter-Liste auftauchen — weder
+/// in der Artikelansicht noch im Prozessblatt.
+bool istVerstecktesPlattenParam(String name) =>
+    name == kPlattenSchemaParam ||
+    name == kMaschinenNotizParam ||
+    kPlattenParamMuster.hasMatch(name);
+
 /// Hat die Anlage ein festes Plattenraster?
 ///
 /// Bratstraße: 10 Platten oben + 10 unten. Kombiofen: 12 unten.
@@ -82,12 +95,12 @@ bool istDampftunnelMaschine(String maschineName) {
 /// kein Raster hat.
 List<String> plattenZeilenFuer(String maschineName) {
   if (istDampftunnelMaschine(maschineName)) {
-    return [for (var i = 1; i <= 12; i++) 'Platte Unten $i'];
+    return [for (var i = 1; i <= kKombiofenZonen; i++) 'Platte Unten $i'];
   }
   if (istPlattenMaschine(maschineName)) {
     return [
-      for (var i = 1; i <= 10; i++) 'Platte Oben $i',
-      for (var i = 1; i <= 10; i++) 'Platte Unten $i',
+      for (var i = 1; i <= kBratstrasseZonen; i++) 'Platte Oben $i',
+      for (var i = 1; i <= kBratstrasseZonen; i++) 'Platte Unten $i',
     ];
   }
   return const [];

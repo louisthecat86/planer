@@ -13,6 +13,7 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/zeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider;
 import '../datenblatt/datenblatt.dart';
+import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
 import 'planungsvorschlag_service.dart';
 
@@ -346,7 +347,7 @@ class _PlanungsvorschlagScreenState
     final db = ref.read(databaseProvider);
     final t = _tage[tagIndex];
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () => alsListe(_blatt(db, t, p)),
     );
   }
@@ -357,7 +358,7 @@ class _PlanungsvorschlagScreenState
     final db = ref.read(databaseProvider);
     final t = _tage[tagIndex];
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () async {
         final blaetter = <Datenblatt>[];
         for (final p in t.posten) {

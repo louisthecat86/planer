@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/zeit.dart';
 import '../../core/database/database.dart';
@@ -22,7 +23,6 @@ import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
 import 'board_druck_dialog.dart';
-import 'board_print_service.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/kalenderwoche.dart';
@@ -440,13 +440,14 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     ref.invalidate(dailyTasksProvider);
   }
 
-  /// Fragt, was gedruckt wird — Woche oder Tag, gesamte Übersicht oder
-  /// einzelne Abteilungen — und öffnet die Druckvorschau.
+  /// Öffnet das Druckfenster: Woche oder Tag, gesamte Übersicht oder
+  /// einzelne Abteilungen, welche Tage und was auf dem Plan steht — mit
+  /// Vorschau.
   ///
-  /// Board und Aufgaben sind beim Klick meist schon geladen; der Dialog
+  /// Board und Aufgaben sind beim Klick meist schon geladen; das Fenster
   /// zeigt damit je Abteilung, wie viel geplant ist.
   Future<void> _drucken(DateTime montag, DateTime sel) async {
-    // Ein Doppelklick öffnete sonst zwei Dialoge.
+    // Ein Doppelklick öffnete sonst zwei Fenster.
     if (_druckLaeuft) return;
     _druckLaeuft = true;
     final messenger = ScaffoldMessenger.of(context);
@@ -455,30 +456,16 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
       final tag = await ref.read(dayBoardProvider(sel).future);
       final aufgaben = await ref.read(tagesaufgabenProvider(montag).future);
       if (!mounted) return;
-      final auswahl = await zeigeBoardDruckDialog(
+      await druckFensterOeffnen(
         context,
-        zeitraum:
-            _modus == _Modus.woche ? DruckZeitraum.woche : DruckZeitraum.tag,
-        woche: 'KW ${isoKalenderwoche(montag)}',
-        tag: _fmtTagKurz(tag.tag),
-        umfangWoche: druckUmfangWoche(woche, aufgaben),
-        umfangTag: druckUmfangTag(tag, aufgaben),
+        planDruckAuftrag(
+          woche: woche,
+          tag: tag,
+          aufgaben: aufgaben,
+          zeitraum:
+              _modus == _Modus.woche ? DruckZeitraum.woche : DruckZeitraum.tag,
+        ),
       );
-      if (auswahl == null) return;
-      switch (auswahl.zeitraum) {
-        case DruckZeitraum.woche:
-          await BoardPrintService.druckeWoche(
-            woche,
-            aufgaben: aufgaben,
-            abteilungen: auswahl.abteilungen,
-          );
-        case DruckZeitraum.tag:
-          await BoardPrintService.druckeTag(
-            tag,
-            aufgaben: aufgaben,
-            abteilungen: auswahl.abteilungen,
-          );
-      }
     } catch (e) {
       messenger.showSnackBar(
         SnackBar(

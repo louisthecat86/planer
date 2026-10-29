@@ -15,6 +15,7 @@ import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import '../datenblatt/datenblatt.dart';
+import '../datenblatt/datenblatt_drucken.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet das Fenster mit allen Details zum Task — mittig, wie jedes
@@ -432,7 +433,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     final db = ref.read(databaseProvider);
     final id = widget.wbTask.task.id;
     return druckeDatenblaetterMitMeldung(
-      ScaffoldMessenger.of(context),
+      context,
       () => alsListe(datenblattFuerKette(db, id)),
     );
   }

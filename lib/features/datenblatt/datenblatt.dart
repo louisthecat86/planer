@@ -1,20 +1,17 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart'
-    show ScaffoldMessengerState, SnackBar, Text;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/artikel_merkmale.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_optionen.dart';
+import '../../core/druck/druck_satz.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show
         AuftragsBezug,
         kQuelleAuftragsbestand,
         ladeBedarfsPlanung,
         restBezuege;
-import '../../core/utils/fehler_text.dart';
 import '../../core/utils/pdf_text.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show berechneSchrittPlan, ermittleAusbeute;
@@ -413,95 +410,217 @@ bool _gleicherTag(DateTime a, DateTime b) =>
 // Drucken
 // ═══════════════════════════════════════════════════════════════════════
 
-/// Öffnet die Druckvorschau mit einem Blatt je Eintrag.
-Future<void> druckeDatenblaetter(List<Datenblatt> blaetter) async {
-  if (blaetter.isEmpty) return;
-  final bytes = await baueDatenblattPdf(blaetter);
-  final name = blaetter.length == 1
-      ? 'Datenblatt_${blaetter.single.artikelnummer}'
-      : 'Datenblaetter';
-  await Printing.layoutPdf(name: name, onLayout: (_) async => bytes);
-}
-
-/// Lädt die Blätter über [laden] und öffnet die Druckvorschau. Fehlt die
-/// Planung inzwischen oder scheitert etwas, steht es als Meldung da.
-///
-/// [messenger] holt der Aufrufer vor der ersten Wartestelle
-/// (`ScaffoldMessenger.of(context)`) — so hängt nichts an einem
-/// BuildContext, der nach dem Laden vielleicht nicht mehr lebt.
-Future<void> druckeDatenblaetterMitMeldung(
-  ScaffoldMessengerState messenger,
-  Future<List<Datenblatt>> Function() laden,
-) async {
-  try {
-    final blaetter = await laden();
-    if (blaetter.isEmpty) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Kein Datenblatt — diese Planung gibt es nicht mehr. Bitte die '
-            'Ansicht neu laden.',
-          ),
-        ),
-      );
-      return;
-    }
-    await druckeDatenblaetter(blaetter);
-  } catch (e) {
-    messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 8),
-        content: Text(
-          'Das Datenblatt ließ sich nicht erstellen. (${fehlerText(e)})',
-        ),
-      ),
-    );
-  }
-}
-
-/// Ein einzelnes Blatt als Liste für [druckeDatenblaetterMitMeldung] —
-/// leer, wenn es fehlt.
+/// Ein einzelnes Blatt als Liste für druckeDatenblaetterMitMeldung
+/// (datenblatt_drucken.dart) — leer, wenn es fehlt.
 Future<List<Datenblatt>> alsListe(Future<Datenblatt?> blatt) async {
   final b = await blatt;
   return b == null ? const <Datenblatt>[] : [b];
 }
 
-/// Baut das PDF — ohne Drucken, damit es sich prüfen lässt.
-Future<Uint8List> baueDatenblattPdf(
+/// Was auf das Datenblatt kommt.
+class DatenblattInhalt {
+  const DatenblattInhalt({
+    this.mengen = true,
+    this.status = true,
+    this.merkmale = true,
+    this.notiz = true,
+    this.ablauf = true,
+    this.auftraege = true,
+    this.kunden = true,
+    this.rueckmeldung = true,
+  });
+
+  /// Fertigware, Rohware und Tag im Kasten oben.
+  final bool mengen;
+
+  /// Der Stand der Planung.
+  final bool status;
+
+  /// Merkmale wie Allergene, dazu Haltbarkeit und MHD.
+  final bool merkmale;
+
+  final bool notiz;
+
+  /// Die Abteilungen mit Tag, Menge und Dauer.
+  final bool ablauf;
+
+  /// Die gebündelten Aufträge.
+  final bool auftraege;
+
+  /// Die Kunden in der Tabelle der Aufträge — ohne nur Versand, Beleg und
+  /// Menge, etwa zum Aushängen in der Produktion.
+  final bool kunden;
+
+  /// Das Feld für die Rückmeldung der Produktion.
+  final bool rueckmeldung;
+}
+
+/// Schlüssel der Wahl im Druckfenster.
+abstract final class DatenblattWahl {
+  static const blaetter = 'blaetter';
+  static const mengen = 'mengen';
+  static const status = 'status';
+  static const merkmale = 'merkmale';
+  static const notiz = 'notiz';
+  static const ablauf = 'ablauf';
+  static const auftraege = 'auftraege';
+  static const kunden = 'kunden';
+  static const rueckmeldung = 'rueckmeldung';
+}
+
+/// Der Druck der Datenblätter für das Druckfenster — bei mehreren lässt
+/// sich wählen, welche.
+DruckAuftrag datenblattDruckAuftrag(
   List<Datenblatt> blaetter, {
   DateTime? gedrucktAm,
 }) {
-  final jetzt = gedrucktAm ?? DateTime.now();
-  final doc = pw.Document(title: 'Datenblatt', creator: 'Produktions Planer');
-  final theme = pw.ThemeData.withFont(
-    base: pw.Font.helvetica(),
-    bold: pw.Font.helveticaBold(),
-  );
-  for (final b in blaetter) {
-    doc.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
-        theme: theme,
-        footer: (ctx) => pw.Container(
-          alignment: pw.Alignment.centerRight,
-          margin: const pw.EdgeInsets.only(top: 8),
-          child: pw.Text(
-            pdfText(
-              '${b.artikelnummer} ${b.bezeichnung} · Seite '
-              '${ctx.pageNumber}/${ctx.pagesCount}',
-            ),
-            style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
-          ),
+  const gruppe = 'Auf dem Blatt';
+  final einzeln = blaetter.length == 1;
+  return DruckAuftrag(
+    art: 'datenblatt',
+    titel: einzeln
+        ? 'Datenblatt drucken'
+        : '${blaetter.length} Datenblätter drucken',
+    untertitel: einzeln
+        ? '${blaetter.single.artikelnummer} · ${blaetter.single.bezeichnung}'
+        : 'Ein Blatt je Planung',
+    optionen: [
+      if (!einzeln)
+        DruckWahlMehrere(
+          schluessel: DatenblattWahl.blaetter,
+          titel: 'Datenblätter',
+          werte: [
+            for (final (i, b) in blaetter.indexed)
+              DruckWert(
+                '$i',
+                '${b.artikelnummer} · ${b.bezeichnung}',
+                hinweis: [
+                  if (b.fertigKg != null) '${_kg(b.fertigKg!)} kg',
+                  if (b.tag != null) _tagKurz(b.tag!),
+                ].join(' · '),
+              ),
+          ],
+          standard: {for (var i = 0; i < blaetter.length; i++) '$i'},
+          merken: false,
         ),
-        build: (ctx) => _seite(b, jetzt),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.mengen,
+        titel: 'Mengen und Tag',
+        hinweis: 'Fertigware, Rohware, Produktionstag',
+        gruppe: gruppe,
       ),
-    );
-  }
-  return doc.save();
+      const DruckSchalter(
+        schluessel: DatenblattWahl.status,
+        titel: 'Stand der Planung',
+        gruppe: gruppe,
+      ),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.merkmale,
+        titel: 'Merkmale und Haltbarkeit',
+        hinweis: 'Allergene, Qualität, MHD',
+        gruppe: gruppe,
+      ),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.notiz,
+        titel: 'Notiz',
+        gruppe: gruppe,
+      ),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.ablauf,
+        titel: 'Ablauf je Abteilung',
+        gruppe: gruppe,
+      ),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.auftraege,
+        titel: 'Aufträge',
+        gruppe: gruppe,
+      ),
+      DruckSchalter(
+        schluessel: DatenblattWahl.kunden,
+        titel: 'Kundennamen',
+        hinweis: 'Ohne: nur Versand, Beleg und Menge',
+        gruppe: gruppe,
+        sichtbar: (w) => w.an(DatenblattWahl.auftraege),
+      ),
+      const DruckSchalter(
+        schluessel: DatenblattWahl.rueckmeldung,
+        titel: 'Feld für die Rückmeldung',
+        hinweis: 'Produziert, Charge, Datum und Kürzel',
+        gruppe: gruppe,
+      ),
+    ],
+    bauen: (wahl) {
+      final gewaehlt = einzeln
+          ? blaetter
+          : [
+              for (final (i, b) in blaetter.indexed)
+                if (wahl.mehrere(DatenblattWahl.blaetter).contains('$i')) b,
+            ];
+      if (gewaehlt.isEmpty) {
+        throw const DruckNichtsGewaehlt(
+          'Wähle mindestens ein Datenblatt.',
+        );
+      }
+      return datenblattDruck(
+        gewaehlt,
+        gedrucktAm: gedrucktAm,
+        inhalt: DatenblattInhalt(
+          mengen: wahl.an(DatenblattWahl.mengen),
+          status: wahl.an(DatenblattWahl.status),
+          merkmale: wahl.an(DatenblattWahl.merkmale),
+          notiz: wahl.an(DatenblattWahl.notiz),
+          ablauf: wahl.an(DatenblattWahl.ablauf),
+          auftraege: wahl.an(DatenblattWahl.auftraege),
+          kunden: wahl.an(DatenblattWahl.kunden),
+          rueckmeldung: wahl.an(DatenblattWahl.rueckmeldung),
+        ),
+      );
+    },
+  );
 }
 
-List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
+/// Die Datenblätter zum Drucken — jedes ein eigenes Blatt.
+DruckDokument datenblattDruck(
+  List<Datenblatt> blaetter, {
+  DatenblattInhalt inhalt = const DatenblattInhalt(),
+  DateTime? gedrucktAm,
+}) {
+  if (blaetter.isEmpty) throw ArgumentError('Kein Datenblatt gewählt.');
+  final jetzt = gedrucktAm ?? DateTime.now();
+  return DruckDokument(
+    titel: 'Datenblatt',
+    dateiname: blaetter.length == 1
+        ? druckDateiname('Datenblatt ${blaetter.single.artikelnummer}')
+        : 'Datenblaetter',
+    blaetter: [
+      for (final b in blaetter)
+        DruckBlatt(
+          rand: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
+          bauen: (r) => DruckSeiten(
+            fuss: (ctx) => pw.Container(
+              alignment: pw.Alignment.centerRight,
+              margin: const pw.EdgeInsets.only(top: 8),
+              child: pw.Text(
+                pdfText(
+                  '${b.artikelnummer} ${b.bezeichnung} · '
+                  '${r.seitenText(ctx)}',
+                ),
+                style:
+                    const pw.TextStyle(fontSize: 7, color: PdfColors.grey600),
+              ),
+            ),
+            inhalt: (ctx) => _seite(b, jetzt, inhalt),
+          ),
+        ),
+    ],
+  );
+}
+
+List<pw.Widget> _seite(
+  Datenblatt b,
+  DateTime jetzt,
+  DatenblattInhalt inhalt,
+) {
   const grau = PdfColors.grey700;
   final mhd = b.mhd;
   final tag = b.tag;
@@ -559,45 +678,46 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     pw.SizedBox(height: 14),
 
     // ── Mengen und Tag ──────────────────────────────────────────────────
-    pw.Container(
-      padding: const pw.EdgeInsets.all(12),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey800, width: 1.2),
-        borderRadius: pw.BorderRadius.circular(6),
+    if (inhalt.mengen)
+      pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey800, width: 1.2),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              flex: 3,
+              child: _feld(
+                fertigLabel,
+                b.fertigKg == null ? 'unbekannt' : '${_kg(b.fertigKg!)} kg',
+                gross: true,
+              ),
+            ),
+            pw.Expanded(
+              flex: 2,
+              child: _feld(
+                'Rohware (ca.)',
+                b.rohwareKg == null ? '-' : '${_kg(b.rohwareKg!)} kg',
+                zusatz: b.ausbeuteProzent == null
+                    ? 'Ausbeute unbekannt'
+                    : 'Ausbeute ${_prozent(b.ausbeuteProzent!)} %',
+              ),
+            ),
+            pw.Expanded(
+              flex: 2,
+              child: _feld(
+                tagLabel,
+                tag == null ? 'ohne Termin' : _datumLang(tag),
+                zusatz: tag == null ? null : _wochentagLang(tag),
+              ),
+            ),
+          ],
+        ),
       ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(
-            flex: 3,
-            child: _feld(
-              fertigLabel,
-              b.fertigKg == null ? 'unbekannt' : '${_kg(b.fertigKg!)} kg',
-              gross: true,
-            ),
-          ),
-          pw.Expanded(
-            flex: 2,
-            child: _feld(
-              'Rohware (ca.)',
-              b.rohwareKg == null ? '-' : '${_kg(b.rohwareKg!)} kg',
-              zusatz: b.ausbeuteProzent == null
-                  ? 'Ausbeute unbekannt'
-                  : 'Ausbeute ${_prozent(b.ausbeuteProzent!)} %',
-            ),
-          ),
-          pw.Expanded(
-            flex: 2,
-            child: _feld(
-              tagLabel,
-              tag == null ? 'ohne Termin' : _datumLang(tag),
-              zusatz: tag == null ? null : _wochentagLang(tag),
-            ),
-          ),
-        ],
-      ),
-    ),
-    if (b.status != null) ...[
+    if (inhalt.status && b.status != null) ...[
       pw.SizedBox(height: 6),
       pw.Text(
         pdfText(b.status!),
@@ -607,7 +727,8 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     pw.SizedBox(height: 12),
 
     // ── Merkmale ────────────────────────────────────────────────────────
-    if (b.merkmale.isNotEmpty || b.haltbarkeitTage != null)
+    if (inhalt.merkmale &&
+        (b.merkmale.isNotEmpty || b.haltbarkeitTage != null))
       pw.Wrap(
         spacing: 6,
         runSpacing: 4,
@@ -622,7 +743,7 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
             ),
         ],
       ),
-    if (b.notiz != null) ...[
+    if (inhalt.notiz && b.notiz != null) ...[
       pw.SizedBox(height: 8),
       pw.Text(
         pdfText('Notiz: ${b.notiz}'),
@@ -631,7 +752,7 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     ],
 
     // ── Abteilungen ─────────────────────────────────────────────────────
-    if (b.schritte.isNotEmpty) ...[
+    if (inhalt.ablauf && b.schritte.isNotEmpty) ...[
       pw.SizedBox(height: 16),
       _ueberschrift('Ablauf'),
       pw.SizedBox(height: 4),
@@ -658,22 +779,27 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     ],
 
     // ── Aufträge ────────────────────────────────────────────────────────
-    if (b.bezuege.isNotEmpty) ...[
+    if (inhalt.auftraege && b.bezuege.isNotEmpty) ...[
       pw.SizedBox(height: 16),
       _ueberschrift(
         'Aufträge (${b.bezuege.length}) · zusammen ${_kg(b.auftragKg)} kg',
       ),
       pw.SizedBox(height: 4),
       _tabelle(
-        kopf: const ['Versand', 'Beleg', 'Kunde', 'kg'],
-        breiten: const [2, 2, 5, 2],
-        rechtsAb: 3,
+        kopf: [
+          'Versand',
+          'Beleg',
+          if (inhalt.kunden) 'Kunde',
+          'kg',
+        ],
+        breiten: [2, 2, if (inhalt.kunden) 5, 2],
+        rechtsAb: inhalt.kunden ? 3 : 2,
         zeilen: [
           for (final z in [...b.bezuege]..sort(_nachVersand))
             [
               _tagKurz(z.warenausgang),
               z.beleg,
-              z.debitor.isEmpty ? '-' : z.debitor,
+              if (inhalt.kunden) z.debitor.isEmpty ? '-' : z.debitor,
               _kg(z.kg),
             ],
         ],
@@ -681,33 +807,34 @@ List<pw.Widget> _seite(Datenblatt b, DateTime jetzt) {
     ],
 
     // ── Rückmeldung ─────────────────────────────────────────────────────
-    pw.SizedBox(height: 22),
-    pw.Container(
-      padding: const pw.EdgeInsets.fromLTRB(10, 10, 10, 14),
-      decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: PdfColors.grey500, width: 0.8),
-        borderRadius: pw.BorderRadius.circular(6),
+    if (inhalt.rueckmeldung) pw.SizedBox(height: 22),
+    if (inhalt.rueckmeldung)
+      pw.Container(
+        padding: const pw.EdgeInsets.fromLTRB(10, 10, 10, 14),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey500, width: 0.8),
+          borderRadius: pw.BorderRadius.circular(6),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Rückmeldung Produktion',
+              style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 14),
+            pw.Row(
+              children: [
+                pw.Expanded(child: _linie('Produziert (kg)')),
+                pw.SizedBox(width: 14),
+                pw.Expanded(child: _linie('Charge')),
+                pw.SizedBox(width: 14),
+                pw.Expanded(child: _linie('Datum / Kürzel')),
+              ],
+            ),
+          ],
+        ),
       ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'Rückmeldung Produktion',
-            style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 14),
-          pw.Row(
-            children: [
-              pw.Expanded(child: _linie('Produziert (kg)')),
-              pw.SizedBox(width: 14),
-              pw.Expanded(child: _linie('Charge')),
-              pw.SizedBox(width: 14),
-              pw.Expanded(child: _linie('Datum / Kürzel')),
-            ],
-          ),
-        ],
-      ),
-    ),
   ];
 }
 

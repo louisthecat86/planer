@@ -1,15 +1,55 @@
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart' show Tagesaufgabe;
+import '../../core/druck/druck_optionen.dart' show druckDateiname;
+import '../../core/druck/druck_satz.dart';
 import '../../core/services/tagesaufgaben_service.dart' show AufgabenZelle;
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/pdf_text.dart';
 import '../../core/utils/zeit.dart';
 import 'board_providers.dart';
+
+/// Was vom Plan gedruckt wird — die Wahl im Druckfenster.
+class PlanDruckInhalt {
+  const PlanDruckInhalt({
+    this.abteilungen,
+    this.einzeln = false,
+    this.wochentage,
+    this.aufgaben = true,
+    this.erledigte = true,
+    this.kaestchen = true,
+    this.leereSpuren = true,
+    this.belegung = true,
+  });
+
+  /// Diese Abteilungen — null: alle. Gedruckt wird in der Reihenfolge des
+  /// Boards.
+  final Set<Abteilung>? abteilungen;
+
+  /// Je Abteilung ein eigenes Blatt statt der gesamten Übersicht.
+  final bool einzeln;
+
+  /// Nur diese Wochentage (1 = Montag) — null: alle. Nur im Wochenplan.
+  final Set<int>? wochentage;
+
+  /// Die sonstigen Aufgaben.
+  final bool aufgaben;
+
+  /// Was schon erledigt ist — grau mit Haken.
+  final bool erledigte;
+
+  /// Ein Kästchen vor jedem Eintrag, zum Abhaken von Hand.
+  final bool kaestchen;
+
+  /// Anlagen ohne Aufträge — als leere Zeilen, etwa zum Nachtragen.
+  final bool leereSpuren;
+
+  /// Im Tagesplan: Belegung der Spuren und Dauer der Aufträge.
+  final bool belegung;
+}
 
 /// Druckt das Planungsboard: die Woche im Querformat, den Tag im
 /// Hochformat — als gesamte Übersicht oder je Abteilung ein eigenes Blatt,
@@ -30,216 +70,56 @@ class BoardPrintService {
   const BoardPrintService._();
 
   // -------------------------------------------------------------------------
-  // Drucken
-  // -------------------------------------------------------------------------
-
-  /// Öffnet die Druckvorschau für die Woche.
-  ///
-  /// [abteilungen]: null druckt die gesamte Übersicht, sonst je Abteilung
-  /// ein eigenes Blatt — in dieser Reihenfolge.
-  static Future<void> druckeWoche(
-    WeekBoard board, {
-    required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    List<Abteilung>? abteilungen,
-  }) async {
-    final bytes = await wochenDokument(
-      board,
-      aufgaben: aufgaben,
-      abteilungen: abteilungen,
-    ).save();
-    await Printing.layoutPdf(
-      name: _dateiname(
-        'Wochenplan KW ${isoKalenderwoche(board.wochenStart)}',
-        abteilungen,
-      ),
-      onLayout: (_) async => bytes,
-    );
-  }
-
-  /// Öffnet die Druckvorschau für den Tag — [abteilungen] wie bei
-  /// [druckeWoche].
-  static Future<void> druckeTag(
-    DayBoard board, {
-    required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    List<Abteilung>? abteilungen,
-  }) async {
-    final bytes = await tagesDokument(
-      board,
-      aufgaben: aufgaben,
-      abteilungen: abteilungen,
-    ).save();
-    await Printing.layoutPdf(
-      name: _dateiname('Tagesplan ${_isoDatum(board.tag)}', abteilungen),
-      onLayout: (_) async => bytes,
-    );
-  }
-
-  // -------------------------------------------------------------------------
   // Woche (Querformat)
   // -------------------------------------------------------------------------
 
-  /// Der Wochenplan als PDF-Dokument — ohne Drucken, damit er sich prüfen
-  /// lässt.
+  /// Der Wochenplan zum Drucken.
   ///
   /// Raster wie im Board: je Anlage eine Zeile, darunter die sonstigen
-  /// Aufgaben der Abteilung, Montag bis Freitag als Spalten. Je Auftrag
+  /// Aufgaben der Abteilung, die Tage als Spalten. Je Auftrag
   /// Artikelnummer, Bezeichnung und Menge — bewusst ohne Zeiten.
-  ///
-  /// [komprimiert]: false lässt den Text im PDF lesbar — für Tests.
-  static pw.Document wochenDokument(
+  static DruckDokument wochenDruck(
     WeekBoard board, {
     required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    List<Abteilung>? abteilungen,
+    PlanDruckInhalt inhalt = const PlanDruckInhalt(),
     DateTime? gedrucktAm,
-    bool komprimiert = true,
   }) {
-    _pruefeAuswahl(abteilungen);
+    final wochentage = inhalt.wochentage;
+    final tage = [
+      for (final t in board.tage)
+        if (wochentage == null || wochentage.contains(t.weekday)) t,
+    ];
+    if (tage.isEmpty) {
+      throw ArgumentError('Kein Tag zum Drucken gewählt.');
+    }
     final kw = isoKalenderwoche(board.wochenStart);
-    final doc = _dokument('Wochenplan KW $kw', komprimiert: komprimiert);
     final gedruckt = _gedruckt(gedrucktAm ?? DateTime.now());
 
     final gruppen = <Abteilung, List<BoardSpur>>{};
     for (final spur in board.spuren) {
       (gruppen[spur.abteilung] ??= <BoardSpur>[]).add(spur);
     }
+    final abteilungen = _auswahl(gruppen.keys, inhalt.abteilungen);
 
-    if (abteilungen == null) {
-      doc.addPage(_wochenBlatt(board, gruppen, aufgaben, gedruckt));
-    } else {
-      for (final abt in abteilungen) {
-        doc.addPage(
-          _wochenBlatt(
-            board,
-            {abt: gruppen[abt] ?? const <BoardSpur>[]},
-            aufgaben,
-            gedruckt,
-            abteilung: abt,
-          ),
-        );
-      }
-    }
-    return doc;
-  }
-
-  /// Ein Blatt der Woche: die gesamte Übersicht ([abteilung] null) oder
-  /// das Blatt einer Abteilung.
-  static pw.MultiPage _wochenBlatt(
-    WeekBoard board,
-    Map<Abteilung, List<BoardSpur>> gruppen,
-    Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    String gedruckt, {
-    Abteilung? abteilung,
-  }) {
-    final kw = isoKalenderwoche(board.wochenStart);
-    final zeitraum = '${Format.tagKurz(board.tage.first)} - '
-        '${Format.tagKurz(board.tage.last)}${board.tage.last.year}';
-    final stil = abteilung == null ? _Stil.uebersicht : _Stil.blatt;
-    final seiten = _Seiten();
-
-    return pw.MultiPage(
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.fromLTRB(24, 20, 24, 16),
-      header: (ctx) {
-        seiten.merke(ctx);
-        return pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-          children: [
-            _kopf(
-              titel: abteilung?.anzeigeName ?? 'Produktionsplan',
-              zeile: abteilung == null
-                  ? 'KW $kw · $zeitraum'
-                  : 'Wochenplan KW $kw · $zeitraum',
-              abteilung: abteilung,
-              gedruckt: gedruckt,
-            ),
-            pw.SizedBox(height: 8),
-            _tageKopf(
-              board.tage,
-              stil,
-              erste: abteilung == null ? 'Abteilung / Anlage' : 'Anlage',
-            ),
-          ],
-        );
-      },
-      footer: (ctx) => _fuss(
-        abteilung == null
-            ? 'Produktionsplan KW $kw'
-            : '${abteilung.anzeigeName} · Wochenplan KW $kw',
-        seiten.text(ctx),
-      ),
-      build: (ctx) => [
-        for (final e in gruppen.entries) ...[
-          ..._wochenAbteilung(
-            board,
-            e.key,
-            e.value,
-            aufgaben,
-            stil,
-            blatt: abteilung != null,
-          ),
-          // Luft zwischen den Abteilungen — innerhalb einer Abteilung
-          // stoßen die Zeilen aneinander wie in einer Tabelle.
-          if (abteilung == null) pw.SizedBox(height: 6),
-        ],
-      ],
+    final plan = _WochenPlan(board, tage, aufgaben, inhalt, gedruckt);
+    return DruckDokument(
+      titel: 'Wochenplan KW $kw',
+      dateiname: _dateiname('Wochenplan KW $kw', abteilungen, inhalt),
+      blaetter: inhalt.einzeln
+          ? [
+              for (final abt in abteilungen)
+                plan.blatt(
+                  {abt: gruppen[abt] ?? const <BoardSpur>[]},
+                  abteilung: abt,
+                ),
+            ]
+          : [
+              plan.blatt({
+                for (final abt in abteilungen)
+                  abt: gruppen[abt] ?? const <BoardSpur>[],
+              }),
+            ],
     );
-  }
-
-  /// Die Zeilen einer Abteilung: je Spur eine, darunter die sonstigen
-  /// Aufgaben.
-  ///
-  /// In der Übersicht steht die Aufgaben-Zeile nur, wenn es in der Woche
-  /// Aufgaben gibt. Auf dem Blatt der Abteilung steht sie immer — dort
-  /// ist sie zugleich Platz, um etwas von Hand nachzutragen.
-  static List<pw.Widget> _wochenAbteilung(
-    WeekBoard board,
-    Abteilung abt,
-    List<BoardSpur> spuren,
-    Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    _Stil stil, {
-    required bool blatt,
-  }) {
-    final aufgabenJeTag = [
-      for (final tag in board.tage)
-        aufgaben[(abt.dbValue, tag)] ?? const <Tagesaufgabe>[],
-    ];
-    final mitAufgaben = blatt || aufgabenJeTag.any((l) => l.isNotEmpty);
-    final hatAnlagen = spuren.any((s) => s.istAnlage);
-
-    return [
-      for (var i = 0; i < spuren.length; i++)
-        ..._wochenZeile(
-          abteilung: abt,
-          stil: stil,
-          label: _spurLabel(
-            abt,
-            spuren[i],
-            erste: i == 0,
-            blatt: blatt,
-            hatAnlagen: hatAnlagen,
-            stil: stil,
-          ),
-          tage: [
-            for (final tag in board.tage)
-              [
-                for (final t in board.cellFor(spuren[i], tag).tasks)
-                  _auftragEintrag(t, stil),
-              ],
-          ],
-        ),
-      if (mitAufgaben)
-        ..._wochenZeile(
-          abteilung: abt,
-          stil: stil,
-          label: blatt
-              ? _label(oben: 'Sonstige Aufgaben', stil: stil)
-              : _label(unten: 'Sonstige Aufgaben', kursiv: true, stil: stil),
-          tage: [
-            for (final liste in aufgabenJeTag)
-              [for (final a in liste) _aufgabeEintrag(a, stil)],
-          ],
-        ),
-    ];
   }
 
   /// Bis zu so vielen Einträgen an einem Tag bleibt eine Zeile des Rasters
@@ -258,6 +138,7 @@ class BoardPrintService {
     required pw.Widget label,
     required List<List<pw.Widget>> tage,
     required _Stil stil,
+    required DruckRahmen rahmen,
   }) {
     var zeilen = 1;
     for (final eintraege in tage) {
@@ -306,8 +187,12 @@ class BoardPrintService {
       ],
     );
     if (!teilbar) return [pw.Inseparable(child: tabelle)];
-    // Nicht mit nur einem Eintrag unten auf der Seite anfangen.
-    return [pw.NewPage(freeSpace: 120), tabelle];
+    // Nicht mit nur einem Eintrag unten auf der Seite anfangen — außer das
+    // Blatt soll auf eine feste Zahl Seiten passen.
+    return [
+      if (rahmen.umbrueche) pw.NewPage(freeSpace: 120),
+      tabelle,
+    ];
   }
 
   /// Erste Spalte einer Rasterzeile: ein Hauch der Abteilungsfarbe und ihre
@@ -431,7 +316,11 @@ class BoardPrintService {
 
   /// Ein Auftrag im Wochenraster: oben Artikelnummer und Menge, darunter
   /// die Bezeichnung.
-  static pw.Widget _auftragEintrag(BoardTask t, _Stil stil) {
+  static pw.Widget _auftragEintrag(
+    BoardTask t,
+    _Stil stil, {
+    required bool kaestchen,
+  }) {
     final erledigt = t.erledigt != null;
     final farbe = erledigt ? _grauErledigt : PdfColors.black;
     final fett = pw.TextStyle(
@@ -444,7 +333,7 @@ class BoardPrintService {
 
     return _mitKaestchen(
       erledigt: erledigt,
-      groesse: stil.kaestchen,
+      groesse: kaestchen ? stil.kaestchen : null,
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.stretch,
         children: [
@@ -475,10 +364,14 @@ class BoardPrintService {
   }
 
   /// Eine sonstige Aufgabe im Wochenraster.
-  static pw.Widget _aufgabeEintrag(Tagesaufgabe a, _Stil stil) {
+  static pw.Widget _aufgabeEintrag(
+    Tagesaufgabe a,
+    _Stil stil, {
+    required bool kaestchen,
+  }) {
     return _mitKaestchen(
       erledigt: a.erledigt,
-      groesse: stil.kaestchen,
+      groesse: kaestchen ? stil.kaestchen : null,
       child: pw.Text(
         pdfText(a.inhalt.trim()),
         maxLines: stil.aufgabeZeilen,
@@ -494,98 +387,42 @@ class BoardPrintService {
   // Tag (Hochformat)
   // -------------------------------------------------------------------------
 
-  /// Der Tagesplan als PDF-Dokument — ohne Drucken, damit er sich prüfen
-  /// lässt.
+  /// Der Tagesplan zum Drucken.
   ///
   /// Je Abteilung ihre Spuren mit Belegung und einer Tabelle der Aufträge
   /// (Artikelnummer, Bezeichnung, Menge, Dauer), darunter die sonstigen
-  /// Aufgaben. [abteilungen] und [komprimiert] wie bei [wochenDokument].
-  static pw.Document tagesDokument(
+  /// Aufgaben.
+  static DruckDokument tagesDruck(
     DayBoard board, {
     required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    List<Abteilung>? abteilungen,
+    PlanDruckInhalt inhalt = const PlanDruckInhalt(),
     DateTime? gedrucktAm,
-    bool komprimiert = true,
   }) {
-    _pruefeAuswahl(abteilungen);
-    final doc = _dokument(
-      'Tagesplan ${Format.datum(board.tag)}',
-      komprimiert: komprimiert,
-    );
     final gedruckt = _gedruckt(gedrucktAm ?? DateTime.now());
-
     final gruppen = <Abteilung, List<DayLane>>{};
     for (final lane in board.lanes) {
       (gruppen[lane.abteilung] ??= <DayLane>[]).add(lane);
     }
-
-    if (abteilungen == null) {
-      doc.addPage(_tagesBlatt(board, gruppen, aufgaben, gedruckt));
-    } else {
-      for (final abt in abteilungen) {
-        doc.addPage(
-          _tagesBlatt(
-            board,
-            {abt: gruppen[abt] ?? const <DayLane>[]},
-            aufgaben,
-            gedruckt,
-            abteilung: abt,
-          ),
-        );
-      }
-    }
-    return doc;
-  }
-
-  static pw.MultiPage _tagesBlatt(
-    DayBoard board,
-    Map<Abteilung, List<DayLane>> gruppen,
-    Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
-    String gedruckt, {
-    Abteilung? abteilung,
-  }) {
-    final tag = board.tag;
-    final kw = isoKalenderwoche(tag);
-    // Startzeiten setzt kaum jemand — eine Spalte voller Striche wäre nur
-    // Ballast. Sie erscheint, sobald auf dem Blatt eine Zeit steht.
-    final mitStart = gruppen.values.any(
-      (lanes) => lanes.any((l) => l.tasks.any((t) => t.startZeit != null)),
-    );
-    final seiten = _Seiten();
-
-    return pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(28, 24, 28, 20),
-      header: (ctx) {
-        seiten.merke(ctx);
-        return pw.Padding(
-          padding: const pw.EdgeInsets.only(bottom: 8),
-          child: _kopf(
-            titel: abteilung?.anzeigeName ?? 'Tagesplan',
-            zeile: abteilung == null
-                ? '${Format.datumLang(tag)} · KW $kw'
-                : 'Tagesplan ${Format.datumLang(tag)} · KW $kw',
-            abteilung: abteilung,
-            gedruckt: gedruckt,
-          ),
-        );
-      },
-      footer: (ctx) => _fuss(
-        abteilung == null
-            ? 'Tagesplan ${Format.datum(tag)}'
-            : '${abteilung.anzeigeName} · Tagesplan ${Format.datum(tag)}',
-        seiten.text(ctx),
-      ),
-      build: (ctx) => [
-        for (final e in gruppen.entries)
-          ..._tagesAbteilung(
-            e.key,
-            e.value,
-            aufgaben[(e.key.dbValue, tag)] ?? const <Tagesaufgabe>[],
-            blatt: abteilung != null,
-            mitStart: mitStart,
-          ),
-      ],
+    final abteilungen = _auswahl(gruppen.keys, inhalt.abteilungen);
+    final plan = _TagesPlan(board, aufgaben, inhalt, gedruckt);
+    final titel = 'Tagesplan ${_isoDatum(board.tag)}';
+    return DruckDokument(
+      titel: 'Tagesplan ${Format.datum(board.tag)}',
+      dateiname: _dateiname(titel, abteilungen, inhalt),
+      blaetter: inhalt.einzeln
+          ? [
+              for (final abt in abteilungen)
+                plan.blatt(
+                  {abt: gruppen[abt] ?? const <DayLane>[]},
+                  abteilung: abt,
+                ),
+            ]
+          : [
+              plan.blatt({
+                for (final abt in abteilungen)
+                  abt: gruppen[abt] ?? const <DayLane>[],
+              }),
+            ],
     );
   }
 
@@ -598,84 +435,6 @@ class BoardPrintService {
   /// Bis zu so vielen sonstigen Aufgaben (je höchstens sechs Zeilen)
   /// bleiben sie samt Überschrift zusammen.
   static const int _aufgabenZusammenBis = 8;
-
-  /// Eine Abteilung im Tagesplan: in der Übersicht mit farbiger Leiste,
-  /// je Spur Überschrift und Tabelle, darunter die sonstigen Aufgaben.
-  static List<pw.Widget> _tagesAbteilung(
-    Abteilung abt,
-    List<DayLane> lanes,
-    List<Tagesaufgabe> aufgaben, {
-    required bool blatt,
-    required bool mitStart,
-  }) {
-    final hatAnlagen = lanes.any((l) => l.spur.istAnlage);
-    final ergebnis = <pw.Widget>[];
-
-    void zusammen(List<pw.Widget> teile, {required bool untrennbar}) {
-      if (untrennbar) {
-        ergebnis.add(
-          pw.Inseparable(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
-              children: teile,
-            ),
-          ),
-        );
-      } else {
-        // Überschriften nicht allein unten auf der Seite stehen lassen.
-        ergebnis
-          ..add(pw.NewPage(freeSpace: 120))
-          ..addAll(teile);
-      }
-    }
-
-    for (var i = 0; i < lanes.length; i++) {
-      final lane = lanes[i];
-      final name = lane.spur.istAnlage
-          ? lane.spur.anzeigeName
-          : (hatAnlagen ? 'Ohne Anlage' : 'Aufträge');
-      zusammen(
-        [
-          // Die Leiste der Abteilung bleibt bei ihrer ersten Spur — sonst
-          // stünde sie womöglich allein unten auf der Seite.
-          if (!blatt && i == 0) _abteilungsLeiste(abt),
-          _spurKopf(name, lane),
-          if (lane.tasks.isEmpty)
-            _hinweis('Keine Aufträge.')
-          else
-            _auftragsTabelle(lane.tasks, mitStart: mitStart),
-        ],
-        untrennbar: lane.tasks.length <= _spurZusammenBis,
-      );
-    }
-    if (aufgaben.isNotEmpty) {
-      zusammen(
-        [
-          _zwischentitel('Sonstige Aufgaben'),
-          for (final a in aufgaben)
-            pw.Padding(
-              padding: const pw.EdgeInsets.fromLTRB(4, 2, 2, 2),
-              child: _mitKaestchen(
-                erledigt: a.erledigt,
-                groesse: 8,
-                child: pw.Text(
-                  pdfText(a.inhalt.trim()),
-                  maxLines: 6,
-                  style: pw.TextStyle(
-                    fontSize: 9.5,
-                    color: a.erledigt ? _grauErledigt : PdfColors.black,
-                  ),
-                ),
-              ),
-            ),
-        ],
-        untrennbar: aufgaben.length <= _aufgabenZusammenBis,
-      );
-    }
-
-    ergebnis.add(pw.SizedBox(height: 14));
-    return ergebnis;
-  }
 
   /// Leiste mit dem Namen der Abteilung — nur in der Übersicht; auf ihrem
   /// eigenen Blatt steht die Abteilung schon im Kopf.
@@ -697,8 +456,12 @@ class BoardPrintService {
     );
   }
 
-  /// Name der Spur und ihre Belegung an diesem Tag.
-  static pw.Widget _spurKopf(String name, DayLane lane) {
+  /// Name der Spur und — mit [belegung] — ihre Belegung an diesem Tag.
+  static pw.Widget _spurKopf(
+    String name,
+    DayLane lane, {
+    required bool belegung,
+  }) {
     final ueberbucht = lane.status == CapacityStatus.ueberbucht;
     return pw.Padding(
       padding: const pw.EdgeInsets.fromLTRB(2, 6, 2, 3),
@@ -712,19 +475,20 @@ class BoardPrintService {
               style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
             ),
           ),
-          pw.Text(
-            pdfText(
-              'Belegt ${Zeit.kurzOhneEinheit(lane.belegtMinuten)} von '
-              '${Zeit.kurz(lane.kapazitaetMinuten)}'
-              '${ueberbucht ? ' · überbucht' : ''}',
+          if (belegung)
+            pw.Text(
+              pdfText(
+                'Belegt ${Zeit.kurzOhneEinheit(lane.belegtMinuten)} von '
+                '${Zeit.kurz(lane.kapazitaetMinuten)}'
+                '${ueberbucht ? ' · überbucht' : ''}',
+              ),
+              style: pw.TextStyle(
+                fontSize: 8.5,
+                fontWeight:
+                    ueberbucht ? pw.FontWeight.bold : pw.FontWeight.normal,
+                color: ueberbucht ? PdfColors.black : PdfColors.grey700,
+              ),
             ),
-            style: pw.TextStyle(
-              fontSize: 8.5,
-              fontWeight:
-                  ueberbucht ? pw.FontWeight.bold : pw.FontWeight.normal,
-              color: ueberbucht ? PdfColors.black : PdfColors.grey700,
-            ),
-          ),
         ],
       ),
     );
@@ -735,6 +499,8 @@ class BoardPrintService {
   static pw.Widget _auftragsTabelle(
     List<BoardTask> tasks, {
     required bool mitStart,
+    required bool mitDauer,
+    required bool kaestchen,
   }) {
     pw.Widget zelle(
       String text, {
@@ -757,36 +523,42 @@ class BoardPrintService {
           ),
         );
 
+    // Die Spalten der Reihe nach — ohne Kästchen und Dauer rücken die
+    // übrigen auf.
+    var nr = 0;
+    final spalten = <int, pw.TableColumnWidth>{
+      if (kaestchen) nr++: const pw.FixedColumnWidth(18),
+      nr++: const pw.FixedColumnWidth(58),
+      nr++: const pw.FlexColumnWidth(),
+      nr++: const pw.FixedColumnWidth(62),
+      if (mitDauer) nr++: const pw.FixedColumnWidth(48),
+      if (mitStart) nr++: const pw.FixedColumnWidth(40),
+    };
+
     return pw.Table(
       border: _gitter,
-      columnWidths: {
-        0: const pw.FixedColumnWidth(18),
-        1: const pw.FixedColumnWidth(58),
-        2: const pw.FlexColumnWidth(),
-        3: const pw.FixedColumnWidth(62),
-        4: const pw.FixedColumnWidth(48),
-        if (mitStart) 5: const pw.FixedColumnWidth(40),
-      },
+      columnWidths: spalten,
       children: [
         pw.TableRow(
           repeat: true,
           decoration: const pw.BoxDecoration(color: PdfColors.grey200),
           children: [
-            pw.SizedBox(),
+            if (kaestchen) pw.SizedBox(),
             zelle('Art.-Nr.', fett: true),
             zelle('Bezeichnung', fett: true),
             zelle('Menge', fett: true, rechts: true),
-            zelle('Dauer', fett: true, rechts: true),
+            if (mitDauer) zelle('Dauer', fett: true, rechts: true),
             if (mitStart) zelle('Start', fett: true, rechts: true),
           ],
         ),
         for (final t in tasks)
           pw.TableRow(
             children: [
-              pw.Padding(
-                padding: const pw.EdgeInsets.fromLTRB(5, 3.5, 3, 3),
-                child: _kaestchen(erledigt: t.erledigt != null, groesse: 8),
-              ),
+              if (kaestchen)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.fromLTRB(5, 3.5, 3, 3),
+                  child: _kaestchen(erledigt: t.erledigt != null, groesse: 8),
+                ),
               zelle(
                 t.artikelnummer.trim().isEmpty ? '-' : t.artikelnummer.trim(),
                 fett: true,
@@ -794,11 +566,12 @@ class BoardPrintService {
               ),
               zelle(t.productName, zeilen: 3, farbe: _schrift(t)),
               zelle(Format.kg(t.mengeKg), rechts: true, farbe: _schrift(t)),
-              zelle(
-                Zeit.kurz(t.dauerMinuten),
-                rechts: true,
-                farbe: _schrift(t),
-              ),
+              if (mitDauer)
+                zelle(
+                  Zeit.kurz(t.dauerMinuten),
+                  rechts: true,
+                  farbe: _schrift(t),
+                ),
               if (mitStart)
                 zelle(t.startZeit ?? '-', rechts: true, farbe: _schrift(t)),
             ],
@@ -858,20 +631,26 @@ class BoardPrintService {
   /// Schrift für Erledigtes: grau, aber noch gut lesbar.
   static const PdfColor _grauErledigt = PdfColors.grey600;
 
-  static pw.Document _dokument(String titel, {required bool komprimiert}) {
-    return pw.Document(
-      title: titel,
-      creator: 'Produktions Planer',
-      compress: komprimiert,
-      // Einmal für das ganze Dokument: Jedes Blatt nutzt dieselben
-      // Schriften, statt sie je Blatt neu anzulegen.
-      theme: pw.ThemeData.withFont(
-        base: pw.Font.helvetica(),
-        bold: pw.Font.helveticaBold(),
-        italic: pw.Font.helveticaOblique(),
-        boldItalic: pw.Font.helveticaBoldOblique(),
-      ),
-    );
+  /// Die gewählten Abteilungen in der Reihenfolge des Boards ([board]);
+  /// gewählte, die dort keine Spur haben, danach.
+  static List<Abteilung> _auswahl(
+    Iterable<Abteilung> board,
+    Set<Abteilung>? gewaehlt,
+  ) {
+    final reihenfolge = [
+      ...board,
+      for (final abt in Abteilung.values)
+        if (!board.contains(abt)) abt,
+    ];
+    final liste = [
+      for (final abt in reihenfolge)
+        if (gewaehlt == null ? board.contains(abt) : gewaehlt.contains(abt))
+          abt,
+    ];
+    if (liste.isEmpty) {
+      throw ArgumentError('Keine Abteilung zum Drucken gewählt.');
+    }
+    return liste;
   }
 
   /// Kopf jedes Blatts: Titel, Zeitraum und wann gedruckt wurde. Auf dem
@@ -948,12 +727,13 @@ class BoardPrintService {
     );
   }
 
-  /// Ein Eintrag mit Kästchen davor.
+  /// Ein Eintrag mit Kästchen davor — ohne [groesse] ohne Kästchen.
   static pw.Widget _mitKaestchen({
     required bool erledigt,
-    required double groesse,
+    required double? groesse,
     required pw.Widget child,
   }) {
+    if (groesse == null) return child;
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -1003,12 +783,6 @@ class BoardPrintService {
     );
   }
 
-  static void _pruefeAuswahl(List<Abteilung>? abteilungen) {
-    if (abteilungen != null && abteilungen.isEmpty) {
-      throw ArgumentError('Keine Abteilung zum Drucken gewählt.');
-    }
-  }
-
   static String _gedruckt(DateTime d) =>
       'Gedruckt ${Format.datum(d)}, ${Format.uhrzeit(d)}';
 
@@ -1017,25 +791,353 @@ class BoardPrintService {
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  /// Name, unter dem die Druckvorschau das PDF speichern würde — ohne
-  /// Umlaute und Leerzeichen.
-  static String _dateiname(String basis, List<Abteilung>? abteilungen) {
-    var name = abteilungen != null && abteilungen.length == 1
-        ? '$basis ${abteilungen.single.anzeigeName}'
-        : basis;
-    const umlaute = {
-      'ä': 'ae',
-      'ö': 'oe',
-      'ü': 'ue',
-      'Ä': 'Ae',
-      'Ö': 'Oe',
-      'Ü': 'Ue',
-      'ß': 'ss',
-    };
-    for (final e in umlaute.entries) {
-      name = name.replaceAll(e.key, e.value);
+  /// Name zum Speichern — mit der Abteilung, wenn nur eine auf eigenem
+  /// Blatt gedruckt wird.
+  static String _dateiname(
+    String basis,
+    List<Abteilung> abteilungen,
+    PlanDruckInhalt inhalt,
+  ) =>
+      druckDateiname(
+        inhalt.einzeln && abteilungen.length == 1
+            ? '$basis ${abteilungen.single.anzeigeName}'
+            : basis,
+      );
+}
+
+/// Ein Wochenplan beim Setzen: was in jedes Blatt gehört.
+class _WochenPlan {
+  _WochenPlan(this.board, this.tage, this.aufgaben, this.inhalt, this.gedruckt);
+
+  final WeekBoard board;
+
+  /// Die gedruckten Tage.
+  final List<DateTime> tage;
+  final Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben;
+  final PlanDruckInhalt inhalt;
+  final String gedruckt;
+
+  /// Ein Blatt der Woche: die gesamte Übersicht ([abteilung] null) oder
+  /// das Blatt einer Abteilung.
+  DruckBlatt blatt(
+    Map<Abteilung, List<BoardSpur>> gruppen, {
+    Abteilung? abteilung,
+  }) {
+    final kw = isoKalenderwoche(board.wochenStart);
+    final zeitraum = tage.length == 1
+        ? '${Format.tagKurz(tage.single)}${tage.single.year}'
+        : '${Format.tagKurz(tage.first)} - '
+            '${Format.tagKurz(tage.last)}${tage.last.year}';
+    final stil = abteilung == null ? _Stil.uebersicht : _Stil.blatt;
+
+    return DruckBlatt(
+      quer: true,
+      rand: const pw.EdgeInsets.fromLTRB(24, 20, 24, 16),
+      bauen: (r) {
+        final zeilen = <pw.Widget>[
+          for (final e in gruppen.entries)
+            ...abteilungZeilen(
+              e.key,
+              e.value,
+              stil,
+              r,
+              blatt: abteilung != null,
+            ),
+        ];
+        return DruckSeiten(
+          kopf: (ctx) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            children: [
+              BoardPrintService._kopf(
+                titel: abteilung?.anzeigeName ?? 'Produktionsplan',
+                zeile: abteilung == null
+                    ? 'KW $kw · $zeitraum'
+                    : 'Wochenplan KW $kw · $zeitraum',
+                abteilung: abteilung,
+                gedruckt: gedruckt,
+              ),
+              pw.SizedBox(height: 8),
+              BoardPrintService._tageKopf(
+                tage,
+                stil,
+                erste: abteilung == null ? 'Abteilung / Anlage' : 'Anlage',
+              ),
+            ],
+          ),
+          fuss: (ctx) => BoardPrintService._fuss(
+            abteilung == null
+                ? 'Produktionsplan KW $kw'
+                : '${abteilung.anzeigeName} · Wochenplan KW $kw',
+            r.seitenText(ctx),
+          ),
+          inhalt: (ctx) => zeilen.isEmpty
+              ? [BoardPrintService._hinweis('Nichts geplant.')]
+              : zeilen,
+        );
+      },
+    );
+  }
+
+  /// Die Zeilen einer Abteilung: je Spur eine, darunter die sonstigen
+  /// Aufgaben. In der Übersicht mit etwas Luft danach — innerhalb einer
+  /// Abteilung stoßen die Zeilen aneinander wie in einer Tabelle.
+  ///
+  /// In der Übersicht steht die Aufgaben-Zeile nur, wenn es in der Woche
+  /// Aufgaben gibt. Auf dem Blatt der Abteilung steht sie immer — dort
+  /// ist sie zugleich Platz, um etwas von Hand nachzutragen.
+  List<pw.Widget> abteilungZeilen(
+    Abteilung abt,
+    List<BoardSpur> spuren,
+    _Stil stil,
+    DruckRahmen rahmen, {
+    required bool blatt,
+  }) {
+    bool zeigen(BoardTask t) => inhalt.erledigte || t.erledigt == null;
+    final aufgabenJeTag = [
+      for (final tag in tage)
+        [
+          if (inhalt.aufgaben)
+            for (final a in aufgaben[(abt.dbValue, tag)] ??
+                const <Tagesaufgabe>[])
+              if (inhalt.erledigte || !a.erledigt) a,
+        ],
+    ];
+    final mitAufgaben = inhalt.aufgaben &&
+        (blatt || aufgabenJeTag.any((l) => l.isNotEmpty));
+    final hatAnlagen = spuren.any((s) => s.istAnlage);
+    final gezeigt = [
+      for (final spur in spuren)
+        if (inhalt.leereSpuren ||
+            tage.any(
+              (tag) => board.cellFor(spur, tag).tasks.any(zeigen),
+            ))
+          spur,
+    ];
+
+    final zeilen = <pw.Widget>[
+      for (var i = 0; i < gezeigt.length; i++)
+        ...BoardPrintService._wochenZeile(
+          abteilung: abt,
+          stil: stil,
+          rahmen: rahmen,
+          label: BoardPrintService._spurLabel(
+            abt,
+            gezeigt[i],
+            erste: i == 0,
+            blatt: blatt,
+            hatAnlagen: hatAnlagen,
+            stil: stil,
+          ),
+          tage: [
+            for (final tag in tage)
+              [
+                for (final t in board.cellFor(gezeigt[i], tag).tasks)
+                  if (zeigen(t))
+                    BoardPrintService._auftragEintrag(
+                      t,
+                      stil,
+                      kaestchen: inhalt.kaestchen,
+                    ),
+              ],
+          ],
+        ),
+      if (mitAufgaben)
+        ...BoardPrintService._wochenZeile(
+          abteilung: abt,
+          stil: stil,
+          rahmen: rahmen,
+          label: blatt || gezeigt.isEmpty
+              ? BoardPrintService._label(
+                  oben: blatt ? 'Sonstige Aufgaben' : abt.anzeigeName,
+                  unten: blatt ? null : 'Sonstige Aufgaben',
+                  stil: stil,
+                )
+              : BoardPrintService._label(
+                  unten: 'Sonstige Aufgaben',
+                  kursiv: true,
+                  stil: stil,
+                ),
+          tage: [
+            for (final liste in aufgabenJeTag)
+              [
+                for (final a in liste)
+                  BoardPrintService._aufgabeEintrag(
+                    a,
+                    stil,
+                    kaestchen: inhalt.kaestchen,
+                  ),
+              ],
+          ],
+        ),
+    ];
+    if (zeilen.isEmpty || blatt) return zeilen;
+    return [...zeilen, pw.SizedBox(height: 6)];
+  }
+}
+
+/// Ein Tagesplan beim Setzen.
+class _TagesPlan {
+  _TagesPlan(this.board, this.aufgaben, this.inhalt, this.gedruckt);
+
+  final DayBoard board;
+  final Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben;
+  final PlanDruckInhalt inhalt;
+  final String gedruckt;
+
+  bool _zeigen(BoardTask t) => inhalt.erledigte || t.erledigt == null;
+
+  DruckBlatt blatt(
+    Map<Abteilung, List<DayLane>> gruppen, {
+    Abteilung? abteilung,
+  }) {
+    final tag = board.tag;
+    final kw = isoKalenderwoche(tag);
+    // Startzeiten setzt kaum jemand — eine Spalte voller Striche wäre nur
+    // Ballast. Sie erscheint, sobald auf dem Blatt eine Zeit steht.
+    final mitStart = gruppen.values.any(
+      (lanes) => lanes.any(
+        (l) => l.tasks.any((t) => t.startZeit != null && _zeigen(t)),
+      ),
+    );
+    return DruckBlatt(
+      rand: const pw.EdgeInsets.fromLTRB(28, 24, 28, 20),
+      bauen: (r) {
+        final teile = <pw.Widget>[
+          for (final e in gruppen.entries)
+            ...abteilungTeile(
+              e.key,
+              e.value,
+              r,
+              blatt: abteilung != null,
+              mitStart: mitStart,
+            ),
+        ];
+        return DruckSeiten(
+          kopf: (ctx) => pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 8),
+            child: BoardPrintService._kopf(
+              titel: abteilung?.anzeigeName ?? 'Tagesplan',
+              zeile: abteilung == null
+                  ? '${Format.datumLang(tag)} · KW $kw'
+                  : 'Tagesplan ${Format.datumLang(tag)} · KW $kw',
+              abteilung: abteilung,
+              gedruckt: gedruckt,
+            ),
+          ),
+          fuss: (ctx) => BoardPrintService._fuss(
+            abteilung == null
+                ? 'Tagesplan ${Format.datum(tag)}'
+                : '${abteilung.anzeigeName} · Tagesplan ${Format.datum(tag)}',
+            r.seitenText(ctx),
+          ),
+          inhalt: (ctx) => teile.isEmpty
+              ? [BoardPrintService._hinweis('Nichts geplant.')]
+              : teile,
+        );
+      },
+    );
+  }
+
+  /// Eine Abteilung im Tagesplan: in der Übersicht mit farbiger Leiste,
+  /// je Spur Überschrift und Tabelle, darunter die sonstigen Aufgaben.
+  List<pw.Widget> abteilungTeile(
+    Abteilung abt,
+    List<DayLane> lanes,
+    DruckRahmen rahmen, {
+    required bool blatt,
+    required bool mitStart,
+  }) {
+    final hatAnlagen = lanes.any((l) => l.spur.istAnlage);
+    final liste = [
+      if (inhalt.aufgaben)
+        for (final a in aufgaben[(abt.dbValue, board.tag)] ??
+            const <Tagesaufgabe>[])
+          if (inhalt.erledigte || !a.erledigt) a,
+    ];
+    final ergebnis = <pw.Widget>[];
+    // Die Leiste der Abteilung steht über ihrem ersten Teil — sonst
+    // stünde sie womöglich allein unten auf der Seite.
+    var leiste = !blatt;
+
+    void zusammen(List<pw.Widget> teile, {required bool untrennbar}) {
+      final mitLeiste = [
+        if (leiste) BoardPrintService._abteilungsLeiste(abt),
+        ...teile,
+      ];
+      leiste = false;
+      if (untrennbar) {
+        ergebnis.add(
+          pw.Inseparable(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: mitLeiste,
+            ),
+          ),
+        );
+      } else {
+        // Überschriften nicht allein unten auf der Seite stehen lassen.
+        ergebnis
+          ..add(
+            rahmen.umbrueche ? pw.NewPage(freeSpace: 120) : pw.SizedBox(),
+          )
+          ..addAll(mitLeiste);
+      }
     }
-    return name.replaceAll(RegExp('[^A-Za-z0-9-]+'), '_');
+
+    for (final lane in lanes) {
+      final tasks = [
+        for (final t in lane.tasks)
+          if (_zeigen(t)) t,
+      ];
+      if (tasks.isEmpty && !inhalt.leereSpuren) continue;
+      final name = lane.spur.istAnlage
+          ? lane.spur.anzeigeName
+          : (hatAnlagen ? 'Ohne Anlage' : 'Aufträge');
+      zusammen(
+        [
+          BoardPrintService._spurKopf(name, lane, belegung: inhalt.belegung),
+          if (tasks.isEmpty)
+            BoardPrintService._hinweis('Keine Aufträge.')
+          else
+            BoardPrintService._auftragsTabelle(
+              tasks,
+              mitStart: mitStart,
+              mitDauer: inhalt.belegung,
+              kaestchen: inhalt.kaestchen,
+            ),
+        ],
+        untrennbar: tasks.length <= BoardPrintService._spurZusammenBis,
+      );
+    }
+    if (liste.isNotEmpty) {
+      zusammen(
+        [
+          BoardPrintService._zwischentitel('Sonstige Aufgaben'),
+          for (final a in liste)
+            pw.Padding(
+              padding: const pw.EdgeInsets.fromLTRB(4, 2, 2, 2),
+              child: BoardPrintService._mitKaestchen(
+                erledigt: a.erledigt,
+                groesse: inhalt.kaestchen ? 8 : null,
+                child: pw.Text(
+                  pdfText(a.inhalt.trim()),
+                  maxLines: 6,
+                  style: pw.TextStyle(
+                    fontSize: 9.5,
+                    color: a.erledigt
+                        ? BoardPrintService._grauErledigt
+                        : PdfColors.black,
+                  ),
+                ),
+              ),
+            ),
+        ],
+        untrennbar: liste.length <= BoardPrintService._aufgabenZusammenBis,
+      );
+    }
+    if (ergebnis.isEmpty) return ergebnis;
+    ergebnis.add(pw.SizedBox(height: 14));
+    return ergebnis;
   }
 }
 
@@ -1087,26 +1189,6 @@ class _Stil {
     nameZeilen: 3,
     aufgabeZeilen: 4,
   );
-}
-
-/// Zählt die Seiten EINES Blatts. Bei „je Abteilung ein Blatt" fängt jede
-/// Abteilung bei Seite 1 an — ihre Seiten werden ja getrennt verteilt.
-///
-/// Die Kopfzeile jeder Seite meldet die Seite an, bevor ihre Fußzeile
-/// entsteht; die endgültige Fußzeile malt das PDF erst, wenn alle Seiten
-/// feststehen.
-class _Seiten {
-  final List<PdfPage> _liste = <PdfPage>[];
-
-  void merke(pw.Context ctx) {
-    if (!_liste.contains(ctx.page)) _liste.add(ctx.page);
-  }
-
-  String text(pw.Context ctx) {
-    final nr = _liste.indexOf(ctx.page) + 1;
-    final von = _liste.length;
-    return 'Seite ${nr < 1 ? 1 : nr} von ${von < 1 ? 1 : von}';
-  }
 }
 
 /// App-Farbe (0xAARRGGBB) als PDF-Farbe — so übernimmt der Ausdruck exakt

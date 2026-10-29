@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
 
+import '../../../core/druck/druck_fenster.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
-import '../projekte/datei_aktionen.dart' show sichererDateiname;
 import 'etikett.dart';
 import 'etikett_dienst.dart';
 import 'etikett_pdf.dart';
@@ -22,16 +21,12 @@ Future<void> etikettZeigen(BuildContext context, String versionId) =>
       builder: (_) => EtikettDialog(versionId: versionId),
     );
 
-/// Öffnet den PDF-Entwurf in der Druckvorschau — dort lässt er sich
-/// drucken oder speichern.
+/// Öffnet den PDF-Entwurf im Druckfenster — dort lässt er sich drucken
+/// oder speichern, in der Breite des echten Etiketts.
 Future<void> etikettPdfOeffnen(BuildContext context, EtikettInhalt e) async {
   final messenger = ScaffoldMessenger.of(context);
   try {
-    final bytes = await baueEtikettPdf(e);
-    await Printing.layoutPdf(
-      name: 'Etikett_${sichererDateiname(e.stand.isEmpty ? e.bezeichnung : e.stand)}',
-      onLayout: (_) async => bytes,
-    );
+    await druckFensterOeffnen(context, etikettDruckAuftrag(e));
   } catch (fehler) {
     messenger.showSnackBar(
       SnackBar(

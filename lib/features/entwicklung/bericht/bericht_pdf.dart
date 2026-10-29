@@ -10,6 +10,9 @@ import '../../../core/constants/parameter_namen.dart'
     show kPlattenGruppeKombi, plattenZeilenFuer;
 import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
+import '../../../core/druck/druck_layout.dart';
+import '../../../core/druck/druck_optionen.dart';
+import '../../../core/druck/druck_satz.dart';
 import '../../../core/utils/format.dart';
 import '../../../core/utils/pdf_text.dart';
 import '../../../core/utils/platten_raster_pdf.dart';
@@ -35,9 +38,12 @@ import 'projekt_bericht.dart';
 // als Hinweis da — so sieht man auch bei einem offenen Projekt, was noch
 // aussteht.
 //
-// Gesetzt wird zweimal: Der erste Durchgang findet die Seiten der Kapitel
-// für das Inhaltsverzeichnis, der zweite schreibt sie hinein. Die Zahlen
-// stehen in Feldern fester Breite — beide Durchgänge brechen gleich um.
+// Gesetzt wird zweimal (das erledigt der Satz, druck_satz.dart): Der erste
+// Durchgang findet die Seiten der Kapitel für das Inhaltsverzeichnis, der
+// zweite schreibt sie hinein. Die Zahlen stehen in Feldern fester Breite —
+// beide Durchgänge brechen gleich um.
+//
+// Was in den Bericht kommt, wählt das Druckfenster ([BerichtInhalt]).
 
 // ── Farben und Schrift ─────────────────────────────────────────────────
 
@@ -470,17 +476,17 @@ class _Marke extends pw.Anchor {
     required pw.Widget child,
     required super.name,
     required this.titel,
-    required this.seiten,
+    required this.rahmen,
   }) : super(child: child, setX: true);
 
   final String titel;
-  final Map<String, int> seiten;
+  final DruckRahmen rahmen;
 
   @override
   void paint(pw.Context context) {
     super.paint(context);
-    if (seiten.containsKey(name)) return;
-    seiten[name] = context.pageNumber;
+    if (rahmen.gefunden.containsKey(name)) return;
+    rahmen.merke(name, context.pageNumber);
     context.document.outline.add(
       PdfOutline(
         context.document,
@@ -494,8 +500,10 @@ class _Marke extends pw.Anchor {
 
 /// Ein Kapitel des Berichts.
 class _Kapitel {
-  _Kapitel(this.titel, this.bauen, {this.neueSeite = true});
+  _Kapitel(this.schluessel, this.titel, this.bauen, {this.neueSeite = true});
 
+  /// Unter diesem Wert steht es in der Wahl ([BerichtWahl.kapitel]).
+  final String schluessel;
   final String titel;
   final List<pw.Widget> Function(_Satz s, _Kapitel k) bauen;
 
@@ -509,29 +517,43 @@ class _Kapitel {
 
 /// Was beim Setzen mitläuft.
 class _Satz {
-  _Satz(this.b, this.jetzt, this.bekannt);
+  _Satz(this.b, this.jetzt, this.rahmen, this.inhalt);
 
   final ProjektBericht b;
   final DateTime jetzt;
 
-  /// Die Seiten der Kapitel aus dem ersten Durchgang.
-  final Map<String, int> bekannt;
+  /// Breite, Maßstab und die Seiten der Kapitel aus dem ersten Durchgang
+  /// ([DruckRahmen.bekannt]).
+  final DruckRahmen rahmen;
 
-  /// Die Seiten, die dieser Durchgang findet.
-  final Map<String, int> gefunden = {};
+  final BerichtInhalt inhalt;
 
   EntwicklungsProjekt get p => b.projekt;
+
+  /// Die Seiten der Kapitel aus dem ersten Durchgang.
+  Map<String, int> get bekannt => rahmen.bekannt;
+
+  /// Kapitel mit Inhalt beginnen auf einer neuen Seite — nicht, wenn es
+  /// abgewählt ist oder der Bericht auf feste Seiten passen soll.
+  bool get neueSeiten => inhalt.neueSeiten && rahmen.umbrueche;
+
+  /// Wie viele Einträge eine Zeile des Zeitstrahls trägt: auf A4 hoch
+  /// sechs, quer oder verkleinert mehr.
+  int get jeZeile => math.max(3, (rahmen.breite / 85).floor());
 }
 
 /// Der Kopf eines Kapitels: Nummer und Titel, darunter [untertitel].
 List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
-  if (k.neueSeite) pw.NewPage(),
+  if (k.neueSeite && s.neueSeiten) pw.NewPage(),
   _Marke(
     name: k.anker,
     titel: '${k.nr}  ${k.titel}',
-    seiten: s.gefunden,
+    rahmen: s.rahmen,
     child: pw.Container(
-      margin: pw.EdgeInsets.only(top: k.neueSeite ? 0 : 22, bottom: 6),
+      margin: pw.EdgeInsets.only(
+        top: k.neueSeite && s.neueSeiten ? 0 : 22,
+        bottom: 6,
+      ),
       padding: const pw.EdgeInsets.only(bottom: 5),
       decoration: const pw.BoxDecoration(
         border: pw.Border(bottom: pw.BorderSide(color: _akzent, width: 1.2)),
@@ -557,131 +579,311 @@ List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
 
 // ── Bericht ────────────────────────────────────────────────────────────
 
-/// Baut den Bericht als PDF — [komprimiert] nur für Tests abgeschaltet,
-/// die den Text lesen.
+/// Was in den Bericht kommt — die Wahl im Druckfenster.
+class BerichtInhalt {
+  const BerichtInhalt({
+    this.kapitel,
+    this.steckbrief = true,
+    this.inhaltsverzeichnis = true,
+    this.zeitstrahl = true,
+    this.verlaufEinzeln = true,
+    this.neueSeiten = true,
+  });
+
+  /// Diese Kapitel ([BerichtKapitel]) — null: alle.
+  final Set<String>? kapitel;
+
+  /// Auf Seite 1 der Stand auf einen Blick: Phase, Idee, Bild, Kacheln.
+  final bool steckbrief;
+
+  /// Das Inhaltsverzeichnis auf Seite 1.
+  final bool inhaltsverzeichnis;
+
+  /// Im Kapitel Verlauf: der Zeitstrahl …
+  final bool zeitstrahl;
+
+  /// … und die Einträge im Einzelnen.
+  final bool verlaufEinzeln;
+
+  /// Kapitel mit Inhalt beginnen auf einer neuen Seite.
+  final bool neueSeiten;
+}
+
+/// Die Kapitel des Berichts — Schlüssel für [BerichtInhalt.kapitel].
+abstract final class BerichtKapitel {
+  static const projekt = 'projekt';
+  static const rezeptur = 'rezeptur';
+  static const produkt = 'produkt';
+  static const herstellung = 'herstellung';
+  static const freigabe = 'freigabe';
+  static const weg = 'weg';
+  static const verlauf = 'verlauf';
+  static const dateien = 'dateien';
+}
+
+/// Schlüssel der Wahl im Druckfenster.
+abstract final class BerichtWahl {
+  static const kapitel = 'kapitel';
+  static const steckbrief = 'steckbrief';
+  static const inhaltsverzeichnis = 'inhaltsverzeichnis';
+  static const zeitstrahl = 'zeitstrahl';
+  static const verlaufEinzeln = 'verlaufEinzeln';
+  static const neueSeiten = 'neueSeiten';
+}
+
+/// Die Kapitel, die es für [b] gibt — mit Titel, in ihrer Reihenfolge.
+List<(String, String)> berichtKapitelVon(ProjektBericht b) => [
+  for (final k in _alleKapitel(b)) (k.schluessel, k.titel),
+];
+
+/// Der Druck des Berichts für das Druckfenster.
+DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
+  final kapitel = berichtKapitelVon(b);
+  const gruppe = 'Im Bericht';
+  return DruckAuftrag(
+    art: 'projektbericht',
+    titel: 'Projektbericht drucken',
+    untertitel: b.projekt.name,
+    optionen: [
+      DruckWahlMehrere(
+        schluessel: BerichtWahl.kapitel,
+        titel: 'Kapitel',
+        werte: [
+          for (final (i, (schluessel, titel)) in kapitel.indexed)
+            DruckWert(schluessel, '${i + 1}  $titel'),
+        ],
+        standard: {for (final (schluessel, _) in kapitel) schluessel},
+      ),
+      const DruckSchalter(
+        schluessel: BerichtWahl.steckbrief,
+        titel: 'Steckbrief',
+        hinweis: 'Seite 1: Phase, Idee, Bild und der Stand auf einen Blick',
+        gruppe: gruppe,
+      ),
+      const DruckSchalter(
+        schluessel: BerichtWahl.inhaltsverzeichnis,
+        titel: 'Inhaltsverzeichnis',
+        gruppe: gruppe,
+      ),
+      if (b.verlauf.isNotEmpty) ...[
+        DruckSchalter(
+          schluessel: BerichtWahl.zeitstrahl,
+          titel: 'Verlauf als Zeitstrahl',
+          gruppe: gruppe,
+          sichtbar: (w) =>
+              w.mehrere(BerichtWahl.kapitel).contains(BerichtKapitel.verlauf),
+        ),
+        DruckSchalter(
+          schluessel: BerichtWahl.verlaufEinzeln,
+          titel: 'Verlauf im Einzelnen',
+          hinweis: 'Jeder Eintrag mit seinem Text',
+          gruppe: gruppe,
+          sichtbar: (w) =>
+              w.mehrere(BerichtWahl.kapitel).contains(BerichtKapitel.verlauf),
+        ),
+      ],
+      const DruckSchalter(
+        schluessel: BerichtWahl.neueSeiten,
+        titel: 'Kapitel auf neuen Seiten',
+        hinweis: 'Ohne: alles fortlaufend — spart Papier',
+        gruppe: gruppe,
+      ),
+    ],
+    bauen: (wahl) {
+      final gewaehlt = wahl.mehrere(BerichtWahl.kapitel);
+      final inhalt = BerichtInhalt(
+        kapitel: gewaehlt,
+        steckbrief: wahl.an(BerichtWahl.steckbrief),
+        inhaltsverzeichnis: wahl.an(BerichtWahl.inhaltsverzeichnis),
+        zeitstrahl: wahl.an(BerichtWahl.zeitstrahl),
+        verlaufEinzeln: wahl.an(BerichtWahl.verlaufEinzeln),
+        neueSeiten: wahl.an(BerichtWahl.neueSeiten),
+      );
+      if (_kapitelFuer(b, inhalt).isEmpty &&
+          !inhalt.steckbrief &&
+          !inhalt.inhaltsverzeichnis) {
+        throw const DruckNichtsGewaehlt(
+          'Wähle mindestens ein Kapitel oder den Steckbrief.',
+        );
+      }
+      return berichtDruck(b, inhalt: inhalt, gedrucktAm: gedrucktAm);
+    },
+  );
+}
+
+/// Baut den ganzen Bericht als PDF in Originalgröße — [komprimiert] nur
+/// für Tests abgeschaltet, die den Text lesen.
 Future<Uint8List> baueProjektPdf(
   ProjektBericht b, {
   DateTime? gedrucktAm,
   bool komprimiert = true,
 }) async {
-  final jetzt = gedrucktAm ?? DateTime.now();
-  // Erst die Seiten der Kapitel finden, dann mit ihnen setzen.
-  final probe = _Satz(b, jetzt, const {});
-  await _dokument(probe, komprimiert: komprimiert).save();
-  return _dokument(
-    _Satz(b, jetzt, probe.gefunden),
+  final ergebnis = await druckSetzen(
+    berichtDruck(b, gedrucktAm: gedrucktAm),
+    const DruckLayout(),
     komprimiert: komprimiert,
-  ).save();
+  );
+  return ergebnis.bytes;
 }
 
-pw.Document _dokument(_Satz s, {required bool komprimiert}) {
-  final p = s.p;
-  final doc = pw.Document(
-    title: pdfText('Projektbericht ${p.name}'),
-    creator: 'Produktions Planer',
-    pageMode: PdfPageMode.outlines,
-    compress: komprimiert,
-  );
-  // Ein Kapitel mit Inhalt beginnt auf einer neuen Seite; eins, das nur
-  // sagt, was noch fehlt, folgt dem davor — so bleibt der Bericht eines
-  // jungen Projekts kurz.
-  final b = s.b;
+/// Alle Kapitel, die es für [b] gibt. Eins mit Inhalt beginnt auf einer
+/// neuen Seite; eins, das nur sagt, was noch fehlt, folgt dem davor — so
+/// bleibt der Bericht eines jungen Projekts kurz.
+List<_Kapitel> _alleKapitel(ProjektBericht b) {
+  final p = b.projekt;
   final mitProzess = !Prozessparameter.aus(p.prozess).leer ||
       b.artikelSchritte.isNotEmpty ||
       !Haccp.aus(p.haccp).leer;
-  final kapitel = <_Kapitel>[
-    _Kapitel('Projekt', _kapitelProjekt),
-    _Kapitel('Rezeptur', _kapitelRezeptur, neueSeite: b.version != null),
-    _Kapitel('Produkt und Spezifikation', _kapitelProdukt, neueSeite: false),
+  return [
+    _Kapitel(BerichtKapitel.projekt, 'Projekt', _kapitelProjekt),
     _Kapitel(
+      BerichtKapitel.rezeptur,
+      'Rezeptur',
+      _kapitelRezeptur,
+      neueSeite: b.version != null,
+    ),
+    _Kapitel(
+      BerichtKapitel.produkt,
+      'Produkt und Spezifikation',
+      _kapitelProdukt,
+      neueSeite: false,
+    ),
+    _Kapitel(
+      BerichtKapitel.herstellung,
       'Herstellung und HACCP',
       _kapitelHerstellung,
       neueSeite: mitProzess,
     ),
-    _Kapitel('Freigabe und Checkliste', _kapitelFreigabe, neueSeite: false),
+    _Kapitel(
+      BerichtKapitel.freigabe,
+      'Freigabe und Checkliste',
+      _kapitelFreigabe,
+      neueSeite: false,
+    ),
     if (b.verlauf.isNotEmpty || b.versionen.isNotEmpty)
       _Kapitel(
+        BerichtKapitel.weg,
         'Entwicklungsweg',
         _kapitelWeg,
         neueSeite: b.versionen.isNotEmpty,
       ),
     if (b.verlauf.isNotEmpty)
-      _Kapitel('Verlauf', _kapitelVerlauf, neueSeite: b.verlauf.length > 3),
+      _Kapitel(
+        BerichtKapitel.verlauf,
+        'Verlauf',
+        _kapitelVerlauf,
+        neueSeite: b.verlauf.length > 3,
+      ),
     if (b.dateien.isNotEmpty)
-      _Kapitel('Dateien', _kapitelDateien, neueSeite: false),
+      _Kapitel(
+        BerichtKapitel.dateien,
+        'Dateien',
+        _kapitelDateien,
+        neueSeite: false,
+      ),
+  ];
+}
+
+/// Die gewählten Kapitel, neu durchgezählt. Der Verlauf fällt weg, wenn
+/// weder Zeitstrahl noch Einträge gewählt sind.
+List<_Kapitel> _kapitelFuer(ProjektBericht b, BerichtInhalt inhalt) {
+  final kapitel = [
+    for (final k in _alleKapitel(b))
+      if ((inhalt.kapitel?.contains(k.schluessel) ?? true) &&
+          (k.schluessel != BerichtKapitel.verlauf ||
+              inhalt.zeitstrahl ||
+              inhalt.verlaufEinzeln))
+        k,
   ];
   for (final (i, k) in kapitel.indexed) {
     k.nr = i + 1;
   }
+  return kapitel;
+}
+
+/// Der Bericht zum Drucken: ein Blatt, das über viele Seiten läuft — mit
+/// Lesezeichen für jedes Kapitel.
+DruckDokument berichtDruck(
+  ProjektBericht b, {
+  BerichtInhalt inhalt = const BerichtInhalt(),
+  DateTime? gedrucktAm,
+}) {
+  final jetzt = gedrucktAm ?? DateTime.now();
+  final p = b.projekt;
   final kunde = _oderNull(p.kunde);
-  final nummer = _oderNull(s.b.artikel?.artikelnummer ?? p.artikelnummer);
-  doc.addPage(
-    pw.MultiPage(
-      pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.fromLTRB(42, 38, 42, 34),
-      maxPages: 500,
-      theme: pw.ThemeData.withFont(
-        base: pw.Font.helvetica(),
-        bold: pw.Font.helveticaBold(),
-        italic: pw.Font.helveticaOblique(),
-        boldItalic: pw.Font.helveticaBoldOblique(),
-      ),
-      header: (ctx) => ctx.pageNumber == 1
-          ? pw.SizedBox()
-          : pw.Container(
-              margin: const pw.EdgeInsets.only(bottom: 12),
-              padding: const pw.EdgeInsets.only(bottom: 4),
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(
-                  bottom: pw.BorderSide(color: _linie, width: .5),
-                ),
-              ),
-              child: pw.Row(
-                children: [
-                  pw.Expanded(
-                    child: _t(
-                      'Projektbericht · ${p.name}',
-                      groesse: 7.5,
-                      farbe: _grau,
-                      maxLines: 1,
+  final nummer = _oderNull(b.artikel?.artikelnummer ?? p.artikelnummer);
+  return DruckDokument(
+    titel: pdfText('Projektbericht ${p.name}'),
+    dateiname: druckDateiname('Projektbericht ${p.name}'),
+    lesezeichen: true,
+    theme: pw.ThemeData.withFont(
+      base: pw.Font.helvetica(),
+      bold: pw.Font.helveticaBold(),
+      italic: pw.Font.helveticaOblique(),
+      boldItalic: pw.Font.helveticaBoldOblique(),
+    ),
+    blaetter: [
+      DruckBlatt(
+        rand: const pw.EdgeInsets.fromLTRB(42, 38, 42, 34),
+        bauen: (r) {
+          final s = _Satz(b, jetzt, r, inhalt);
+          final kapitel = _kapitelFuer(b, inhalt);
+          return DruckSeiten(
+            maxSeiten: 500,
+            kopf: (ctx) => r.seiteImBlatt(ctx) == 1
+                ? pw.SizedBox()
+                : pw.Container(
+                    margin: const pw.EdgeInsets.only(bottom: 12),
+                    padding: const pw.EdgeInsets.only(bottom: 4),
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(
+                        bottom: pw.BorderSide(color: _linie, width: .5),
+                      ),
+                    ),
+                    child: pw.Row(
+                      children: [
+                        pw.Expanded(
+                          child: _t(
+                            'Projektbericht · ${p.name}',
+                            groesse: 7.5,
+                            farbe: _grau,
+                            maxLines: 1,
+                          ),
+                        ),
+                        _t(
+                          [
+                            if (kunde != null) kunde,
+                            if (nummer != null) 'Art.-Nr. $nummer',
+                          ].join(' · '),
+                          groesse: 7.5,
+                          farbe: _grau,
+                        ),
+                      ],
                     ),
                   ),
+            fuss: (ctx) => pw.Container(
+              margin: const pw.EdgeInsets.only(top: 10),
+              child: pw.Row(
+                children: [
                   _t(
-                    [
-                      if (kunde != null) kunde,
-                      if (nummer != null) 'Art.-Nr. $nummer',
-                    ].join(' · '),
-                    groesse: 7.5,
-                    farbe: _grau,
+                    'Stand ${_datum(jetzt)} · Produktions Planer',
+                    groesse: 7,
+                    farbe: _hellgrau,
                   ),
+                  pw.Spacer(),
+                  _t(r.seitenText(ctx), groesse: 7, farbe: _hellgrau),
                 ],
               ),
             ),
-      footer: (ctx) => pw.Container(
-        margin: const pw.EdgeInsets.only(top: 10),
-        child: pw.Row(
-          children: [
-            _t(
-              'Stand ${_datum(s.jetzt)} · Produktions Planer',
-              groesse: 7,
-              farbe: _hellgrau,
-            ),
-            pw.Spacer(),
-            _t(
-              'Seite ${ctx.pageNumber} von ${ctx.pagesCount}',
-              groesse: 7,
-              farbe: _hellgrau,
-            ),
-          ],
-        ),
+            inhalt: (ctx) => [
+              ..._deckblatt(s, kapitel),
+              for (final k in kapitel) ...k.bauen(s, k),
+            ],
+          );
+        },
       ),
-      build: (ctx) => [
-        ..._deckblatt(s, kapitel),
-        for (final k in kapitel) ...k.bauen(s, k),
-      ],
-    ),
+    ],
   );
-  return doc;
 }
 
 // ── Steckbrief (Seite 1) ───────────────────────────────────────────────
@@ -711,6 +913,7 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
     '${status.label}${seit == null ? '' : ' seit ${_datum(seit)}'}',
     'angelegt am ${_datum(p.createdAt)}',
   ].join(' · ');
+  final steckbrief = s.inhalt.steckbrief;
   return [
     pw.Row(
       children: [
@@ -739,18 +942,20 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
                   padding: const pw.EdgeInsets.only(top: 4),
                   child: _t(unterzeile, groesse: 10, farbe: _grau),
                 ),
-              pw.SizedBox(height: 14),
-              _phasenLeiste(status),
-              pw.SizedBox(height: 5),
-              _t(phase, groesse: 8, farbe: _grau),
-              if (_oderNull(p.produktidee) case final idee?) ...[
-                pw.SizedBox(height: 10),
-                _t(idee, groesse: 9, maxLines: 4),
+              if (steckbrief) ...[
+                pw.SizedBox(height: 14),
+                _phasenLeiste(status),
+                pw.SizedBox(height: 5),
+                _t(phase, groesse: 8, farbe: _grau),
+                if (_oderNull(p.produktidee) case final idee?) ...[
+                  pw.SizedBox(height: 10),
+                  _t(idee, groesse: 9, maxLines: 4),
+                ],
               ],
             ],
           ),
         ),
-        if (bild != null)
+        if (steckbrief && bild != null)
           pw.Container(
             width: 168,
             height: 126,
@@ -763,14 +968,18 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
           ),
       ],
     ),
-    _abschnitt('Auf einen Blick'),
-    ..._kacheln(s),
-    if (_zielPruefungen(s).isNotEmpty) ...[
-      pw.SizedBox(height: 8),
-      _zieleZeile(s),
+    if (steckbrief) ...[
+      _abschnitt('Auf einen Blick'),
+      ..._kacheln(s),
+      if (_zielPruefungen(s).isNotEmpty) ...[
+        pw.SizedBox(height: 8),
+        _zieleZeile(s),
+      ],
     ],
-    _abschnitt('Inhalt'),
-    for (final k in kapitel) _inhaltZeile(s, k),
+    if (s.inhalt.inhaltsverzeichnis && kapitel.isNotEmpty) ...[
+      _abschnitt('Inhalt'),
+      for (final k in kapitel) _inhaltZeile(s, k),
+    ],
   ];
 }
 
@@ -2821,9 +3030,6 @@ String _gekuerzt(String text, int zeichen) {
   return '${t.substring(0, schnitt > zeichen ~/ 2 ? schnitt : zeichen - 1)}…';
 }
 
-/// Wie viele Einträge eine Zeile des Zeitstrahls trägt.
-const int _jeZeile = 6;
-
 // Maße einer Zeile: Symbol, kurzer und langer Stiel, Platz der
 // Beschriftung — oben und unten gleich.
 const double _zsSymbol = 14;
@@ -2860,10 +3066,15 @@ List<pw.Widget> _kapitelVerlauf(_Satz s, _Kapitel k) {
           : '${eintraege.length} Einträge vom ${_datum(erster)} bis '
                 '${_datum(letzter)}${zahl.offen == 0 ? '' : offen}.',
     ),
-    _zeitstrahlLegende(eintraege, phasen),
-    ..._zeitstrahl(s, eintraege, phasen),
-    _abschnitt('Im Einzelnen', zusatz: 'der älteste Eintrag zuerst'),
-    ..._verlaufImEinzelnen(s, eintraege),
+    if (s.inhalt.zeitstrahl) ...[
+      _zeitstrahlLegende(eintraege, phasen),
+      ..._zeitstrahl(s, eintraege, phasen),
+    ],
+    if (s.inhalt.verlaufEinzeln) ...[
+      if (s.inhalt.zeitstrahl)
+        _abschnitt('Im Einzelnen', zusatz: 'der älteste Eintrag zuerst'),
+      ..._verlaufImEinzelnen(s, eintraege),
+    ],
   ];
 }
 
@@ -2935,7 +3146,7 @@ pw.Widget _zeitstrahlLegende(
   );
 }
 
-/// Der Zeitstrahl in Zeilen zu [_jeZeile] Einträgen.
+/// Der Zeitstrahl in Zeilen zu je [_Satz.jeZeile] Einträgen.
 List<pw.Widget> _zeitstrahl(
   _Satz s,
   List<ProjektEintrag> eintraege,
@@ -2953,15 +3164,16 @@ List<pw.Widget> _zeitstrahl(
     final e = eintraege[i];
     if (istStation(e)) station.putIfAbsent(e.versionId!, () => i);
   }
+  final jeZeile = s.jeZeile;
   return [
-    for (var von = 0; von < n; von += _jeZeile)
+    for (var von = 0; von < n; von += jeZeile)
       _zeitstrahlZeile(
         s,
         eintraege: eintraege,
         phase: phase,
         station: station,
         von: von,
-        bis: math.min(von + _jeZeile, n),
+        bis: math.min(von + jeZeile, n),
       ),
   ];
 }
@@ -2976,12 +3188,14 @@ pw.Widget _zeitstrahlZeile(
   required int bis,
 }) {
   final n = eintraege.length;
-  final breite = PdfPageFormat.a4.width - 84;
+  // Die volle Breite — quer oder verkleinert ist mehr Platz.
+  final breite = s.rahmen.breite;
+  final jeZeile = s.jeZeile;
   const hoehe = 2 * _zsHaelfte;
   const achse = _zsHaelfte;
   // Passt alles in eine Zeile, verteilt sich der Strahl über die Breite;
   // sonst hat jeder Eintrag denselben Platz, auch in der letzten Zeile.
-  final abstand = breite / (n <= _jeZeile ? n : _jeZeile);
+  final abstand = breite / (n <= jeZeile ? n : jeZeile);
   double xVon(int i) => abstand * (i - von + .5);
   final letzte = bis == n;
   final ende = letzte ? xVon(bis - 1) + abstand / 2 : breite;
