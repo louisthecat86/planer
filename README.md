@@ -201,13 +201,16 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Zutatenverzeichnis, Allergene, Nährwerte, Fleisch nach LMIV, die Stände im
   Vergleich), Produkt und Spezifikation (Sensorik, Angaben, Verpackung,
   Etikett nach LMIV), Herstellung und HACCP (Prozesskette nach Stationen mit
-  Werten und Platten, festgehaltene Versionen, — wenn der Artikel davon
+  Werten, die Platten von Bratstraße und Kombiofen als Raster wie im
+  Prozessblatt, festgehaltene Versionen, — wenn der Artikel davon
   abweicht — der Prozess im Artikel, Gefahrenanalyse und Lenkungspunkte),
   Freigabe und Checkliste (Artikel, Verlust der Produktion gegen die
   Rezeptur), der Entwicklungsweg (die Stände im Überblick, jede Station mit
-  Grund, Kennzahlen, Änderungen und Rückmeldungen), der ganze Verlauf und
-  die Dateien. Was fehlt, steht als Hinweis da; Kapitel ohne Inhalt
-  beginnen keine eigene Seite.
+  Grund, Kennzahlen, Änderungen und Rückmeldungen), der Verlauf als
+  Zeitstrahl wie in der App (Phasen, Stationen, Bezüge zu den Ständen, in
+  Zeilen zu sechs Einträgen) mit jedem Eintrag im Einzelnen und die
+  Dateien. Was fehlt, steht als Hinweis da; Kapitel ohne Inhalt beginnen
+  keine eigene Seite.
 - Übernahme aus der Development-Suite (ZIP oder JSON) — im Menü oben neben
   „Sperren", wo auch „Passwort ändern" steht.
 

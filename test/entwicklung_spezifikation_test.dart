@@ -948,6 +948,73 @@ void main() {
         expect(seiten, inInclusiveRange(3, 8));
       });
 
+      test('Platten als Raster wie im Prozessblatt, der Verlauf als '
+          'Zeitstrahl', () async {
+        final a = await anlegen();
+        await projekte.projektAendern(
+          a.projekt.id,
+          EntwicklungProjekteCompanion(
+            prozess: Value(
+              const Prozessparameter(
+                schritte: [
+                  ProzessSchritt(
+                    id: 's1',
+                    abteilung: 'bratstrasse',
+                    maschine: 'Bratstraße Test',
+                    prozessschritt: 'Braten',
+                    werte: [
+                      ProzessWert(
+                        name: 'Platte Oben 1',
+                        wert: '235',
+                        gruppe: kPlattenGruppeBrat,
+                      ),
+                      ProzessWert(
+                        name: 'Platte Unten 3',
+                        wert: '182,5',
+                        gruppe: kPlattenGruppeBrat,
+                      ),
+                    ],
+                  ),
+                ],
+              ).alsJson(),
+            ),
+          ),
+        );
+        // Offen und längst fällig — zu Stand 1, der Station.
+        await projekte.eintragAnlegen(
+          projektId: a.projekt.id,
+          art: EintragArt.notiz,
+          titel: 'Verkostung',
+          datum: DateTime(2026, 1, 2),
+          ziel: 'KW 1/2026',
+          versionId: a.v1,
+        );
+        final projekt = (await projekte.projekt(a.projekt.id))!;
+        final b = await berichtLaden(db, dateien, projekt);
+
+        final roh = latin1.decode(
+          await baueProjektPdf(b, gedrucktAm: datum, komprimiert: false),
+        );
+        // Die Platten als Raster — keine Liste „Nr. 1: 235" mehr (das PDF
+        // schreibt Wort für Wort).
+        expect(roh, contains('(Bratstrasse)'));
+        expect(roh, contains('(Laufrichtung)'));
+        expect(roh, contains('(235)'));
+        expect(roh, contains('(182,5)'));
+        expect(
+          RegExp(r'\(Nr\.\)\]TJ ET BT [^\[]*\[\(1:\)\]TJ').hasMatch(roh),
+          isFalse,
+        );
+        // Der Zeitstrahl mit Legende, darunter jeder Eintrag im Einzelnen
+        // — nur Offenes trägt eine Marke.
+        expect(roh, contains(r'(\(Rezepturstand\))'));
+        expect(roh, contains('(Phase)'));
+        expect(roh, contains('(Einzelnen)'));
+        expect(roh, contains('(überfällig)'));
+        expect(roh, contains('(ÜBERFÄLLIG)'));
+        expect(roh, isNot(contains('(ERLEDIGT)')));
+      });
+
       test('der freigegebene Stand geht vor', () async {
         final a = await anlegen();
         await projekte.projektAendern(

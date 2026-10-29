@@ -21,6 +21,7 @@ import 'package:printing/printing.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/parameter_namen.dart';
 import '../../core/database/database.dart';
+import '../../core/utils/platten_raster_pdf.dart';
 import '../../core/utils/zeit.dart' show Zeit;
 import '../whiteboard/whiteboard_provider.dart' show leistungsdatenVon;
 import 'article_detail_providers.dart';
@@ -713,119 +714,16 @@ class ArticlePrintService {
     return null;
   }
 
+  /// Das Plattenraster — derselbe Baustein wie im Projektbericht.
   static pw.Widget _plattenRaster(
     BratschemaTyp typ,
     List<ProductStepParameter> parameter,
   ) {
-    final istKombi = typ == BratschemaTyp.kombiofen;
-    final zonen = istKombi ? kKombiofenZonen : kBratstrasseZonen;
-
-    pw.Widget reihe(String prefix) {
-      // Laufrichtung: Zone 1 = Einlauf rechts -> links steht die höchste Zone
-      final zellen = <pw.Widget>[];
-      for (var anzeige = 0; anzeige < zonen; anzeige++) {
-        final zone = zonen - anzeige;
-        // Kombiofen optisch in 2 Gruppen à 6 (wie auf der Vorlage)
-        if (istKombi && anzeige == 6) {
-          zellen.add(pw.SizedBox(width: 6));
-        }
-        zellen.add(
-          _plattenZelle(
-            zone: zone,
-            wert: _plattenWert(parameter, '$prefix $zone'),
-          ),
-        );
-      }
-      return pw.Row(children: zellen);
-    }
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          children: [
-            pw.Text(
-              istKombi ? 'Kombiofen' : 'Bratstrasse',
-              style: pw.TextStyle(
-                fontSize: 8.5,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-            pw.SizedBox(width: 10),
-            pw.Text(
-              '<----- Laufrichtung (Zone 1 = Einlauf rechts)',
-              style: const pw.TextStyle(
-                fontSize: 7,
-                color: PdfColors.grey600,
-              ),
-            ),
-          ],
-        ),
-        pw.SizedBox(height: 3),
-        if (!istKombi) ...[
-          pw.Text(
-            'Platten oben',
-            style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
-          ),
-          pw.SizedBox(height: 1),
-          reihe('Platte Oben'),
-          pw.SizedBox(height: 3),
-        ],
-        pw.Text(
-          'Platten unten',
-          style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700),
-        ),
-        pw.SizedBox(height: 1),
-        reihe('Platte Unten'),
-      ],
-    );
-  }
-
-  static pw.Widget _plattenZelle({required int zone, double? wert}) {
-    final hat = wert != null;
-    PdfColor bg;
-    if (!hat) {
-      bg = PdfColors.grey200;
-    } else if (wert <= 0) {
-      bg = PdfColors.grey300;
-    } else if (wert < 160) {
-      bg = PdfColor.fromHex('#FFF3E0');
-    } else if (wert < 230) {
-      bg = PdfColor.fromHex('#FFE0B2');
-    } else {
-      bg = PdfColor.fromHex('#FFCC80');
-    }
-    return pw.Container(
-      width: 36,
-      height: 24,
-      margin: const pw.EdgeInsets.only(right: 2),
-      decoration: pw.BoxDecoration(
-        color: bg,
-        border: pw.Border.all(color: PdfColors.grey500, width: 0.5),
-        borderRadius: pw.BorderRadius.circular(2),
-      ),
-      child: pw.Stack(
-        children: [
-          pw.Positioned(
-            top: 1,
-            left: 2,
-            child: pw.Text(
-              '$zone',
-              style: const pw.TextStyle(fontSize: 5, color: PdfColors.grey600),
-            ),
-          ),
-          pw.Center(
-            child: pw.Text(
-              hat ? _fmt(wert) : '-',
-              style: pw.TextStyle(
-                fontSize: 9,
-                fontWeight: pw.FontWeight.bold,
-                color: hat ? PdfColors.grey900 : PdfColors.grey500,
-              ),
-            ),
-          ),
-        ],
-      ),
+    final kombiofen = typ == BratschemaTyp.kombiofen;
+    return plattenRasterPdf(
+      kombiofen: kombiofen,
+      zonen: kombiofen ? kKombiofenZonen : kBratstrasseZonen,
+      wert: (name) => _plattenWert(parameter, name),
     );
   }
 

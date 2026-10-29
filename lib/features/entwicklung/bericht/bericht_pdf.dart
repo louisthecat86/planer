@@ -1,15 +1,18 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../core/constants/artikel_merkmale.dart';
-import '../../../core/constants/parameter_namen.dart' show plattenZeilenFuer;
+import '../../../core/constants/parameter_namen.dart'
+    show kPlattenGruppeKombi, plattenZeilenFuer;
 import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
 import '../../../core/utils/format.dart';
 import '../../../core/utils/pdf_text.dart';
+import '../../../core/utils/platten_raster_pdf.dart';
 import '../daten/entwicklung_repository.dart' show VersionStatus;
 import '../entwicklung_format.dart';
 import '../haccp/haccp_modell.dart';
@@ -554,24 +557,30 @@ List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
 
 // ── Bericht ────────────────────────────────────────────────────────────
 
-/// Baut den Bericht als PDF.
+/// Baut den Bericht als PDF — [komprimiert] nur für Tests abgeschaltet,
+/// die den Text lesen.
 Future<Uint8List> baueProjektPdf(
   ProjektBericht b, {
   DateTime? gedrucktAm,
+  bool komprimiert = true,
 }) async {
   final jetzt = gedrucktAm ?? DateTime.now();
   // Erst die Seiten der Kapitel finden, dann mit ihnen setzen.
   final probe = _Satz(b, jetzt, const {});
-  await _dokument(probe).save();
-  return _dokument(_Satz(b, jetzt, probe.gefunden)).save();
+  await _dokument(probe, komprimiert: komprimiert).save();
+  return _dokument(
+    _Satz(b, jetzt, probe.gefunden),
+    komprimiert: komprimiert,
+  ).save();
 }
 
-pw.Document _dokument(_Satz s) {
+pw.Document _dokument(_Satz s, {required bool komprimiert}) {
   final p = s.p;
   final doc = pw.Document(
     title: pdfText('Projektbericht ${p.name}'),
     creator: 'Produktions Planer',
     pageMode: PdfPageMode.outlines,
+    compress: komprimiert,
   );
   // Ein Kapitel mit Inhalt beginnt auf einer neuen Seite; eins, das nur
   // sagt, was noch fehlt, folgt dem davor — so bleibt der Bericht eines
@@ -1866,30 +1875,33 @@ pw.Widget _stationsBand(int nr, String abteilung, {String? zusatz}) =>
       ),
     );
 
-/// Was von einem Schritt im Bericht steht: die Maschineneinstellungen,
-/// die eingetragenen Werte und die gesetzten Platten mit ihrer Nummer.
-List<(String, String)> _schrittWerte(ProzessSchritt s) {
-  final zeilen = <(String, String)>[
-    if (s.notiz.trim().isNotEmpty) ('Maschineneinstellungen', s.notiz.trim()),
-    for (final w in s.werte)
-      if (!istPlattenWert(w) && !w.leer) (w.label, w.wert.trim()),
-  ];
+/// Was von einem Schritt im Bericht steht: die Maschineneinstellungen und
+/// die eingetragenen Werte — die Platten zeigt [_plattenRaster].
+List<(String, String)> _schrittWerte(ProzessSchritt s) => [
+  if (s.notiz.trim().isNotEmpty) ('Maschineneinstellungen', s.notiz.trim()),
+  for (final w in s.werte)
+    if (!istPlattenWert(w) && !w.leer) (w.label, w.wert.trim()),
+];
+
+/// Die Platten eines Schritts an Bratstraße oder Kombiofen als Raster —
+/// wie im Prozessblatt, etwas kleiner. Null ohne Raster oder ohne eine
+/// gesetzte Platte.
+pw.Widget? _plattenRaster(ProzessSchritt s) {
   final gruppe = plattenGruppe(s.maschine);
-  if (gruppe == null) return zeilen;
-  for (final (label, praefix) in const [
-    ('Platten oben (°C)', 'Platte Oben '),
-    ('Platten unten (°C)', 'Platte Unten '),
-  ]) {
-    final gesetzt = [
-      for (final n in plattenZeilenFuer(s.maschine))
-        if (n.startsWith(praefix) &&
-            plattenWert(s, n, gruppe).trim().isNotEmpty)
-          'Nr. ${n.substring(praefix.length)}: '
-              '${plattenWert(s, n, gruppe).trim()}',
-    ];
-    if (gesetzt.isNotEmpty) zeilen.add((label, gesetzt.join(' · ')));
+  if (gruppe == null) return null;
+  final namen = plattenZeilenFuer(s.maschine);
+  if (!namen.any((n) => plattenWert(s, n, gruppe).trim().isNotEmpty)) {
+    return null;
   }
-  return zeilen;
+  return plattenRasterPdf(
+    kombiofen: gruppe == kPlattenGruppeKombi,
+    zonen: namen.where((n) => n.startsWith('Platte Unten ')).length,
+    wert: (name) {
+      final w = plattenWert(s, name, gruppe).trim();
+      return w.isEmpty ? null : double.tryParse(w.replaceAll(',', '.'));
+    },
+    massstab: .82,
+  );
 }
 
 /// Woran zwei Schritte gleich sind: Abteilung, Anlage, Prozessschritt,
@@ -1920,6 +1932,7 @@ pw.Widget _schrittBlock(
       ? '${s.bezeichnung(nr)} - $prozess'
       : s.bezeichnung(nr);
   final zeilen = [..._schrittWerte(s), ...mehr];
+  final raster = _plattenRaster(s);
   return pw.Padding(
     padding: const pw.EdgeInsets.only(left: 4, top: 5, bottom: 2),
     child: pw.Column(
@@ -1956,6 +1969,11 @@ pw.Widget _schrittBlock(
           pw.Padding(
             padding: const pw.EdgeInsets.only(left: 21, top: 2),
             child: _felder(zeilen, labelBreite: 130, groesse: 8.3),
+          ),
+        if (raster != null)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(left: 21, top: 5, bottom: 2),
+            child: raster,
           ),
       ],
     ),
@@ -2677,105 +2695,603 @@ List<pw.Widget> _wegStation(_Satz s, WegStation punkt) {
 
 // ── 7 Verlauf ──────────────────────────────────────────────────────────
 
+// Der Verlauf als Zeitstrahl — wie in der App: eine Achse in der Farbe der
+// Phase, die Einträge vom ältesten links zum neuesten rechts gleichmäßig
+// verteilt, abwechselnd oben und unten an kurzen und langen Stielen, jede
+// Art mit ihrer Farbe und ihrem Zeichen. Die Rezepturstände sind
+// nummerierte Stationen auf der Achse; ein Eintrag zu einem Stand hängt
+// mit einer gestrichelten Linie an seiner Station. Auf dem Papier läuft
+// der Strahl in Zeilen zu sechs Einträgen — darunter steht jeder Eintrag
+// im Einzelnen, nach Monaten.
+
+/// Die Farbe einer Eintragsart — wie auf dem Zeitstrahl der App.
+PdfColor _artFarbe(EintragArt a) => switch (a) {
+  EintragArt.meilenstein => _akzent,
+  EintragArt.rezeptur => _station,
+  EintragArt.email => const PdfColor.fromInt(0xFFC77700),
+  EintragArt.datei => const PdfColor.fromInt(0xFF2F6FD0),
+  EintragArt.parameter => const PdfColor.fromInt(0xFF0F7A6E),
+  EintragArt.notiz => const PdfColor.fromInt(0xFF5B6675),
+};
+
+/// [farbe], um [anteil] zum Weiß hin aufgehellt.
+PdfColor _hell(PdfColor farbe, double anteil) => PdfColor(
+  farbe.red + (1 - farbe.red) * anteil,
+  farbe.green + (1 - farbe.green) * anteil,
+  farbe.blue + (1 - farbe.blue) * anteil,
+);
+
+/// Malt das Symbol einer Eintragsart: einen Kreis mit dem Radius [r] um
+/// ([x], [y]) in der Farbe der Art, darin weiß ihr Zeichen — eine Fahne,
+/// ein offenes Buch, ein Brief, Regler, ein Blatt, Notizzeilen.
+void _symbolMalen(
+  PdfGraphics c,
+  EintragArt art,
+  double x,
+  double y,
+  double r,
+) {
+  c
+    ..setFillColor(_artFarbe(art))
+    ..drawEllipse(x, y, r, r)
+    ..fillPath()
+    ..setStrokeColor(PdfColors.white)
+    ..setFillColor(PdfColors.white)
+    ..setLineWidth(r * .14)
+    ..setLineCap(PdfLineCap.round)
+    ..setLineJoin(PdfLineJoin.round);
+  final s = r * .52;
+  switch (art) {
+    case EintragArt.meilenstein:
+      c
+        ..moveTo(x - s * .55, y - s * .95)
+        ..lineTo(x - s * .55, y + s * .95)
+        ..strokePath()
+        ..moveTo(x - s * .55, y + s * .95)
+        ..lineTo(x + s * .85, y + s * .5)
+        ..lineTo(x - s * .55, y + s * .02)
+        ..closePath()
+        ..fillPath();
+    case EintragArt.rezeptur:
+      for (final seite in [-1.0, 1.0]) {
+        c
+          ..moveTo(x, y + s * .55)
+          ..lineTo(x + seite * s, y + s * .8)
+          ..lineTo(x + seite * s, y - s * .55)
+          ..lineTo(x, y - s * .8)
+          ..closePath()
+          ..strokePath();
+      }
+    case EintragArt.email:
+      c
+        ..drawRect(x - s, y - s * .68, 2 * s, 1.36 * s)
+        ..strokePath()
+        ..moveTo(x - s, y + s * .68)
+        ..lineTo(x, y - s * .05)
+        ..lineTo(x + s, y + s * .68)
+        ..strokePath();
+    case EintragArt.parameter:
+      for (final (hoehe, knopf) in [(.55, .35), (0.0, -.4), (-.55, .1)]) {
+        c
+          ..moveTo(x - s, y + s * hoehe)
+          ..lineTo(x + s, y + s * hoehe)
+          ..strokePath()
+          ..drawEllipse(x + s * knopf, y + s * hoehe, s * .24, s * .24)
+          ..fillPath();
+      }
+    case EintragArt.datei:
+      c
+        ..moveTo(x - s * .7, y - s)
+        ..lineTo(x - s * .7, y + s)
+        ..lineTo(x + s * .25, y + s)
+        ..lineTo(x + s * .7, y + s * .55)
+        ..lineTo(x + s * .7, y - s)
+        ..closePath()
+        ..strokePath()
+        ..moveTo(x + s * .25, y + s)
+        ..lineTo(x + s * .25, y + s * .55)
+        ..lineTo(x + s * .7, y + s * .55)
+        ..strokePath();
+    case EintragArt.notiz:
+      for (final (hoehe, ende) in [(.5, .8), (0.0, .8), (-.5, .3)]) {
+        c
+          ..moveTo(x - s * .8, y + s * hoehe)
+          ..lineTo(x + s * ende, y + s * hoehe)
+          ..strokePath();
+      }
+  }
+}
+
+/// Das Symbol einer Eintragsart als eigenes Bild — für Legende und Liste.
+pw.Widget _symbol(EintragArt art, {double groesse = 11}) => pw.SizedBox(
+  width: groesse,
+  height: groesse,
+  child: pw.CustomPaint(
+    size: PdfPoint(groesse, groesse),
+    painter: (c, size) =>
+        _symbolMalen(c, art, size.x / 2, size.y / 2, size.x / 2),
+  ),
+);
+
+/// [text] auf höchstens [zeichen] Zeichen gekürzt — am Wortende, mit „…".
+String _gekuerzt(String text, int zeichen) {
+  final t = text.trim();
+  if (t.length <= zeichen) return t;
+  final schnitt = t.lastIndexOf(' ', zeichen - 1);
+  return '${t.substring(0, schnitt > zeichen ~/ 2 ? schnitt : zeichen - 1)}…';
+}
+
+/// Wie viele Einträge eine Zeile des Zeitstrahls trägt.
+const int _jeZeile = 6;
+
+// Maße einer Zeile: Symbol, kurzer und langer Stiel, Platz der
+// Beschriftung — oben und unten gleich.
+const double _zsSymbol = 14;
+const double _zsKurz = 10;
+const double _zsLang = 30;
+const double _zsKarte = 40;
+const double _zsHaelfte = _zsLang + _zsSymbol + 3 + _zsKarte;
+
+/// Wo ein Eintrag am Strahl hängt: oben oder unten, kurz oder lang — im
+/// Takt von vier wie in der App, damit Nachbarn sich nicht in die Quere
+/// kommen.
+({bool oben, bool lang}) _platz(int index) {
+  final takt = index % 4;
+  return (oben: takt == 0 || takt == 2, lang: takt == 2 || takt == 3);
+}
+
 List<pw.Widget> _kapitelVerlauf(_Satz s, _Kapitel k) {
   final b = s.b;
   final eintraege = zeitlichSortiert(b.verlauf);
   final zahl = offeneZaehlen(eintraege, heute: s.jetzt);
-  final offen = zahl.offen;
-  final spaet =
-      zahl.ueberfaellig == 0 ? '' : ', ${zahl.ueberfaellig} überfällig';
-  final dateien = {for (final d in b.dateien) d.id: d};
-  final widgets = <pw.Widget>[
+  final offen = zahl.ueberfaellig == 0
+      ? ' · ${zahl.offen} offen'
+      : ' · ${zahl.offen} offen, ${zahl.ueberfaellig} überfällig';
+  final phasen = statusJeEintrag(eintraege, ProjektStatus.aus(s.p.status));
+  final erster = eintraege.first.datum;
+  final letzter = eintraege.last.datum;
+  return [
     ..._kapitelKopf(
       s,
       k,
       untertitel: eintraege.length == 1
-          ? 'Ein Eintrag${offen == 0 ? '' : ', offen'}'
-              '${zahl.ueberfaellig == 0 ? '' : ' und überfällig'}.'
-          : 'Alle ${eintraege.length} Einträge, der älteste zuerst'
-              '${offen == 0 ? '' : ' · $offen offen$spaet'}.',
+          ? 'Ein Eintrag vom ${_datum(erster)}'
+                '${zahl.offen == 0 ? '' : offen}.'
+          : '${eintraege.length} Einträge vom ${_datum(erster)} bis '
+                '${_datum(letzter)}${zahl.offen == 0 ? '' : offen}.',
+    ),
+    _zeitstrahlLegende(eintraege, phasen),
+    ..._zeitstrahl(s, eintraege, phasen),
+    _abschnitt('Im Einzelnen', zusatz: 'der älteste Eintrag zuerst'),
+    ..._verlaufImEinzelnen(s, eintraege),
+  ];
+}
+
+/// Was die Farben und Zeichen bedeuten — nur, was vorkommt: die Arten
+/// und Stationen, darunter die Phasen.
+pw.Widget _zeitstrahlLegende(
+  List<ProjektEintrag> eintraege,
+  Map<String, ProjektStatus> phasen,
+) {
+  final arten = {for (final e in eintraege) EintragArt.aus(e.art)};
+  final folge = [
+    for (final p in ProjektStatus.values)
+      if (phasen.values.contains(p)) p,
+  ];
+  pw.Widget eintrag(pw.Widget zeichen, String text) => pw.Row(
+    mainAxisSize: pw.MainAxisSize.min,
+    children: [
+      zeichen,
+      pw.SizedBox(width: 3),
+      _t(text, groesse: 7, farbe: _grau),
+    ],
+  );
+  pw.Widget zeile(List<pw.Widget> kinder) => pw.Wrap(
+    spacing: 10,
+    runSpacing: 4,
+    crossAxisAlignment: pw.WrapCrossAlignment.center,
+    children: kinder,
+  );
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(top: 4, bottom: 6),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        zeile([
+          for (final a in EintragArt.values)
+            if (arten.contains(a)) eintrag(_symbol(a, groesse: 10), a.label),
+          if (eintraege.any(istStation))
+            eintrag(
+              pw.Container(
+                width: 10,
+                height: 10,
+                alignment: pw.Alignment.center,
+                decoration: const pw.BoxDecoration(
+                  color: _station,
+                  shape: pw.BoxShape.circle,
+                ),
+                child: _t('1', groesse: 6, fett: true, farbe: PdfColors.white),
+              ),
+              'Station (Rezepturstand)',
+            ),
+        ]),
+        if (folge.isNotEmpty) ...[
+          pw.SizedBox(height: 4),
+          zeile([
+            _t('Phase', groesse: 7, fett: true, farbe: _grau),
+            for (final p in folge)
+              eintrag(
+                pw.Container(
+                  width: 16,
+                  height: 4,
+                  color: _hell(_phasenFarbe(p), .25),
+                ),
+                _phasenName(p),
+              ),
+          ]),
+        ],
+      ],
+    ),
+  );
+}
+
+/// Der Zeitstrahl in Zeilen zu [_jeZeile] Einträgen.
+List<pw.Widget> _zeitstrahl(
+  _Satz s,
+  List<ProjektEintrag> eintraege,
+  Map<String, ProjektStatus> phasen,
+) {
+  final n = eintraege.length;
+  // Die Phase bei jedem Eintrag — ohne Angabe die davor.
+  final phase = <ProjektStatus?>[];
+  for (final e in eintraege) {
+    phase.add(phasen[e.id] ?? phase.lastOrNull);
+  }
+  // Je Stand die Station: der erste Rezepturstand mit diesem Bezug.
+  final station = <String, int>{};
+  for (var i = 0; i < n; i++) {
+    final e = eintraege[i];
+    if (istStation(e)) station.putIfAbsent(e.versionId!, () => i);
+  }
+  return [
+    for (var von = 0; von < n; von += _jeZeile)
+      _zeitstrahlZeile(
+        s,
+        eintraege: eintraege,
+        phase: phase,
+        station: station,
+        von: von,
+        bis: math.min(von + _jeZeile, n),
+      ),
+  ];
+}
+
+/// Eine Zeile des Zeitstrahls mit den Einträgen [von] bis vor [bis].
+pw.Widget _zeitstrahlZeile(
+  _Satz s, {
+  required List<ProjektEintrag> eintraege,
+  required List<ProjektStatus?> phase,
+  required Map<String, int> station,
+  required int von,
+  required int bis,
+}) {
+  final n = eintraege.length;
+  final breite = PdfPageFormat.a4.width - 84;
+  const hoehe = 2 * _zsHaelfte;
+  const achse = _zsHaelfte;
+  // Passt alles in eine Zeile, verteilt sich der Strahl über die Breite;
+  // sonst hat jeder Eintrag denselben Platz, auch in der letzten Zeile.
+  final abstand = breite / (n <= _jeZeile ? n : _jeZeile);
+  double xVon(int i) => abstand * (i - von + .5);
+  final letzte = bis == n;
+  final ende = letzte ? xVon(bis - 1) + abstand / 2 : breite;
+  final karte = math.min(2 * abstand - 12, 140.0);
+  double stiel(int i) => _platz(i).lang ? _zsLang : _zsKurz;
+  // Die Mitte eines Symbols, von oben gemessen.
+  double symbolY(int i) => _platz(i).oben
+      ? achse - stiel(i) - _zsSymbol / 2
+      : achse + stiel(i) + _zsSymbol / 2;
+  bool istStand(int i) =>
+      istStation(eintraege[i]) && station[eintraege[i].versionId] == i;
+
+  final kinder = <pw.Widget>[
+    pw.CustomPaint(
+      size: PdfPoint(breite, hoehe),
+      painter: (c, size) {
+        // Von oben gemessen — das PDF zählt von unten.
+        double y(double vonOben) => size.y - vonOben;
+        // Die Achse, grau, und darauf das Band der Phasen.
+        c
+          ..setFillColor(_linie)
+          ..drawRRect(0, y(achse) - 1.5, ende, 3, 1.5, 1.5)
+          ..fillPath();
+        var start = von;
+        while (start < bis) {
+          final p = phase[start];
+          var stop = start;
+          while (stop + 1 < bis && phase[stop + 1] == p) {
+            stop++;
+          }
+          if (p != null) {
+            final links = start == von
+                ? 0.0
+                : (xVon(start - 1) + xVon(start)) / 2;
+            final rechts = stop == bis - 1
+                ? ende
+                : (xVon(stop) + xVon(stop + 1)) / 2;
+            c
+              ..setFillColor(_hell(_phasenFarbe(p), .25))
+              ..drawRect(links, y(achse) - 2.5, rechts - links, 5)
+              ..fillPath();
+          }
+          start = stop + 1;
+        }
+        // Geht es in der nächsten Zeile weiter, zeigt ein Pfeil dorthin.
+        if (!letzte) {
+          c
+            ..setFillColor(_hellgrau)
+            ..moveTo(breite, y(achse))
+            ..lineTo(breite - 6, y(achse) + 4)
+            ..lineTo(breite - 6, y(achse) - 4)
+            ..closePath()
+            ..fillPath();
+        }
+        // Die Linien von Einträgen zu ihrer Station in dieser Zeile.
+        c
+          ..saveContext()
+          ..setStrokeColor(_hell(_station, .45))
+          ..setLineWidth(.9)
+          ..setLineDashPattern([3, 2]);
+        for (var i = von; i < bis; i++) {
+          final ziel = station[eintraege[i].versionId];
+          if (ziel == null || ziel == i || ziel < von || ziel >= bis) {
+            continue;
+          }
+          c
+            ..moveTo(xVon(i), y(symbolY(i)))
+            ..lineTo(xVon(ziel), y(achse))
+            ..strokePath();
+        }
+        c.restoreContext();
+        // Stiele, Punkte auf der Achse und die Symbole.
+        for (var i = von; i < bis; i++) {
+          final art = EintragArt.aus(eintraege[i].art);
+          final x = xVon(i);
+          final oben = _platz(i).oben;
+          c
+            ..setStrokeColor(const PdfColor.fromInt(0xFFC2C8CF))
+            ..setLineWidth(.9)
+            ..setLineCap(PdfLineCap.butt)
+            ..moveTo(x, y(achse))
+            ..lineTo(x, y(oben ? achse - stiel(i) : achse + stiel(i)))
+            ..strokePath();
+          final (radius, farbe) = istStand(i)
+              ? (6.5, _station)
+              : art == EintragArt.meilenstein
+              ? (3.6, _akzent)
+              : (3.0, _hellgrau);
+          c
+            ..setFillColor(farbe)
+            ..drawEllipse(x, y(achse), radius, radius)
+            ..fillPath()
+            ..setStrokeColor(PdfColors.white)
+            ..setLineWidth(1.1)
+            ..drawEllipse(x, y(achse), radius, radius)
+            ..strokePath();
+          _symbolMalen(c, art, x, y(symbolY(i)), _zsSymbol / 2);
+        }
+      },
     ),
   ];
+  for (var i = von; i < bis; i++) {
+    final e = eintraege[i];
+    final x = xVon(i);
+    final platz = _platz(i);
+    final links = (x - karte / 2).clamp(0.0, breite - karte);
+    final beschriftung = pw.SizedBox(
+      width: karte,
+      child: pw.Column(
+        mainAxisSize: pw.MainAxisSize.min,
+        children: [_zeitstrahlKarte(s, e, karte)],
+      ),
+    );
+    final abstandZurAchse = stiel(i) + _zsSymbol + 3;
+    kinder.add(
+      platz.oben
+          ? pw.Positioned(
+              left: links,
+              bottom: achse + abstandZurAchse,
+              child: beschriftung,
+            )
+          : pw.Positioned(
+              left: links,
+              top: achse + abstandZurAchse,
+              child: beschriftung,
+            ),
+    );
+    if (istStand(i)) {
+      kinder.add(
+        pw.Positioned(
+          left: x - 6.5,
+          top: achse - 6.5,
+          child: pw.SizedBox(
+            width: 13,
+            height: 13,
+            child: pw.Center(
+              child: _t(
+                '${s.b.versionen[e.versionId]?.nummer ?? ''}',
+                groesse: 6.8,
+                fett: true,
+                farbe: PdfColors.white,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+  return pw.Container(
+    margin: const pw.EdgeInsets.only(bottom: 6),
+    child: pw.Stack(children: kinder),
+  );
+}
+
+/// Die Beschriftung eines Eintrags am Strahl: Titel, Datum (mit dem Stand,
+/// zu dem er gehört) und — ist er offen — „offen" oder „überfällig".
+/// Meilensteine stehen farbig da.
+pw.Widget _zeitstrahlKarte(_Satz s, ProjektEintrag e, double breite) {
+  final meilenstein = EintragArt.aus(e.art) == EintragArt.meilenstein;
+  final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
+  final stand = istStation(e) ? null : s.b.versionen[e.versionId];
+  final vorbei = eintragUeberfaellig(e, heute: s.jetzt);
+  final schrift = meilenstein ? PdfColors.white : _schwarz;
+  final grau = meilenstein ? _hell(_akzent, .7) : _grau;
+  return pw.Container(
+    constraints: pw.BoxConstraints(maxWidth: breite),
+    padding: const pw.EdgeInsets.fromLTRB(5, 2.5, 5, 3),
+    decoration: pw.BoxDecoration(
+      color: meilenstein ? _akzent : PdfColors.white,
+      border: meilenstein ? null : pw.Border.all(color: _linie, width: .6),
+      borderRadius: const pw.BorderRadius.all(pw.Radius.circular(3)),
+    ),
+    child: pw.Column(
+      mainAxisSize: pw.MainAxisSize.min,
+      children: [
+        _t(
+          _gekuerzt(e.titel, 62),
+          groesse: 7,
+          fett: true,
+          farbe: schrift,
+          maxLines: 2,
+          ausrichtung: pw.TextAlign.center,
+        ),
+        pw.SizedBox(height: .5),
+        _t(
+          [
+            _datum(e.datum),
+            if (stand != null) 'zu Stand ${stand.nummer}',
+          ].join(' · '),
+          groesse: 6.2,
+          farbe: grau,
+        ),
+        if (offen)
+          _t(
+            vorbei ? 'überfällig' : 'offen',
+            groesse: 6.2,
+            fett: true,
+            farbe: meilenstein ? schrift : (vorbei ? _fehler : _warn),
+          ),
+      ],
+    ),
+  );
+}
+
+/// Jeder Eintrag im Einzelnen — nach Monaten, mit Beschreibung,
+/// Änderungen und Kommentaren.
+List<pw.Widget> _verlaufImEinzelnen(_Satz s, List<ProjektEintrag> eintraege) {
+  final b = s.b;
+  final dateien = {for (final d in b.dateien) d.id: d};
+  const einzug = 74.0;
+  final widgets = <pw.Widget>[];
+  String? monat;
   for (final e in eintraege) {
     final art = EintragArt.aus(e.art);
-    final status = EintragStatus.aus(e.status);
+    final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
     final vorbei = eintragUeberfaellig(e, heute: s.jetzt);
     final v = b.versionen[e.versionId];
     final datei = dateien[e.dateiId];
     final meta = [
+      art.label,
       if (_oderNull(e.benutzer) case final von?) 'von $von',
-      if (v != null) 'zu Stand ${v.nummer}',
-      if (datei != null) 'Datei: ${datei.name}',
+      if (v != null && !istStation(e)) 'zu Stand ${v.nummer}',
+      if (datei != null)
+        art == EintragArt.datei ? datei.name : 'Datei: ${datei.name}',
       if (_oderNull(e.ziel) case final z?) 'fällig bis $z',
     ];
-    final beschreibung = _oderNull(e.beschreibung);
-    final aenderungen = texteAus(e.aenderungen);
-    final kommentare = Kommentar.listeAus(e.kommentare);
-    widgets.add(
-      pw.Container(
-        margin: const pw.EdgeInsets.only(top: 7),
-        padding: const pw.EdgeInsets.only(top: 5),
-        decoration: const pw.BoxDecoration(
-          border: pw.Border(top: pw.BorderSide(color: _linie, width: .5)),
-        ),
-        child: pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.SizedBox(
-              width: 56,
-              child: _t(_datum(e.datum), groesse: 8.3, fett: true),
+    final kopf = pw.Container(
+      margin: const pw.EdgeInsets.only(top: 5),
+      padding: const pw.EdgeInsets.only(top: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: _linie, width: .4)),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: .5),
+            child: _symbol(art),
+          ),
+          pw.SizedBox(width: 6),
+          pw.SizedBox(
+            width: einzug - 17,
+            child: _t(_datum(e.datum), groesse: 8, fett: true),
+          ),
+          pw.Expanded(
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                _t(e.titel, groesse: 8.8, fett: true),
+                _t(meta.join(' · '), groesse: 7.3, farbe: _grau),
+              ],
             ),
-            pw.SizedBox(
-              width: 66,
-              child: _t(art.label, groesse: 8, farbe: _grau),
-            ),
-            pw.Expanded(
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  _t(e.titel, groesse: 9, fett: true),
-                  if (meta.isNotEmpty)
-                    _t(meta.join(' · '), groesse: 7.5, farbe: _grau),
-                ],
-              ),
-            ),
+          ),
+          if (offen) ...[
             pw.SizedBox(width: 6),
-            _marke(
-              switch (status) {
-                EintragStatus.offen when vorbei => 'ÜBERFÄLLIG',
-                EintragStatus.offen => 'OFFEN',
-                EintragStatus.erledigt => 'ERLEDIGT',
-              },
-              switch (status) {
-                EintragStatus.offen => vorbei ? _fehler : _warn,
-                EintragStatus.erledigt => _ok,
-              },
-            ),
+            vorbei
+                ? _marke('ÜBERFÄLLIG', _fehler)
+                : _marke('OFFEN', _warn),
           ],
-        ),
+        ],
       ),
     );
-    if (beschreibung != null) {
+    final beschreibung = _oderNull(e.beschreibung);
+    final text = beschreibung == null
+        ? null
+        : pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 2),
+            child: _fliess(beschreibung, groesse: 8.3, einzug: einzug),
+          );
+    // Eine kurze Beschreibung bleibt bei ihrem Eintrag, der Monat bei
+    // seinem ersten Eintrag; eine lange darf über die Seite laufen.
+    final kurz = beschreibung == null || beschreibung.length <= 600;
+    final m = '${Format.monate[e.datum.month - 1]} ${e.datum.year}';
+    widgets.add(
+      _zusammen([
+        if (m != monat)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 8, bottom: 1),
+            child: _t(m, groesse: 8.5, fett: true, farbe: _akzent),
+          ),
+        kopf,
+        if (kurz && text != null) text,
+      ]),
+    );
+    monat = m;
+    if (!kurz && text != null) widgets.add(text);
+    final aenderungen = texteAus(e.aenderungen);
+    if (aenderungen.isNotEmpty) {
       widgets.add(
         pw.Padding(
           padding: const pw.EdgeInsets.only(top: 2),
-          child: _fliess(beschreibung, groesse: 8.5, einzug: 122),
+          child: _fliess(
+            'Änderungen: ${aenderungen.join(' · ')}',
+            groesse: 7.6,
+            farbe: _grau,
+            einzug: einzug,
+          ),
         ),
       );
     }
-    for (final a in aenderungen) {
-      widgets.add(_punkt(a, einzug: 122, farbe: _grau));
-    }
-    for (final kom in kommentare) {
+    for (final kom in Kommentar.listeAus(e.kommentare)) {
       widgets.add(
         pw.Padding(
           padding: const pw.EdgeInsets.only(top: 2),
           child: _fliess(
             '${kom.name.isEmpty ? 'Kommentar' : kom.name} '
             '(${_datum(kom.datum)}): ${kom.text}',
-            groesse: 7.8,
+            groesse: 7.6,
             farbe: _grau,
-            einzug: 122,
+            einzug: einzug,
           ),
         ),
       );
