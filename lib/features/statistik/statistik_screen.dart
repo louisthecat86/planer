@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
@@ -14,6 +15,7 @@ import '../board/board_providers.dart' show CapacityStatus;
 import '../whiteboard/whiteboard_provider.dart' show kLetzteProduktionen;
 import 'statistik_daten.dart';
 import 'statistik_diagramme.dart';
+import 'statistik_druck.dart';
 
 /// Statistik: was sich aus der Planung und den erfassten Produktionen
 /// lernen lässt — wo es eng wird, wohin die Zeit geht, wie viel der Plan
@@ -40,6 +42,27 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen> {
 
   void _waehleAbteilung(Abteilung? abteilung) =>
       setState(() => _abteilung = abteilung);
+
+  /// Öffnet das Druckfenster — mit dem Zeitraum und der Abteilung, die
+  /// gerade gewählt sind.
+  Future<void> _drucken(StatistikDaten daten) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await druckFensterOeffnen(
+        context,
+        statistikDruckAuftrag(daten, abteilung: _abteilung),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Statistik ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -83,6 +106,12 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen> {
       appBar: AppBar(
         title: const Text('Statistik'),
         actions: [
+          IconButton(
+            key: const ValueKey('statistik-drucken'),
+            onPressed: neu == null ? null : () => _drucken(neu),
+            icon: const Icon(Icons.print),
+            tooltip: 'Statistik drucken',
+          ),
           IconButton(
             onPressed: () => ref.invalidate(statistikProvider(_zeitraum)),
             icon: const Icon(Icons.refresh),

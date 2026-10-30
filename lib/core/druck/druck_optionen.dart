@@ -153,6 +153,41 @@ class DruckWahlMehrere extends DruckOption {
   Object schreiben(Object wert) => [...(wert as Set<String>)];
 }
 
+/// Eine Zahl — „Ansatzgröße in kg". Was nicht zwischen [min] und [max]
+/// liegt, gilt nicht: Das Fenster behält dann den letzten gültigen Wert.
+class DruckZahl extends DruckOption {
+  const DruckZahl({
+    required super.schluessel,
+    required super.titel,
+    required this.standard,
+    this.einheit,
+    this.min = 0,
+    this.max = double.infinity,
+    super.hinweis,
+    super.gruppe,
+    super.sichtbar,
+    super.merken,
+  });
+
+  final double standard;
+
+  /// Steht hinter dem Feld — „kg".
+  final String? einheit;
+
+  final double min;
+  final double max;
+
+  /// Ob [wert] gilt.
+  bool gilt(double wert) => wert.isFinite && wert >= min && wert <= max;
+
+  @override
+  Object get standardWert => standard;
+
+  @override
+  Object? lesen(Object? json) =>
+      json is num && gilt(json.toDouble()) ? json.toDouble() : null;
+}
+
 /// Was im Druckfenster gewählt ist: wie gedruckt wird ([layout]) und was
 /// ([werte]).
 class DruckWahl {
@@ -202,6 +237,10 @@ class DruckWahl {
   /// Eine [DruckWahlMehrere].
   Set<String> mehrere(String schluessel) =>
       werte[schluessel] as Set<String>? ?? const {};
+
+  /// Eine [DruckZahl] — ohne Wert: 0.
+  double zahl(String schluessel) =>
+      (werte[schluessel] as num?)?.toDouble() ?? 0;
 
   DruckWahl mit(String schluessel, Object wert) =>
       DruckWahl(layout: layout, werte: {...werte, schluessel: wert});

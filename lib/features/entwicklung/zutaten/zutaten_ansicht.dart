@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/artikel_merkmale.dart';
 import '../../../core/database/database.dart';
+import '../../../core/druck/druck_fenster.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
@@ -11,6 +12,7 @@ import '../daten/entwicklung_repository.dart';
 import '../import/suite_import_dialog.dart';
 import '../rechenkern/rechen_modell.dart';
 import 'zutat_dialog.dart';
+import 'zutatenkatalog_druck.dart';
 
 /// Der Zutaten-Katalog: Rohstoffe mit Nährwerten, Allergenen und den
 /// Angaben für Etikett und Fleischanteil.
@@ -39,12 +41,26 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
     );
   }
 
-  bool _passt(Zutat z) {
-    final t = _text.trim().toLowerCase();
-    if (t.isEmpty) return true;
-    return z.name.toLowerCase().contains(t) ||
-        (z.etikettName ?? '').toLowerCase().contains(t) ||
-        (z.artikelnummer ?? '').toLowerCase().contains(t);
+  bool _passt(Zutat z) => zutatTrifft(z, _text);
+
+  /// Öffnet das Druckfenster — mit der Suche, wenn die Liste gerade sucht.
+  Future<void> _drucken(List<Zutat> alle) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await druckFensterOeffnen(
+        context,
+        zutatenkatalogDruckAuftrag(alle, suche: _text),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Zutaten ließen sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
   }
 
   @override
@@ -107,6 +123,13 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  IconButton.outlined(
+                    key: const ValueKey('zutaten-drucken'),
+                    tooltip: 'Zutaten drucken',
+                    onPressed: alle.isEmpty ? null : () => _drucken(alle),
+                    icon: const Icon(Icons.print_outlined, size: 18),
+                  ),
+                  const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: () => _bearbeiten(null),
                     icon: const Icon(Icons.add, size: 18),

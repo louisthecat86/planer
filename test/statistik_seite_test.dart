@@ -332,6 +332,12 @@ void main() {
     for (final l in ArtikelLuecke.values) {
       expect(zeile(l.titel), findsOneWidget, reason: l.titel);
     }
+
+    // Gedruckt wird, sobald die Daten da sind.
+    final drucken = tester.widget<IconButton>(
+      find.byKey(const ValueKey('statistik-drucken')),
+    );
+    expect(drucken.onPressed, isNotNull);
   });
 
   testWidgets('ein Tipp auf eine Abteilung zeigt ihre Anlagen',

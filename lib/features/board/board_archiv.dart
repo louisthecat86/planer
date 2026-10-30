@@ -19,10 +19,46 @@ class ArchivWochenplanScreen extends ConsumerWidget {
 
   final String snapshotId;
 
+  /// Öffnet das Druckfenster für den Plan von [snap].
+  Future<void> _drucken(BuildContext context, WeekSnapshot snap) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final daten = dekodiereSnapshot(snap);
+      final plan = daten.plan;
+      if (plan == null) return;
+      await druckFensterOeffnen(
+        context,
+        archivPlanDruckAuftrag(
+          woche: wochenboardAusArchiv(
+            plan,
+            stand: snap.createdAt,
+            zusatzzeiten: daten.zusatzzeiten,
+          ),
+          aufgaben: aufgabenAusArchiv(plan, stand: snap.createdAt),
+          stand: snap.createdAt,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Der Wochenplan ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final snapAsync = ref.watch(weekSnapshotProvider(snapshotId));
     final geladen = snapAsync.valueOrNull;
+    // Drucken lässt sich nur, wo es einen Plan gibt.
+    final druckbar =
+        geladen != null && dekodiereSnapshot(geladen).plan != null
+            ? geladen
+            : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -31,6 +67,16 @@ class ArchivWochenplanScreen extends ConsumerWidget {
               ? 'Wochenplan'
               : 'Wochenplan KW ${geladen.kw} · ${geladen.jahr}',
         ),
+        actions: [
+          if (druckbar != null)
+            IconButton(
+              key: const ValueKey('archivplan-drucken'),
+              onPressed: () => _drucken(context, druckbar),
+              icon: const Icon(Icons.print),
+              tooltip: 'Wochenplan drucken',
+            ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: snapAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),

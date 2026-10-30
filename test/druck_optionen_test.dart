@@ -125,6 +125,39 @@ void main() {
     expect(kaestchen.istSichtbar(wahl), isTrue);
   });
 
+  test('Eine Zahl: Standard, Merken — was nicht gilt, kommt aus dem '
+      'Standard', () {
+    const ansatz = DruckZahl(
+      schluessel: 'ansatz',
+      titel: 'Ansatzgröße',
+      standard: 100,
+      einheit: 'kg',
+      min: 0.01,
+      max: 5000,
+    );
+    final wahl = DruckWahl.standard(const [ansatz]);
+    expect(wahl.zahl('ansatz'), 100);
+    expect(wahl.zahl('gibtEsNicht'), 0);
+
+    final json = jsonDecode(
+      jsonEncode(wahl.mit('ansatz', 120.0).toJson(const [ansatz])),
+    );
+    expect(DruckWahl.fromJson(json, const [ansatz]).zahl('ansatz'), 120);
+
+    for (final kaputt in <Object?>[0, -5, 9000, 'viel', null]) {
+      final gelesen = DruckWahl.fromJson(
+        {
+          'werte': {'ansatz': kaputt},
+        },
+        const [ansatz],
+      );
+      expect(gelesen.zahl('ansatz'), 100, reason: '$kaputt');
+    }
+    expect(ansatz.gilt(0.01), isTrue);
+    expect(ansatz.gilt(double.nan), isFalse);
+    expect(ansatz.gilt(double.infinity), isFalse);
+  });
+
   test('In den Einstellungen: je Art des Dokuments', () async {
     final db = testDatenbank();
     addTearDown(db.close);

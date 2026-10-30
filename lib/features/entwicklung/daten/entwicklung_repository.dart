@@ -150,6 +150,13 @@ class EntwicklungRepository {
             ..orderBy([(v) => OrderingTerm.desc(v.nummer)]))
           .watch();
 
+  /// Die Stände einer Rezeptur, der neueste zuerst — einmal gelesen.
+  Future<List<RezepturVersion>> versionen(String rezepturId) =>
+      (_db.select(_db.entwicklungRezepturVersionen)
+            ..where((v) => v.rezepturId.equals(rezepturId))
+            ..orderBy([(v) => OrderingTerm.desc(v.nummer)]))
+          .get();
+
   Future<RezepturVersion?> version(String id) =>
       (_db.select(_db.entwicklungRezepturVersionen)
             ..where((v) => v.id.equals(id)))

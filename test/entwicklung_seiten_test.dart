@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart' show LayoutCallback;
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/druck/druck_fenster.dart';
+import 'package:produktion_planer/core/druck/druck_satz.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
@@ -162,6 +165,25 @@ void main() {
     expect(find.text('1 von 2 Zutaten'), findsOneWidget);
   });
 
+  testWidgets('Zutaten drucken: das Fenster — mit der Suche der Liste',
+      (tester) async {
+    await zeige(
+      tester,
+      const ZutatenAnsicht(),
+      dazu: [druckSystemProvider.overrideWithValue(const _Druck())],
+    );
+    await tester.enterText(find.byType(TextField), 'senf');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('zutaten-drucken')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    expect(find.text('Zutaten drucken'), findsOneWidget);
+    expect(find.text('Nur Treffer der Suche „senf“'), findsOneWidget);
+    expect(find.textContaining('Vorschau:'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('Zutaten schmal und dunkel: kein Überlauf', (tester) async {
     await zeige(
       tester,
@@ -191,6 +213,8 @@ void main() {
     // Der Entwurf ist in Arbeit; der eine Hauptknopf schließt ihn ab.
     expect(find.text('Entwurf · in Arbeit'), findsOneWidget);
     expect(find.text('Stand abschließen…'), findsOneWidget);
+    // Das Rezepturblatt hat einen eigenen Knopf.
+    expect(find.byKey(const ValueKey('stand-drucken')), findsOneWidget);
     // Alles andere steht unter „Mehr".
     expect(find.text('Mit anderem Stand vergleichen…'), findsNothing);
     await tester.tap(find.byKey(const ValueKey('stand-mehr')));
@@ -198,6 +222,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     for (final t in const [
       'Mit anderem Stand vergleichen…',
+      'Stände nebeneinander drucken…',
       'Etikett ansehen…',
       'Fleischanteil einstellen…',
       'Neuen Stand daraus anlegen',
@@ -248,6 +273,7 @@ void main() {
     expect(find.text('Neuen Stand daraus anlegen'), findsNothing);
     expect(find.text('Entwurf löschen…'), findsNothing);
     expect(find.text('Mit anderem Stand vergleichen…'), findsNothing);
+    expect(find.text('Stände nebeneinander drucken…'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -288,6 +314,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(find.text('Vergleich'), findsOneWidget);
+    expect(find.byKey(const ValueKey('vergleich-drucken')), findsOneWidget);
     await tester.tap(find.text('Schließen'));
     await tester.pump();
   });
@@ -420,4 +447,19 @@ void main() {
       );
     });
   });
+}
+
+/// Statt Vorschau und Gedächtnis des Druckfensters — die gibt es im Test
+/// nicht.
+class _Druck extends DruckSystem {
+  const _Druck() : super(null);
+
+  @override
+  Widget vorschau(
+    BuildContext context,
+    DruckErgebnis ergebnis,
+    LayoutCallback bauen,
+    String dateiname,
+  ) =>
+      Center(child: Text('Vorschau: ${ergebnis.beschreibung}'));
 }

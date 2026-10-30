@@ -5,7 +5,10 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:printing/printing.dart' show LayoutCallback;
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/druck/druck_fenster.dart';
+import 'package:produktion_planer/core/druck/druck_satz.dart';
 import 'package:produktion_planer/core/services/auto_backup_trigger.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
@@ -569,6 +572,27 @@ void main() {
       await tester.pump();
       expect(find.text('Schnitzel Wiener Art'), findsOneWidget);
       expect(find.text('Bratwurst fein'), findsNothing);
+    });
+
+    testWidgets('Projekte drucken: das Fenster — Filter und Suche wie die '
+        'Liste', (tester) async {
+      await zeige(
+        tester,
+        const ProjekteAnsicht(),
+        dazu: [druckSystemProvider.overrideWithValue(const _Druck())],
+      );
+      await tester.tap(find.text('Archiv (1)'));
+      await tester.enterText(find.byType(TextField), 'alt');
+      await tester.pump();
+      await tester.tap(find.byKey(const ValueKey('projekte-drucken')));
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Projektliste drucken'), findsOneWidget);
+      expect(find.text('Archiv · Suche „alt“'), findsOneWidget);
+      expect(find.text('Nur Treffer der Suche „alt“'), findsOneWidget);
+      expect(find.textContaining('Vorschau:'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('Projekte: was als Nächstes kommt und was im Verlauf offen '
@@ -1237,4 +1261,19 @@ class _OhneSicherung implements AutoBackupTrigger {
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
+}
+
+/// Statt Vorschau und Gedächtnis des Druckfensters — die gibt es im Test
+/// nicht.
+class _Druck extends DruckSystem {
+  const _Druck() : super(null);
+
+  @override
+  Widget vorschau(
+    BuildContext context,
+    DruckErgebnis ergebnis,
+    LayoutCallback bauen,
+    String dateiname,
+  ) =>
+      Center(child: Text('Vorschau: ${ergebnis.beschreibung}'));
 }

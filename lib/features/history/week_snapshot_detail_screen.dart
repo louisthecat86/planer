@@ -6,14 +6,17 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/week_snapshot_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
+import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
+import 'wochenauswertung_druck.dart';
 
 const _wkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 
@@ -81,6 +84,27 @@ class _WeekSnapshotDetailScreenState
     }
   }
 
+  /// Öffnet das Druckfenster — mit der Notiz, wie sie gerade im Feld
+  /// steht, auch ungespeichert.
+  Future<void> _drucken(WeekSnapshot snap) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await druckFensterOeffnen(
+        context,
+        wochenauswertungDruckAuftrag(snap, notiz: _notiz.text),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Auswertung ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   void dispose() {
     _notiz.dispose();
@@ -113,6 +137,13 @@ class _WeekSnapshotDetailScreenState
         ),
         actions: [
           if (snap != null && daten != null) ...[
+            IconButton(
+              key: const ValueKey('auswertung-drucken'),
+              onPressed: () => _drucken(snap),
+              icon: const Icon(Icons.print),
+              tooltip: 'Auswertung drucken',
+            ),
+            const SizedBox(width: 4),
             if (schmal)
               IconButton(
                 onPressed: hatPlan ? zeigePlan : null,

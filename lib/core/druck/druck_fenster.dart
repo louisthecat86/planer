@@ -12,6 +12,7 @@ import '../providers/database_provider.dart';
 import '../theme/app_stil.dart';
 import '../ui/bausteine.dart';
 import '../utils/fehler_text.dart';
+import '../utils/format.dart';
 import 'druck_layout.dart';
 import 'druck_optionen.dart';
 import 'druck_satz.dart';
@@ -97,6 +98,77 @@ class DruckSystem {
     await File(ziel).writeAsBytes(ergebnis.bytes, flush: true);
     return ziel;
   }
+}
+
+/// Das Feld einer [DruckZahl]: Was gilt, geht sofort an das Fenster. Was
+/// nicht gilt, steht rot darunter — gesetzt bleibt der letzte gültige
+/// Wert.
+class _ZahlFeld extends StatefulWidget {
+  const _ZahlFeld({
+    super.key,
+    required this.option,
+    required this.wert,
+    required this.onWert,
+  });
+
+  final DruckZahl option;
+  final double wert;
+  final ValueChanged<double> onWert;
+
+  @override
+  State<_ZahlFeld> createState() => _ZahlFeldState();
+}
+
+class _ZahlFeldState extends State<_ZahlFeld> {
+  late final TextEditingController _text =
+      TextEditingController(text: Format.eingabe(widget.wert));
+  String? _fehler;
+
+  @override
+  void didUpdateWidget(_ZahlFeld alt) {
+    super.didUpdateWidget(alt);
+    // Von außen geändert — etwa über „Zurücksetzen": Das Feld zeigt den
+    // neuen Wert, wenn es nicht schon ihn zeigt.
+    if (alt.wert == widget.wert) return;
+    final gezeigt = Format.lies(_text.text);
+    if (gezeigt == null || (gezeigt - widget.wert).abs() > 1e-9) {
+      _text.text = Format.eingabe(widget.wert);
+      _fehler = null;
+    }
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  void _geaendert(String text) {
+    final o = widget.option;
+    final einheit = o.einheit == null ? '' : ' ${o.einheit}';
+    final w = Format.lies(text);
+    final fehler = w == null
+        ? 'Bitte eine Zahl eingeben.'
+        : w < o.min
+            ? 'Mindestens ${Format.eingabe(o.min)}$einheit.'
+            : w > o.max
+                ? 'Höchstens ${Format.eingabe(o.max)}$einheit.'
+                : null;
+    setState(() => _fehler = fehler);
+    if (fehler == null && w != null) widget.onWert(w);
+  }
+
+  @override
+  Widget build(BuildContext context) => TextField(
+        controller: _text,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          isDense: true,
+          suffixText: widget.option.einheit,
+          errorText: _fehler,
+        ),
+        onChanged: _geaendert,
+      );
 }
 
 final druckSystemProvider = Provider<DruckSystem>(
@@ -454,6 +526,7 @@ class _DruckFensterState extends ConsumerState<DruckFenster> {
           DruckSchalter() => _schalter(o, wahl),
           DruckWahlEins() => _wahlEins(theme, o, wahl),
           DruckWahlMehrere() => _wahlMehrere(theme, o, wahl),
+          DruckZahl() => _zahl(theme, o, wahl),
         },
       );
     }
@@ -541,6 +614,22 @@ class _DruckFensterState extends ConsumerState<DruckFenster> {
       ],
     );
   }
+
+  Widget _zahl(ThemeData theme, DruckZahl o, DruckWahl wahl) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _titel(theme, o.titel, o.hinweis),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, bottom: 4),
+            child: _ZahlFeld(
+              key: ValueKey('druck-zahl-${o.schluessel}'),
+              option: o,
+              wert: wahl.zahl(o.schluessel),
+              onWert: (w) => _setze(o.schluessel, w),
+            ),
+          ),
+        ],
+      );
 
   /// Eine farbige Marke wie die der Abteilungen.
   Widget _marke(DruckWert w) => Container(

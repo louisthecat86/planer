@@ -78,6 +78,24 @@ Standard. Strg+P druckt.
     Bemerkung —, welche Tage und Abteilungen, die Tage untereinander oder
     jeder auf eigenem Blatt zum Aushängen, was geplant ist, leere Zeilen
     zum Nachtragen.
+  - **Archivierter Wochenplan** (Wochen-Historie, Wochenplan einer
+    archivierten Woche): der Plan, wie er beim Archivieren stand — mit
+    „Archiv" und dem Stand in Kopf und Fuß, damit er nicht für den
+    aktuellen gehalten wird; Übersicht oder je Abteilung ein Blatt, welche
+    Abteilungen und Tage, sonstige Aufgaben, Erledigtes.
+  - **Wochenauswertung** (Auswertung einer archivierten Woche):
+    Kennzahlen, Auslastung je Abteilung gegen die Kapazität beim
+    Archivieren, die Aufträge Tag für Tag (auf Wunsch mit ihren Notizen),
+    Rüst-, Reinigungs- und sonstige Zeiten einzeln, die Erkenntnisse — so,
+    wie sie gerade im Feld stehen —, welche Abteilungen.
+  - **Wochen im Überblick** (Wochen-Historie): je archivierte Woche eine
+    Zeile mit Aufträgen, Menge, Belegung und Auslastung, auf Wunsch je
+    Abteilung, dazu die Erkenntnisse; der Monat im Kalender, die letzten
+    4, 13 oder 52 Wochen oder alle.
+  - **Statistik**: der Zeitraum der Seite, welche Teile, alle Abteilungen
+    oder eine (vorgewählt: die der Seite), die Verläufe je Woche oder Monat
+    als Tabellen, die Erklärungen, jeder Teil auf einer neuen Seite. Statt
+    der Diagramme stehen Tabellen mit Balken auf dem Blatt.
   - **Auftragsbestand**: nach Artikel (mit Versandtagen, Aufträgen,
     Vormerkungen und Produktionen), nach Versandtag oder nach Kunde; nur
     mit Handlungsbedarf, alles nicht Gedeckte oder alles; Versandtage bis
@@ -103,11 +121,35 @@ Standard. Strg+P druckt.
     Nährwerttabelle, Platzhalter, was noch offen ist.
   - **Projektbericht**: Kapitel, Steckbrief, Inhaltsverzeichnis, Verlauf als
     Zeitstrahl und im Einzelnen, Kapitel auf neuen Seiten oder fortlaufend.
+  - **Rezepturblatt** (Rezeptur, Knopf neben „Mehr"): ein Stand mit Mengen
+    wie in der Rezeptur, **umgerechnet auf eine Ansatzgröße oder ein
+    Endgewicht** (in kg einzugeben; der Verlust ist eingerechnet), nur mit
+    Anteilen oder ganz ohne Mengen — etwa zum Weitergeben. Dazu Kennzahlen,
+    Beschreibung und Grund des Stands, die Unterrezepturen mit ihren
+    Zutaten (auf die eingesetzte Menge umgerechnet, auch verschachtelt),
+    Zutatenverzeichnis, Nährwerte wie auf dem Etikett, Allergene und
+    Hilfsstoffe, Fleisch nach LMIV, Hinweise der Berechnung. Für die
+    Produktion: je Zutat ein Kästchen mit Soll, Ist und Rohstoff-Charge,
+    Felder für Datum, Charge, Ansatz und Kürzel. Ein Entwurf ist als
+    Entwurf gekennzeichnet.
+  - **Stände im Vergleich** (Rezeptur, „Mehr" oder im Vergleich zweier
+    Stände): zwei bis acht Stände nebeneinander — Mengen in kg oder als
+    Anteil, Kennzahlen und Nährwerte, was anders ist als im Stand davor
+    fett, in Sätzen, was sich geändert hat, Bezeichnung und Grund jedes
+    Stands, auf Wunsch das Zutatenverzeichnis.
+  - **Projektliste** (Projekte): Status wie die Liste oder alle, die Suche
+    der Liste, zuletzt bewegt zuerst, nach Name oder je Kunde, Muster der
+    Gesamtprojekte einzeln, was als Nächstes kommt und was im Verlauf offen
+    (rot: überfällig) ist, die Produktidee.
+  - **Zutaten** (Katalog): alle, nur Fleisch, nur mit Allergenen oder nur
+    die ohne Nährwerte, nach Name oder nach Art (Fleisch je Tierart,
+    Wasser, übrige), Nährwerte je 100 g als Spalten, Etikett und
+    Unterzutaten; mit der Suche der Liste.
 
 Der Satz (`lib/core/druck/`) legt jedes Blatt auf eine gedachte, größere
 Seite und verkleinert beim Zeichnen — so bricht der Text über die volle
 Breite um, und Links und Lesezeichen im PDF stimmen auch verkleinert. Die
-Listen der Produktion teilen sich Kopf, Fuß, Tabellen und Leisten
+Listen teilen sich Kopf, Fuß, Tabellen und Leisten
 (`druck_bausteine.dart`): schwarz und grau, Farbe nur als Kante oder Punkt
 neben dem Text.
 

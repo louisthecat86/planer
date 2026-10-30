@@ -9,6 +9,7 @@ import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import 'rezeptur_drucken.dart';
 import 'stand_vergleich.dart';
 
 export 'stand_vergleich.dart' show VergleichsZeile, vergleicheZeilen;
@@ -94,6 +95,19 @@ class _VersionsVergleichDialogState
               ),
       ),
       actions: [
+        TextButton.icon(
+          key: const ValueKey('vergleich-drucken'),
+          onPressed: widget.versionen.isEmpty
+              ? null
+              : () => standvergleichDrucken(
+                    context,
+                    ref,
+                    widget.versionen.first.rezepturId,
+                    vorwahl: {_a, _b},
+                  ),
+          icon: const Icon(Icons.print_outlined, size: 18),
+          label: const Text('Drucken…'),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Schließen'),

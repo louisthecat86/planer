@@ -78,11 +78,15 @@ class BoardPrintService {
   /// Raster wie im Board: je Anlage eine Zeile, darunter die sonstigen
   /// Aufgaben der Abteilung, die Tage als Spalten. Je Auftrag
   /// Artikelnummer, Bezeichnung und Menge — bewusst ohne Zeiten.
+  ///
+  /// [archiviertAm]: ein Plan aus dem Archiv — Kopf und Fuß sagen das,
+  /// damit das Blatt nicht für den aktuellen Plan gehalten wird.
   static DruckDokument wochenDruck(
     WeekBoard board, {
     required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
     PlanDruckInhalt inhalt = const PlanDruckInhalt(),
     DateTime? gedrucktAm,
+    DateTime? archiviertAm,
   }) {
     final wochentage = inhalt.wochentage;
     final tage = [
@@ -101,10 +105,20 @@ class BoardPrintService {
     }
     final abteilungen = _auswahl(gruppen.keys, inhalt.abteilungen);
 
-    final plan = _WochenPlan(board, tage, aufgaben, inhalt, gedruckt);
+    final plan = _WochenPlan(
+      board,
+      tage,
+      aufgaben,
+      inhalt,
+      gedruckt,
+      archiviertAm: archiviertAm,
+    );
+    final titel = archiviertAm == null
+        ? 'Wochenplan KW $kw'
+        : 'Wochenplan KW $kw Archiv';
     return DruckDokument(
-      titel: 'Wochenplan KW $kw',
-      dateiname: _dateiname('Wochenplan KW $kw', abteilungen, inhalt),
+      titel: titel,
+      dateiname: _dateiname(titel, abteilungen, inhalt),
       blaetter: inhalt.einzeln
           ? [
               for (final abt in abteilungen)
@@ -807,9 +821,19 @@ class BoardPrintService {
 
 /// Ein Wochenplan beim Setzen: was in jedes Blatt gehört.
 class _WochenPlan {
-  _WochenPlan(this.board, this.tage, this.aufgaben, this.inhalt, this.gedruckt);
+  _WochenPlan(
+    this.board,
+    this.tage,
+    this.aufgaben,
+    this.inhalt,
+    this.gedruckt, {
+    this.archiviertAm,
+  });
 
   final WeekBoard board;
+
+  /// Der Plan stammt aus dem Archiv — eingefroren zu dieser Zeit.
+  final DateTime? archiviertAm;
 
   /// Die gedruckten Tage.
   final List<DateTime> tage;
@@ -850,9 +874,15 @@ class _WochenPlan {
             children: [
               BoardPrintService._kopf(
                 titel: abteilung?.anzeigeName ?? 'Produktionsplan',
-                zeile: abteilung == null
-                    ? 'KW $kw · $zeitraum'
-                    : 'Wochenplan KW $kw · $zeitraum',
+                zeile: [
+                  if (abteilung == null)
+                    'KW $kw · $zeitraum'
+                  else
+                    'Wochenplan KW $kw · $zeitraum',
+                  if (archiviertAm case final am?)
+                    'Archiv: Stand ${Format.datum(am)}, '
+                        '${Format.uhrzeit(am)}',
+                ].join(' · '),
                 abteilung: abteilung,
                 gedruckt: gedruckt,
               ),
@@ -865,9 +895,13 @@ class _WochenPlan {
             ],
           ),
           fuss: (ctx) => BoardPrintService._fuss(
-            abteilung == null
-                ? 'Produktionsplan KW $kw'
-                : '${abteilung.anzeigeName} · Wochenplan KW $kw',
+            [
+              if (abteilung == null)
+                'Produktionsplan KW $kw'
+              else
+                '${abteilung.anzeigeName} · Wochenplan KW $kw',
+              if (archiviertAm != null) 'Archiv',
+            ].join(' · '),
             r.seitenText(ctx),
           ),
           inhalt: (ctx) => zeilen.isEmpty

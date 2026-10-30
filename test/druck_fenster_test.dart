@@ -210,6 +210,68 @@ void main() {
     expect(gebaut.last.layout, const DruckLayout());
   });
 
+  testWidgets('eine Zahl: was gilt, setzt neu — sonst bleibt der Wert',
+      (tester) async {
+    final gebaut = <DruckWahl>[];
+    final mitZahl = DruckAuftrag(
+      art: 'probe-zahl',
+      titel: 'Probe drucken',
+      optionen: const [
+        DruckZahl(
+          schluessel: 'menge',
+          titel: 'Ansatzgröße',
+          standard: 100,
+          einheit: 'kg',
+          min: 1,
+          max: 1000,
+        ),
+      ],
+      bauen: (wahl) {
+        gebaut.add(wahl);
+        return DruckDokument(
+          dateiname: 'Probe',
+          blaetter: [
+            DruckBlatt(
+              bauen: (_) => DruckSeiten(
+                inhalt: (_) => [pw.Text('${wahl.zahl('menge')} kg')],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+    await oeffne(tester, mitZahl);
+    expect(gebaut.last.zahl('menge'), 100);
+    final feld = find.byKey(const ValueKey('druck-zahl-menge'));
+    expect(feld, findsOneWidget);
+    String gezeigt() => tester
+        .widget<TextField>(
+          find.descendant(of: feld, matching: find.byType(TextField)),
+        )
+        .controller!
+        .text;
+    expect(gezeigt(), '100');
+
+    await tester.enterText(feld, '250,5');
+    await warte(tester);
+    expect(gebaut.last.zahl('menge'), 250.5);
+
+    await tester.enterText(feld, 'viel');
+    await warte(tester);
+    expect(find.text('Bitte eine Zahl eingeben.'), findsOneWidget);
+    expect(gebaut.last.zahl('menge'), 250.5);
+
+    await tester.enterText(feld, '5000');
+    await warte(tester);
+    expect(find.text('Höchstens 1000 kg.'), findsOneWidget);
+    expect(gebaut.last.zahl('menge'), 250.5);
+
+    await tester.tap(find.text('Zurücksetzen'));
+    await warte(tester);
+    expect(gebaut.last.zahl('menge'), 100);
+    expect(gezeigt(), '100');
+  });
+
   testWidgets('Abbrechen druckt nichts und merkt nichts', (tester) async {
     final gebaut = <DruckWahl>[];
     final ergebnis = <bool>[];

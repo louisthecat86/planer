@@ -46,6 +46,31 @@ enum ProjektStatus {
   }
 }
 
+/// Welche Projekte die Projektliste zeigt — auf dem Schirm und im
+/// Ausdruck.
+enum ProjektFilter {
+  aktiv('Aktiv'),
+  entwicklung('In Entwicklung'),
+  validierung('Validierung'),
+  produktion('In Produktion'),
+  eingestellt('Nicht weiter verfolgt'),
+  archiv('Archiv');
+
+  const ProjektFilter(this.label);
+
+  final String label;
+
+  /// „Aktiv" sind alle, die nicht ruhen.
+  bool passt(ProjektStatus s) => switch (this) {
+        ProjektFilter.aktiv => !s.ruht,
+        ProjektFilter.entwicklung => s == ProjektStatus.entwicklung,
+        ProjektFilter.validierung => s == ProjektStatus.validierung,
+        ProjektFilter.produktion => s == ProjektStatus.produktion,
+        ProjektFilter.eingestellt => s == ProjektStatus.eingestellt,
+        ProjektFilter.archiv => s == ProjektStatus.archiviert,
+      };
+}
+
 /// Art eines Eintrags im Verlauf.
 enum EintragArt {
   meilenstein('meilenstein', 'Meilenstein', Icons.flag_outlined),

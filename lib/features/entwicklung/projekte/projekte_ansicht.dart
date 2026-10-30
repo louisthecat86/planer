@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/database/database.dart';
+import '../../../core/druck/druck_fenster.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/ablage.dart';
@@ -22,30 +23,7 @@ import 'gesamtprojekt_screen.dart' show oeffneGesamtprojekt;
 import 'projekt_checkliste.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
-
-/// Welche Projekte die Liste zeigt.
-enum ProjektFilter {
-  aktiv('Aktiv'),
-  entwicklung('In Entwicklung'),
-  validierung('Validierung'),
-  produktion('In Produktion'),
-  eingestellt('Nicht weiter verfolgt'),
-  archiv('Archiv');
-
-  const ProjektFilter(this.label);
-
-  final String label;
-
-  /// „Aktiv" sind alle, die nicht ruhen.
-  bool passt(ProjektStatus s) => switch (this) {
-        ProjektFilter.aktiv => !s.ruht,
-        ProjektFilter.entwicklung => s == ProjektStatus.entwicklung,
-        ProjektFilter.validierung => s == ProjektStatus.validierung,
-        ProjektFilter.produktion => s == ProjektStatus.produktion,
-        ProjektFilter.eingestellt => s == ProjektStatus.eingestellt,
-        ProjektFilter.archiv => s == ProjektStatus.archiviert,
-      };
-}
+import 'projektliste_druck.dart';
 
 /// Die Farbe eines Status.
 StatusArt projektStatusArt(ProjektStatus s) => switch (s) {
@@ -96,6 +74,9 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
   final _suche = TextEditingController();
   String _text = '';
   ProjektFilter _filter = ProjektFilter.aktiv;
+
+  /// Ein Doppelklick öffnete sonst zwei Druckfenster.
+  bool _druckLaeuft = false;
 
   @override
   void dispose() {
@@ -160,6 +141,45 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
     );
     if (neu == null || !mounted) return;
     await oeffneAngelegt(context, neu);
+  }
+
+  /// Öffnet das Druckfenster — vorgewählt ist, was die Liste zeigt:
+  /// Filter und Suche.
+  Future<void> _drucken() async {
+    if (_druckLaeuft) return;
+    _druckLaeuft = true;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final projekte = await ref.read(projekteProvider.future);
+      final gesamtprojekte = await ref.read(gesamtprojekteProvider.future);
+      final eintraege = await ref.read(alleEintraegeProvider.future);
+      if (!mounted) return;
+      await druckFensterOeffnen(
+        context,
+        projektlisteDruckAuftrag(
+          ProjektlisteDaten(
+            projekte: projekte,
+            gesamtprojekte: gesamtprojekte,
+            checklisten: ref.read(projektChecklistenProvider) ??
+                const <String, ProjektCheckStand>{},
+            offen: offeneJeProjekt(eintraege, heute: DateTime.now()),
+          ),
+          filter: _filter,
+          suche: _text,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Projektliste ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    } finally {
+      _druckLaeuft = false;
+    }
   }
 
   Future<void> _mailWaehlen() async {
@@ -298,6 +318,13 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                       ),
                     ),
                     const SizedBox(width: 12),
+                    IconButton.outlined(
+                      key: const ValueKey('projekte-drucken'),
+                      tooltip: 'Projektliste drucken',
+                      onPressed: alle.isEmpty ? null : _drucken,
+                      icon: const Icon(Icons.print_outlined, size: 18),
+                    ),
+                    const SizedBox(width: 8),
                     // Schmal nur das Symbol.
                     if (MediaQuery.sizeOf(context).width < 760)
                       IconButton.outlined(

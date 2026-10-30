@@ -73,6 +73,54 @@ String druckUmfangText(DruckUmfang? u) {
   ].join(' · ');
 }
 
+/// Die Abteilungen zur Auswahl — mit dem, was jede zu tun hat.
+List<DruckWert> _abteilungsWerte(Map<Abteilung, DruckUmfang> umfang) => [
+      for (final abt in Abteilung.values)
+        DruckWert(
+          abt.dbValue,
+          abt.anzeigeName,
+          hinweis: druckUmfangText(umfang[abt]),
+          farbe: abt.farbwert,
+          kuerzel: abt.kurzcode,
+        ),
+    ];
+
+/// Vorgeschlagen: alle mit Plan — ist nirgends etwas geplant, alle.
+Set<String> _vorschlag(Map<Abteilung, DruckUmfang> umfang) {
+  final mitPlan = {
+    for (final abt in Abteilung.values)
+      if (druckUmfangText(umfang[abt]) != 'nichts geplant') abt.dbValue,
+  };
+  return mitPlan.isNotEmpty
+      ? mitPlan
+      : {for (final abt in Abteilung.values) abt.dbValue};
+}
+
+/// Die gewählten Abteilungen in der Reihenfolge der App — ohne Wahl wirft
+/// es [DruckNichtsGewaehlt].
+Set<Abteilung> _gewaehlteAbteilungen(Set<String> gewaehlt) {
+  if (gewaehlt.isEmpty) {
+    throw const DruckNichtsGewaehlt('Wähle mindestens eine Abteilung.');
+  }
+  return {
+    for (final abt in Abteilung.values)
+      if (gewaehlt.contains(abt.dbValue)) abt,
+  };
+}
+
+/// Die gewählten Wochentage (1 = Montag) — ohne Wahl wirft es
+/// [DruckNichtsGewaehlt].
+Set<int> _gewaehlteTage(Set<String> gewaehlt) {
+  final tage = {
+    for (final t in gewaehlt)
+      if (int.tryParse(t) case final nr?) nr,
+  };
+  if (tage.isEmpty) {
+    throw const DruckNichtsGewaehlt('Wähle mindestens einen Tag.');
+  }
+  return tage;
+}
+
 /// Schlüssel der Wahl im Druckfenster.
 abstract final class PlanDruckWahl {
   static const zeitraum = 'zeitraum';
@@ -103,28 +151,6 @@ DruckAuftrag planDruckAuftrag({
   final kw = isoKalenderwoche(woche.wochenStart);
   final umfangWoche = druckUmfangWoche(woche, aufgaben);
   final umfangTag = druckUmfangTag(tag, aufgaben);
-
-  List<DruckWert> abteilungen(Map<Abteilung, DruckUmfang> umfang) => [
-        for (final abt in Abteilung.values)
-          DruckWert(
-            abt.dbValue,
-            abt.anzeigeName,
-            hinweis: druckUmfangText(umfang[abt]),
-            farbe: abt.farbwert,
-            kuerzel: abt.kurzcode,
-          ),
-      ];
-
-  // Vorgeschlagen: alle mit Plan — ist nirgends etwas geplant, alle.
-  Set<String> vorschlag(Map<Abteilung, DruckUmfang> umfang) {
-    final mitPlan = {
-      for (final abt in Abteilung.values)
-        if (druckUmfangText(umfang[abt]) != 'nichts geplant') abt.dbValue,
-    };
-    return mitPlan.isNotEmpty
-        ? mitPlan
-        : {for (final abt in Abteilung.values) abt.dbValue};
-  }
 
   bool istWoche(DruckWahl w) =>
       w.eins(PlanDruckWahl.zeitraum) != DruckZeitraum.tag.name;
@@ -173,16 +199,16 @@ DruckAuftrag planDruckAuftrag({
       DruckWahlMehrere(
         schluessel: PlanDruckWahl.abteilungenWoche,
         titel: 'Abteilungen',
-        werte: abteilungen(umfangWoche),
-        standard: vorschlag(umfangWoche),
+        werte: _abteilungsWerte(umfangWoche),
+        standard: _vorschlag(umfangWoche),
         merken: false,
         sichtbar: istWoche,
       ),
       DruckWahlMehrere(
         schluessel: PlanDruckWahl.abteilungenTag,
         titel: 'Abteilungen',
-        werte: abteilungen(umfangTag),
-        standard: vorschlag(umfangTag),
+        werte: _abteilungsWerte(umfangTag),
+        standard: _vorschlag(umfangTag),
         merken: false,
         sichtbar: (w) => !istWoche(w),
       ),
@@ -227,28 +253,18 @@ DruckAuftrag planDruckAuftrag({
     ],
     bauen: (wahl) {
       final alsWoche = istWoche(wahl);
-      final gewaehlt = wahl.mehrere(
-        alsWoche
-            ? PlanDruckWahl.abteilungenWoche
-            : PlanDruckWahl.abteilungenTag,
+      final abteilungen = _gewaehlteAbteilungen(
+        wahl.mehrere(
+          alsWoche
+              ? PlanDruckWahl.abteilungenWoche
+              : PlanDruckWahl.abteilungenTag,
+        ),
       );
-      if (gewaehlt.isEmpty) {
-        throw const DruckNichtsGewaehlt('Wähle mindestens eine Abteilung.');
-      }
-      final wochentage = {
-        for (final t in wahl.mehrere(PlanDruckWahl.tage))
-          if (int.tryParse(t) case final nr?) nr,
-      };
-      if (alsWoche && wochentage.isEmpty) {
-        throw const DruckNichtsGewaehlt('Wähle mindestens einen Tag.');
-      }
       final inhalt = PlanDruckInhalt(
-        abteilungen: {
-          for (final abt in Abteilung.values)
-            if (gewaehlt.contains(abt.dbValue)) abt,
-        },
+        abteilungen: abteilungen,
         einzeln: wahl.eins(PlanDruckWahl.umfang) == 'einzeln',
-        wochentage: alsWoche ? wochentage : null,
+        wochentage:
+            alsWoche ? _gewaehlteTage(wahl.mehrere(PlanDruckWahl.tage)) : null,
         aufgaben: wahl.an(PlanDruckWahl.aufgaben),
         erledigte: wahl.an(PlanDruckWahl.erledigte),
         kaestchen: wahl.an(PlanDruckWahl.kaestchen),
@@ -269,5 +285,100 @@ DruckAuftrag planDruckAuftrag({
               gedrucktAm: gedrucktAm,
             );
     },
+  );
+}
+
+/// Der Druck eines archivierten Wochenplans für das Druckfenster: die
+/// Woche, wie sie beim Archivieren ([stand]) im Board stand. Kopf und Fuß
+/// des Blatts sagen, dass es das Archiv ist. Kästchen und leere Anlagen
+/// sind aus — abgehakt wird auf diesem Blatt nichts mehr.
+DruckAuftrag archivPlanDruckAuftrag({
+  required WeekBoard woche,
+  required Map<AufgabenZelle, List<Tagesaufgabe>> aufgaben,
+  required DateTime stand,
+  DateTime? gedrucktAm,
+}) {
+  final kw = isoKalenderwoche(woche.wochenStart);
+  final umfang = druckUmfangWoche(woche, aufgaben);
+  return DruckAuftrag(
+    art: 'archivplan',
+    titel: 'Archivierten Wochenplan drucken',
+    untertitel: 'KW $kw · Stand beim Archivieren ${Format.datum(stand)}, '
+        '${Format.uhrzeit(stand)}',
+    optionen: [
+      const DruckWahlEins(
+        schluessel: PlanDruckWahl.umfang,
+        titel: 'Aufteilung',
+        werte: [
+          DruckWert(
+            'uebersicht',
+            'Gesamte Übersicht',
+            hinweis: 'Alle gewählten Abteilungen auf einem Plan',
+          ),
+          DruckWert(
+            'einzeln',
+            'Einzelne Abteilungen',
+            hinweis: 'Jede auf einem eigenen Blatt',
+          ),
+        ],
+        standard: 'uebersicht',
+      ),
+      DruckWahlMehrere(
+        schluessel: PlanDruckWahl.abteilungenWoche,
+        titel: 'Abteilungen',
+        werte: _abteilungsWerte(umfang),
+        standard: _vorschlag(umfang),
+        merken: false,
+      ),
+      DruckWahlMehrere(
+        schluessel: PlanDruckWahl.tage,
+        titel: 'Tage',
+        werte: [
+          for (final t in woche.tage)
+            DruckWert('${t.weekday}', Format.tagKurz(t)),
+        ],
+        standard: {for (final t in woche.tage) '${t.weekday}'},
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.aufgaben,
+        titel: 'Sonstige Aufgaben',
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.erledigte,
+        titel: 'Erledigtes',
+        hinweis: 'Grau, mit Haken — wie beim Archivieren',
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.kaestchen,
+        titel: 'Kästchen zum Abhaken',
+        standard: false,
+        gruppe: 'Auf dem Plan',
+      ),
+      const DruckSchalter(
+        schluessel: PlanDruckWahl.leere,
+        titel: 'Anlagen ohne Aufträge',
+        standard: false,
+        gruppe: 'Auf dem Plan',
+      ),
+    ],
+    bauen: (wahl) => BoardPrintService.wochenDruck(
+      woche,
+      aufgaben: aufgaben,
+      gedrucktAm: gedrucktAm,
+      archiviertAm: stand,
+      inhalt: PlanDruckInhalt(
+        abteilungen: _gewaehlteAbteilungen(
+          wahl.mehrere(PlanDruckWahl.abteilungenWoche),
+        ),
+        einzeln: wahl.eins(PlanDruckWahl.umfang) == 'einzeln',
+        wochentage: _gewaehlteTage(wahl.mehrere(PlanDruckWahl.tage)),
+        aufgaben: wahl.an(PlanDruckWahl.aufgaben),
+        erledigte: wahl.an(PlanDruckWahl.erledigte),
+        kaestchen: wahl.an(PlanDruckWahl.kaestchen),
+        leereSpuren: wahl.an(PlanDruckWahl.leere),
+      ),
+    ),
   );
 }

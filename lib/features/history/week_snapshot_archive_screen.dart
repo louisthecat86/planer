@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/tagesaufgaben_service.dart';
@@ -15,6 +16,7 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
+import 'wochenuebersicht_druck.dart';
 // Dasselbe Datum wie im Board: Die Auswahl zum Archivieren beginnt bei der
 // Woche, die dort gerade zu sehen ist. Vorher hatte die Startseite eine
 // eigene Kopie dieses Providers, die nie jemand setzte.
@@ -180,9 +182,34 @@ class _WeekSnapshotArchiveScreenState
     ref.invalidate(weekSnapshotsProvider);
   }
 
+  /// Öffnet das Druckfenster für den Überblick — vorgewählt der Monat,
+  /// den der Kalender zeigt.
+  Future<void> _drucken(List<WeekSnapshot> snaps) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await druckFensterOeffnen(
+        context,
+        wochenuebersichtDruckAuftrag(
+          snaps,
+          monat: _kalender ? _monat : null,
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Der Überblick ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final snapsAsync = ref.watch(weekSnapshotsProvider);
+    final snaps = snapsAsync.valueOrNull ?? const <WeekSnapshot>[];
     // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
     final schmal = MediaQuery.sizeOf(context).width < 720;
     // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau, ein weißer
@@ -197,6 +224,13 @@ class _WeekSnapshotArchiveScreenState
       appBar: AppBar(
         title: const Text('Wochen-Historie'),
         actions: [
+          IconButton(
+            key: const ValueKey('historie-drucken'),
+            onPressed: snaps.isEmpty ? null : () => _drucken(snaps),
+            icon: const Icon(Icons.print),
+            tooltip: 'Wochen im Überblick drucken',
+          ),
+          const SizedBox(width: 4),
           // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
           // vorher ein schwebender Knopf, der unten die letzte Woche
           // verdeckte.

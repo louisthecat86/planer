@@ -15,6 +15,7 @@ import '../entwicklung_format.dart';
 import '../etikett/etikett_dialog.dart';
 import '../rechenkern/rechen_modell.dart';
 import 'fleischanteil_dialog.dart';
+import 'rezeptur_drucken.dart';
 import 'rezeptur_ergebnis_ansicht.dart';
 import 'rezepturen_ansicht.dart';
 import 'stand_abschliessen_dialog.dart';
@@ -222,6 +223,24 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
     );
   }
 
+  /// Druckt die Stände nebeneinander — vorgewählt der gewählte und der
+  /// davor.
+  Future<void> _staendeDrucken(
+    List<RezepturVersion> versionen,
+    RezepturVersion aktuell,
+  ) {
+    // Die Stände stehen neuester zuerst — der erste mit kleinerer Nummer
+    // ist der davor.
+    final davor =
+        versionen.where((v) => v.nummer < aktuell.nummer).firstOrNull;
+    return standvergleichDrucken(
+      context,
+      ref,
+      widget.rezepturId,
+      vorwahl: {aktuell.id, if (davor != null) davor.id},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rezeptur = ref.watch(rezepturProvider(widget.rezepturId));
@@ -341,6 +360,8 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
           onNeu: () => _neuerStand(aktuell),
           onAbschliessen: () => _abschliessen(aktuell),
           onVergleichen: () => _vergleichen(liste, aktuell),
+          onDrucken: () => rezepturblattDrucken(context, ref, aktuell.id),
+          onStaendeDrucken: () => _staendeDrucken(liste, aktuell),
           onEtikett: () => etikettZeigen(context, aktuell.id),
           onFleisch: () => _fleischanteil(aktuell),
           onLoeschen: liste.length > 1 &&
@@ -419,6 +440,8 @@ class _StandLeiste extends StatelessWidget {
     required this.onAbschliessen,
     required this.onVergleichen,
     required this.onLoeschen,
+    this.onDrucken,
+    this.onStaendeDrucken,
     this.onEtikett,
     this.onFleisch,
   });
@@ -433,6 +456,12 @@ class _StandLeiste extends StatelessWidget {
   final VoidCallback onAbschliessen;
   final VoidCallback onVergleichen;
   final VoidCallback? onLoeschen;
+
+  /// Das Rezepturblatt des Stands — null: kein Knopf.
+  final VoidCallback? onDrucken;
+
+  /// Die Stände nebeneinander drucken — null: kein Eintrag.
+  final VoidCallback? onStaendeDrucken;
 
   /// Das Etikett des Stands — null: kein Eintrag.
   final VoidCallback? onEtikett;
@@ -480,6 +509,8 @@ class _StandLeiste extends StatelessWidget {
     final etikett = onEtikett;
     final fleisch = onFleisch;
     final loeschen = onLoeschen;
+    final drucken = onDrucken;
+    final staendeDrucken = onStaendeDrucken;
     final mehr = MenueKnopf(
       key: const ValueKey('stand-mehr'),
       eintraege: [
@@ -488,6 +519,12 @@ class _StandLeiste extends StatelessWidget {
             'Mit anderem Stand vergleichen…',
             icon: Icons.compare_arrows,
             aktion: onVergleichen,
+          ),
+        if (versionen.length > 1 && staendeDrucken != null)
+          MenueEintrag(
+            'Stände nebeneinander drucken…',
+            icon: Icons.table_chart_outlined,
+            aktion: staendeDrucken,
           ),
         if (etikett != null)
           MenueEintrag(
@@ -564,6 +601,14 @@ class _StandLeiste extends StatelessWidget {
             ),
           ),
           haupt,
+          if (drucken != null)
+            IconButton(
+              key: const ValueKey('stand-drucken'),
+              tooltip: 'Rezepturblatt drucken — mit oder ohne Mengen, auf '
+                  'eine Ansatzgröße umgerechnet',
+              onPressed: drucken,
+              icon: const Icon(Icons.print_outlined),
+            ),
           mehr,
         ],
       ),

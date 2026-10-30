@@ -14,6 +14,8 @@
 /// Oberfläche prüfen.
 library;
 
+import 'dart:math' as math;
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -350,6 +352,74 @@ pw.Widget druckPunkt(PdfColor farbe, {double groesse = 5}) => pw.Container(
       width: groesse,
       height: groesse,
       decoration: pw.BoxDecoration(color: farbe, shape: pw.BoxShape.circle),
+    );
+
+/// Ein waagrechter Balken, [breite] Punkt breit: die [segmente] (Wert,
+/// Farbe) nebeneinander, gemessen an [max], dahinter der leere Rest in
+/// Hellgrau. [marke] zieht einen Strich bei diesem Wert — etwa bei 100 %.
+/// Was über [max] hinausgeht, endet am Rand.
+pw.Widget druckBalken(
+  List<(double, PdfColor)> segmente, {
+  required double max,
+  double breite = 110,
+  double hoehe = 6,
+  double? marke,
+}) =>
+    pw.CustomPaint(
+      size: PdfPoint(breite, hoehe),
+      painter: (canvas, groesse) {
+        canvas
+          ..setFillColor(PdfColors.grey200)
+          ..drawRect(0, 0, groesse.x, groesse.y)
+          ..fillPath();
+        if (!(max > 0)) return;
+        var x = 0.0;
+        for (final (wert, farbe) in segmente) {
+          if (!(wert > 0)) continue;
+          final w = math.min(groesse.x - x, wert / max * groesse.x);
+          if (w <= 0) break;
+          canvas
+            ..setFillColor(farbe)
+            ..drawRect(x, 0, w, groesse.y)
+            ..fillPath();
+          x += w;
+        }
+        final m = marke;
+        if (m != null && m > 0 && m <= max) {
+          final mx = m / max * groesse.x;
+          canvas
+            ..setStrokeColor(PdfColors.grey800)
+            ..setLineWidth(0.8)
+            ..moveTo(mx, -1.5)
+            ..lineTo(mx, groesse.y + 1.5)
+            ..strokePath();
+        }
+      },
+    );
+
+/// Ein leeres Kästchen zum Abhaken von Hand.
+pw.Widget druckKaestchen({double groesse = 8}) => pw.Container(
+      width: groesse,
+      height: groesse,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey800, width: 0.6),
+      ),
+    );
+
+/// Ein Feld zum Schreiben von Hand: klein und grau oben [titel], darunter
+/// Platz.
+pw.Widget druckSchreibfeld(String titel, {double hoehe = 34}) => pw.Container(
+      height: hoehe,
+      padding: const pw.EdgeInsets.fromLTRB(5, 3, 5, 3),
+      alignment: pw.Alignment.topLeft,
+      decoration: const pw.BoxDecoration(
+        border: pw.Border.fromBorderSide(kDruckLinie),
+      ),
+      child: pw.Text(
+        pdfText(titel),
+        maxLines: 1,
+        style: const pw.TextStyle(fontSize: 7.5, color: kDruckGrau),
+      ),
     );
 
 /// Text in einer Zelle mit einem Punkt in [farbe] davor.

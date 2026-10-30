@@ -1239,6 +1239,31 @@ ArchivKettenSchritt? _alsArchivSchritt(KettenSchritt? s) => s == null
         kw: s.kw,
       );
 
+/// Die sonstigen Aufgaben eines archivierten [plan] — so, wie der Druck
+/// des Plans sie braucht. [stand] ist der Zeitpunkt des Archivierens.
+Map<AufgabenZelle, List<Tagesaufgabe>> aufgabenAusArchiv(
+  ArchivPlan plan, {
+  required DateTime stand,
+}) {
+  final ergebnis = <AufgabenZelle, List<Tagesaufgabe>>{};
+  for (final (i, a) in plan.aufgaben.indexed) {
+    final tag = tagOhneZeit(a.datum);
+    (ergebnis[(a.abteilung, tag)] ??= []).add(
+      Tagesaufgabe(
+        id: 'archiv-aufgabe-$i',
+        datum: tag,
+        abteilung: a.abteilung,
+        inhalt: a.inhalt,
+        erledigt: a.erledigt,
+        sortierung: i,
+        createdAt: stand,
+        updatedAt: stand,
+      ),
+    );
+  }
+  return ergebnis;
+}
+
 /// Baut aus einem archivierten [plan] wieder ein [WeekBoard] — für die
 /// Ansicht „Wochenplan" im Archiv.
 ///
