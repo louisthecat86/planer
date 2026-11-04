@@ -171,33 +171,6 @@ const List<CheckPunkt> kEtikettCheckliste = [
   (schluessel: 'schutzgas', label: 'Unter Schutzatmosphäre verpackt'),
 ];
 
-/// Schlüssel der alten Suite → Schlüssel hier.
-const Map<String, String> kSuiteProjektCheckliste = {
-  'articleCreated': 'artikelAngelegt',
-  'recipeCreated': 'rezepturErstellt',
-  'labelCreated': 'etikettErstellt',
-  'nutritionCreated': 'naehrwerteErstellt',
-  'specCreated': 'spezifikationErstellt',
-  'processCreated': 'prozessErstellt',
-  'navisionCreated': 'navisionAngelegt',
-  'sensoryCreated': 'sensorikErstellt',
-};
-
-const Map<String, String> kSuiteEtikettCheckliste = {
-  'name': 'bezeichnung',
-  'ingredients': 'zutaten',
-  'allergens': 'allergene',
-  'quantity': 'quid',
-  'netWeight': 'nettofuellmenge',
-  'bestBefore': 'mhd',
-  'storage': 'lagerung',
-  'address': 'anschrift',
-  'origin': 'herkunft',
-  'instructions': 'zubereitung',
-  'nutrition': 'naehrwerte',
-  'gas': 'schutzgas',
-};
-
 /// Liest eine Checkliste aus dem JSON der Datenbank: erledigte Schlüssel.
 Set<String> checklisteAus(String? json) {
   if (json == null || json.trim().isEmpty) return <String>{};
@@ -385,26 +358,6 @@ class Sensorik {
     } on FormatException {
       return const Sensorik();
     }
-  }
-
-  /// Aus dem Format der alten Suite (englische Schlüssel, Maße
-  /// verschachtelt).
-  static Sensorik ausSuite(Object? json) {
-    if (json is! Map<String, dynamic>) return const Sensorik();
-    String t(Map<String, dynamic> m, String k) =>
-        m[k] is String ? m[k] as String : '';
-    final masse = json['dimensions'];
-    final m = masse is Map<String, dynamic> ? masse : const <String, dynamic>{};
-    return Sensorik(
-      aussehen: t(json, 'appearance'),
-      geruch: t(json, 'odor'),
-      geschmack: t(json, 'taste'),
-      konsistenz: t(json, 'texture'),
-      laenge: t(m, 'length'),
-      durchmesser: t(m, 'diameter'),
-      gewicht: t(m, 'weight'),
-      zubereitung: t(json, 'preparation'),
-    );
   }
 
   Sensorik kopie({

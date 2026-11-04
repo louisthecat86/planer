@@ -5,7 +5,6 @@ import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import 'entwicklung_auto_sperre.dart';
 import 'entwicklung_zugang.dart';
-import 'import/suite_import_dialog.dart';
 import 'projekte/datei_aktionen.dart';
 import 'projekte/projekte_ansicht.dart';
 import 'rezepturen/rezepturen_ansicht.dart';
@@ -40,7 +39,7 @@ class EntwicklungScreen extends ConsumerWidget {
             // Was man selten braucht, liegt im Menü — Sperren bleibt vorn.
             PopupMenuButton<VoidCallback>(
               key: const ValueKey('entwicklung-mehr'),
-              tooltip: 'Passwort ändern oder aus der Suite übernehmen',
+              tooltip: 'Passwort ändern',
               onSelected: (aktion) => aktion(),
               itemBuilder: (_) => [
                 PopupMenuItem(
@@ -48,13 +47,6 @@ class EntwicklungScreen extends ConsumerWidget {
                   child: const ListTile(
                     leading: Icon(Icons.password_outlined),
                     title: Text('Passwort ändern…'),
-                  ),
-                ),
-                PopupMenuItem(
-                  value: () => suiteImportStarten(context),
-                  child: const ListTile(
-                    leading: Icon(Icons.move_to_inbox_outlined),
-                    title: Text('Aus der Development-Suite übernehmen…'),
                   ),
                 ),
               ],

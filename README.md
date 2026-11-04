@@ -305,7 +305,16 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   und Hinweisen aus der Spezifikation, als Text kopieren oder als
   PDF-Entwurf.
 - **Zutaten-Katalog** mit Nährwerten, Allergenen, Tierart, Bindegewebe und
-  Unterzutaten.
+  Unterzutaten. Über „Excel" lässt er sich als Mappe speichern, dort pflegen
+  und wieder einlesen — je Zutat eine Zeile, Ja/Nein und Tierart als
+  Auswahlliste, je Allergen eine Spalte zum Ankreuzen. Eine Zeile findet ihre
+  Zutat über die ID, ohne ID über die Artikelnummer, sonst über den Namen;
+  ohne Treffer ist sie neu. Eine leere Zelle leert den Wert, eine fehlende
+  Spalte lässt ihn, gelöscht wird über die Mappe nichts. Jede Zeile trägt
+  ihren Stand beim Export: Hat sich eine Zutat seither nur in der App
+  geändert, bleibt die App; hat sie sich auf beiden Seiten geändert, fragt
+  die Vorschau je Zutat, welche Seite gilt. Geschrieben wird erst nach der
+  Vorschau, alles oder nichts. Die Mappe selbst ist nicht verschlüsselt.
 - **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil
   einer Rezeptur (nach Wahl, ihr neuester Stand) auf ein Ziel einstellen,
   Entwicklung in Zahlen.
@@ -355,8 +364,6 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Zeilen zu sechs Einträgen) mit jedem Eintrag im Einzelnen und die
   Dateien. Was fehlt, steht als Hinweis da; Kapitel ohne Inhalt beginnen
   keine eigene Seite.
-- Übernahme aus der Development-Suite (ZIP oder JSON) — im Menü oben neben
-  „Sperren", wo auch „Passwort ändern" steht.
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
 in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine

@@ -77,14 +77,14 @@ class ProzessFeld {
         if (optionen.isNotEmpty) 'optionen': optionen,
       };
 
-  static ProzessFeld ausJson(Map<String, dynamic> j, {bool suite = false}) {
+  static ProzessFeld ausJson(Map<String, dynamic> j) {
     String t(String k) => j[k] is String ? j[k] as String : '';
-    final optionen = j[suite ? 'options' : 'optionen'];
+    final optionen = j['optionen'];
     return ProzessFeld(
       id: '${j['id'] ?? ''}',
       label: t('label'),
-      wert: t(suite ? 'value' : 'wert'),
-      typ: FeldTyp.aus(t(suite ? 'type' : 'typ')),
+      wert: t('wert'),
+      typ: FeldTyp.aus(t('typ')),
       optionen: [
         if (optionen is List)
           for (final o in optionen)
@@ -120,20 +120,15 @@ class ProzessAbschnitt {
         'felder': [for (final f in felder) f.toJson()],
       };
 
-  static ProzessAbschnitt ausJson(
-    Map<String, dynamic> j, {
-    bool suite = false,
-  }) {
-    final felder = j[suite ? 'fields' : 'felder'];
+  static ProzessAbschnitt ausJson(Map<String, dynamic> j) {
+    final felder = j['felder'];
     return ProzessAbschnitt(
       id: '${j['id'] ?? ''}',
-      titel: j[suite ? 'title' : 'titel'] is String
-          ? j[suite ? 'title' : 'titel'] as String
-          : '',
+      titel: j['titel'] is String ? j['titel'] as String : '',
       felder: [
         if (felder is List)
           for (final f in felder)
-            if (f is Map<String, dynamic>) ProzessFeld.ausJson(f, suite: suite),
+            if (f is Map<String, dynamic>) ProzessFeld.ausJson(f),
       ],
     );
   }
@@ -358,11 +353,11 @@ class Prozessparameter {
   /// JSON für die Datenbank — null, wenn nichts darin steht.
   String? alsJson() => leer ? null : jsonEncode(toJson());
 
-  static Prozessparameter ausJson(Object? json, {bool suite = false}) {
+  static Prozessparameter ausJson(Object? json) {
     if (json is! Map<String, dynamic>) return const Prozessparameter();
-    final abschnitte = json[suite ? 'sections' : 'abschnitte'];
-    final schritte = suite ? null : json['schritte'];
-    final stand = json[suite ? 'updatedAt' : 'stand'];
+    final abschnitte = json['abschnitte'];
+    final schritte = json['schritte'];
+    final stand = json['stand'];
     return Prozessparameter(
       version: json['version'] is String ? json['version'] as String : '1.0',
       stand: stand is String ? DateTime.tryParse(stand) : null,
@@ -374,8 +369,7 @@ class Prozessparameter {
       abschnitte: [
         if (abschnitte is List)
           for (final a in abschnitte)
-            if (a is Map<String, dynamic>)
-              ProzessAbschnitt.ausJson(a, suite: suite),
+            if (a is Map<String, dynamic>) ProzessAbschnitt.ausJson(a),
       ],
     );
   }
@@ -443,24 +437,6 @@ class ProzessStand {
 
   static String? listeZuJson(List<ProzessStand> liste) =>
       liste.isEmpty ? null : jsonEncode([for (final s in liste) s.toJson()]);
-
-  /// Aus der Suite: processHistory mit version, date, note, settings.
-  static List<ProzessStand> ausSuite(Object? json) {
-    if (json is! List) return const [];
-    return [
-      for (final s in json)
-        if (s is Map<String, dynamic>)
-          ProzessStand(
-            version: s['version'] is String ? s['version'] as String : '',
-            datum: DateTime.tryParse(
-                  s['date'] is String ? s['date'] as String : '',
-                ) ??
-                DateTime(2000),
-            notiz: s['note'] is String ? s['note'] as String : '',
-            parameter: Prozessparameter.ausJson(s['settings'], suite: true),
-          ),
-    ];
-  }
 }
 
 /// Ob zwei Stände dieselbe Kette (und dieselben früheren Abschnitte) mit

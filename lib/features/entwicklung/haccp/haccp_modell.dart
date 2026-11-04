@@ -227,45 +227,6 @@ class Haccp {
       return const Haccp();
     }
   }
-
-  /// Aus dem Format der alten Suite (fmeaData: hazards, ccps).
-  static Haccp ausSuite(Object? json) {
-    if (json is! Map<String, dynamic>) return const Haccp();
-    String t(Map<String, dynamic> m, String k) =>
-        m[k] is String ? m[k] as String : '';
-    Gefahrenart art(Object? text) =>
-        Gefahrenart.aus(text is String ? text : null);
-    return Haccp(
-      gefahren: [
-        for (final h in (json['hazards'] as List?) ?? const [])
-          if (h is Map<String, dynamic>)
-            Gefahr(
-              id: '${h['id'] ?? ''}',
-              gefahr: t(h, 'hazard'),
-              art: art(h['category']),
-              schwere: _stufe(h['severity']),
-              wahrscheinlichkeit: _stufe(h['occurrence']),
-              massnahmen: t(h, 'measures'),
-            ),
-      ],
-      lenkungspunkte: [
-        for (final c in (json['ccps'] as List?) ?? const [])
-          if (c is Map<String, dynamic>)
-            Lenkungspunkt(
-              id: '${c['id'] ?? ''}',
-              schritt: t(c, 'step'),
-              beschreibung: t(c, 'description'),
-              art: art(c['hazardType']),
-              antworten: {
-                for (final f in const ['q1', 'q2', 'q3', 'q4'])
-                  if (c[f] is bool) 'f${f.substring(1)}': c[f] as bool,
-              },
-              ergebnis: Lenkungsart.aus(c['result'] as String?),
-              lenkung: t(c, 'controlMeasures'),
-            ),
-      ],
-    );
-  }
 }
 
 int _stufe(Object? wert) {

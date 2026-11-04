@@ -13,7 +13,6 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../freigabe/freigabe_ansicht.dart' show oeffneArtikel;
-import '../import/suite_import_dialog.dart';
 import '../mail/mail.dart';
 import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart' show dateienWaehlen, groesseText;
@@ -388,25 +387,11 @@ class _ProjekteAnsichtState extends ConsumerState<ProjekteAnsicht> {
                                       child: LeerHinweis(
                                         alle.isEmpty
                                             ? 'Noch keine Projekte. Lege das '
-                                                'erste an — oder übernimm die '
-                                                'Projekte der alten Suite.'
+                                                'erste an.'
                                             : 'Keine Treffer.',
                                         icon: alle.isEmpty
                                             ? Icons.folder_open_outlined
                                             : Icons.search_off,
-                                        aktion: alle.isEmpty
-                                            ? TextButton.icon(
-                                                onPressed: () =>
-                                                    suiteImportStarten(context),
-                                                icon: const Icon(
-                                                  Icons.move_to_inbox_outlined,
-                                                  size: 18,
-                                                ),
-                                                label: const Text(
-                                                  'Aus der Suite übernehmen',
-                                                ),
-                                              )
-                                            : null,
                                       ),
                                     )
                                   : ListView.builder(

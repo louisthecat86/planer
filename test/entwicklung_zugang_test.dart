@@ -343,15 +343,13 @@ void main() {
       await warte(tester);
       expect(offen(), findsOneWidget);
 
-      // Passwort und Übernahme aus der Suite liegen im Menü.
+      // Das Passwort ändert man über das Menü; die Übernahme aus der
+      // alten Suite gibt es nicht mehr.
       await tester.tap(find.byKey(const ValueKey('entwicklung-mehr')));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(find.text('Passwort ändern…'), findsOneWidget);
-      expect(
-        find.text('Aus der Development-Suite übernehmen…'),
-        findsOneWidget,
-      );
+      expect(find.textContaining('Suite'), findsNothing);
       await tester.tapAt(const Offset(4, 4));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));

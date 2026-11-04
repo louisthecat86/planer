@@ -9,9 +9,9 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/sheet_utils.dart';
 import '../daten/entwicklung_repository.dart';
-import '../import/suite_import_dialog.dart';
 import '../rechenkern/rechen_modell.dart';
 import 'zutat_dialog.dart';
+import 'zutaten_excel_dialog.dart';
 import 'zutatenkatalog_druck.dart';
 
 /// Der Zutaten-Katalog: Rohstoffe mit Nährwerten, Allergenen und den
@@ -123,6 +123,28 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  MenueKnopf(
+                    key: const ValueKey('zutaten-excel'),
+                    label: 'Excel',
+                    icon: Icons.table_view_outlined,
+                    eintraege: [
+                      MenueEintrag(
+                        alle.isEmpty
+                            ? 'Leere Vorlage speichern…'
+                            : 'Als Excel exportieren…',
+                        key: const ValueKey('zutaten-excel-export'),
+                        icon: Icons.file_upload_outlined,
+                        aktion: () => zutatenExportieren(context, alle),
+                      ),
+                      MenueEintrag(
+                        'Aus Excel importieren…',
+                        key: const ValueKey('zutaten-excel-import'),
+                        icon: Icons.file_download_outlined,
+                        aktion: () => zutatenImportStarten(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
                   IconButton.outlined(
                     key: const ValueKey('zutaten-drucken'),
                     tooltip: 'Zutaten drucken',
@@ -161,8 +183,8 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                                     child: LeerHinweis(
                                       alle.isEmpty
                                           ? 'Noch keine Zutaten. Lege die '
-                                              'erste an — oder übernimm den '
-                                              'Katalog der alten Suite.'
+                                              'erste an — oder lies eine '
+                                              'Liste aus Excel ein.'
                                           : 'Keine Treffer.',
                                       icon: alle.isEmpty
                                           ? Icons.egg_outlined
@@ -170,13 +192,13 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                                       aktion: alle.isEmpty
                                           ? TextButton.icon(
                                               onPressed: () =>
-                                                  suiteImportStarten(context),
+                                                  zutatenImportStarten(context),
                                               icon: const Icon(
-                                                Icons.move_to_inbox_outlined,
+                                                Icons.file_download_outlined,
                                                 size: 18,
                                               ),
                                               label: const Text(
-                                                'Aus der Suite übernehmen',
+                                                'Aus Excel importieren',
                                               ),
                                             )
                                           : null,

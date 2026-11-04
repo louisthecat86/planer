@@ -1,8 +1,6 @@
 import 'dart:collection';
-import 'dart:convert';
 import 'dart:isolate';
 
-import 'package:archive/archive.dart';
 import 'package:drift/drift.dart';
 
 import '../constants/abteilungen.dart';
@@ -11,6 +9,7 @@ import '../constants/parameter_namen.dart';
 import '../constants/product_groups.dart';
 import '../database/database.dart';
 import '../utils/fehler_text.dart';
+import '../utils/xlsx_schreiber.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Ergebnis
@@ -258,11 +257,11 @@ class StammdatenExportService {
           .putIfAbsent(name, () => def['einheit']! as String);
     }
 
-    final mappe = _Mappe();
+    final mappe = XlsxSchreiber();
 
     // ── Übersicht ─────────────────────────────────────────────────────
     final ue = mappe.blatt('Übersicht', reiter: _akzent);
-    ue.text(1, 1, 'Produktions-Stammdaten', _S.titel);
+    ue.text(1, 1, 'Produktions-Stammdaten', XlsxStil.titel);
     ue.verbinde('A1:E1');
     ue.hoehe(1, 28);
     ue.text(
@@ -270,28 +269,28 @@ class StammdatenExportService {
       1,
       'Export ${_datumZeit(stand)} · ${artikel.length} Artikel · '
       '${anlagen.length} Anlagen',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     ue.text(
       3,
       1,
       'Werte in dieser Datei ändern und sie wieder importieren — '
       'die App übernimmt sie.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     const ueKopf = ['Artikelnummer', 'Bezeichnung', 'Schritte', 'Chargen'];
     for (var i = 0; i < ueKopf.length; i++) {
-      ue.text(5, 1 + i, ueKopf[i], _S.kopf);
+      ue.text(5, 1 + i, ueKopf[i], XlsxStil.kopf);
     }
-    ue.text(5, 5, 'Blatt', _S.kopf);
+    ue.text(5, 5, 'Blatt', XlsxStil.kopf);
     var r = 6;
     for (final a in artikel) {
       final nr = a['nummer']! as String;
-      ue.text(r, 1, nr, _S.wert);
-      ue.text(r, 2, a['bezeichnung'] as String?, _S.wert);
-      ue.zahl(r, 3, (a['schritte']! as List).length, _S.wert);
-      ue.zahl(r, 4, (a['historie']! as List).length, _S.wert);
-      ue.text(r, 5, 'öffnen', _S.link);
+      ue.text(r, 1, nr, XlsxStil.wert);
+      ue.text(r, 2, a['bezeichnung'] as String?, XlsxStil.wert);
+      ue.zahl(r, 3, (a['schritte']! as List).length, XlsxStil.wert);
+      ue.zahl(r, 4, (a['historie']! as List).length, XlsxStil.wert);
+      ue.text(r, 5, 'öffnen', XlsxStil.link);
       ue.verweis('E$r', "'${_blattName(nr)}'!A1");
       r++;
     }
@@ -300,7 +299,7 @@ class StammdatenExportService {
 
     // ── Anlagen ───────────────────────────────────────────────────────
     final an = mappe.blatt('Anlagen', reiter: _dunkel);
-    an.text(1, 1, 'Anlagen', _S.titel);
+    an.text(1, 1, 'Anlagen', XlsxStil.titel);
     an.verbinde('A1:D1');
     an.hoehe(1, 28);
     an.text(
@@ -308,11 +307,11 @@ class StammdatenExportService {
       1,
       'Quelle der Auswahlmenüs. Neue Anlage hier eintragen — beim Import '
       'legt die App sie an.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     const anKopf = ['Anlage', 'Abteilung', 'Maschinentyp', 'Parameter'];
     for (var i = 0; i < anKopf.length; i++) {
-      an.text(4, 1 + i, anKopf[i], _S.kopf);
+      an.text(4, 1 + i, anKopf[i], XlsxStil.kopf);
     }
     final sortiert = [...anlagen]..sort(
         (a, b) => (a['name']! as String).compareTo(b['name']! as String),
@@ -320,16 +319,16 @@ class StammdatenExportService {
     r = 5;
     for (final a in sortiert) {
       final name = a['name']! as String;
-      an.text(r, 1, name, _S.wert);
-      an.text(r, 2, a['abteilung'] as String?, _S.wert);
-      an.text(r, 3, typVon[name], _S.wert);
-      an.zahl(r, 4, steckbriefJeTyp[typVon[name]]?.length ?? 0, _S.wert);
+      an.text(r, 1, name, XlsxStil.wert);
+      an.text(r, 2, a['abteilung'] as String?, XlsxStil.wert);
+      an.text(r, 3, typVon[name], XlsxStil.wert);
+      an.zahl(r, 4, steckbriefJeTyp[typVon[name]]?.length ?? 0, XlsxStil.wert);
       r++;
     }
     final anlagenLetzte = r - 1;
-    an.text(4, 6, 'Abteilungen', _S.kopf);
+    an.text(4, 6, 'Abteilungen', XlsxStil.kopf);
     for (var i = 0; i < abteilungen.length; i++) {
-      an.text(5 + i, 6, abteilungen[i], _S.wert);
+      an.text(5 + i, 6, abteilungen[i], XlsxStil.wert);
     }
     final abtLetzte = 4 + abteilungen.length;
     an.breiten({1: 30, 2: 22, 3: 26, 4: 12, 6: 22});
@@ -337,7 +336,7 @@ class StammdatenExportService {
 
     // ── Steckbriefe ───────────────────────────────────────────────────
     final sb = mappe.blatt('Steckbriefe', reiter: _dunkel);
-    sb.text(1, 1, 'Steckbriefe der Maschinentypen', _S.titel);
+    sb.text(1, 1, 'Steckbriefe der Maschinentypen', XlsxStil.titel);
     sb.verbinde('A1:C1');
     sb.hoehe(1, 28);
     sb.text(
@@ -345,18 +344,18 @@ class StammdatenExportService {
       1,
       'Neue Zeile hier ergänzen — sie erscheint beim nächsten Export in '
       'jedem Blatt, das diesen Maschinentyp benutzt.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     const sbKopf = ['Maschinentyp', 'Parameter', 'Einheit'];
     for (var i = 0; i < sbKopf.length; i++) {
-      sb.text(4, 1 + i, sbKopf[i], _S.kopf);
+      sb.text(4, 1 + i, sbKopf[i], XlsxStil.kopf);
     }
     r = 5;
     for (final typ in steckbriefJeTyp.keys.toList()..sort()) {
       for (final e in steckbriefJeTyp[typ]!.entries) {
-        sb.text(r, 1, typ, _S.wert);
-        sb.text(r, 2, e.key, _S.wert);
-        sb.text(r, 3, e.value.isEmpty ? null : e.value, _S.wert);
+        sb.text(r, 1, typ, XlsxStil.wert);
+        sb.text(r, 2, e.key, XlsxStil.wert);
+        sb.text(r, 3, e.value.isEmpty ? null : e.value, XlsxStil.wert);
         r++;
       }
     }
@@ -406,7 +405,7 @@ class StammdatenExportService {
   ];
 
   static void _artikelBlatt(
-    _Mappe mappe,
+    XlsxSchreiber mappe,
     Map<String, Object?> a, {
     required Map<String, String> typVon,
     required Map<String, LinkedHashMap<String, String>> steckbriefJeTyp,
@@ -419,38 +418,38 @@ class StammdatenExportService {
       _blattName(nr),
       reiter: gruppe == null ? null : _farbeVon[gruppe],
     );
-    final ende = _spalte(1 + _spalten);
+    final ende = xlsxSpalte(1 + _spalten);
 
     final titel = produktgruppeLabel(gruppe);
-    w.text(2, 1, titel.isEmpty ? 'Artikel' : titel, _S.titel);
+    w.text(2, 1, titel.isEmpty ? 'Artikel' : titel, XlsxStil.titel);
     w.verbinde('A2:${ende}2');
     w.hoehe(2, 26);
-    w.text(3, 1, '$nr — ${a['bezeichnung'] ?? ''}', _S.artikelKopf);
+    w.text(3, 1, '$nr — ${a['bezeichnung'] ?? ''}', XlsxStil.artikelKopf);
     w.text(
       4,
       1,
       'Von der App erzeugt. Werte hier ändern und die Datei wieder '
       'importieren.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
 
     // ── Prozessschritte ───────────────────────────────────────────────
-    w.text(6, 1, 'PROZESSSCHRITTE', _S.block);
+    w.text(6, 1, 'PROZESSSCHRITTE', XlsxStil.block);
     w.verbinde('A6:${ende}6');
     w.text(
       7,
       1,
       'Eine Spalte je Schritt, von links nach rechts in '
       'Produktionsreihenfolge. Freie Spalten können hier befüllt werden.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     for (var i = 0; i < _spalten; i++) {
-      w.text(8, 2 + i, 'Schritt ${i + 1}', _S.kopf);
+      w.text(8, 2 + i, 'Schritt ${i + 1}', XlsxStil.kopf);
     }
     for (var z = 0; z < _schrittZeilen.length; z++) {
-      w.text(9 + z, 1, _schrittZeilen[z], _S.label);
+      w.text(9 + z, 1, _schrittZeilen[z], XlsxStil.label);
       for (var c = 2; c < 2 + _spalten; c++) {
-        w.leer(9 + z, c, _S.wert);
+        w.leer(9 + z, c, XlsxStil.wert);
       }
     }
 
@@ -461,15 +460,15 @@ class StammdatenExportService {
     for (var i = 0; i < schritte.length && i < _spalten; i++) {
       final s = schritte[i];
       final c = 2 + i;
-      w.text(9, c, s['abteilung'] as String?, _S.wert);
-      w.text(10, c, s['prozessschritt'] as String?, _S.wert);
-      w.text(11, c, s['anlage'] as String?, _S.wert);
+      w.text(9, c, s['abteilung'] as String?, XlsxStil.wert);
+      w.text(10, c, s['prozessschritt'] as String?, XlsxStil.wert);
+      w.text(11, c, s['anlage'] as String?, XlsxStil.wert);
       final personen = s['personen']! as int;
-      if (personen > 0) w.zahl(12, c, personen, _S.wert);
+      if (personen > 0) w.zahl(12, c, personen, XlsxStil.wert);
       final menge = s['mengeKg']! as double;
-      if (menge > 0) w.zahl(13, c, menge, _S.zahl1);
+      if (menge > 0) w.zahl(13, c, menge, XlsxStil.zahl1);
       final dauer = s['dauerMinuten']! as double;
-      if (dauer > 0) w.text(14, c, _hhmm(dauer.round()), _S.wert);
+      if (dauer > 0) w.text(14, c, _hhmm(dauer.round()), XlsxStil.wert);
 
       final anlage = s['anlage'] as String?;
       if (anlage != null && anlage.isNotEmpty) {
@@ -482,7 +481,7 @@ class StammdatenExportService {
         1,
         'Achtung: ${schritte.length} Schritte — nur die ersten $_spalten '
         'passen in die Mappe.',
-        _S.hinweis,
+        XlsxStil.hinweis,
       );
     }
     w.auswahl('B9:${ende}9', 'Anlagen!\$F\$5:\$F\$$abtLetzte');
@@ -494,7 +493,7 @@ class StammdatenExportService {
     for (final eintrag in spaltenJeAnlage.entries) {
       final anlage = eintrag.key;
       final spalten = eintrag.value;
-      w.text(r, 1, anlage.toUpperCase(), _S.block);
+      w.text(r, 1, anlage.toUpperCase(), XlsxStil.block);
       w.verbinde('A$r:$ende$r');
       r++;
 
@@ -512,9 +511,9 @@ class StammdatenExportService {
         for (var c = 2; c < 2 + _spalten; c++) {
           final wert = werteJeSpalte[c]?[_schluessel(name)];
           if (wert != null) {
-            w.text(r, c, wert, _S.wert);
+            w.text(r, c, wert, XlsxStil.wert);
           } else {
-            w.leer(r, c, _S.wert);
+            w.leer(r, c, XlsxStil.wert);
           }
         }
         r++;
@@ -529,7 +528,7 @@ class StammdatenExportService {
 
       // 1. Plattenzeilen — Namen exakt wie in der Leiste der App.
       for (final platte in plattenZeilenFuer(anlage)) {
-        zeile(platte, '', _S.parameter);
+        zeile(platte, '', XlsxStil.parameter);
         bekannt.add(_schluessel(platte));
       }
       // 2. Steckbrief des Maschinentyps.
@@ -537,7 +536,7 @@ class StammdatenExportService {
           <String, String>{};
       for (final e in steck.entries) {
         if (e.key == 'Sonstige Informationen') continue;
-        zeile(e.key, e.value, _S.parameter);
+        zeile(e.key, e.value, XlsxStil.parameter);
         bekannt.add(_schluessel(e.key));
       }
       // 3. Werte, die in keinem Steckbrief stehen — damit nichts verloren
@@ -557,16 +556,16 @@ class StammdatenExportService {
           for (final c in spalten)
             ...(schritte[c - 2]['werte']! as Map).keys.cast<String>(),
         ].firstWhere((n) => _schluessel(n) == k, orElse: () => k);
-        zeile(original, '', _S.parameter);
+        zeile(original, '', XlsxStil.parameter);
       }
       // 4. Freitext — immer zuletzt.
       sonstigeZeile[anlage] = r;
-      zeile('Sonstige Informationen', '', _S.parameter);
+      zeile('Sonstige Informationen', '', XlsxStil.parameter);
       r++;
     }
 
     // ── Zusätzliche Informationen ─────────────────────────────────────
-    w.text(r, 1, 'ZUSÄTZLICHE INFORMATIONEN', _S.block);
+    w.text(r, 1, 'ZUSÄTZLICHE INFORMATIONEN', XlsxStil.block);
     w.verbinde('A$r:$ende$r');
     r++;
     final hinweise = _hinweiseAus(a['notizen'] as String?);
@@ -582,29 +581,29 @@ class StammdatenExportService {
         if (!feste.contains(k) && !merkmale.containsKey(k)) k,
     ];
     for (final k in reihe) {
-      w.text(r, 1, k, _S.label);
+      w.text(r, 1, k, XlsxStil.label);
       final wert = merkmale.containsKey(k) ? merkmale[k] : hinweise[k];
       if (wert != null) {
-        w.text(r, 2, wert, _S.umbruch);
+        w.text(r, 2, wert, XlsxStil.umbruch);
       } else {
-        w.leer(r, 2, _S.umbruch);
+        w.leer(r, 2, XlsxStil.umbruch);
       }
       w.verbinde('B$r:$ende$r');
       w.hoehe(r, 24);
       r++;
     }
     if (sonstigeZeile.isNotEmpty) {
-      w.text(r, 1, 'Aus den Anlagen gesammelt', _S.hinweis);
+      w.text(r, 1, 'Aus den Anlagen gesammelt', XlsxStil.hinweis);
       r++;
       for (final e in sonstigeZeile.entries) {
         final z = e.value;
         // Ohne TEXTJOIN — das kennt Excel erst ab 2019. TRIM entfernt
         // auch doppelte Leerzeichen im Inneren.
         final kette = [
-          for (var c = 2; c < 2 + _spalten; c++) '${_spalte(c)}$z',
+          for (var c = 2; c < 2 + _spalten; c++) '${xlsxSpalte(c)}$z',
         ].join(' & " " & ');
-        w.text(r, 1, e.key, _S.parameter);
-        w.formel(r, 2, 'TRIM($kette)', _S.berechnet);
+        w.text(r, 1, e.key, XlsxStil.parameter);
+        w.formel(r, 2, 'TRIM($kette)', XlsxStil.berechnet);
         w.verbinde('B$r:$ende$r');
         r++;
       }
@@ -612,7 +611,7 @@ class StammdatenExportService {
     r += 2;
 
     // ── Historie ──────────────────────────────────────────────────────
-    w.text(r, 1, 'HISTORISCHE DATEN', _S.block);
+    w.text(r, 1, 'HISTORISCHE DATEN', XlsxStil.block);
     w.verbinde('A$r:K$r');
     r++;
     w.text(
@@ -620,7 +619,7 @@ class StammdatenExportService {
       1,
       'Nur Datum, Gewichte und Zeiten eintragen — Verlust, Dauer und kg/h '
       'rechnet die Tabelle.',
-      _S.hinweis,
+      XlsxStil.hinweis,
     );
     r++;
     const histKopf = [
@@ -639,7 +638,7 @@ class StammdatenExportService {
       'Kg Fleischeinwaage',
     ];
     for (var i = 0; i < histKopf.length; i++) {
-      w.text(r, 1 + i, histKopf[i], _S.kopf);
+      w.text(r, 1 + i, histKopf[i], XlsxStil.kopf);
     }
     final von = r + 1;
     r++;
@@ -647,35 +646,35 @@ class StammdatenExportService {
     void histZeile(Map<String, Object?>? h) {
       if (h != null) {
         final tag = _excelTag(DateTime.parse(h['datum']! as String));
-        w.zahl(r, 1, tag, _S.datum);
-        w.zahlOderLeer(r, 2, h['kgRoh'] as double?, _S.zahl1);
-        w.zahlOderLeer(r, 3, h['kgFertig'] as double?, _S.zahl1);
-        w.zahlOderLeer(r, 5, _tagesbruch(h['start'] as String?), _S.zeit);
-        w.zahlOderLeer(r, 6, _tagesbruch(h['ende'] as String?), _S.zeit);
-        w.text(r, 10, h['notizen'] as String?, _S.wert);
-        w.zahlOderLeer(r, 11, h['kgFleisch'] as double?, _S.zahl1);
+        w.zahl(r, 1, tag, XlsxStil.datum);
+        w.zahlOderLeer(r, 2, h['kgRoh'] as double?, XlsxStil.zahl1);
+        w.zahlOderLeer(r, 3, h['kgFertig'] as double?, XlsxStil.zahl1);
+        w.zahlOderLeer(r, 5, _tagesbruch(h['start'] as String?), XlsxStil.zeit);
+        w.zahlOderLeer(r, 6, _tagesbruch(h['ende'] as String?), XlsxStil.zeit);
+        w.text(r, 10, h['notizen'] as String?, XlsxStil.wert);
+        w.zahlOderLeer(r, 11, h['kgFleisch'] as double?, XlsxStil.zahl1);
       } else {
-        w.leer(r, 1, _S.datum);
-        w.leer(r, 2, _S.zahl1);
-        w.leer(r, 3, _S.zahl1);
-        w.leer(r, 5, _S.zeit);
-        w.leer(r, 6, _S.zeit);
-        w.leer(r, 10, _S.wert);
-        w.leer(r, 11, _S.zahl1);
+        w.leer(r, 1, XlsxStil.datum);
+        w.leer(r, 2, XlsxStil.zahl1);
+        w.leer(r, 3, XlsxStil.zahl1);
+        w.leer(r, 5, XlsxStil.zeit);
+        w.leer(r, 6, XlsxStil.zeit);
+        w.leer(r, 10, XlsxStil.wert);
+        w.leer(r, 11, XlsxStil.zahl1);
       }
-      w.formel(r, 4, 'IF(OR(B$r="",C$r=""),"",1-C$r/B$r)', _S.prozent);
-      w.formel(r, 7, 'IF(OR(E$r="",F$r=""),"",F$r-E$r)', _S.zeitBerechnet);
+      w.formel(r, 4, 'IF(OR(B$r="",C$r=""),"",1-C$r/B$r)', XlsxStil.prozent);
+      w.formel(r, 7, 'IF(OR(E$r="",F$r=""),"",F$r-E$r)', XlsxStil.zeitBerechnet);
       w.formel(
         r,
         8,
         'IF(OR(B$r="",G$r=""),"",B$r/(G$r*24))',
-        _S.ganzBerechnet,
+        XlsxStil.ganzBerechnet,
       );
       w.formel(
         r,
         9,
         'IF(OR(C$r="",G$r=""),"",C$r/(G$r*24))',
-        _S.ganzBerechnet,
+        XlsxStil.ganzBerechnet,
       );
       r++;
     }
@@ -690,24 +689,24 @@ class StammdatenExportService {
 
     // Durchschnitt über alle Chargen — gewichtet: Summe kg / Summe Stunden.
     r++;
-    w.text(r, 1, 'Ø über alle Chargen', _S.summe);
+    w.text(r, 1, 'Ø über alle Chargen', XlsxStil.summe);
     for (var c = 2; c <= 7; c++) {
-      w.leer(r, c, _S.summe);
+      w.leer(r, c, XlsxStil.summe);
     }
     w.formel(
       r,
       8,
       'IF(SUM(G$von:G$bis)=0,"",SUM(B$von:B$bis)/(SUM(G$von:G$bis)*24))',
-      _S.summe,
+      XlsxStil.summe,
     );
     w.formel(
       r,
       9,
       'IF(SUM(G$von:G$bis)=0,"",SUM(C$von:C$bis)/(SUM(G$von:G$bis)*24))',
-      _S.summe,
+      XlsxStil.summe,
     );
-    w.leer(r, 10, _S.summe);
-    w.leer(r, 11, _S.summe);
+    w.leer(r, 10, XlsxStil.summe);
+    w.leer(r, 11, XlsxStil.summe);
 
     w.breiten({1: 38, for (var i = 0; i < _spalten; i++) 2 + i: 16});
     w.fixiere('B9');
@@ -793,409 +792,3 @@ class StammdatenExportService {
     'angebratene_bruehwurst': 'FFFFA000',
   };
 }
-
-/// 1-basierte Spaltennummer → Buchstaben (1 → A, 27 → AA).
-String _spalte(int n) {
-  var c = n;
-  final b = StringBuffer();
-  while (c > 0) {
-    final rest = (c - 1) % 26;
-    b.write(String.fromCharCode(65 + rest));
-    c = (c - 1) ~/ 26;
-  }
-  return b.toString().split('').reversed.join();
-}
-
-/// XML-Text entschärfen. Steuerzeichen fliegen raus: In XML 1.0 sind sie
-/// grundsätzlich unzulässig, und Navision-Texte enthalten sie gelegentlich.
-String _esc(String s) => s
-    .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F]'), '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Zellformate — feste Nummern, passend zur styles.xml unten
-// ═══════════════════════════════════════════════════════════════════════════
-
-abstract final class _S {
-  static const int titel = 1;
-  static const int block = 2;
-  static const int label = 3;
-  static const int parameter = 4;
-  static const int wert = 5;
-  static const int berechnet = 6;
-  static const int hinweis = 7;
-  static const int kopf = 8;
-  static const int datum = 9;
-  static const int zeit = 10;
-  static const int prozent = 11;
-  static const int zeitBerechnet = 12;
-  static const int zahl1 = 13;
-  static const int ganzBerechnet = 14;
-  static const int summe = 15;
-  static const int link = 16;
-  static const int artikelKopf = 17;
-  static const int umbruch = 18;
-}
-
-const String _stylesXml =
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    '<styleSheet xmlns="http://schemas.openxmlformats.org/'
-    'spreadsheetml/2006/main">'
-    '<numFmts count="4">'
-    '<numFmt numFmtId="164" formatCode="DD.MM.YYYY"/>'
-    '<numFmt numFmtId="165" formatCode="hh:mm"/>'
-    '<numFmt numFmtId="166" formatCode="0.0"/>'
-    '<numFmt numFmtId="167" formatCode="0.0%"/>'
-    '</numFmts>'
-    '<fonts count="7">'
-    '<font><sz val="10"/><name val="Arial"/></font>'
-    '<font><b/><sz val="14"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>'
-    '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font>'
-    '<font><b/><sz val="10"/><name val="Arial"/></font>'
-    '<font><i/><sz val="9"/><color rgb="FF8A9099"/><name val="Arial"/></font>'
-    '<font><u/><sz val="10"/><color rgb="FF1976D2"/><name val="Arial"/></font>'
-    '<font><b/><sz val="12"/><name val="Arial"/></font>'
-    '</fonts>'
-    '<fills count="8">'
-    '<fill><patternFill patternType="none"/></fill>'
-    '<fill><patternFill patternType="gray125"/></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FF1F6F6F"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FF3F4A54"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFF7E0"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFEDEFF2"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFF7F8FA"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '<fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/>'
-    '<bgColor indexed="64"/></patternFill></fill>'
-    '</fills>'
-    '<borders count="2"><border/>'
-    '<border><left style="thin"><color rgb="FFC8CDD3"/></left>'
-    '<right style="thin"><color rgb="FFC8CDD3"/></right>'
-    '<top style="thin"><color rgb="FFC8CDD3"/></top>'
-    '<bottom style="thin"><color rgb="FFC8CDD3"/></bottom>'
-    '<diagonal/></border></borders>'
-    '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" '
-    'borderId="0"/></cellStyleXfs>'
-    '<cellXfs count="19">'
-    // 0 Standard
-    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
-    // 1 Titel
-    '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" '
-    'applyFont="1" applyFill="1" applyAlignment="1">'
-    '<alignment vertical="center"/></xf>'
-    // 2 Blockkopf
-    '<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" '
-    'applyFont="1" applyFill="1" applyAlignment="1">'
-    '<alignment vertical="center"/></xf>'
-    // 3 Beschriftung gelb
-    '<xf numFmtId="0" fontId="3" fillId="4" borderId="1" xfId="0" '
-    'applyFont="1" applyFill="1" applyBorder="1"/>'
-    // 4 Parameterzeile grau
-    '<xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" '
-    'applyFill="1" applyBorder="1"/>'
-    // 5 Wert
-    '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" '
-    'applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>'
-    // 6 Berechnet
-    '<xf numFmtId="0" fontId="0" fillId="6" borderId="1" xfId="0" '
-    'applyFill="1" applyBorder="1"/>'
-    // 7 Hinweis
-    '<xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" '
-    'applyFont="1"/>'
-    // 8 Tabellenkopf
-    '<xf numFmtId="0" fontId="3" fillId="5" borderId="1" xfId="0" '
-    'applyFont="1" applyFill="1" applyBorder="1"/>'
-    // 9 Datum
-    '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyBorder="1"/>'
-    // 10 Uhrzeit (Eingabe)
-    '<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyBorder="1"/>'
-    // 11 Prozent (berechnet)
-    '<xf numFmtId="167" fontId="0" fillId="6" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
-    // 12 Uhrzeit (berechnet)
-    '<xf numFmtId="165" fontId="0" fillId="6" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
-    // 13 Zahl mit einer Nachkommastelle
-    '<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyBorder="1"/>'
-    // 14 Ganzzahl (berechnet)
-    '<xf numFmtId="1" fontId="0" fillId="6" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
-    // 15 Summenzeile
-    '<xf numFmtId="1" fontId="3" fillId="5" borderId="1" xfId="0" '
-    'applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>'
-    // 16 Verweis
-    '<xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" '
-    'applyFont="1" applyBorder="1"/>'
-    // 17 Artikelkopf
-    '<xf numFmtId="0" fontId="6" fillId="0" borderId="0" xfId="0" '
-    'applyFont="1"/>'
-    // 18 Freitext mit Umbruch
-    '<xf numFmtId="0" fontId="0" fillId="7" borderId="1" xfId="0" '
-    'applyFill="1" applyBorder="1" applyAlignment="1">'
-    '<alignment wrapText="1" vertical="center"/></xf>'
-    '</cellXfs>'
-    '<cellStyles count="1"><cellStyle name="Standard" xfId="0" '
-    'builtinId="0"/></cellStyles>'
-    '</styleSheet>';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Minimaler xlsx-Baukasten
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _Mappe {
-  final List<_Blatt> _blaetter = [];
-  final Map<String, int> _textIndex = {};
-  final List<String> _texte = [];
-
-  _Blatt blatt(String name, {String? reiter}) {
-    final b = _Blatt(this, name, reiter);
-    _blaetter.add(b);
-    return b;
-  }
-
-  int textNr(String s) =>
-      _textIndex.putIfAbsent(s, () => (_texte..add(s)).length - 1);
-
-  Uint8List packe() {
-    final archiv = Archive();
-    void datei(String pfad, String inhalt) {
-      final bytes = utf8.encode(inhalt);
-      archiv.addFile(ArchiveFile(pfad, bytes.length, bytes));
-    }
-
-    const kopf = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-    final blattXml = [for (final b in _blaetter) b.xml()];
-
-    datei(
-      '[Content_Types].xml',
-      '$kopf<Types xmlns="http://schemas.openxmlformats.org/package/2006/'
-          'content-types">'
-          '<Default Extension="rels" ContentType="application/'
-          'vnd.openxmlformats-package.relationships+xml"/>'
-          '<Default Extension="xml" ContentType="application/xml"/>'
-          '<Override PartName="/xl/workbook.xml" ContentType="application/'
-          'vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
-          '${[
-        for (var i = 0; i < _blaetter.length; i++)
-          '<Override PartName="/xl/worksheets/sheet${i + 1}.xml" '
-              'ContentType="application/vnd.openxmlformats-officedocument.'
-              'spreadsheetml.worksheet+xml"/>',
-      ].join()}'
-          '<Override PartName="/xl/styles.xml" ContentType="application/'
-          'vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
-          '<Override PartName="/xl/sharedStrings.xml" ContentType='
-          '"application/vnd.openxmlformats-officedocument.spreadsheetml.'
-          'sharedStrings+xml"/>'
-          '</Types>',
-    );
-    datei(
-      '_rels/.rels',
-      '$kopf<Relationships xmlns="http://schemas.openxmlformats.org/package/'
-          '2006/relationships"><Relationship Id="rId1" Type="http://'
-          'schemas.openxmlformats.org/officeDocument/2006/relationships/'
-          'officeDocument" Target="xl/workbook.xml"/></Relationships>',
-    );
-    datei(
-      'xl/workbook.xml',
-      '$kopf<workbook xmlns="http://schemas.openxmlformats.org/'
-          'spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.'
-          'org/officeDocument/2006/relationships">'
-          // Die Blattansichten verweisen mit workbookViewId="0" hierauf.
-          '<bookViews><workbookView/></bookViews><sheets>'
-          '${[
-        for (var i = 0; i < _blaetter.length; i++)
-          '<sheet name="${_esc(_blaetter[i].name)}" sheetId="${i + 1}" '
-              'r:id="rId${i + 1}"/>',
-      ].join()}'
-          '</sheets></workbook>',
-    );
-    // Beziehungsziele RELATIV — die Lesebibliothek setzt „xl/" davor.
-    final n = _blaetter.length;
-    datei(
-      'xl/_rels/workbook.xml.rels',
-      '$kopf<Relationships xmlns="http://schemas.openxmlformats.org/package/'
-          '2006/relationships">'
-          '${[
-        for (var i = 0; i < n; i++)
-          '<Relationship Id="rId${i + 1}" Type="http://schemas.'
-              'openxmlformats.org/officeDocument/2006/relationships/'
-              'worksheet" Target="worksheets/sheet${i + 1}.xml"/>',
-      ].join()}'
-          '<Relationship Id="rId${n + 1}" Type="http://schemas.'
-          'openxmlformats.org/officeDocument/2006/relationships/styles" '
-          'Target="styles.xml"/>'
-          '<Relationship Id="rId${n + 2}" Type="http://schemas.'
-          'openxmlformats.org/officeDocument/2006/relationships/'
-          'sharedStrings" Target="sharedStrings.xml"/>'
-          '</Relationships>',
-    );
-    for (var i = 0; i < blattXml.length; i++) {
-      datei('xl/worksheets/sheet${i + 1}.xml', blattXml[i]);
-    }
-    datei('xl/styles.xml', _stylesXml);
-    datei(
-      'xl/sharedStrings.xml',
-      '$kopf<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/'
-          '2006/main" count="${_texte.length}" '
-          'uniqueCount="${_texte.length}">'
-          '${[
-        for (final t in _texte)
-          '<si><t xml:space="preserve">${_esc(t)}</t></si>',
-      ].join()}'
-          '</sst>',
-    );
-
-    final gepackt = ZipEncoder().encode(archiv);
-    if (gepackt == null) {
-      throw StateError('Die Mappe konnte nicht gepackt werden.');
-    }
-    return Uint8List.fromList(gepackt);
-  }
-}
-
-class _Blatt {
-  _Blatt(this._mappe, this.name, this._reiter);
-
-  final _Mappe _mappe;
-  final String name;
-  final String? _reiter;
-
-  /// Zeile → Spalte → Zell-XML. Sortiert, weil Excel Zeilen und Zellen in
-  /// aufsteigender Reihenfolge verlangt.
-  final SplayTreeMap<int, SplayTreeMap<int, String>> _zellen = SplayTreeMap();
-  final Map<int, double> _hoehen = {};
-  final Map<int, double> _breiten = {};
-  final List<String> _verbunden = [];
-  final List<String> _auswahl = [];
-  final List<String> _verweise = [];
-  String? _fixiert;
-
-  void _setze(int r, int c, String xml) =>
-      _zellen.putIfAbsent(r, SplayTreeMap.new)[c] = xml;
-
-  String _ref(int r, int c) => '${_spalte(c)}$r';
-
-  void text(int r, int c, String? wert, int stil) {
-    if (wert == null || wert.isEmpty) return leer(r, c, stil);
-    _setze(
-      r,
-      c,
-      '<c r="${_ref(r, c)}" s="$stil" t="s"><v>${_mappe.textNr(wert)}</v></c>',
-    );
-  }
-
-  void zahl(int r, int c, num wert, int stil) =>
-      _setze(r, c, '<c r="${_ref(r, c)}" s="$stil"><v>$wert</v></c>');
-
-  void formel(int r, int c, String f, int stil) =>
-      _setze(r, c, '<c r="${_ref(r, c)}" s="$stil"><f>${_esc(f)}</f></c>');
-
-  void leer(int r, int c, int stil) =>
-      _setze(r, c, '<c r="${_ref(r, c)}" s="$stil"/>');
-
-  void zahlOderLeer(int r, int c, num? wert, int stil) {
-    if (wert == null) {
-      leer(r, c, stil);
-    } else {
-      zahl(r, c, wert, stil);
-    }
-  }
-
-  void verbinde(String bereich) => _verbunden.add(bereich);
-  void hoehe(int r, double h) => _hoehen[r] = h;
-  void breiten(Map<int, double> b) => _breiten.addAll(b);
-  void fixiere(String zelle) => _fixiert = zelle;
-
-  void auswahl(String bereich, String quelle) => _auswahl.add(
-        '<dataValidation type="list" allowBlank="1" showInputMessage="1" '
-        'showErrorMessage="0" sqref="$bereich">'
-        '<formula1>${_esc(quelle)}</formula1></dataValidation>',
-      );
-
-  void verweis(String zelle, String ziel) => _verweise.add(
-        '<hyperlink ref="$zelle" location="${_esc(ziel)}" display="öffnen"/>',
-      );
-
-  String xml() {
-    final b = StringBuffer()
-      ..write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>')
-      ..write('<worksheet xmlns="http://schemas.openxmlformats.org/'
-          'spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.'
-          'org/officeDocument/2006/relationships">');
-    // Reihenfolge der Elemente ist im OOXML-Schema festgelegt.
-    if (_reiter != null) {
-      b.write('<sheetPr><tabColor rgb="$_reiter"/></sheetPr>');
-    }
-    b.write('<sheetViews><sheetView workbookViewId="0">');
-    final f = _fixiert;
-    if (f != null) {
-      final m = RegExp(r'^([A-Z]+)(\d+)$').firstMatch(f)!;
-      final spalteNr = m.group(1)!.codeUnits.fold<int>(
-            0,
-            (s, u) => s * 26 + (u - 64),
-          );
-      final xSplit = spalteNr - 1;
-      final ySplit = int.parse(m.group(2)!) - 1;
-      final pane = xSplit > 0 && ySplit > 0
-          ? 'bottomRight'
-          : (ySplit > 0 ? 'bottomLeft' : 'topRight');
-      b.write('<pane${xSplit > 0 ? ' xSplit="$xSplit"' : ''}'
-          '${ySplit > 0 ? ' ySplit="$ySplit"' : ''} topLeftCell="$f" '
-          'activePane="$pane" state="frozen"/>');
-    }
-    b.write('</sheetView></sheetViews>');
-    b.write('<sheetFormatPr defaultRowHeight="15"/>');
-    if (_breiten.isNotEmpty) {
-      b.write('<cols>');
-      for (final e in (SplayTreeMap<int, double>.from(_breiten)).entries) {
-        b.write('<col min="${e.key}" max="${e.key}" width="${e.value}" '
-            'customWidth="1"/>');
-      }
-      b.write('</cols>');
-    }
-    b.write('<sheetData>');
-    for (final z in _zellen.entries) {
-      final h = _hoehen[z.key];
-      b.write('<row r="${z.key}"'
-          '${h == null ? '' : ' ht="$h" customHeight="1"'}>');
-      z.value.values.forEach(b.write);
-      b.write('</row>');
-    }
-    b.write('</sheetData>');
-    if (_verbunden.isNotEmpty) {
-      b.write('<mergeCells count="${_verbunden.length}">');
-      for (final v in _verbunden) {
-        b.write('<mergeCell ref="$v"/>');
-      }
-      b.write('</mergeCells>');
-    }
-    if (_auswahl.isNotEmpty) {
-      b
-        ..write('<dataValidations count="${_auswahl.length}">')
-        ..writeAll(_auswahl)
-        ..write('</dataValidations>');
-    }
-    if (_verweise.isNotEmpty) {
-      b
-        ..write('<hyperlinks>')
-        ..writeAll(_verweise)
-        ..write('</hyperlinks>');
-    }
-    b.write('<pageMargins left="0.7" right="0.7" top="0.75" bottom="0.75" '
-        'header="0.3" footer="0.3"/>');
-    b.write('</worksheet>');
-    return b.toString();
-  }
-}
-
-
