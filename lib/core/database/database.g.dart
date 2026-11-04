@@ -8800,6 +8800,12 @@ class $ProductionHistoryTable extends ProductionHistory
   late final GeneratedColumn<double> kgRohware = GeneratedColumn<double>(
       'kg_rohware', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _kgFleischeinwaageMeta =
+      const VerificationMeta('kgFleischeinwaage');
+  @override
+  late final GeneratedColumn<double> kgFleischeinwaage =
+      GeneratedColumn<double>('kg_fleischeinwaage', aliasedName, true,
+          type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _kgFertigwareMeta =
       const VerificationMeta('kgFertigware');
   @override
@@ -8883,6 +8889,7 @@ class $ProductionHistoryTable extends ProductionHistory
         productId,
         datum,
         kgRohware,
+        kgFleischeinwaage,
         kgFertigware,
         verlustAnteil,
         startzeit,
@@ -8927,6 +8934,12 @@ class $ProductionHistoryTable extends ProductionHistory
     if (data.containsKey('kg_rohware')) {
       context.handle(_kgRohwareMeta,
           kgRohware.isAcceptableOrUnknown(data['kg_rohware']!, _kgRohwareMeta));
+    }
+    if (data.containsKey('kg_fleischeinwaage')) {
+      context.handle(
+          _kgFleischeinwaageMeta,
+          kgFleischeinwaage.isAcceptableOrUnknown(
+              data['kg_fleischeinwaage']!, _kgFleischeinwaageMeta));
     }
     if (data.containsKey('kg_fertigware')) {
       context.handle(
@@ -9003,6 +9016,8 @@ class $ProductionHistoryTable extends ProductionHistory
           .read(DriftSqlType.dateTime, data['${effectivePrefix}datum'])!,
       kgRohware: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}kg_rohware']),
+      kgFleischeinwaage: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}kg_fleischeinwaage']),
       kgFertigware: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}kg_fertigware']),
       verlustAnteil: attachedDatabase.typeMapping
@@ -9045,8 +9060,13 @@ class ProductionHistoryData extends DataClass
   /// Produktionsdatum (tagesgenau).
   final DateTime datum;
 
-  /// Eingesetzte Rohware in kg (Excel: „Kg Rohware").
+  /// Eingesetzte Rohware in kg (Excel: „Kg Rohware") — alles, was
+  /// hineinkommt: Fleisch und alle übrigen Zutaten.
   final double? kgRohware;
+
+  /// Davon das eingewogene Fleisch in kg (Excel: „Kg Fleischeinwaage").
+  /// Freiwillig — für jeden Artikel.
+  final double? kgFleischeinwaage;
 
   /// Erzeugte Fertigware in kg (Excel: „Kg Fertigware").
   final double? kgFertigware;
@@ -9083,6 +9103,7 @@ class ProductionHistoryData extends DataClass
       required this.productId,
       required this.datum,
       this.kgRohware,
+      this.kgFleischeinwaage,
       this.kgFertigware,
       this.verlustAnteil,
       this.startzeit,
@@ -9103,6 +9124,9 @@ class ProductionHistoryData extends DataClass
     map['datum'] = Variable<DateTime>(datum);
     if (!nullToAbsent || kgRohware != null) {
       map['kg_rohware'] = Variable<double>(kgRohware);
+    }
+    if (!nullToAbsent || kgFleischeinwaage != null) {
+      map['kg_fleischeinwaage'] = Variable<double>(kgFleischeinwaage);
     }
     if (!nullToAbsent || kgFertigware != null) {
       map['kg_fertigware'] = Variable<double>(kgFertigware);
@@ -9145,6 +9169,9 @@ class ProductionHistoryData extends DataClass
       kgRohware: kgRohware == null && nullToAbsent
           ? const Value.absent()
           : Value(kgRohware),
+      kgFleischeinwaage: kgFleischeinwaage == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kgFleischeinwaage),
       kgFertigware: kgFertigware == null && nullToAbsent
           ? const Value.absent()
           : Value(kgFertigware),
@@ -9186,6 +9213,8 @@ class ProductionHistoryData extends DataClass
       productId: serializer.fromJson<String>(json['productId']),
       datum: serializer.fromJson<DateTime>(json['datum']),
       kgRohware: serializer.fromJson<double?>(json['kgRohware']),
+      kgFleischeinwaage:
+          serializer.fromJson<double?>(json['kgFleischeinwaage']),
       kgFertigware: serializer.fromJson<double?>(json['kgFertigware']),
       verlustAnteil: serializer.fromJson<double?>(json['verlustAnteil']),
       startzeit: serializer.fromJson<String?>(json['startzeit']),
@@ -9210,6 +9239,7 @@ class ProductionHistoryData extends DataClass
       'productId': serializer.toJson<String>(productId),
       'datum': serializer.toJson<DateTime>(datum),
       'kgRohware': serializer.toJson<double?>(kgRohware),
+      'kgFleischeinwaage': serializer.toJson<double?>(kgFleischeinwaage),
       'kgFertigware': serializer.toJson<double?>(kgFertigware),
       'verlustAnteil': serializer.toJson<double?>(verlustAnteil),
       'startzeit': serializer.toJson<String?>(startzeit),
@@ -9231,6 +9261,7 @@ class ProductionHistoryData extends DataClass
           String? productId,
           DateTime? datum,
           Value<double?> kgRohware = const Value.absent(),
+          Value<double?> kgFleischeinwaage = const Value.absent(),
           Value<double?> kgFertigware = const Value.absent(),
           Value<double?> verlustAnteil = const Value.absent(),
           Value<String?> startzeit = const Value.absent(),
@@ -9248,6 +9279,9 @@ class ProductionHistoryData extends DataClass
         productId: productId ?? this.productId,
         datum: datum ?? this.datum,
         kgRohware: kgRohware.present ? kgRohware.value : this.kgRohware,
+        kgFleischeinwaage: kgFleischeinwaage.present
+            ? kgFleischeinwaage.value
+            : this.kgFleischeinwaage,
         kgFertigware:
             kgFertigware.present ? kgFertigware.value : this.kgFertigware,
         verlustAnteil:
@@ -9274,6 +9308,9 @@ class ProductionHistoryData extends DataClass
       productId: data.productId.present ? data.productId.value : this.productId,
       datum: data.datum.present ? data.datum.value : this.datum,
       kgRohware: data.kgRohware.present ? data.kgRohware.value : this.kgRohware,
+      kgFleischeinwaage: data.kgFleischeinwaage.present
+          ? data.kgFleischeinwaage.value
+          : this.kgFleischeinwaage,
       kgFertigware: data.kgFertigware.present
           ? data.kgFertigware.value
           : this.kgFertigware,
@@ -9306,6 +9343,7 @@ class ProductionHistoryData extends DataClass
           ..write('productId: $productId, ')
           ..write('datum: $datum, ')
           ..write('kgRohware: $kgRohware, ')
+          ..write('kgFleischeinwaage: $kgFleischeinwaage, ')
           ..write('kgFertigware: $kgFertigware, ')
           ..write('verlustAnteil: $verlustAnteil, ')
           ..write('startzeit: $startzeit, ')
@@ -9328,6 +9366,7 @@ class ProductionHistoryData extends DataClass
       productId,
       datum,
       kgRohware,
+      kgFleischeinwaage,
       kgFertigware,
       verlustAnteil,
       startzeit,
@@ -9348,6 +9387,7 @@ class ProductionHistoryData extends DataClass
           other.productId == this.productId &&
           other.datum == this.datum &&
           other.kgRohware == this.kgRohware &&
+          other.kgFleischeinwaage == this.kgFleischeinwaage &&
           other.kgFertigware == this.kgFertigware &&
           other.verlustAnteil == this.verlustAnteil &&
           other.startzeit == this.startzeit &&
@@ -9368,6 +9408,7 @@ class ProductionHistoryCompanion
   final Value<String> productId;
   final Value<DateTime> datum;
   final Value<double?> kgRohware;
+  final Value<double?> kgFleischeinwaage;
   final Value<double?> kgFertigware;
   final Value<double?> verlustAnteil;
   final Value<String?> startzeit;
@@ -9386,6 +9427,7 @@ class ProductionHistoryCompanion
     this.productId = const Value.absent(),
     this.datum = const Value.absent(),
     this.kgRohware = const Value.absent(),
+    this.kgFleischeinwaage = const Value.absent(),
     this.kgFertigware = const Value.absent(),
     this.verlustAnteil = const Value.absent(),
     this.startzeit = const Value.absent(),
@@ -9405,6 +9447,7 @@ class ProductionHistoryCompanion
     required String productId,
     required DateTime datum,
     this.kgRohware = const Value.absent(),
+    this.kgFleischeinwaage = const Value.absent(),
     this.kgFertigware = const Value.absent(),
     this.verlustAnteil = const Value.absent(),
     this.startzeit = const Value.absent(),
@@ -9426,6 +9469,7 @@ class ProductionHistoryCompanion
     Expression<String>? productId,
     Expression<DateTime>? datum,
     Expression<double>? kgRohware,
+    Expression<double>? kgFleischeinwaage,
     Expression<double>? kgFertigware,
     Expression<double>? verlustAnteil,
     Expression<String>? startzeit,
@@ -9445,6 +9489,7 @@ class ProductionHistoryCompanion
       if (productId != null) 'product_id': productId,
       if (datum != null) 'datum': datum,
       if (kgRohware != null) 'kg_rohware': kgRohware,
+      if (kgFleischeinwaage != null) 'kg_fleischeinwaage': kgFleischeinwaage,
       if (kgFertigware != null) 'kg_fertigware': kgFertigware,
       if (verlustAnteil != null) 'verlust_anteil': verlustAnteil,
       if (startzeit != null) 'startzeit': startzeit,
@@ -9467,6 +9512,7 @@ class ProductionHistoryCompanion
       Value<String>? productId,
       Value<DateTime>? datum,
       Value<double?>? kgRohware,
+      Value<double?>? kgFleischeinwaage,
       Value<double?>? kgFertigware,
       Value<double?>? verlustAnteil,
       Value<String?>? startzeit,
@@ -9485,6 +9531,7 @@ class ProductionHistoryCompanion
       productId: productId ?? this.productId,
       datum: datum ?? this.datum,
       kgRohware: kgRohware ?? this.kgRohware,
+      kgFleischeinwaage: kgFleischeinwaage ?? this.kgFleischeinwaage,
       kgFertigware: kgFertigware ?? this.kgFertigware,
       verlustAnteil: verlustAnteil ?? this.verlustAnteil,
       startzeit: startzeit ?? this.startzeit,
@@ -9516,6 +9563,9 @@ class ProductionHistoryCompanion
     }
     if (kgRohware.present) {
       map['kg_rohware'] = Variable<double>(kgRohware.value);
+    }
+    if (kgFleischeinwaage.present) {
+      map['kg_fleischeinwaage'] = Variable<double>(kgFleischeinwaage.value);
     }
     if (kgFertigware.present) {
       map['kg_fertigware'] = Variable<double>(kgFertigware.value);
@@ -9567,6 +9617,7 @@ class ProductionHistoryCompanion
           ..write('productId: $productId, ')
           ..write('datum: $datum, ')
           ..write('kgRohware: $kgRohware, ')
+          ..write('kgFleischeinwaage: $kgFleischeinwaage, ')
           ..write('kgFertigware: $kgFertigware, ')
           ..write('verlustAnteil: $verlustAnteil, ')
           ..write('startzeit: $startzeit, ')
@@ -28118,6 +28169,7 @@ typedef $$ProductionHistoryTableCreateCompanionBuilder
   required String productId,
   required DateTime datum,
   Value<double?> kgRohware,
+  Value<double?> kgFleischeinwaage,
   Value<double?> kgFertigware,
   Value<double?> verlustAnteil,
   Value<String?> startzeit,
@@ -28138,6 +28190,7 @@ typedef $$ProductionHistoryTableUpdateCompanionBuilder
   Value<String> productId,
   Value<DateTime> datum,
   Value<double?> kgRohware,
+  Value<double?> kgFleischeinwaage,
   Value<double?> kgFertigware,
   Value<double?> verlustAnteil,
   Value<String?> startzeit,
@@ -28191,6 +28244,10 @@ class $$ProductionHistoryTableFilterComposer
 
   ColumnFilters<double> get kgRohware => $composableBuilder(
       column: $table.kgRohware, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get kgFleischeinwaage => $composableBuilder(
+      column: $table.kgFleischeinwaage,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get kgFertigware => $composableBuilder(
       column: $table.kgFertigware, builder: (column) => ColumnFilters(column));
@@ -28269,6 +28326,10 @@ class $$ProductionHistoryTableOrderingComposer
 
   ColumnOrderings<double> get kgRohware => $composableBuilder(
       column: $table.kgRohware, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<double> get kgFleischeinwaage => $composableBuilder(
+      column: $table.kgFleischeinwaage,
+      builder: (column) => ColumnOrderings(column));
 
   ColumnOrderings<double> get kgFertigware => $composableBuilder(
       column: $table.kgFertigware,
@@ -28349,6 +28410,9 @@ class $$ProductionHistoryTableAnnotationComposer
 
   GeneratedColumn<double> get kgRohware =>
       $composableBuilder(column: $table.kgRohware, builder: (column) => column);
+
+  GeneratedColumn<double> get kgFleischeinwaage => $composableBuilder(
+      column: $table.kgFleischeinwaage, builder: (column) => column);
 
   GeneratedColumn<double> get kgFertigware => $composableBuilder(
       column: $table.kgFertigware, builder: (column) => column);
@@ -28436,6 +28500,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             Value<String> productId = const Value.absent(),
             Value<DateTime> datum = const Value.absent(),
             Value<double?> kgRohware = const Value.absent(),
+            Value<double?> kgFleischeinwaage = const Value.absent(),
             Value<double?> kgFertigware = const Value.absent(),
             Value<double?> verlustAnteil = const Value.absent(),
             Value<String?> startzeit = const Value.absent(),
@@ -28455,6 +28520,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             productId: productId,
             datum: datum,
             kgRohware: kgRohware,
+            kgFleischeinwaage: kgFleischeinwaage,
             kgFertigware: kgFertigware,
             verlustAnteil: verlustAnteil,
             startzeit: startzeit,
@@ -28474,6 +28540,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             required String productId,
             required DateTime datum,
             Value<double?> kgRohware = const Value.absent(),
+            Value<double?> kgFleischeinwaage = const Value.absent(),
             Value<double?> kgFertigware = const Value.absent(),
             Value<double?> verlustAnteil = const Value.absent(),
             Value<String?> startzeit = const Value.absent(),
@@ -28493,6 +28560,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             productId: productId,
             datum: datum,
             kgRohware: kgRohware,
+            kgFleischeinwaage: kgFleischeinwaage,
             kgFertigware: kgFertigware,
             verlustAnteil: verlustAnteil,
             startzeit: startzeit,

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/entwicklung.dart';
 import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/services/backup_service.dart';
+import 'package:produktion_planer/core/services/produktion_erfassen_service.dart';
 import 'package:produktion_planer/core/services/tagesaufgaben_service.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 
@@ -175,6 +176,46 @@ void main() {
       expect(aufgaben.single.abteilung, 'wurstkueche');
       expect(aufgaben.single.erledigt, isTrue);
       expect(aufgaben.single.datum, DateTime(2026, 10, 5));
+    });
+
+    test('Produktionen samt Fleischeinwaage — auch aus älteren Backups',
+        () async {
+      await seedArtikel(db, id: 'p1', nummer: '4711');
+      await ProduktionErfassenService.speichere(
+        db: db,
+        productId: 'p1',
+        datum: DateTime(2026, 11, 2),
+        kgRohware: 1000,
+        kgFleischeinwaage: 820,
+        kgFertigware: 900,
+      );
+      final inhalt = await BackupService.backupInhalt(db);
+      final daten = inhalt['data'] as Map<String, dynamic>;
+
+      // Auf einem zweiten Rechner eingespielt: Die Einwaage ist da.
+      final zweiter = testDatenbank();
+      addTearDown(zweiter.close);
+      final neu = await schreibeBackup(daten, version: '1.5');
+      await BackupService.importBackup(neu, zweiter, sicherungAnlegen: false);
+      final zeile = await zweiter.select(zweiter.productionHistory).getSingle();
+      expect(zeile.kgRohware, 1000);
+      expect(zeile.kgFleischeinwaage, 820);
+
+      // Ein Backup von vorher kennt sie nicht — eingespielt wird trotzdem.
+      final alt = await schreibeBackup(
+        {
+          ...daten,
+          'production_history': [
+            for (final h in daten['production_history'] as List)
+              Map<String, dynamic>.from(h as Map)..remove('kgFleischeinwaage'),
+          ],
+        },
+        version: '1.5',
+      );
+      await BackupService.importBackup(alt, zweiter, sicherungAnlegen: false);
+      final ohne = await zweiter.select(zweiter.productionHistory).getSingle();
+      expect(ohne.kgRohware, 1000);
+      expect(ohne.kgFleischeinwaage, isNull);
     });
   });
 

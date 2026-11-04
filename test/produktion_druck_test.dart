@@ -193,6 +193,31 @@ void main() {
       expect(t, contains('(02.11.2026)'));
     });
 
+    test('Fleischeinwaage: eine Spalte neben der Rohware — abwählbar',
+        () async {
+      final auftrag = erfassungDruckAuftrag(
+        montag: mo,
+        gruppen: woche(),
+        gedrucktAm: gedruckt,
+      );
+      // Die erste der Spalten zum Eintragen — und eingeschaltet.
+      final schluessel = [for (final o in auftrag.optionen) o.schluessel];
+      expect(
+        schluessel.indexOf(ErfassungDruckWahl.fleisch),
+        schluessel.indexOf(ErfassungDruckWahl.charge) - 1,
+      );
+      final wahl = DruckWahl.standard(auftrag.optionen);
+      expect(wahl.an(ErfassungDruckWahl.fleisch), isTrue);
+
+      final mit = await text(await auftrag.bauen(wahl));
+      expect(mit, contains('(Fleisch)'));
+      final ohne = await text(
+        await auftrag.bauen(wahl.mit(ErfassungDruckWahl.fleisch, false)),
+      );
+      expect(ohne, isNot(contains('(Fleisch)')));
+      expect(ohne, contains('(Rohware)'));
+    });
+
     test('Spalten abwählen, ohne Plan und ohne leere Zeilen', () async {
       final auftrag = erfassungDruckAuftrag(
         montag: mo,

@@ -33,7 +33,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 |             | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
 |             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise ins Board           |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
-| Auswerten   | Produktionserfassung  | Ist-Mengen und -Zeiten je Produktion: Verlust, kg/h; die Kette im Board wird erledigt        |
+| Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten: Verlust, kg/h; die Kette im Board wird erledigt |
 |             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
 |             | Statistik             | Engpässe, Zeitverteilung, Planerfüllung, Ausbeute, Leistung, Lücken in den Stammdaten        |
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
@@ -74,10 +74,10 @@ Standard. Strg+P druckt.
     Belegung.
   - **Erfassungsliste** (Produktionserfassung): die noch nicht erfassten
     Produktionen der Woche mit leeren Spalten für die Ist-Werte —
-    Rohware, Fertigware, Start und Ende, dazu Charge, Kürzel und
-    Bemerkung —, welche Tage und Abteilungen, die Tage untereinander oder
-    jeder auf eigenem Blatt zum Aushängen, was geplant ist, leere Zeilen
-    zum Nachtragen.
+    Rohware, davon Fleisch, Fertigware, Start und Ende, dazu Charge,
+    Kürzel und Bemerkung —, welche Tage und Abteilungen, die Tage
+    untereinander oder jeder auf eigenem Blatt zum Aushängen, was geplant
+    ist, leere Zeilen zum Nachtragen.
   - **Archivierter Wochenplan** (Wochen-Historie, Wochenplan einer
     archivierten Woche): der Plan, wie er beim Archivieren stand — mit
     „Archiv" und dem Stand in Kopf und Fuß, damit er nicht für den
@@ -138,7 +138,8 @@ Standard. Strg+P druckt.
   - **Rezepturblatt** (Rezeptur, Knopf neben „Mehr"): ein Stand mit Mengen
     wie in der Rezeptur, **umgerechnet auf eine Ansatzgröße oder ein
     Endgewicht** (in kg einzugeben; der Verlust ist eingerechnet), nur mit
-    Anteilen oder ganz ohne Mengen — etwa zum Weitergeben. Dazu Kennzahlen,
+    Anteilen oder ganz ohne Mengen — etwa zum Weitergeben. Vor jeder Zutat
+    ihre Artikelnummer aus dem Katalog (abwählbar). Dazu Kennzahlen,
     Beschreibung und Grund des Stands, die Unterrezepturen mit ihren
     Zutaten (auf die eingesetzte Menge umgerechnet, auch verschachtelt),
     Zutatenverzeichnis, Nährwerte wie auf dem Etikett, Allergene und
@@ -274,7 +275,11 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Lage: „Stand abschließen…" beim Entwurf, „Weiterentwickeln" beim
   abgeschlossenen — oder „Zum Entwurf", wenn schon einer in Arbeit ist.
   Vergleichen, Etikett, Fleischanteil, Kopie und Löschen stehen unter
-  „Mehr".
+  „Mehr". In der Zusammensetzung steht vor jeder Zutat ihre Artikelnummer.
+  Im Entwurf lassen sich die Zeilen am Griff links an eine neue Stelle
+  ziehen, und „Austauschen …" im Menü der Zeile setzt eine andere Zutat
+  oder Unterrezeptur ein: Menge, Platz und Notiz bleiben, Etikettname und
+  QUID gelten wieder wie bei der neuen.
 - **Entwicklungsstrang:** Beim Abschließen eines Stands fragt die App „Was
   ist neu und warum?" und vergleicht selbst mit dem vorigen Stand (Zeilen,
   Verlust, Fleischanteil, Nährwerte wie auf dem Etikett, Allergene,
@@ -360,7 +365,7 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 34.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 35.
 - **Backups** (`.planerbackup`) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute, die letzten 30 bleiben) und beim
@@ -373,8 +378,10 @@ Firmenangaben.
   DeepL-Schlüssel bleibt auf dem Rechner und geht nie ins Backup.
 - **Stammdaten-Mappe** (Excel): wird bei jedem Export frisch aus der
   Datenbank gebaut — Blätter „Anlagen", „Steckbriefe" und je Artikel eines.
-  In Excel bearbeitet, lässt sie sich wieder einlesen. Den Maschinen-Katalog
-  gibt es zusätzlich als eigene Mappe.
+  In Excel bearbeitet, lässt sie sich wieder einlesen. Im Block
+  „HISTORISCHE DATEN" stehen die erfassten Produktionen, ganz rechts die
+  Fleischeinwaage — ältere Mappen ohne diese Spalte lassen sich weiter
+  einlesen. Den Maschinen-Katalog gibt es zusätzlich als eigene Mappe.
 
 ### Tabellen
 

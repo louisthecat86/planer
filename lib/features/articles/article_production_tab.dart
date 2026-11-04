@@ -53,7 +53,7 @@ class _ProductionTab extends ConsumerWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // Breit: eine Spalte je Kennzahl. Schmal: zweizeilig.
-                  final breit = constraints.maxWidth >= 760;
+                  final breit = constraints.maxWidth >= 880;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
@@ -93,14 +93,24 @@ class _KennzahlenCard extends StatelessWidget {
     final f = AppFarben.von(context);
     double summeRoh = 0;
     double summeFertig = 0;
-    var hatMengen = false;
+    double summeFleisch = 0;
+    var mitRoh = 0;
+    var mitFleisch = 0;
     for (final r in rows) {
       if (r.kgRohware != null) {
         summeRoh += r.kgRohware!;
-        hatMengen = true;
+        mitRoh++;
       }
       if (r.kgFertigware != null) summeFertig += r.kgFertigware!;
+      if (r.kgFleischeinwaage != null) {
+        summeFleisch += r.kgFleischeinwaage!;
+        mitFleisch++;
+      }
     }
+    final hatMengen = mitRoh > 0;
+    // „davon … Fleisch" nur, wenn es bei jeder Produktion erfasst ist —
+    // sonst stünde ein Teil gegen das Ganze.
+    final fleischUeberall = mitFleisch > 0 && mitFleisch >= mitRoh;
 
     final ausbeute = ausbeuteAusProduktionen(rows);
     final leistung = leistungAusProduktionen(rows);
@@ -160,8 +170,20 @@ class _KennzahlenCard extends StatelessWidget {
           if (hatMengen) ...[
             const SizedBox(height: 2),
             Text(
-              'Gesamt: ${fmtKg(summeRoh)} kg Rohware → '
-              '${fmtKg(summeFertig)} kg Fertigware',
+              [
+                'Gesamt: ${fmtKg(summeRoh)} kg Rohware',
+                if (fleischUeberall)
+                  '(davon ${fmtKg(summeFleisch)} kg Fleisch)',
+                '→ ${fmtKg(summeFertig)} kg Fertigware',
+              ].join(' '),
+              style: hinweis,
+            ),
+          ],
+          if (mitFleisch > 0 && !fleischUeberall) ...[
+            const SizedBox(height: 2),
+            Text(
+              'Fleischeinwaage in $mitFleisch von ${rows.length} '
+              'Produktionen erfasst: ${fmtKg(summeFleisch)} kg',
               style: hinweis,
             ),
           ],
@@ -217,6 +239,7 @@ class _HistorieKopf extends StatelessWidget {
             child: Text('Datum', style: stil),
           ),
           rechts('Rohware', _HistSpalten.menge),
+          rechts('davon Fleisch', _HistSpalten.menge),
           rechts('Fertigware', _HistSpalten.menge),
           rechts('Garverlust', _HistSpalten.anteil),
           rechts('Dauer', _HistSpalten.dauer),
@@ -257,6 +280,7 @@ class _HistorieZeile extends StatelessWidget {
     // Garverlust: gespeicherten Anteil bevorzugen, sonst aus Roh/Fertig.
     var verlust = e.verlustAnteil;
     final roh = e.kgRohware;
+    final fleisch = e.kgFleischeinwaage;
     final fertig = e.kgFertigware;
     if (verlust == null && roh != null && fertig != null && roh > 0) {
       verlust = 1 - (fertig / roh);
@@ -327,6 +351,7 @@ class _HistorieZeile extends StatelessWidget {
         children: [
           SizedBox(width: _HistSpalten.datum, child: datum),
           zelle(kg(roh), _HistSpalten.menge),
+          zelle(kg(fleisch), _HistSpalten.menge),
           zelle(kg(fertig), _HistSpalten.menge),
           zelle(
             verlust == null ? '—' : fmtProzent(verlust),
@@ -341,7 +366,11 @@ class _HistorieZeile extends StatelessWidget {
     } else {
       // Schmal: Datum und Quelle oben, die Zahlen als eine Zeile darunter.
       final teile = <String>[
-        '${kg(roh)} → ${kg(fertig)}',
+        [
+          kg(roh),
+          if (fleisch != null) '(davon ${kg(fleisch)} Fleisch)',
+          '→ ${kg(fertig)}',
+        ].join(' '),
         if (verlust != null) '${fmtProzent(verlust)} Verlust',
         if (e.produktionszeitMinuten != null)
           fmtDauer(e.produktionszeitMinuten),

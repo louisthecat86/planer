@@ -184,6 +184,7 @@ class StammdatenExportService {
               'datum': h.datum.toIso8601String(),
               'kgRoh': h.kgRohware,
               'kgFertig': h.kgFertigware,
+              'kgFleisch': h.kgFleischeinwaage,
               'start': h.startzeit,
               'ende': h.endzeit,
               'notizen': h.notizen,
@@ -612,7 +613,7 @@ class StammdatenExportService {
 
     // ── Historie ──────────────────────────────────────────────────────
     w.text(r, 1, 'HISTORISCHE DATEN', _S.block);
-    w.verbinde('A$r:J$r');
+    w.verbinde('A$r:K$r');
     r++;
     w.text(
       r,
@@ -633,6 +634,9 @@ class StammdatenExportService {
       'kg/h roh',
       'kg/h gegart',
       'Notizen',
+      // Hinten angehängt: Ältere Mappen enden mit „Notizen" und lassen
+      // sich so weiter einlesen.
+      'Kg Fleischeinwaage',
     ];
     for (var i = 0; i < histKopf.length; i++) {
       w.text(r, 1 + i, histKopf[i], _S.kopf);
@@ -649,6 +653,7 @@ class StammdatenExportService {
         w.zahlOderLeer(r, 5, _tagesbruch(h['start'] as String?), _S.zeit);
         w.zahlOderLeer(r, 6, _tagesbruch(h['ende'] as String?), _S.zeit);
         w.text(r, 10, h['notizen'] as String?, _S.wert);
+        w.zahlOderLeer(r, 11, h['kgFleisch'] as double?, _S.zahl1);
       } else {
         w.leer(r, 1, _S.datum);
         w.leer(r, 2, _S.zahl1);
@@ -656,6 +661,7 @@ class StammdatenExportService {
         w.leer(r, 5, _S.zeit);
         w.leer(r, 6, _S.zeit);
         w.leer(r, 10, _S.wert);
+        w.leer(r, 11, _S.zahl1);
       }
       w.formel(r, 4, 'IF(OR(B$r="",C$r=""),"",1-C$r/B$r)', _S.prozent);
       w.formel(r, 7, 'IF(OR(E$r="",F$r=""),"",F$r-E$r)', _S.zeitBerechnet);
@@ -701,6 +707,7 @@ class StammdatenExportService {
       _S.summe,
     );
     w.leer(r, 10, _S.summe);
+    w.leer(r, 11, _S.summe);
 
     w.breiten({1: 38, for (var i = 0; i < _spalten; i++) 2 + i: 16});
     w.fixiere('B9');

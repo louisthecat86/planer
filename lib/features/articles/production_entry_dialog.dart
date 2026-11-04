@@ -23,6 +23,9 @@ import '../../core/utils/zeit.dart';
 /// [ProduktionErfassenService] — identisch zur Excel-Vorlage und auch über
 /// Mitternacht richtig.
 ///
+/// Rohware ist alles, was hineinkommt; die Fleischeinwaage daneben, wie
+/// viel davon Fleisch war — freiwillig, für jeden Artikel.
+///
 /// Aus diesen Zeilen stammen Ausbeute und Leistung der Planung (Ø der
 /// letzten zehn Produktionen).
 class ProductionEntryDialog extends ConsumerStatefulWidget {
@@ -81,6 +84,7 @@ class _ProductionEntryDialogState
     extends ConsumerState<ProductionEntryDialog> {
   late DateTime _datum;
   final _rohController = TextEditingController();
+  final _fleischController = TextEditingController();
   final _fertigController = TextEditingController();
   final _startController = TextEditingController();
   final _endController = TextEditingController();
@@ -97,6 +101,7 @@ class _ProductionEntryDialogState
     if (e != null) {
       _datum = DateTime(e.datum.year, e.datum.month, e.datum.day);
       _rohController.text = _kgText(e.kgRohware);
+      _fleischController.text = _kgText(e.kgFleischeinwaage);
       _fertigController.text = _kgText(e.kgFertigware);
       _startController.text = e.startzeit ?? '';
       _endController.text = e.endzeit ?? '';
@@ -113,6 +118,7 @@ class _ProductionEntryDialogState
   @override
   void dispose() {
     _rohController.dispose();
+    _fleischController.dispose();
     _fertigController.dispose();
     _startController.dispose();
     _endController.dispose();
@@ -128,6 +134,7 @@ class _ProductionEntryDialogState
       v == null ? '' : Format.eingabe(v, nachkomma: 3);
 
   double? get _roh => _num(_rohController.text);
+  double? get _fleisch => _num(_fleischController.text);
   double? get _fertig => _num(_fertigController.text);
 
   /// Live gerechnet — mit derselben Rechnung, mit der gespeichert wird.
@@ -176,6 +183,20 @@ class _ProductionEntryDialogState
       );
       return;
     }
+    final fleisch = _fleisch;
+    // Die Rohware zählt alles mit, was hineinkommt — Fleisch ist ein Teil
+    // davon.
+    if (fleisch != null && fleisch > roh) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Die Fleischeinwaage ist ein Teil der Rohware — sie kann nicht '
+            'größer sein.',
+          ),
+        ),
+      );
+      return;
+    }
     final fertig = _fertig;
 
     setState(() => _saving = true);
@@ -185,6 +206,7 @@ class _ProductionEntryDialogState
         productId: widget.productId,
         datum: _datum,
         kgRohware: roh,
+        kgFleischeinwaage: fleisch,
         kgFertigware: (fertig != null && fertig > 0) ? fertig : null,
         startzeit: _startController.text,
         endzeit: _endController.text,
@@ -339,7 +361,7 @@ class _ProductionEntryDialogState
               ),
               const SizedBox(height: 14),
 
-              // Roh + Fertig
+              // Roh, davon Fleisch, Fertig
               Row(
                 children: [
                   Expanded(
@@ -354,6 +376,21 @@ class _ProductionEntryDialogState
                         FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
                       ],
                       onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('erfassung-fleisch'),
+                      controller: _fleischController,
+                      decoration: const InputDecoration(
+                        labelText: 'Fleischeinwaage (kg)',
+                      ),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 12),

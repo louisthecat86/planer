@@ -338,6 +338,8 @@ class StammdatenImportService {
     String? aktuellesGeraet;
     var inHistorie = false;
     var historieKopfGesehen = false;
+    // Spalte K „Kg Fleischeinwaage" — ältere Mappen haben sie nicht.
+    var mitFleisch = false;
     final historie = <Map<String, Object?>>[];
     final hinweise = <String, String>{};
     final merkmale = <String, String>{};
@@ -351,6 +353,7 @@ class StammdatenImportService {
         aktuellesGeraet = null;
         inHistorie = oben == 'HISTORISCHE DATEN';
         historieKopfGesehen = false;
+        mitFleisch = false;
         continue;
       }
       // Blockkopf einer Anlage? Steht in Großbuchstaben.
@@ -366,7 +369,12 @@ class StammdatenImportService {
 
       if (inHistorie) {
         if (!historieKopfGesehen) {
-          if (a == 'Datum') historieKopfGesehen = true;
+          if (a == 'Datum') {
+            historieKopfGesehen = true;
+            mitFleisch = (_text(zeilen[r], 10) ?? '')
+                .toLowerCase()
+                .contains('fleisch');
+          }
           continue;
         }
         if (a.startsWith('Ø')) continue; // Auswertungszeile
@@ -379,6 +387,7 @@ class StammdatenImportService {
           'start': _hhmm(zelle(r + 1, 4)),
           'ende': _hhmm(zelle(r + 1, 5)),
           'notizen': zelle(r + 1, 9),
+          'kgFleisch': mitFleisch ? _zahl(zelle(r + 1, 10)) : null,
         });
         continue;
       }
@@ -818,6 +827,7 @@ class StammdatenImportService {
           if (roh == null || roh <= 0) continue;
           if (schluessel.contains('${datum.toIso8601String()}|$roh')) continue;
           final fertig = h['kgFertig'] as double?;
+          final fleisch = h['kgFleisch'] as double?;
           final start = h['start'] as String?;
           final ende = h['ende'] as String?;
           final dauer = _dauerMinuten(start, ende);
@@ -827,6 +837,9 @@ class StammdatenImportService {
               productId: pid,
               datum: datum,
               kgRohware: Value(roh),
+              kgFleischeinwaage: Value(
+                (fleisch != null && fleisch > 0) ? fleisch : null,
+              ),
               kgFertigware: Value(fertig),
               verlustAnteil: Value(
                 (fertig != null && roh > 0) ? 1 - (fertig / roh) : null,

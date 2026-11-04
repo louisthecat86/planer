@@ -5,9 +5,9 @@ import 'products.dart';
 /// Historische Produktionsdaten je Artikel — eine Zeile pro produzierter
 /// Charge. Quelle ist der Block „HISTORISCHE DATEN" der v3-Excel-Vorlage
 /// (Datum, Kg Rohware, Kg Fertigware, Verlust %, Start-/Endzeit,
-/// Produktionszeit, kg/h roh). Wird beim Import befüllt und beim Export
-/// wieder in dieselbe Vorlage zurückgeschrieben — so haben App und Excel
-/// in beide Richtungen denselben Stand.
+/// Produktionszeit, kg/h roh, Kg Fleischeinwaage). Wird beim Import
+/// befüllt und beim Export wieder in dieselbe Vorlage zurückgeschrieben —
+/// so haben App und Excel in beide Richtungen denselben Stand.
 ///
 /// Bewusst getrennt von [ProductionRuns]: Letztere hängen an einer
 /// konkreten Task und füttern die schrittweise Lernlogik. Diese Tabelle
@@ -20,8 +20,13 @@ class ProductionHistory extends Table {
   /// Produktionsdatum (tagesgenau).
   DateTimeColumn get datum => dateTime()();
 
-  /// Eingesetzte Rohware in kg (Excel: „Kg Rohware").
+  /// Eingesetzte Rohware in kg (Excel: „Kg Rohware") — alles, was
+  /// hineinkommt: Fleisch und alle übrigen Zutaten.
   RealColumn get kgRohware => real().nullable()();
+
+  /// Davon das eingewogene Fleisch in kg (Excel: „Kg Fleischeinwaage").
+  /// Freiwillig — für jeden Artikel.
+  RealColumn get kgFleischeinwaage => real().nullable()();
 
   /// Erzeugte Fertigware in kg (Excel: „Kg Fertigware").
   RealColumn get kgFertigware => real().nullable()();

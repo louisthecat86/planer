@@ -10,10 +10,10 @@ import '../../core/utils/kalenderwoche.dart';
 import 'geplante_produktion.dart';
 
 // Die Erfassungsliste: die geplanten Produktionen der Woche auf Papier, mit
-// leeren Spalten für die Ist-Werte — Rohware, Fertigware, Start und Ende,
-// dazu Charge, Kürzel und Bemerkung. Was dort von Hand steht, kommt danach
-// in die Produktionserfassung. Gedruckt wird, was die Erfassung zeigt: was
-// noch nicht erfasst ist.
+// leeren Spalten für die Ist-Werte — Rohware, davon Fleisch, Fertigware,
+// Start und Ende, dazu Charge, Kürzel und Bemerkung. Was dort von Hand
+// steht, kommt danach in die Produktionserfassung. Gedruckt wird, was die
+// Erfassung zeigt: was noch nicht erfasst ist.
 
 /// Schlüssel der Wahl im Druckfenster.
 abstract final class ErfassungDruckWahl {
@@ -22,6 +22,7 @@ abstract final class ErfassungDruckWahl {
   static const abteilungen = 'abteilungen';
   static const plan = 'plan';
   static const leer = 'leer';
+  static const fleisch = 'fleisch';
   static const charge = 'charge';
   static const kuerzel = 'kuerzel';
   static const bemerkung = 'bemerkung';
@@ -35,6 +36,7 @@ class ErfassungDruckInhalt {
     this.abteilungen,
     this.plan = true,
     this.leereZeilen = 3,
+    this.fleisch = true,
     this.charge = true,
     this.kuerzel = true,
     this.bemerkung = true,
@@ -55,6 +57,9 @@ class ErfassungDruckInhalt {
 
   /// So viele leere Zeilen je Tag — zum Nachtragen von Ungeplantem.
   final int leereZeilen;
+
+  /// Neben der Rohware die Fleischeinwaage — wie viel davon Fleisch ist.
+  final bool fleisch;
 
   /// Spalten zum Eintragen, außer Mengen und Zeiten.
   final bool charge;
@@ -195,6 +200,12 @@ DruckAuftrag erfassungDruckAuftrag({
         gruppe: 'Auf der Liste',
       ),
       const DruckSchalter(
+        schluessel: ErfassungDruckWahl.fleisch,
+        titel: 'Fleischeinwaage',
+        hinweis: 'Neben der Rohware: wie viel davon Fleisch ist',
+        gruppe: 'Spalten zum Eintragen',
+      ),
+      const DruckSchalter(
         schluessel: ErfassungDruckWahl.charge,
         titel: 'Charge',
         gruppe: 'Spalten zum Eintragen',
@@ -234,6 +245,7 @@ DruckAuftrag erfassungDruckAuftrag({
           abteilungen: gewaehlteAbteilungen,
           plan: wahl.an(ErfassungDruckWahl.plan),
           leereZeilen: wahl.an(ErfassungDruckWahl.leer) ? 3 : 0,
+          fleisch: wahl.an(ErfassungDruckWahl.fleisch),
           charge: wahl.an(ErfassungDruckWahl.charge),
           kuerzel: wahl.an(ErfassungDruckWahl.kuerzel),
           bemerkung: wahl.an(ErfassungDruckWahl.bemerkung),
@@ -423,12 +435,16 @@ class _Erfassungsliste {
       nr++: const pw.FixedColumnWidth(52),
       nr++: const pw.FlexColumnWidth(),
       nr++: const pw.FixedColumnWidth(68),
+      if (inhalt.fleisch) nr++: const pw.FixedColumnWidth(62),
       nr++: const pw.FixedColumnWidth(68),
       nr++: const pw.FixedColumnWidth(46),
       nr++: const pw.FixedColumnWidth(46),
       if (inhalt.charge) nr++: const pw.FixedColumnWidth(86),
       if (inhalt.kuerzel) nr++: const pw.FixedColumnWidth(46),
-      if (inhalt.bemerkung) nr++: const pw.FixedColumnWidth(150),
+      // Mit der Fleischeinwaage etwas schmaler — sonst bliebe dem Artikel
+      // zu wenig Platz.
+      if (inhalt.bemerkung)
+        nr++: pw.FixedColumnWidth(inhalt.fleisch ? 124 : 150),
     };
     // Was rechts vom Artikel steht, ist zum Eintragen da.
     final zumEintragen = breiten.length - (mitAbteilung ? 3 : 2);
@@ -467,6 +483,7 @@ class _Erfassungsliste {
             ].join(' · '),
           ),
           druckKopfZelle('Rohware kg', rechts: true),
+          if (inhalt.fleisch) druckKopfZelle('Fleisch kg', rechts: true),
           druckKopfZelle('Fertigware kg', rechts: true),
           druckKopfZelle('Start'),
           druckKopfZelle('Ende'),

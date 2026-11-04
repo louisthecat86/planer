@@ -86,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 34;
+  int get schemaVersion => 35;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -555,6 +555,17 @@ class AppDatabase extends _$AppDatabase {
               'entwicklung_projekte',
               'gesamtprojekt_id',
               'TEXT',
+            );
+          }
+
+          // --- v34 → v35: Fleischeinwaage je Produktion ---------------
+          // Wie viel von der Rohware Fleisch war — die Rohware zählt alle
+          // Zutaten mit.
+          if (from < 35) {
+            await _addColumnIfNotExists(
+              'production_history',
+              'kg_fleischeinwaage',
+              'REAL',
             );
           }
         },

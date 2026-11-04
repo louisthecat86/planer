@@ -75,4 +75,42 @@ void main() {
     expect(geaendert.produktionszeitMinuten, isNull);
     expect(geaendert.kgProStundeRoh, isNull);
   });
+
+  test('Fleischeinwaage: festgehalten, ohne Einfluss auf die Kennzahlen',
+      () async {
+    await seedArtikel(db, id: 'p1', nummer: '4001');
+
+    // 1.000 kg Rohware — alles, was hineinkommt —, davon 820 kg Fleisch.
+    await ProduktionErfassenService.speichere(
+      db: db,
+      productId: 'p1',
+      datum: DateTime(2026, 11, 2),
+      kgRohware: 1000,
+      kgFleischeinwaage: 820,
+      kgFertigware: 900,
+    );
+    final neu = await db.select(db.productionHistory).getSingle();
+    expect(neu.kgFleischeinwaage, 820);
+    // Verlust und Leistung rechnen weiter mit der Rohware.
+    expect(neu.verlustAnteil, closeTo(0.1, 1e-9));
+
+    // Geändert — und wieder geleert. 0 zählt wie leer.
+    for (final (eingabe, erwartet) in [
+      (780.5, 780.5),
+      (null, null),
+      (0.0, null),
+    ]) {
+      await ProduktionErfassenService.speichere(
+        db: db,
+        productId: 'p1',
+        datum: DateTime(2026, 11, 2),
+        kgRohware: 1000,
+        kgFleischeinwaage: eingabe,
+        kgFertigware: 900,
+        vorhandeneId: neu.id,
+      );
+      final zeile = await db.select(db.productionHistory).getSingle();
+      expect(zeile.kgFleischeinwaage, erwartet, reason: '$eingabe');
+    }
+  });
 }

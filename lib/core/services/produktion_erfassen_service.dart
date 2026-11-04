@@ -38,6 +38,8 @@ class ProduktionsKennzahlen {
 ///   Produktionszeit (min) = Ende − Start
 ///   kg/h roh     = Roh    / (Produktionszeit in Stunden)
 ///   kg/h gegart  = Fertig / (Produktionszeit in Stunden)
+/// Die Fleischeinwaage — wie viel von der Rohware Fleisch war — wird nur
+/// festgehalten; in keine Kennzahl geht sie ein.
 class ProduktionErfassenService {
   const ProduktionErfassenService._();
 
@@ -90,12 +92,14 @@ class ProduktionErfassenService {
   /// Speichert eine Produktion: neu mit `quelle = 'app'`, oder — mit
   /// [vorhandeneId] — als Änderung einer bestehenden Zeile. Alle
   /// abgeleiteten Werte werden hier berechnet, damit App und Excel
-  /// denselben Stand haben.
+  /// denselben Stand haben. [kgFleischeinwaage]: wie viel von der Rohware
+  /// Fleisch war — 0 oder weniger gilt als nicht erfasst.
   static Future<void> speichere({
     required AppDatabase db,
     required String productId,
     required DateTime datum,
     required double kgRohware,
+    double? kgFleischeinwaage,
     double? kgFertigware,
     String? startzeit,
     String? endzeit,
@@ -116,6 +120,9 @@ class ProduktionErfassenService {
       endzeit: ende,
     );
     final tag = DateTime(datum.year, datum.month, datum.day);
+    final fleisch = (kgFleischeinwaage != null && kgFleischeinwaage > 0)
+        ? kgFleischeinwaage
+        : null;
 
     if (vorhandeneId != null) {
       await (db.update(db.productionHistory)
@@ -124,6 +131,7 @@ class ProduktionErfassenService {
         ProductionHistoryCompanion(
           datum: Value(tag),
           kgRohware: Value(kgRohware),
+          kgFleischeinwaage: Value(fleisch),
           kgFertigware: Value(kgFertigware),
           verlustAnteil: Value(k.verlustAnteil),
           startzeit: Value(start),
@@ -144,6 +152,7 @@ class ProduktionErfassenService {
             productId: productId,
             datum: tag,
             kgRohware: Value(kgRohware),
+            kgFleischeinwaage: Value(fleisch),
             kgFertigware: Value(kgFertigware),
             verlustAnteil: Value(k.verlustAnteil),
             startzeit: Value(start),
