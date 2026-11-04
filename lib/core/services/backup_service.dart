@@ -13,15 +13,28 @@ import '../constants/entwicklung.dart';
 import '../database/database.dart';
 import '../utils/fehler_text.dart';
 import '../utils/format.dart';
+import 'datei_ablage.dart';
 import 'entwicklung_sicherung.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
 /// Speichert Backups im Ordner `backups` unter den Dokumenten — oder in
 /// einem selbst gewählten Ordner (siehe [getEigenerBackupOrdner]).
+///
+/// Zwei Arten:
+/// - **Auto-Backup** (nach Änderungen, beim Beenden, Schnell-Backup, vor
+///   einem Restore): die Daten gepackt, die angehängten Dateien der
+///   Produktentwicklung nur als Prüfsumme. Ihr Inhalt liegt einmal in der
+///   Ablage `planer_dateien` neben den Backups ([DateiAblage]) — statt in
+///   jedem Backup ganz.
+/// - **Komplett-Backup** (von Hand gespeichert): alles in einer Datei, auch
+///   die Dateien — zum Umziehen auf einen anderen Rechner.
+///
+/// Geschrieben wird erst in eine Zwischendatei, dann umbenannt: Bricht das
+/// Schreiben ab, bleibt keine halbe Sicherung unter dem richtigen Namen.
 class BackupService {
   static const String _backupDirName = 'backups';
-  static const String _backupFilePrefix = 'planer_backup';
+  static const String _komplettFilePrefix = 'planer_komplett';
   static const String _autoBackupFilePrefix = 'planer_auto_backup';
 
   /// Präfix der Sicherung, die unmittelbar VOR einem Restore geschrieben
@@ -31,13 +44,19 @@ class BackupService {
   /// falsche Backup erwischt hat.
   static const String _preRestoreFilePrefix = 'planer_vor_restore';
   static const String _backupFileExtension = 'planerbackup';
+
+  /// Endung der Zwischendatei beim Schreiben.
+  static const String _zwischenEndung = '.tmp';
+
   /// Aktuelle Backup-Version.
   ///
   /// 1.0 → ohne Maschinen-Steckbriefe und Parameter-Grenzen
   /// 1.1 → vollständig (inkl. `machine_parameter_defs`, `parameter_grenzen`)
   /// 1.4 → inkl. `demands`, `production_history`, `week_snapshots`
   /// 1.5 → inkl. `tagesaufgaben`
-  static const String _currentVersion = '1.5';
+  /// 1.6 → gepackt (gzip); im Auto-Backup die Dateien der
+  ///       Produktentwicklung nur als Verweis auf die Ablage daneben
+  static const String _currentVersion = '1.6';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -49,7 +68,13 @@ class BackupService {
     '1.3',
     '1.4',
     '1.5',
+    '1.6',
   };
+
+  /// Nur für Tests: dieser Ordner statt des eingestellten — die Tests
+  /// kommen nicht an Dokumente-Ordner und Einstellungen heran.
+  @visibleForTesting
+  static Directory? ordnerFuerTests;
 
   /// Schlüssel des selbst gewählten Backup-Ordners.
   ///
@@ -149,6 +174,11 @@ class BackupService {
   /// sonst fällt der Service still auf den Standard zurück. Damit gehen
   /// Backups nie verloren, nur weil ein Netzlaufwerk gerade nicht da ist.
   static Future<Directory> _getBackupDir() async {
+    final test = ordnerFuerTests;
+    if (test != null) {
+      await test.create(recursive: true);
+      return test;
+    }
     final eigener = await getEigenerBackupOrdner();
     if (eigener != null) {
       try {
@@ -209,7 +239,9 @@ class BackupService {
     }
   }
 
-  /// Exportiert die gesamte Datenbank als JSON-Backup.
+  /// Speichert ein Komplett-Backup: alles in einer Datei, auch die
+  /// angehängten Dateien der Produktentwicklung — zum Umziehen auf einen
+  /// anderen Rechner.
   ///
   /// Zeigt einen "Speichern unter"-Dialog, damit der Nutzer den Speicherort
   /// selbst wählen kann. Returns: Pfad zur erstellten Backup-Datei oder null,
@@ -219,11 +251,11 @@ class BackupService {
       final now = DateTime.now();
       final timeStamp = DateFormat('yyyy-MM-dd_HHmmss').format(now);
       final defaultFilename =
-          '${_backupFilePrefix}_$timeStamp.$_backupFileExtension';
+          '${_komplettFilePrefix}_$timeStamp.$_backupFileExtension';
 
       // "Speichern unter"-Dialog anzeigen.
       final outputPath = await FilePicker.saveFile(
-        dialogTitle: 'Backup speichern unter…',
+        dialogTitle: 'Komplett-Backup speichern unter…',
         fileName: defaultFilename,
         type: FileType.any,
       );
@@ -231,14 +263,7 @@ class BackupService {
       if (outputPath == null) return null; // Nutzer hat abgebrochen.
 
       final backupData = await _buildBackupPayload(database, isAuto: false);
-
-      // JSON in vom Nutzer gewählte Datei schreiben
-      final file = File(outputPath);
-      await file.writeAsString(
-        await _kodiereJson(backupData),
-        flush: true,
-      );
-
+      await _schreibeGepackt(File(outputPath), backupData);
       return outputPath;
     } catch (e) {
       throw Exception('Backup-Export fehlgeschlagen: ${fehlerText(e)}');
@@ -250,6 +275,9 @@ class BackupService {
   static Future<String> createAutoBackup(AppDatabase database) async {
     try {
       final backupDir = await _getBackupDir();
+      // Vor dem Lesen: Was danach noch geändert wird, gilt als nicht
+      // gesichert.
+      final stand = await _aenderungenBisher(database);
 
       final now = DateTime.now();
       final timeStamp = DateFormat('yyyy-MM-dd_HHmmss').format(now);
@@ -257,10 +285,13 @@ class BackupService {
           '${_autoBackupFilePrefix}_$timeStamp.$_backupFileExtension';
       final filepath = '${backupDir.path}/$filename';
 
-      final backupData = await _buildBackupPayload(database, isAuto: true);
-
-      final file = File(filepath);
-      await file.writeAsString(await _kodiereJson(backupData), flush: true);
+      final backupData = await _buildBackupPayload(
+        database,
+        isAuto: true,
+        ablage: DateiAblage.neben(backupDir),
+      );
+      await _schreibeGepackt(File(filepath), backupData);
+      if (stand != null) _standBeimBackup[database] = stand;
 
       return filepath;
     } catch (e) {
@@ -268,23 +299,104 @@ class BackupService {
     }
   }
 
-  /// Wandelt das Backup-Payload in JSON — auf einem eigenen Isolate.
+  // ── Was seit dem letzten Backup geändert wurde ───────────────────────
+
+  /// Je Datenbank: die Zahl der Änderungen, als ihr letztes Auto-Backup in
+  /// diesem Programmlauf begann.
+  static final Expando<int> _standBeimBackup =
+      Expando<int>('Änderungen beim letzten Backup');
+
+  /// Wie viele Zeilen diese Verbindung seit dem Öffnen geändert hat —
+  /// null, wenn sich das nicht ermitteln lässt.
+  static Future<int?> _aenderungenBisher(AppDatabase db) async {
+    try {
+      final zeile = await db
+          .customSelect('SELECT total_changes() AS anzahl')
+          .getSingle();
+      return zeile.read<int>('anzahl');
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Wurde seit dem letzten Auto-Backup dieses Programmlaufs etwas
+  /// geändert? Ohne ein solches Backup: ja — dann sichert das Beenden in
+  /// jedem Fall, wie bisher.
+  static Future<bool> hatAenderungenSeitLetztemBackup(AppDatabase db) async {
+    final stand = _standBeimBackup[db];
+    if (stand == null) return true;
+    final jetzt = await _aenderungenBisher(db);
+    return jetzt == null || jetzt != stand;
+  }
+
+  // ── Packen und sicher schreiben ──────────────────────────────────────
+
+  /// Packt [daten] und schreibt sie sicher nach [ziel].
+  static Future<void> _schreibeGepackt(
+    File ziel,
+    Map<String, dynamic> daten,
+  ) async =>
+      _schreibeSicher(ziel, await _packe(daten));
+
+  /// Wandelt das Backup in gepacktes JSON — auf einem eigenen Isolate.
   ///
-  /// Bei vollen Stammdaten sind das mehrere Megabyte. `jsonEncode` ist reine
-  /// CPU-Arbeit und blockiert den UI-Thread, solange es läuft: Das Fenster
-  /// friert ein, beim Beenden hakt die App sichtbar. Auf einem eigenen
-  /// Isolate merkt der Nutzer davon nichts.
+  /// Bei vollen Stammdaten sind das mehrere Megabyte. `jsonEncode` und das
+  /// Packen sind reine Rechenarbeit und blockierten sonst den UI-Thread:
+  /// Das Fenster fröre ein, beim Beenden hakte die App sichtbar.
   ///
   /// Der Fallback ist Absicht: Sollte `Isolate.run` auf einer Plattform
   /// nicht verfügbar sein oder das Payload wider Erwarten etwas
-  /// Nicht-Sendbares enthalten, wird ganz normal im Hauptisolate kodiert.
+  /// Nicht-Sendbares enthalten, wird ganz normal im Hauptisolate gepackt.
   /// Lieber kurz ruckeln als gar kein Backup.
-  static Future<String> _kodiereJson(Map<String, dynamic> daten) async {
+  static Future<List<int>> _packe(Map<String, dynamic> daten) async {
     try {
-      return await Isolate.run(() => jsonEncode(daten));
+      return await Isolate.run(() => _packeHier(daten));
     } catch (_) {
-      return jsonEncode(daten);
+      return _packeHier(daten);
     }
+  }
+
+  static List<int> _packeHier(Map<String, dynamic> daten) =>
+      gzip.encode(utf8.encode(jsonEncode(daten)));
+
+  /// Schreibt [bytes] erst in eine Zwischendatei und benennt sie dann um
+  /// — bricht das Schreiben ab (etwa weil die App beim Beenden nicht mehr
+  /// wartet), liegt keine halbe Sicherung unter dem richtigen Namen.
+  static Future<void> _schreibeSicher(File ziel, List<int> bytes) async {
+    final zwischen = File('${ziel.path}$_zwischenEndung');
+    await zwischen.writeAsBytes(bytes, flush: true);
+    try {
+      await zwischen.rename(ziel.path);
+    } on FileSystemException {
+      // Unter Windows scheitert das Umbenennen auf eine vorhandene Datei —
+      // etwa, wenn ein Export eine ältere überschreiben soll.
+      if (!await ziel.exists()) rethrow;
+      await ziel.delete();
+      await zwischen.rename(ziel.path);
+    }
+  }
+
+  /// Ist [bytes] gepackt (gzip)? Ältere Backups sind reines JSON.
+  static bool _istGepackt(List<int> bytes) =>
+      bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+
+  /// Liest ein Backup — gepackt oder nicht — auf einem eigenen Isolate:
+  /// Auch große Dateien lassen das Fenster nicht stehen.
+  static Future<Map<String, dynamic>> _leseBackup(File datei) async {
+    final bytes = await datei.readAsBytes();
+    return Isolate.run(() => _entpacke(bytes));
+  }
+
+  static Map<String, dynamic> _entpacke(Uint8List bytes) {
+    final roh = _istGepackt(bytes) ? gzip.decode(bytes) : bytes;
+    final json = jsonDecode(utf8.decode(roh));
+    if (json is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Die Datei ist kein gültiges Backup (erwartet wird ein '
+        'JSON-Objekt).',
+      );
+    }
+    return json;
   }
 
   /// Schreibt den aktuellen Stand als Sicherung vor einem Restore.
@@ -295,30 +407,38 @@ class BackupService {
     final timeStamp = DateFormat('yyyy-MM-dd_HHmmss').format(DateTime.now());
     final filepath = '${backupDir.path}/'
         '${_preRestoreFilePrefix}_$timeStamp.$_backupFileExtension';
-    // isAuto: false — die Datei soll die Rotation überleben.
-    final daten = await _buildBackupPayload(database, isAuto: false);
-    await File(filepath).writeAsString(
-      await _kodiereJson(daten),
-      flush: true,
+    // isAuto: false — die Datei soll die Rotation überleben. Die Dateien
+    // der Produktentwicklung liegen in der Ablage daneben.
+    final daten = await _buildBackupPayload(
+      database,
+      isAuto: false,
+      ablage: DateiAblage.neben(backupDir),
     );
+    await _schreibeGepackt(File(filepath), daten);
     return filepath;
   }
 
   /// Der Inhalt eines Backups — für Tests, die ihn prüfen, ohne eine
-  /// Datei zu schreiben.
+  /// Datei zu schreiben. Ohne [ablage] wie ein Komplett-Backup.
   @visibleForTesting
-  static Future<Map<String, dynamic>> backupInhalt(AppDatabase database) =>
-      _buildBackupPayload(database, isAuto: false);
+  static Future<Map<String, dynamic>> backupInhalt(
+    AppDatabase database, {
+    DateiAblage? ablage,
+  }) =>
+      _buildBackupPayload(database, isAuto: false, ablage: ablage);
 
   /// Baut das Backup-Payload zusammen. Zentrale Stelle damit
   /// `exportBackup` und `createAutoBackup` immer das gleiche Schema
-  /// liefern.
+  /// liefern. Mit [ablage] stehen die Dateien der Produktentwicklung dort
+  /// statt im Backup.
   static Future<Map<String, dynamic>> _buildBackupPayload(
     AppDatabase database, {
     required bool isAuto,
+    DateiAblage? ablage,
   }) async {
     final now = DateTime.now();
-    final entwicklung = await EntwicklungSicherung.exportieren(database);
+    final entwicklung =
+        await EntwicklungSicherung.exportieren(database, ablage: ablage);
     return {
       'version': _currentVersion,
       'timestamp': now.toIso8601String(),
@@ -383,15 +503,8 @@ class BackupService {
         throw Exception('Backup-Datei nicht gefunden: $filepath');
       }
 
-      final contents = await file.readAsString();
-      final dekodiert = jsonDecode(contents);
-      if (dekodiert is! Map<String, dynamic>) {
-        throw Exception(
-          'Die Datei ist kein gültiges Backup (erwartet wird ein '
-          'JSON-Objekt).',
-        );
-      }
-      final backupJson = dekodiert;
+      // Gepackt oder nicht, auf einem eigenen Isolate gelesen.
+      final backupJson = await _leseBackup(file);
 
       // Version prüfen — ältere Backups bleiben lesbar.
       final version = backupJson['version'] as String?;
@@ -416,13 +529,17 @@ class BackupService {
       data = rohDaten;
 
       // Die Produktentwicklung: prüfen und, wenn der Schlüssel dieses
-      // Rechners passt, schon entschlüsseln. Ist ihr Teil beschädigt,
-      // bricht das Einspielen hier ab — bevor etwas gelöscht ist.
+      // Rechners passt, schon entschlüsseln. Ist ihr Teil beschädigt oder
+      // fehlen Dateien, bricht das Einspielen hier ab — bevor etwas
+      // gelöscht ist. Die Dateien eines Auto-Backups kommen vorher aus der
+      // Ablage zurück.
       try {
-        entwicklung = await EntwicklungSicherung.vorbereiten(
-          database,
-          data['entwicklung'],
-        );
+        var teil = data['entwicklung'];
+        if (teil is Map<String, dynamic> &&
+            teil.containsKey('dateiVerweise')) {
+          teil = await _dateienZurueckholen(teil, file, database);
+        }
+        entwicklung = await EntwicklungSicherung.vorbereiten(database, teil);
       } on FormatException catch (e) {
         throw Exception(
           'Der Teil der Produktentwicklung ist beschädigt (${e.message}).',
@@ -500,6 +617,58 @@ class BackupService {
     }
   }
 
+  /// Holt die Dateien zum Entwicklungsteil [teil] eines Auto-Backups
+  /// zurück und gibt den Teil so zurück, wie ein Komplett-Backup ihn trägt.
+  ///
+  /// Gesucht wird in der Ablage neben [backupDatei], dann in der neben dem
+  /// eingestellten Backup-Ordner, zuletzt in der Datenbank dieses Rechners
+  /// (derselbe Inhalt unter derselben ID). Fehlt etwas, wird nichts
+  /// eingespielt — sonst stünden die Dateien danach ohne Inhalt da.
+  static Future<Map<String, dynamic>> _dateienZurueckholen(
+    Map<String, dynamic> teil,
+    File backupDatei,
+    AppDatabase db,
+  ) async {
+    final roh = teil['dateiVerweise'];
+    if (roh is! Map<String, dynamic>) {
+      throw const FormatException('Die Verweise auf die Dateien fehlen.');
+    }
+    final verweise = <String, String>{
+      for (final MapEntry(:key, :value) in roh.entries)
+        if (value is String) key: value,
+    };
+    final ordner = <String>{backupDatei.absolute.parent.path};
+    try {
+      ordner.add((await _getBackupDir()).absolute.path);
+    } catch (_) {
+      // Ohne eingestellten Ordner bleibt die Ablage neben der Datei.
+    }
+    final aufgeloest = await DateiAblage.aufloesen(
+      verweise,
+      ablagen: [for (final o in ordner) DateiAblage.neben(Directory(o))],
+      db: db,
+    );
+    final fehlen = aufgeloest.fehlen.length;
+    if (fehlen > 0) {
+      throw Exception(
+        'Dem Backup fehlen $fehlen '
+        '${fehlen == 1 ? 'angehängte Datei' : 'angehängte Dateien'} der '
+        'Produktentwicklung — sie liegen im Ordner '
+        '„${DateiAblage.ordnerName}" neben den Backups. Für einen anderen '
+        'Rechner das Komplett-Backup nehmen oder den Ordner mitkopieren. '
+        'Es wurde nichts verändert.',
+      );
+    }
+    return {
+      for (final MapEntry(:key, :value) in teil.entries)
+        if (key != 'dateiVerweise') key: value,
+      'dateien': {
+        for (final MapEntry(:key, :value) in aufgeloest.dateien.entries)
+          key: base64Encode(value),
+      },
+    };
+  }
+
   /// Listet alle verfügbaren Backup-Dateien auf, sortiert mit dem
   /// neuesten zuerst.
   static Future<List<BackupInfo>> listBackups() async {
@@ -563,18 +732,30 @@ class BackupService {
     }
   }
 
-  /// Liest nur die ersten Bytes der Datei und zieht die Version heraus.
+  /// Liest nur die ersten Bytes der Datei und zieht die Version heraus —
+  /// bei einer gepackten Datei aus ihrem entpackten Anfang.
   static Future<String?> _versionAusKopf(File file, int laenge) async {
     try {
       final ende = laenge < 2048 ? laenge : 2048;
       if (ende <= 0) return null;
       final bytes =
           await file.openRead(0, ende).expand((teil) => teil).toList();
-      final kopf = utf8.decode(bytes, allowMalformed: true);
+      final kopf = utf8.decode(
+        _istGepackt(bytes) ? _anfangEntpackt(bytes) : bytes,
+        allowMalformed: true,
+      );
       return _versionMuster.firstMatch(kopf)?.group(1);
     } catch (_) {
       return null;
     }
+  }
+
+  /// Entpackt den Anfang einer gepackten Datei, so weit [anfang] reicht —
+  /// ohne den Rest zu lesen.
+  static List<int> _anfangEntpackt(List<int> anfang) {
+    final sammler = _Sammler();
+    gzip.decoder.startChunkedConversion(sammler).add(anfang);
+    return sammler.bytes;
   }
 
   /// Liest Metainformationen einer Backup-Datei.
@@ -610,8 +791,7 @@ class BackupService {
 
   /// Fallback: Datei komplett lesen und parsen.
   static Future<BackupInfo> _readBackupInfoVollstaendig(File file) async {
-    final contents = await file.readAsString();
-    final json = jsonDecode(contents) as Map<String, dynamic>;
+    final json = await _leseBackup(file);
 
     return BackupInfo(
       filename: file.path.split(Platform.pathSeparator).last,
@@ -635,35 +815,141 @@ class BackupService {
     }
   }
 
-  /// Räumt alte Auto-Backups auf — behält die [maxKeep] neuesten,
-  /// löscht den Rest. Wird beim Schreiben neuer Auto-Backups
-  /// aufgerufen damit der Ordner nicht wuchert.
-  /// Standard-Anzahl automatischer Backups, die aufbewahrt werden.
-  ///
-  /// Bewusst klein: Automatische Backups entstehen bei jeder Änderung, und
-  /// ein einzelner Stand ist wertlos — ein versehentlich gespeicherter
-  /// Fehler läge dann sofort im einzigen Backup. Fünf Stände geben ein bis
-  /// zwei Arbeitstage Rückweg, um einen Fehler zu bemerken, bevor der letzte
-  /// gute Stand herausrotiert. Manuelle Exporte sind davon NICHT betroffen
-  /// (Filter auf `isAuto`).
-  static const int standardMaxBackups = 5;
+  // ── Aufbewahren ──────────────────────────────────────────────────────
+  //
+  // Gestaffelt: die letzten zehn Auto-Backups, dazu für die letzten sieben
+  // Tage je Tag das letzte und für die letzten vier Wochen je Woche das
+  // letzte. Höchstens 21 Dateien — und doch ein Rückweg von vier Wochen,
+  // um einen Fehler zu bemerken, bevor der letzte gute Stand herausfällt.
+  // Manuelle Exporte und die Sicherung vor einem Restore bleiben immer.
 
-  static Future<void> cleanupOldAutoBackups({
-    int maxKeep = standardMaxBackups,
-  }) async {
+  /// So viele der neuesten Auto-Backups bleiben immer.
+  static const int _letzteBehalten = 10;
+
+  /// Für so viele Tage bleibt je Tag das letzte Auto-Backup.
+  static const int _tageBehalten = 7;
+
+  /// Für so viele Wochen bleibt je Woche das letzte.
+  static const int _wochenBehalten = 4;
+
+  /// Die Pfade der Auto-Backups aus [autos], die bleiben — Stand [jetzt].
+  @visibleForTesting
+  static Set<String> behalteneBackups(List<BackupInfo> autos, DateTime jetzt) {
+    final sortiert = [...autos]
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    final behalten = {
+      for (final b in sortiert.take(_letzteBehalten)) b.filepath,
+    };
+    // Das letzte Backup im Zeitraum [von, bis).
+    void letztesIn(DateTime von, DateTime bis) {
+      for (final b in sortiert) {
+        if (b.timestamp.isBefore(bis) && !b.timestamp.isBefore(von)) {
+          behalten.add(b.filepath);
+          return;
+        }
+      }
+    }
+
+    final heute = DateTime(jetzt.year, jetzt.month, jetzt.day);
+    for (var i = 0; i < _tageBehalten; i++) {
+      letztesIn(
+        DateTime(heute.year, heute.month, heute.day - i),
+        DateTime(heute.year, heute.month, heute.day - i + 1),
+      );
+    }
+    final montag =
+        DateTime(heute.year, heute.month, heute.day - (heute.weekday - 1));
+    for (var i = 0; i < _wochenBehalten; i++) {
+      letztesIn(
+        DateTime(montag.year, montag.month, montag.day - 7 * i),
+        DateTime(montag.year, montag.month, montag.day - 7 * i + 7),
+      );
+    }
+    return behalten;
+  }
+
+  /// Räumt alte Auto-Backups auf (siehe [behalteneBackups]) und löscht
+  /// Zwischendateien, die ein abgebrochenes Schreiben hinterlassen hat.
+  /// Läuft nach jedem Auto-Backup und beim Beenden.
+  static Future<void> cleanupOldAutoBackups({DateTime? jetzt}) async {
+    final zeit = jetzt ?? DateTime.now();
     try {
       final all = await listBackups();
       // Nur automatische Backups rotieren — manuell exportierte Sicherungen
       // sind bewusste Momentaufnahmen und bleiben erhalten.
       final autos = all.where((b) => b.isAuto).toList();
-      if (autos.length <= maxKeep) return;
-      final zuLoeschen = autos.skip(maxKeep);
-      for (final b in zuLoeschen) {
-        await deleteBackup(b.filepath);
+      final behalten = behalteneBackups(autos, zeit);
+      for (final b in autos) {
+        if (!behalten.contains(b.filepath)) await deleteBackup(b.filepath);
       }
     } catch (_) {
       // Cleanup ist Best-Effort, nicht kritisch
     }
+    try {
+      final ordner = await _getBackupDir();
+      await for (final e in ordner.list()) {
+        if (e is! File ||
+            !e.path.endsWith('.$_backupFileExtension$_zwischenEndung')) {
+          continue;
+        }
+        if (zeit.difference(await e.lastModified()) > const Duration(days: 1)) {
+          await e.delete();
+        }
+      }
+    } catch (_) {
+      // Beim nächsten Mal.
+    }
+  }
+
+  /// Räumt die Ablage der Dateien auf — höchstens einmal am Tag: Was kein
+  /// Backup im Ordner mehr nennt, fällt weg (siehe [DateiAblage.aufraeumen]).
+  /// Lässt sich ein Backup nicht lesen, bleibt alles liegen — lieber eine
+  /// Datei zu viel als eine, die einem Backup fehlt.
+  static Future<void> dateienAufraeumen({DateTime? jetzt}) async {
+    final zeit = jetzt ?? DateTime.now();
+    try {
+      final ordner = await _getBackupDir();
+      final ablage = DateiAblage.neben(ordner);
+      if (!await ablage.ordner.exists()) return;
+      final merker = File(
+        '${ablage.ordner.path}${Platform.pathSeparator}.aufgeraeumt',
+      );
+      final tag = DateFormat('yyyy-MM-dd').format(zeit);
+      if (await merker.exists() && (await merker.readAsString()) == tag) {
+        return;
+      }
+      final gebraucht = <String>{};
+      await for (final e in ordner.list()) {
+        if (e is! File || !e.path.endsWith('.$_backupFileExtension')) {
+          continue;
+        }
+        // Erst ab 1.6 stehen Verweise in einem Backup.
+        final version = await _versionAusKopf(e, await e.length());
+        if (version != null && vergleicheVersion(version, '1.6') < 0) {
+          continue;
+        }
+        final bytes = await e.readAsBytes();
+        gebraucht.addAll(await Isolate.run(() => _verweiseIn(bytes)));
+      }
+      await ablage.aufraeumen(gebraucht, jetzt: zeit);
+      await merker.writeAsString(tag);
+    } catch (_) {
+      // Aufräumen ist Best-Effort — beim nächsten Mal.
+    }
+  }
+
+  /// Die Prüfsummen, die das Backup [bytes] nennt.
+  static Set<String> _verweiseIn(Uint8List bytes) {
+    final json = _entpacke(bytes);
+    final daten = json['data'];
+    final teil = daten is Map<String, dynamic> ? daten['entwicklung'] : null;
+    final verweise =
+        teil is Map<String, dynamic> ? teil['dateiVerweise'] : null;
+    if (verweise is! Map<String, dynamic>) return const {};
+    return {
+      for (final v in verweise.values)
+        if (v is String) v,
+    };
   }
 
   /// Prüft ob die DB im Wesentlichen leer ist (keine Produkte).
@@ -1185,6 +1471,32 @@ class BackupService {
   }
 }
 
+/// Vergleicht zwei Backup-Versionen wie „1.4" und „1.10" Stelle für
+/// Stelle: negativ, wenn [a] älter ist, 0 bei gleicher, sonst positiv.
+/// Was keine Zahl ist, zählt als 0.
+int vergleicheVersion(String a, String b) {
+  final x = a.split('.');
+  final y = b.split('.');
+  for (var i = 0; i < x.length || i < y.length; i++) {
+    final m = i < x.length ? int.tryParse(x[i]) ?? 0 : 0;
+    final n = i < y.length ? int.tryParse(y[i]) ?? 0 : 0;
+    if (m != n) return m.compareTo(n);
+  }
+  return 0;
+}
+
+/// Nimmt auf, was ein entpackter Anfang hergibt — für den Kopf eines
+/// gepackten Backups.
+class _Sammler implements Sink<List<int>> {
+  final List<int> bytes = [];
+
+  @override
+  void add(List<int> data) => bytes.addAll(data);
+
+  @override
+  void close() {}
+}
+
 // ============================================================================
 // BackupInfo
 // ============================================================================
@@ -1230,7 +1542,7 @@ class BackupInfo {
   /// historie noch Wochen-Snapshots — diese Tabellen wurden damals nicht
   /// mitgeschrieben. Beim Wiederherstellen sind sie danach leer, ohne dass
   /// irgendetwas kaputt wäre. Genau das sollte man vorher wissen.
-  bool get istAeltereVersion => version != BackupService._currentVersion;
+  bool get istAeltereVersion => vergleicheVersion(version, '1.4') < 0;
 
   /// Was in einem älteren Backup fehlt — null bei aktueller Version.
   String? get versionsHinweis => istAeltereVersion

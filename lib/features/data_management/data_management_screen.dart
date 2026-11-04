@@ -681,9 +681,11 @@ class _DataManagementScreenState
                     _KategorieZeile(
                       icon: Icons.cloud_upload_outlined,
                       titel: 'Komplett-Backup',
-                      beschreibung: 'Der gesamte Datenstand als JSON. Beim '
-                          'Wiederherstellen werden alle aktuellen Daten '
-                          'überschrieben.',
+                      beschreibung: 'Der gesamte Datenstand in einer Datei, '
+                          'auch die angehängten Dateien der '
+                          'Produktentwicklung — zum Umziehen auf einen '
+                          'anderen Rechner. Beim Wiederherstellen werden '
+                          'alle aktuellen Daten überschrieben.',
                       exportLabel: 'Backup speichern',
                       importLabel: 'Wiederherstellen',
                       onExport: _busy ? null : _backupErstellenManuell,

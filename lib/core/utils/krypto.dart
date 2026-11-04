@@ -29,6 +29,18 @@ Uint8List hmacSha256(List<int> schluessel, List<int> daten) {
   return mac.process(Uint8List.fromList(daten));
 }
 
+/// SHA-256 von [daten] als 64 Hex-Zeichen — der Name, unter dem eine
+/// angehängte Datei neben den Backups liegt.
+String pruefsumme(List<int> daten) {
+  final digest = SHA256Digest()
+      .process(daten is Uint8List ? daten : Uint8List.fromList(daten));
+  final text = StringBuffer();
+  for (final b in digest) {
+    text.write(b.toRadixString(16).padLeft(2, '0'));
+  }
+  return text.toString();
+}
+
 /// [anzahl] Bytes aus dem sicheren Zufallsgenerator des Systems.
 Uint8List zufallsBytes(int anzahl) {
   final zufall = Random.secure();

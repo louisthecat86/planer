@@ -345,8 +345,12 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     _exitBackupGestartet = true;
     final db = ref.read(databaseProvider);
     try {
-      await BackupService.createAutoBackup(db)
-          .timeout(const Duration(seconds: 10));
+      // Nur, wenn seit dem letzten Auto-Backup etwas geändert wurde —
+      // sonst schließt die App ohne Wartezeit.
+      if (await BackupService.hatAenderungenSeitLetztemBackup(db)) {
+        await BackupService.createAutoBackup(db)
+            .timeout(const Duration(seconds: 10));
+      }
       await BackupService.cleanupOldAutoBackups()
           .timeout(const Duration(seconds: 5));
     } catch (_) {

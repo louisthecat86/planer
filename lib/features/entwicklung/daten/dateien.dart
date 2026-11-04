@@ -8,11 +8,13 @@ import 'package:uuid/uuid.dart';
 import '../../../core/constants/entwicklung.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
+import '../../../core/services/datei_ablage.dart';
 import '../../../core/utils/krypto.dart';
 
 // Angehängte Dateien der Produktentwicklung: Der Inhalt liegt mit dem
 // Datenschlüssel verschlüsselt in der Datenbank. Einmal beim Speichern
-// verschlüsselt, wandert er unverändert ins Backup.
+// verschlüsselt, wandert er unverändert ins Backup — ins Auto-Backup nur
+// als Prüfsumme, der Inhalt einmal in die Ablage daneben.
 
 /// Ab dieser Größe wird auf einem eigenen Isolate verschlüsselt.
 const int _imHintergrundAb = 256 * 1024;
@@ -59,6 +61,8 @@ class EntwicklungDateienDienst {
     String? id,
   }) async {
     final paket = await verschluesselt(inhalt);
+    // Neu verschlüsselt heißt neue Prüfsumme — auch bei derselben ID.
+    final summe = await pruefsummeVon(paket);
     final neueId = id ?? _uuid.v4();
     await _db.transaction(() async {
       await _db.into(_db.entwicklungDateien).insertOnConflictUpdate(
@@ -68,6 +72,7 @@ class EntwicklungDateienDienst {
               projektId: Value(projektId),
               mimeTyp: Value(mimeTyp),
               groesse: Value(inhalt.length),
+              pruefsumme: Value(summe),
             ),
           );
       await _db.into(_db.entwicklungDateiInhalte).insertOnConflictUpdate(

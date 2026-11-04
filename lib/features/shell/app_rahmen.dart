@@ -551,7 +551,8 @@ class _Fensterknoepfe extends ConsumerWidget {
 }
 
 /// Nachfrage vor dem Beenden — ein versehentlicher Klick soll nicht die
-/// App schließen. Beim Beenden wird ein Backup geschrieben.
+/// App schließen. Beim Beenden wird gesichert, was seit dem letzten
+/// Backup geändert wurde.
 Future<void> beendenFragen(BuildContext context, WidgetRef ref) async {
   // Vor dem Warten holen: Die Datenbank gehört dem Container, nicht dieser
   // Leiste.
@@ -561,7 +562,8 @@ Future<void> beendenFragen(BuildContext context, WidgetRef ref) async {
     builder: (context) => AlertDialog(
       title: const Text('App beenden?'),
       content: const Text(
-        'Beim Beenden wird automatisch ein Backup geschrieben.',
+        'Beim Beenden wird automatisch gesichert, was sich seit dem '
+        'letzten Backup geändert hat.',
       ),
       actions: [
         TextButton(
@@ -580,8 +582,12 @@ Future<void> beendenFragen(BuildContext context, WidgetRef ref) async {
   // des Fensters: So läuft nur ein einziger, klar begrenzter Ausstiegsweg
   // (siehe Vollbild.beenden).
   try {
-    await BackupService.createAutoBackup(db)
-        .timeout(const Duration(seconds: 10));
+    // Nur, wenn seit dem letzten Auto-Backup etwas geändert wurde — sonst
+    // schließt die App ohne Wartezeit.
+    if (await BackupService.hatAenderungenSeitLetztemBackup(db)) {
+      await BackupService.createAutoBackup(db)
+          .timeout(const Duration(seconds: 10));
+    }
     await BackupService.cleanupOldAutoBackups()
         .timeout(const Duration(seconds: 5));
   } catch (_) {

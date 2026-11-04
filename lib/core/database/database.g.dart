@@ -21909,9 +21909,15 @@ class $EntwicklungDateienTable extends EntwicklungDateien
       type: DriftSqlType.dateTime,
       requiredDuringInsert: false,
       defaultValue: currentDateAndTime);
+  static const VerificationMeta _pruefsummeMeta =
+      const VerificationMeta('pruefsumme');
+  @override
+  late final GeneratedColumn<String> pruefsumme = GeneratedColumn<String>(
+      'pruefsumme', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns =>
-      [id, projektId, name, mimeTyp, groesse, createdAt];
+      [id, projektId, name, mimeTyp, groesse, createdAt, pruefsumme];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -21949,6 +21955,12 @@ class $EntwicklungDateienTable extends EntwicklungDateien
       context.handle(_createdAtMeta,
           createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
     }
+    if (data.containsKey('pruefsumme')) {
+      context.handle(
+          _pruefsummeMeta,
+          pruefsumme.isAcceptableOrUnknown(
+              data['pruefsumme']!, _pruefsummeMeta));
+    }
     return context;
   }
 
@@ -21970,6 +21982,8 @@ class $EntwicklungDateienTable extends EntwicklungDateien
           .read(DriftSqlType.int, data['${effectivePrefix}groesse'])!,
       createdAt: attachedDatabase.typeMapping
           .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+      pruefsumme: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}pruefsumme']),
     );
   }
 
@@ -21991,13 +22005,19 @@ class EntwicklungsDatei extends DataClass
   /// Größe des Klartexts in Bytes.
   final int groesse;
   final DateTime createdAt;
+
+  /// SHA-256 des verschlüsselten Inhalts — unter diesem Namen liegt die
+  /// Datei in der Ablage neben den Backups. null: noch nicht berechnet;
+  /// das holt das nächste Backup nach.
+  final String? pruefsumme;
   const EntwicklungsDatei(
       {required this.id,
       this.projektId,
       required this.name,
       this.mimeTyp,
       required this.groesse,
-      required this.createdAt});
+      required this.createdAt,
+      this.pruefsumme});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -22011,6 +22031,9 @@ class EntwicklungsDatei extends DataClass
     }
     map['groesse'] = Variable<int>(groesse);
     map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || pruefsumme != null) {
+      map['pruefsumme'] = Variable<String>(pruefsumme);
+    }
     return map;
   }
 
@@ -22026,6 +22049,9 @@ class EntwicklungsDatei extends DataClass
           : Value(mimeTyp),
       groesse: Value(groesse),
       createdAt: Value(createdAt),
+      pruefsumme: pruefsumme == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pruefsumme),
     );
   }
 
@@ -22039,6 +22065,7 @@ class EntwicklungsDatei extends DataClass
       mimeTyp: serializer.fromJson<String?>(json['mimeTyp']),
       groesse: serializer.fromJson<int>(json['groesse']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      pruefsumme: serializer.fromJson<String?>(json['pruefsumme']),
     );
   }
   @override
@@ -22051,6 +22078,7 @@ class EntwicklungsDatei extends DataClass
       'mimeTyp': serializer.toJson<String?>(mimeTyp),
       'groesse': serializer.toJson<int>(groesse),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'pruefsumme': serializer.toJson<String?>(pruefsumme),
     };
   }
 
@@ -22060,7 +22088,8 @@ class EntwicklungsDatei extends DataClass
           String? name,
           Value<String?> mimeTyp = const Value.absent(),
           int? groesse,
-          DateTime? createdAt}) =>
+          DateTime? createdAt,
+          Value<String?> pruefsumme = const Value.absent()}) =>
       EntwicklungsDatei(
         id: id ?? this.id,
         projektId: projektId.present ? projektId.value : this.projektId,
@@ -22068,6 +22097,7 @@ class EntwicklungsDatei extends DataClass
         mimeTyp: mimeTyp.present ? mimeTyp.value : this.mimeTyp,
         groesse: groesse ?? this.groesse,
         createdAt: createdAt ?? this.createdAt,
+        pruefsumme: pruefsumme.present ? pruefsumme.value : this.pruefsumme,
       );
   EntwicklungsDatei copyWithCompanion(EntwicklungDateienCompanion data) {
     return EntwicklungsDatei(
@@ -22077,6 +22107,8 @@ class EntwicklungsDatei extends DataClass
       mimeTyp: data.mimeTyp.present ? data.mimeTyp.value : this.mimeTyp,
       groesse: data.groesse.present ? data.groesse.value : this.groesse,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      pruefsumme:
+          data.pruefsumme.present ? data.pruefsumme.value : this.pruefsumme,
     );
   }
 
@@ -22088,14 +22120,15 @@ class EntwicklungsDatei extends DataClass
           ..write('name: $name, ')
           ..write('mimeTyp: $mimeTyp, ')
           ..write('groesse: $groesse, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('pruefsumme: $pruefsumme')
           ..write(')'))
         .toString();
   }
 
   @override
   int get hashCode =>
-      Object.hash(id, projektId, name, mimeTyp, groesse, createdAt);
+      Object.hash(id, projektId, name, mimeTyp, groesse, createdAt, pruefsumme);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -22105,7 +22138,8 @@ class EntwicklungsDatei extends DataClass
           other.name == this.name &&
           other.mimeTyp == this.mimeTyp &&
           other.groesse == this.groesse &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.pruefsumme == this.pruefsumme);
 }
 
 class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
@@ -22115,6 +22149,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
   final Value<String?> mimeTyp;
   final Value<int> groesse;
   final Value<DateTime> createdAt;
+  final Value<String?> pruefsumme;
   final Value<int> rowid;
   const EntwicklungDateienCompanion({
     this.id = const Value.absent(),
@@ -22123,6 +22158,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
     this.mimeTyp = const Value.absent(),
     this.groesse = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.pruefsumme = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   EntwicklungDateienCompanion.insert({
@@ -22132,6 +22168,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
     this.mimeTyp = const Value.absent(),
     this.groesse = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.pruefsumme = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         name = Value(name);
@@ -22142,6 +22179,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
     Expression<String>? mimeTyp,
     Expression<int>? groesse,
     Expression<DateTime>? createdAt,
+    Expression<String>? pruefsumme,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -22151,6 +22189,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
       if (mimeTyp != null) 'mime_typ': mimeTyp,
       if (groesse != null) 'groesse': groesse,
       if (createdAt != null) 'created_at': createdAt,
+      if (pruefsumme != null) 'pruefsumme': pruefsumme,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -22162,6 +22201,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
       Value<String?>? mimeTyp,
       Value<int>? groesse,
       Value<DateTime>? createdAt,
+      Value<String?>? pruefsumme,
       Value<int>? rowid}) {
     return EntwicklungDateienCompanion(
       id: id ?? this.id,
@@ -22170,6 +22210,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
       mimeTyp: mimeTyp ?? this.mimeTyp,
       groesse: groesse ?? this.groesse,
       createdAt: createdAt ?? this.createdAt,
+      pruefsumme: pruefsumme ?? this.pruefsumme,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -22195,6 +22236,9 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (pruefsumme.present) {
+      map['pruefsumme'] = Variable<String>(pruefsumme.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -22210,6 +22254,7 @@ class EntwicklungDateienCompanion extends UpdateCompanion<EntwicklungsDatei> {
           ..write('mimeTyp: $mimeTyp, ')
           ..write('groesse: $groesse, ')
           ..write('createdAt: $createdAt, ')
+          ..write('pruefsumme: $pruefsumme, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -34552,6 +34597,7 @@ typedef $$EntwicklungDateienTableCreateCompanionBuilder
   Value<String?> mimeTyp,
   Value<int> groesse,
   Value<DateTime> createdAt,
+  Value<String?> pruefsumme,
   Value<int> rowid,
 });
 typedef $$EntwicklungDateienTableUpdateCompanionBuilder
@@ -34562,6 +34608,7 @@ typedef $$EntwicklungDateienTableUpdateCompanionBuilder
   Value<String?> mimeTyp,
   Value<int> groesse,
   Value<DateTime> createdAt,
+  Value<String?> pruefsumme,
   Value<int> rowid,
 });
 
@@ -34591,6 +34638,9 @@ class $$EntwicklungDateienTableFilterComposer
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => ColumnFilters(column));
 }
 
 class $$EntwicklungDateienTableOrderingComposer
@@ -34619,6 +34669,9 @@ class $$EntwicklungDateienTableOrderingComposer
 
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
       column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => ColumnOrderings(column));
 }
 
 class $$EntwicklungDateienTableAnnotationComposer
@@ -34647,6 +34700,9 @@ class $$EntwicklungDateienTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => column);
 }
 
 class $$EntwicklungDateienTableTableManager extends RootTableManager<
@@ -34683,6 +34739,7 @@ class $$EntwicklungDateienTableTableManager extends RootTableManager<
             Value<String?> mimeTyp = const Value.absent(),
             Value<int> groesse = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<String?> pruefsumme = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               EntwicklungDateienCompanion(
@@ -34692,6 +34749,7 @@ class $$EntwicklungDateienTableTableManager extends RootTableManager<
             mimeTyp: mimeTyp,
             groesse: groesse,
             createdAt: createdAt,
+            pruefsumme: pruefsumme,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -34701,6 +34759,7 @@ class $$EntwicklungDateienTableTableManager extends RootTableManager<
             Value<String?> mimeTyp = const Value.absent(),
             Value<int> groesse = const Value.absent(),
             Value<DateTime> createdAt = const Value.absent(),
+            Value<String?> pruefsumme = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               EntwicklungDateienCompanion.insert(
@@ -34710,6 +34769,7 @@ class $$EntwicklungDateienTableTableManager extends RootTableManager<
             mimeTyp: mimeTyp,
             groesse: groesse,
             createdAt: createdAt,
+            pruefsumme: pruefsumme,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

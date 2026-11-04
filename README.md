@@ -365,12 +365,24 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 35.
-- **Backups** (`.planerbackup`) liegen im Ordner `backups` unter den
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 36.
+- **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
-  App automatisch (höchstens einmal je Minute, die letzten 30 bleiben) und beim
-  Beenden. Vor jedem Wiederherstellen schreibt sie den aktuellen Stand weg.
-  Ältere Backup-Versionen (ab 1.0) lassen sich weiter einspielen.
+  App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit
+  dem letzten Backup etwas geändert hat. Aufbewahrt werden die letzten zehn
+  Auto-Backups, dazu für sieben Tage je Tag und für vier Wochen je Woche das
+  letzte. Geschrieben wird über eine Zwischendatei — ein abgebrochenes Backup
+  hinterlässt keine halbe Datei. Vor jedem Wiederherstellen schreibt die App
+  den aktuellen Stand weg. Ältere Backup-Versionen (ab 1.0) lassen sich weiter
+  einspielen.
+- **Angehängte Dateien** der Produktentwicklung (PDFs, Mails,
+  Spezifikationen) stehen nicht in jedem Auto-Backup, sondern einmal im Ordner
+  `planer_dateien` neben den Backups, benannt nach der Prüfsumme ihres
+  verschlüsselten Inhalts; das Backup nennt nur die Prüfsummen. Was kein
+  Backup mehr nennt, räumt die App einmal am Tag weg. Zum Umziehen auf einen
+  anderen Rechner das **Komplett-Backup** nehmen (Daten → Komplett-Backup):
+  eine Datei mit allem, auch den Dateien. Fehlen einem Auto-Backup beim
+  Wiederherstellen Dateien, spielt die App nichts ein.
 - **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
   lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
   Auf demselben Rechner eingespielt, bleibt das aktuelle Passwort; ein Backup

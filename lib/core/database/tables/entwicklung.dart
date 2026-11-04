@@ -362,6 +362,11 @@ class EntwicklungDateien extends Table {
 
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// SHA-256 des verschlüsselten Inhalts — unter diesem Namen liegt die
+  /// Datei in der Ablage neben den Backups. null: noch nicht berechnet;
+  /// das holt das nächste Backup nach.
+  TextColumn get pruefsumme => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

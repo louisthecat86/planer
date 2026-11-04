@@ -86,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 35;
+  int get schemaVersion => 36;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -566,6 +566,18 @@ class AppDatabase extends _$AppDatabase {
               'production_history',
               'kg_fleischeinwaage',
               'REAL',
+            );
+          }
+
+          // --- v35 → v36: Prüfsumme der angehängten Dateien -----------
+          // Unter ihr liegt eine Datei einmal in der Ablage neben den
+          // Backups, statt in jedem Backup ganz. Leer bei vorhandenen
+          // Dateien — das nächste Backup rechnet sie nach.
+          if (from < 36) {
+            await _addColumnIfNotExists(
+              'entwicklung_dateien',
+              'pruefsumme',
+              'TEXT',
             );
           }
         },

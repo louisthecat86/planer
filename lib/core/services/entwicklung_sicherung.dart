@@ -6,6 +6,7 @@ import 'package:drift/drift.dart';
 import '../constants/entwicklung.dart';
 import '../database/database.dart';
 import '../utils/krypto.dart';
+import 'datei_ablage.dart';
 import 'entwicklung_daten.dart';
 
 // Die Produktentwicklung im Backup.
@@ -18,6 +19,14 @@ import 'entwicklung_daten.dart';
 //              Passwort
 //   daten      Base64 der verschlüsselten Tabellen (EntwicklungDaten)
 //   dateien    Base64 der Dateiinhalte je Datei — schon verschlüsselt
+//
+// Im Auto-Backup stehen statt `dateien` nur Verweise:
+//
+//   dateiVerweise  je Datei die Prüfsumme ihres Inhalts — der liegt
+//                  einmal in der Ablage neben den Backups (DateiAblage)
+//
+// Beim Einspielen holt der BackupService die Inhalte aus der Ablage zurück
+// und reicht den Teil wie gewohnt mit `dateien` herein.
 //
 // Verschlüsselt wird mit dem Datenschlüssel dieses Rechners. Der liegt im
 // Klartext in der Datenbank, damit das Auto-Backup beim Schließen ohne
@@ -97,8 +106,12 @@ class EntwicklungSicherung {
           .toList();
 
   /// Der Teil fürs Backup — null, wenn auf diesem Rechner nichts
-  /// eingerichtet ist.
-  static Future<Map<String, Object?>?> exportieren(AppDatabase db) async {
+  /// eingerichtet ist. Mit [ablage] stehen die Dateiinhalte dort statt im
+  /// Teil; er nennt dann nur ihre Prüfsummen.
+  static Future<Map<String, Object?>?> exportieren(
+    AppDatabase db, {
+    DateiAblage? ablage,
+  }) async {
     final werte = {for (final s in await einstellungen(db)) s.key: s.value};
     final passwort = werte[kEntwicklungPasswortSchluessel];
     if (passwort == null) return null;
@@ -117,10 +130,21 @@ class EntwicklungSicherung {
       return {'format': format, 'passwort': passwort};
     }
 
+    // Zuerst ablegen: Fehlende Prüfsummen trägt das in die Angaben der
+    // Dateien ein — die dann so ins Backup gehen.
+    final verweise = ablage == null ? null : await ablage.auslagern(db);
     final klartext = Uint8List.fromList(
       utf8.encode(jsonEncode(await EntwicklungDaten.lesen(db))),
     );
     final paket = await _verschluesseleSicher(schluessel, klartext);
+    if (verweise != null) {
+      return {
+        'format': format,
+        'passwort': passwort,
+        'daten': base64Encode(paket),
+        'dateiVerweise': verweise,
+      };
+    }
     final inhalte = await EntwicklungDaten.dateiInhalte(db);
     return {
       'format': format,

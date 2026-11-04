@@ -51,7 +51,7 @@ class BackupManagementScreen extends ConsumerWidget {
               onPressed:
                   isExporting ? null : () => _handleExport(context, ref),
               icon: isExporting ? kreisel : const Icon(Icons.backup_outlined),
-              tooltip: 'Backup erstellen',
+              tooltip: 'Komplett-Backup speichern',
             ),
           ] else ...[
             OutlinedButton.icon(
@@ -69,7 +69,7 @@ class BackupManagementScreen extends ConsumerWidget {
               icon: isExporting
                   ? kreisel
                   : const Icon(Icons.backup_outlined, size: 18),
-              label: const Text('Backup erstellen'),
+              label: const Text('Komplett-Backup …'),
             ),
           ],
           const SizedBox(width: 12),

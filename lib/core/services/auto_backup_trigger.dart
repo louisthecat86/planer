@@ -42,10 +42,6 @@ class AutoBackupTrigger {
   /// Schützt vor Backup-Spam wenn der User ständig Sachen ändert.
   static const Duration _minIntervall = Duration(minutes: 1);
 
-  /// Maximalzahl der Auto-Backups im Backup-Ordner. Ältere werden
-  /// nach dem Schreiben automatisch entsorgt.
-  static const int _maxBackups = 30;
-
   Timer? _debounceTimer;
   DateTime? _letztesBackup;
   String? _ausstehenderGrund;
@@ -113,8 +109,13 @@ class AutoBackupTrigger {
       await BackupService.createAutoBackup(_db);
       _letztesBackup = DateTime.now();
       _backupZaehler++;
-      // Cleanup im Hintergrund — Fehler sind nicht kritisch
-      unawaited(BackupService.cleanupOldAutoBackups(maxKeep: _maxBackups));
+      // Aufräumen im Hintergrund — gestaffelt aufbewahren, dann die
+      // Ablage der Dateien (höchstens einmal am Tag). Fehler sind nicht
+      // kritisch.
+      unawaited(
+        BackupService.cleanupOldAutoBackups()
+            .then((_) => BackupService.dateienAufraeumen()),
+      );
     } catch (_) {
       // Auto-Backup darf nicht den User-Flow stören.
       // Fehler werden geschluckt; eine nächste Änderung versucht es erneut.
