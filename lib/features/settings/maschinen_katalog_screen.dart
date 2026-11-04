@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
@@ -14,7 +15,9 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
+import 'maschinen_druck_daten.dart';
 import 'maschinen_seed.dart';
+import 'maschinenkatalog_druck.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -71,6 +74,14 @@ class MaschinenKatalogScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Maschinen-Katalog'),
         actions: [
+          IconButton(
+            key: const ValueKey('katalog-drucken'),
+            icon: const Icon(Icons.print),
+            tooltip: 'Katalog drucken',
+            onPressed: (katalog.valueOrNull?.isNotEmpty ?? false)
+                ? () => _drucken(context, ref)
+                : null,
+          ),
           // Die Grenzwerte gehören sachlich zum Katalog — sie beschreiben,
           // welche Werte an einer Anlage plausibel sind. Deshalb hier statt
           // als eigener Punkt in den Einstellungen.
@@ -168,6 +179,26 @@ class MaschinenKatalogScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  /// Öffnet das Druckfenster: Übersicht oder Steckbriefe, mit den
+  /// Grenzwerten und den Artikeln je Anlage.
+  Future<void> _drucken(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final daten = await maschinenDruckLaden(ref.read(databaseProvider));
+      if (!context.mounted) return;
+      await druckFensterOeffnen(context, maschinenkatalogDruckAuftrag(daten));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Der Katalog ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
   }
 
   /// Fragt nach und ergänzt dann den Standard-Maschinenpark: legt fehlende

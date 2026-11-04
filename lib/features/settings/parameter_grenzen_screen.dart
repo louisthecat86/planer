@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
+import 'grenzen_druck.dart';
+import 'maschinen_druck_daten.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -82,6 +85,15 @@ class ParameterGrenzenScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Maschinen-Grenzen'),
         actions: [
+          IconButton(
+            key: const ValueKey('grenzen-drucken'),
+            icon: const Icon(Icons.print),
+            tooltip: 'Grenzen drucken',
+            onPressed: (grenzen.valueOrNull?.isNotEmpty ?? false)
+                ? () => _drucken(context, ref)
+                : null,
+          ),
+          const SizedBox(width: 4),
           // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
           // vorher ein schwebender Knopf, der unten die letzte Grenze
           // verdeckte.
@@ -160,6 +172,25 @@ class ParameterGrenzenScreen extends ConsumerWidget {
         },
       ),
     );
+  }
+
+  /// Öffnet das Druckfenster — je Anlage oder Gruppe eine Tabelle.
+  Future<void> _drucken(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final daten = await maschinenDruckLaden(ref.read(databaseProvider));
+      if (!context.mounted) return;
+      await druckFensterOeffnen(context, grenzenDruckAuftrag(daten));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Grenzen ließen sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _bearbeiten(

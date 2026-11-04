@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
+import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
@@ -15,6 +16,7 @@ import '../../core/utils/fehler_text.dart';
 import '../bedarf/bedarf_screen.dart';
 import 'article_info_editor_dialog.dart';
 import 'artikel_luecken.dart';
+import 'artikelliste_druck.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -134,7 +136,14 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
       list = list.where((a) => a.luecken.contains(luecke)).toList();
     }
 
-    // Sortierung
+    return _sortiert([...list], bedarfKg);
+  }
+
+  /// Sortiert [list] wie gewählt — für die Liste und für den Druck.
+  List<_ArticleInfo> _sortiert(
+    List<_ArticleInfo> list,
+    Map<String, double> bedarfKg,
+  ) {
     list.sort((a, b) {
       int cmp;
       switch (_sortField) {
@@ -169,6 +178,66 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     });
 
     return list;
+  }
+
+  /// Ob die Liste gefiltert ist — durch die Suche oder eine Lücke.
+  bool get _gefiltert => _search.trim().isNotEmpty || _luecke != null;
+
+  /// „Ohne Ausbeute · Suche „wurst"" — leer ohne Filter.
+  String get _filterText => [
+        if (_luecke case final l?) l.titel,
+        if (_search.trim().isNotEmpty) 'Suche „${_search.trim()}“',
+      ].join(' · ');
+
+  /// „nach Bezeichnung" — wie die Liste sortiert ist.
+  String get _sortierText {
+    final nach = switch (_sortField) {
+      _SortField.bezeichnung => 'nach Bezeichnung',
+      _SortField.artikelnr => 'nach Artikelnummer',
+      _SortField.schritte => 'nach Zahl der Schritte',
+      _SortField.bedarf => 'nach offenem Bedarf',
+      _SortField.pflegestatus => 'nach Pflegestatus',
+      _SortField.produktgruppe => 'nach Produktgruppe',
+    };
+    return _sortAsc ? nach : '$nach, absteigend';
+  }
+
+  /// Öffnet das Druckfenster — vorgewählt, was die Liste zeigt.
+  Future<void> _drucken(
+    List<_ArticleInfo> alle,
+    Map<String, double> bedarfKg,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      // Die Anlagen stehen mit Namen auf dem Blatt — auch gelöschte, auf
+      // die ein Schritt noch zeigt.
+      final db = ref.read(databaseProvider);
+      final namen = {
+        for (final m in await db.select(db.machines).get()) m.id: m.name,
+      };
+      final daten = ArtikellisteDaten(
+        alle: [
+          for (final a in _sortiert([...alle], bedarfKg))
+            artikellisteEintrag(a.product, a.steps, a.luecken, namen),
+        ],
+        liste: _gefiltert
+            ? [for (final a in _filtered(alle, bedarfKg)) a.product.id]
+            : null,
+        filterText: _filterText,
+        sortierText: _sortierText,
+      );
+      if (!mounted) return;
+      await druckFensterOeffnen(context, artikellisteDruckAuftrag(daten));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Die Artikelliste ließ sich nicht drucken. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
   }
 
   void _toggleSort(_SortField field) {
@@ -352,6 +421,16 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
       appBar: AppBar(
         title: const Text('Artikel-Stammdaten'),
         actions: [
+          IconButton(
+            key: const ValueKey('artikel-drucken'),
+            icon: const Icon(Icons.print),
+            tooltip: 'Artikelliste drucken',
+            onPressed: switch (articlesAsync.valueOrNull) {
+              final alle? when alle.isNotEmpty => () =>
+                  _drucken(alle, bedarfKg),
+              _ => null,
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: () => ref.invalidate(articlesProvider),
@@ -741,15 +820,6 @@ abstract final class _Spalten {
 /// Ziffern gleich breit, damit Nummern und Anzahlen untereinander stehen.
 const List<FontFeature> _ziffern = [FontFeature.tabularFigures()];
 
-/// Abteilung aus dem dbValue — null bei unbekanntem Wert. Eine kaputte
-/// Zeile in der Datenbank soll die Liste nicht abstürzen lassen.
-Abteilung? _abteilungAus(String dbValue) {
-  for (final a in Abteilung.values) {
-    if (a.dbValue == dbValue) return a;
-  }
-  return null;
-}
-
 /// Spaltenköpfe der Tabelle — dieselben Breiten wie [_ArtikelZeile].
 class _TabellenKopf extends StatelessWidget {
   const _TabellenKopf({required this.breit});
@@ -829,11 +899,7 @@ class _ArtikelZeile extends StatelessWidget {
 
     // Abteilungen als farbige Kürzel — jede Abteilung nur einmal,
     // in Reihenfolge ihres ersten Auftretens im Prozess.
-    final abteilungen = <Abteilung>[];
-    for (final s in steps) {
-      final a = _abteilungAus(s.abteilung);
-      if (a != null && !abteilungen.contains(a)) abteilungen.add(a);
-    }
+    final abteilungen = prozessAbteilungen(steps);
 
     // Anlagen-Zähler: wie viele verschiedene Anlagen im Prozess stecken.
     //

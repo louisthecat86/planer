@@ -113,6 +113,20 @@ Standard. Strg+P druckt.
     auf eigener Seite, Leistungsdaten, Kennwerte, Plattenraster,
     Maschineneinstellungen, Parameter, Notizen, Linien für Notizen von
     Hand.
+  - **Artikelliste** (Artikel-Stammdaten): wie die Liste gefiltert, alle
+    oder nur die mit Lücken; sortiert wie die Liste, nach Artikelnummer,
+    nach Bezeichnung, je Produktgruppe oder je Abteilung (ein Artikel bei
+    jeder seiner Abteilungen); je Artikel Gruppe, die Abteilungen des
+    Prozesses als Kürzel, Schritte, die Anlagen mit Namen und was der
+    Planung fehlt; Kennzahlen, eine leere Spalte für Notizen.
+  - **Maschinen-Katalog**: als Übersicht eine Zeile je Anlage (Eignung,
+    Planungsspur, Steckbrief, Zahl der Grenzen und Artikel) oder als
+    Steckbriefe — je Anlage ihre Parameter mit Einheit und Grenzwerten und
+    die Artikel, die sie nutzen; welche Abteilungen, jede Abteilung oder
+    jede Anlage auf einer neuen Seite (zum Aushängen).
+  - **Maschinen-Grenzen**: je Anlage oder Parametergruppe die harte Grenze
+    und die Warnung, Notizen, auf Wunsch die Parameter des Steckbriefs
+    ohne Grenze, jede Anlage auf einer eigenen Seite zum Aushängen.
   - **Datenblatt** (Board, Bedarf, Auftragsbestand, Planungsvorschlag):
     welche Blätter, Mengen und Tag, Stand, Merkmale, Notiz, Ablauf,
     Aufträge — auch ohne Kundennamen zum Aushängen —, Feld für die

@@ -397,6 +397,25 @@ pw.Widget druckBalken(
       },
     );
 
+/// Ein Kürzel weiß auf einer Fläche in [farbe] — etwa eine Abteilung wie
+/// ihre Marke auf dem Schirm. Grau gedruckt bleibt das Kürzel lesbar.
+pw.Widget druckMarke(String text, int farbe, {double groesse = 6.5}) =>
+    pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 2.5, vertical: 1),
+      decoration: pw.BoxDecoration(
+        color: druckFarbe(farbe),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(1.5)),
+      ),
+      child: pw.Text(
+        pdfText(text),
+        style: pw.TextStyle(
+          fontSize: groesse,
+          fontWeight: pw.FontWeight.bold,
+          color: PdfColors.white,
+        ),
+      ),
+    );
+
 /// Ein leeres Kästchen zum Abhaken von Hand.
 pw.Widget druckKaestchen({double groesse = 8}) => pw.Container(
       width: groesse,
