@@ -139,6 +139,25 @@ class EntwicklungRepository {
         ..where((r) => r.id.equals(id)))
       .getSingleOrNull();
 
+  /// Die Artikelnummern aller Zutaten und aller Rezepturen, je nach ihrer
+  /// ID — auch gelöschter, damit alte Stände sie zeigen. Wer keine hat,
+  /// fehlt.
+  Future<({Map<String, String> zutaten, Map<String, String> rezepturen})>
+      artikelnummern() async {
+    Map<String, String> nummern(Iterable<(String, String?)> liste) => {
+          for (final (id, nummer) in liste)
+            if ((nummer?.trim() ?? '').isNotEmpty) id: nummer!.trim(),
+        };
+    final zutaten = await _db.select(_db.entwicklungZutaten).get();
+    final rezepturen = await _db.select(_db.entwicklungRezepturen).get();
+    return (
+      zutaten: nummern([for (final z in zutaten) (z.id, z.artikelnummer)]),
+      rezepturen: nummern([
+        for (final r in rezepturen) (r.id, r.artikelnummer),
+      ]),
+    );
+  }
+
   /// Alle Stände aller Rezepturen — für Listen, die den neuesten zeigen.
   Stream<List<RezepturVersion>> alleVersionenBeobachten() =>
       _db.select(_db.entwicklungRezepturVersionen).watch();
@@ -454,11 +473,34 @@ class EntwicklungRepository {
     final i = liste.indexWhere((p) => p.id == position.id);
     final j = nachOben ? i - 1 : i + 1;
     if (i < 0 || j < 0 || j >= liste.length) return;
-    // Neu durchnummerieren — so stören doppelte Nummern nicht.
+    await _neuOrdnen(liste, i, j);
+  }
+
+  /// Setzt eine Zeile an die Stelle [ziel] — 0 ist ganz oben, die übrigen
+  /// rücken nach. Liegt [ziel] außerhalb, kommt sie ans Ende oder an den
+  /// Anfang.
+  Future<void> positionVerschiebenNach(
+    RezepturPosition position,
+    int ziel,
+  ) async {
+    await _nurEntwurf(position.versionId);
+    final liste = await positionen(position.versionId);
+    final i = liste.indexWhere((p) => p.id == position.id);
+    if (i < 0) return;
+    final j = ziel.clamp(0, liste.length - 1);
+    if (i == j) return;
+    await _neuOrdnen(liste, i, j);
+  }
+
+  /// Nimmt die Zeile an [von] heraus, setzt sie an [nach] und nummeriert
+  /// alle neu durch — so stören doppelte Nummern nicht.
+  Future<void> _neuOrdnen(
+    List<RezepturPosition> liste,
+    int von,
+    int nach,
+  ) async {
     final neu = [...liste];
-    final tausch = neu[i];
-    neu[i] = neu[j];
-    neu[j] = tausch;
+    neu.insert(nach, neu.removeAt(von));
     await _db.batch((b) {
       for (var k = 0; k < neu.length; k++) {
         b.update(
@@ -468,6 +510,42 @@ class EntwicklungRepository {
         );
       }
     });
+  }
+
+  /// Tauscht die Zutat einer Zeile gegen [zutatId] oder die Unterrezeptur
+  /// [unterrezepturId] aus — genau eines von beiden. Menge, Platz und Notiz
+  /// bleiben. Name auf dem Etikett und QUID gelten danach wieder wie bei der
+  /// neuen Zutat: Die eigenen gehörten zur alten. Bei einer Unterrezeptur
+  /// gilt ihr neuester Stand.
+  Future<void> positionAustauschen(
+    RezepturPosition position, {
+    String? zutatId,
+    String? unterrezepturId,
+  }) async {
+    if ((zutatId == null) == (unterrezepturId == null)) {
+      throw ArgumentError(
+        'Genau eine Zutat oder eine Unterrezeptur angeben.',
+      );
+    }
+    await _nurEntwurf(position.versionId);
+    // Dieselbe gewählt: nichts tun — sonst gingen Etikettname und QUID
+    // ohne Not verloren.
+    if (zutatId == position.zutatId &&
+        unterrezepturId == position.unterrezepturId) {
+      return;
+    }
+    await (_db.update(_db.entwicklungRezepturPositionen)
+          ..where((p) => p.id.equals(position.id)))
+        .write(
+      EntwicklungRezepturPositionenCompanion(
+        zutatId: Value(zutatId),
+        unterrezepturId: Value(unterrezepturId),
+        unterVersionId: const Value(null),
+        etikettName: const Value(null),
+        quidPflicht: const Value(null),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
   }
 
   // ── Für den Rechenkern ──────────────────────────────────────────────

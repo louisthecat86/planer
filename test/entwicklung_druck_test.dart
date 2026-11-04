@@ -282,6 +282,82 @@ void main() {
       }
     });
 
+    test('mit Artikelnummern: vor jeder Zutat — auch in Unterrezepturen',
+        () async {
+      // Ohne eigene Nummer der Rezeptur — so steht „Art.-Nr." nicht schon
+      // in der Kopfzeile.
+      RezepturblattDaten daten({bool nummern = true}) => RezepturblattDaten(
+            name: 'Gartenwurst',
+            version: bspVersion(),
+            eingabe: bspGartenwurst(),
+            zutatNummern: nummern
+                ? const {
+                    'z-schwein': '10010',
+                    'z-rind': '10020',
+                    'z-kraeuter': '30050',
+                  }
+                : const {},
+            rezepturNummern: nummern ? const {'r-braet': '50100'} : const {},
+          );
+      final t = await blatt(daten());
+      for (final wort in [
+        '(Art.-Nr.)',
+        '(10010)',
+        '(10020)',
+        // Die Unterrezeptur in der Zusammensetzung …
+        '(50100)',
+        // … und die Zutat in der Unterrezeptur der Unterrezeptur.
+        '(30050)',
+      ]) {
+        expect(t, contains(wort), reason: wort);
+      }
+      // Schwein steht in der Gartenwurst und im Brät.
+      expect('(10010)'.allMatchesIn(t), 2);
+
+      // Abgewählt — oder ohne Nummern im Katalog: keine Spalte.
+      for (final ohne in [
+        await blatt(daten(), const RezepturblattInhalt(artikelnummern: false)),
+        await blatt(daten(nummern: false)),
+      ]) {
+        expect(ohne, isNot(contains('(Art.-Nr.)')));
+        expect(ohne, isNot(contains('(10010)')));
+      }
+    });
+
+    test('Druckfenster: Artikelnummern nur, wenn es welche gibt', () async {
+      final mit = rezepturblattDruckAuftrag(
+        RezepturblattDaten(
+          name: 'Gartenwurst',
+          version: bspVersion(),
+          eingabe: bspGartenwurst(),
+          // Nur eine Zutat ganz unten in den Unterrezepturen hat eine.
+          zutatNummern: const {'z-kraeuter': '30050'},
+        ),
+        gedrucktAm: gedruckt,
+      );
+      final schluessel = [for (final o in mit.optionen) o.schluessel];
+      // Gleich hinter den Kennzahlen, und eingeschaltet.
+      expect(
+        schluessel.indexOf(RezepturblattWahl.artikelnummern),
+        schluessel.indexOf(RezepturblattWahl.kennzahlen) + 1,
+      );
+      final standard = DruckWahl.standard(mit.optionen);
+      expect(standard.an(RezepturblattWahl.artikelnummern), isTrue);
+      expect(await text(await mit.bauen(standard)), contains('(30050)'));
+      final aus = standard.mit(RezepturblattWahl.artikelnummern, false);
+      expect(await text(await mit.bauen(aus)), isNot(contains('(30050)')));
+
+      // Ohne Nummern im Katalog fehlt der Schalter.
+      final ohne = rezepturblattDruckAuftrag(
+        gartenwurst(),
+        gedrucktAm: gedruckt,
+      );
+      expect(
+        [for (final o in ohne.optionen) o.schluessel],
+        isNot(contains(RezepturblattWahl.artikelnummern)),
+      );
+    });
+
     test('ein Entwurf ist als Entwurf zu erkennen', () async {
       final t = await blatt(gartenwurst(stand: 3, abgeschlossen: false));
       expect(t, contains('(Entwurf)'));
@@ -774,6 +850,7 @@ void main() {
       final schwein = await repo.zutatAnlegen(
         const EntwicklungZutatenCompanion(
           name: Value('Schweinefleisch S III'),
+          artikelnummer: Value('10010'),
           istFleisch: Value(true),
           tierart: Value('schwein'),
           fett: Value(22),
@@ -806,6 +883,14 @@ void main() {
       expect(blatt.version.nummer, 1);
       expect(blatt.freigegeben, isTrue);
       expect(blatt.eingabe.positionen, hasLength(2));
+      // Die Artikelnummern aus dem Katalog — auch für den abgeschlossenen
+      // Stand, in dessen eingefrorenen Daten keine stehen.
+      expect(blatt.zutatNummern, {schwein: '10010'});
+      expect(
+        [for (final p in blatt.eingabe.positionen) blatt.nummerVon(p)],
+        ['10010', null],
+      );
+      expect(blatt.rezepturNummern[rezepturId], '40711');
       // Der Entwurf ist nicht freigegeben.
       final entwurf = (await rezepturblattLaden(repo, projekte, v2))!;
       expect(entwurf.freigegeben, isFalse);

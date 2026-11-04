@@ -28,10 +28,12 @@ void main() {
     bool fleisch = false,
     String? allergene,
     double? fett,
+    String? nummer,
   }) =>
       Zutat(
         id: id,
         name: name,
+        artikelnummer: nummer,
         istFleisch: fleisch,
         istWasser: false,
         tierart: fleisch ? 'schwein' : null,
@@ -43,7 +45,13 @@ void main() {
         updatedAt: zeit,
       );
 
-  final schwein = zutat('z1', 'Schweineschulter S3', fleisch: true, fett: 22);
+  final schwein = zutat(
+    'z1',
+    'Schweineschulter S3',
+    fleisch: true,
+    fett: 22,
+    nummer: '10010',
+  );
   final senf = zutat(
     'z2',
     'Senfsaat gemahlen mit einem sehr langen Namen aus dem Katalog',
@@ -286,6 +294,47 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.text('Name und Angaben…'), findsOneWidget);
     expect(find.text('Rezeptur löschen…'), findsOneWidget);
+  });
+
+  testWidgets(
+      'Rezeptur: Art.-Nr. vor der Zutat — im Entwurf Griff und '
+      'Austauschen', (tester) async {
+    await zeige(tester, const RezepturScreen(rezepturId: 'r1'));
+    await tester.pump();
+
+    expect(find.text('Art.-Nr.'), findsOneWidget);
+    expect(find.text('10010'), findsOneWidget);
+    // Der Entwurf: je Zeile ein Griff zum Ziehen.
+    expect(find.byType(ReorderableListView), findsOneWidget);
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsNWidgets(2));
+
+    // Im Menü der ersten Zeile: austauschen und nach unten, nicht nach oben.
+    await tester.tap(find.byTooltip('Zeile').first);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Austauschen …'), findsOneWidget);
+    expect(find.text('Nach unten'), findsOneWidget);
+    expect(find.text('Nach oben'), findsNothing);
+
+    // Austauschen öffnet die Auswahl — mit eigener Überschrift.
+    await tester.tap(find.text('Austauschen …'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text('„Schweineschulter S3" austauschen gegen …'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Abbrechen').last);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Ein abgeschlossener Stand: Nummern ja, Griffe nein.
+    await tester.tap(find.text('Stand 1'));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('10010'), findsOneWidget);
+    expect(find.byIcon(Icons.drag_indicator_rounded), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Rezeptur schmal und dunkel: untereinander, kein Überlauf',

@@ -645,15 +645,20 @@ class Zusammensetzung extends ConsumerWidget {
     void gesichert(String grund) =>
         ref.read(autoBackupTriggerProvider).fireDebounced(reason: grund);
 
-    Future<void> ausfuehren(Future<void> Function() tun, String grund) async {
+    /// Führt [tun] aus — true, wenn es geklappt hat. Ein Fehler erscheint
+    /// unten.
+    Future<bool> ausfuehren(Future<void> Function() tun, String grund) async {
       try {
         await tun();
         gesichert(grund);
+        return true;
       } catch (e) {
-        if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(fehlerText(e))),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(fehlerText(e))),
+          );
+        }
+        return false;
       }
     }
 
@@ -693,7 +698,7 @@ class Zusammensetzung extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const _ZeilenKopf(),
+              _ZeilenKopf(griff: entwurf),
               if (positionen.isEmpty)
                 LeerHinweis(
                   entwurf
@@ -701,21 +706,29 @@ class Zusammensetzung extends ConsumerWidget {
                       : 'Dieser Stand hat keine Zeilen.',
                   icon: Icons.egg_outlined,
                 ),
-              for (var i = 0; i < positionen.length; i++)
-                _ZeilenAnsicht(
-                  key: ValueKey(positionen[i].id),
-                  position: positionen[i],
-                  zutat: positionen[i].zutatId == null
-                      ? null
-                      : zutaten[positionen[i].zutatId],
-                  unterrezeptur: positionen[i].unterrezepturId == null
-                      ? null
-                      : rezepturen[positionen[i].unterrezepturId],
-                  summeKg: summe,
-                  bearbeitbar: entwurf,
-                  erste: i == 0,
-                  letzte: i == positionen.length - 1,
-                  ausfuehren: ausfuehren,
+              if (positionen.isNotEmpty)
+                _Zeilen(
+                  positionen: positionen,
+                  verschiebbar: entwurf,
+                  verschieben: (p, ziel) => ausfuehren(
+                    () => repo().positionVerschiebenNach(p, ziel),
+                    'Zeile verschoben',
+                  ),
+                  zeile: (p, i, anzahl, griff) => _ZeilenAnsicht(
+                    key: ValueKey(p.id),
+                    rezepturId: rezepturId,
+                    position: p,
+                    zutat: p.zutatId == null ? null : zutaten[p.zutatId],
+                    unterrezeptur: p.unterrezepturId == null
+                        ? null
+                        : rezepturen[p.unterrezepturId],
+                    summeKg: summe,
+                    bearbeitbar: entwurf,
+                    erste: i == 0,
+                    letzte: i == anzahl - 1,
+                    griff: griff,
+                    ausfuehren: ausfuehren,
+                  ),
                 ),
               Container(
                 padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -867,8 +880,13 @@ class Zusammensetzung extends ConsumerWidget {
 }
 
 class _ZeilenKopf extends StatelessWidget {
-  const _ZeilenKopf();
+  const _ZeilenKopf({required this.griff});
 
+  /// Platz für den Griff zum Verschieben — nur im Entwurf.
+  final bool griff;
+
+  static const double griffBreite = 28;
+  static const double nummer = 76;
   static const double menge = 110;
   static const double anteil = 70;
   static const double quid = 56;
@@ -883,13 +901,15 @@ class _ZeilenKopf extends StatelessWidget {
       color: theme.colorScheme.onSurfaceVariant,
     );
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
+      padding: EdgeInsets.fromLTRB(griff ? 4 : 12, 6, 12, 6),
       decoration: BoxDecoration(
         color: AppFarben.von(context).leiste,
         border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
       ),
       child: Row(
         children: [
+          if (griff) const SizedBox(width: griffBreite),
+          SizedBox(width: nummer, child: Text('Art.-Nr.', style: stil)),
           Expanded(child: Text('Zutat', style: stil)),
           SizedBox(
             width: menge,
@@ -910,10 +930,145 @@ class _ZeilenKopf extends StatelessWidget {
   }
 }
 
+/// Die Zeilen der Zusammensetzung. Im Entwurf hat jede links einen Griff:
+/// anfassen und an die neue Stelle ziehen.
+class _Zeilen extends StatefulWidget {
+  const _Zeilen({
+    required this.positionen,
+    required this.verschiebbar,
+    required this.verschieben,
+    required this.zeile,
+  });
+
+  final List<RezepturPosition> positionen;
+  final bool verschiebbar;
+
+  /// Setzt [p] an die Stelle [ziel] — true, wenn es geklappt hat.
+  final Future<bool> Function(RezepturPosition p, int ziel) verschieben;
+
+  /// Baut die Zeile [p] an der Stelle [i] von [anzahl]. [griff] steht
+  /// links — null, wenn sich nichts verschieben lässt.
+  final Widget Function(RezepturPosition p, int i, int anzahl, Widget? griff)
+      zeile;
+
+  @override
+  State<_Zeilen> createState() => _ZeilenState();
+}
+
+class _ZeilenState extends State<_Zeilen> {
+  /// Die Reihenfolge gleich nach dem Ziehen, bis die Datenbank sie meldet —
+  /// sonst spränge die Zeile kurz an ihren alten Platz zurück.
+  List<String>? _vorlaeufig;
+
+  @override
+  void didUpdateWidget(_Zeilen alt) {
+    super.didUpdateWidget(alt);
+    // Neue Zeilen aus der Datenbank: Ab jetzt gelten sie.
+    if (!identical(alt.positionen, widget.positionen)) _vorlaeufig = null;
+  }
+
+  /// Die Zeilen in der Reihenfolge, die gerade gilt.
+  List<RezepturPosition> get _liste {
+    final ids = _vorlaeufig;
+    final echt = widget.positionen;
+    if (ids == null || ids.length != echt.length) return echt;
+    final nachId = {for (final p in echt) p.id: p};
+    final liste = <RezepturPosition>[];
+    for (final id in ids) {
+      final p = nachId[id];
+      if (p == null) return echt;
+      liste.add(p);
+    }
+    return liste;
+  }
+
+  Future<void> _umstellen(
+    List<RezepturPosition> liste,
+    int alt,
+    int neu,
+  ) async {
+    // [neu] zählt die gezogene Zeile an ihrem alten Platz noch mit.
+    final ziel = neu > alt ? neu - 1 : neu;
+    if (ziel == alt) return;
+    final ids = [for (final p in liste) p.id];
+    ids.insert(ziel, ids.removeAt(alt));
+    setState(() => _vorlaeufig = ids);
+    final geklappt = await widget.verschieben(liste[alt], ziel);
+    if (!geklappt && mounted) setState(() => _vorlaeufig = null);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final liste = _liste;
+    final anzahl = liste.length;
+    if (!widget.verschiebbar) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, p) in liste.indexed)
+            widget.zeile(p, i, anzahl, null),
+        ],
+      );
+    }
+    return ReorderableListView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      buildDefaultDragHandles: false,
+      // Wie im Planungsvorschlag: Die Flutter-Version der CI kennt
+      // `onReorderItem` noch nicht, die lokale hält `onReorder` schon für
+      // veraltet. Mit der CI umstellen — dann entfällt die Korrektur in
+      // [_umstellen].
+      // ignore: deprecated_member_use
+      onReorder: (alt, neu) => _umstellen(liste, alt, neu),
+      children: [
+        for (final (i, p) in liste.indexed)
+          widget.zeile(
+            p,
+            i,
+            anzahl,
+            ReorderableDragStartListener(
+              key: ValueKey('griff-${p.id}'),
+              index: i,
+              child: const _Griff(),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Der Griff links an einer Zeile im Entwurf — wie bei den Posten im
+/// Planungsvorschlag.
+class _Griff extends StatelessWidget {
+  const _Griff();
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.grab,
+      // Durchsichtig, aber mit Fläche: Der Griff soll auf seiner ganzen
+      // Breite zu fassen sein, nicht nur auf dem Symbol.
+      child: ColoredBox(
+        color: Colors.transparent,
+        child: SizedBox(
+          width: _ZeilenKopf.griffBreite,
+          height: 40,
+          child: Icon(
+            Icons.drag_indicator_rounded,
+            size: 18,
+            color: Theme.of(context).colorScheme.outline,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Eine Zeile der Zusammensetzung.
 class _ZeilenAnsicht extends ConsumerWidget {
   const _ZeilenAnsicht({
     super.key,
+    required this.rezepturId,
     required this.position,
     required this.zutat,
     required this.unterrezeptur,
@@ -922,8 +1077,12 @@ class _ZeilenAnsicht extends ConsumerWidget {
     required this.erste,
     required this.letzte,
     required this.ausfuehren,
+    this.griff,
   });
 
+  /// Die Rezeptur, zu der die Zeile gehört — beim Austauschen steht sie
+  /// nicht zur Wahl.
+  final String rezepturId;
   final RezepturPosition position;
   final Zutat? zutat;
   final Rezeptur? unterrezeptur;
@@ -931,8 +1090,11 @@ class _ZeilenAnsicht extends ConsumerWidget {
   final bool bearbeitbar;
   final bool erste;
   final bool letzte;
-  final Future<void> Function(Future<void> Function() tun, String grund)
+  final Future<bool> Function(Future<void> Function() tun, String grund)
       ausfuehren;
+
+  /// Links vor der Zeile — der Griff zum Verschieben.
+  final Widget? griff;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -949,6 +1111,8 @@ class _ZeilenAnsicht extends ConsumerWidget {
     final etikett = p.etikettName?.trim();
     final quid = p.quidPflicht ?? z?.quidPflicht ?? false;
     final anteil = summeKg > 0 ? p.mengeKg / summeKg * 100 : 0.0;
+    final nummer = (z?.artikelnummer ?? u?.artikelnummer)?.trim() ?? '';
+    final g = griff;
 
     Future<void> etikettAendern() async {
       final text = await showDialog<String>(
@@ -971,8 +1135,29 @@ class _ZeilenAnsicht extends ConsumerWidget {
       );
     }
 
+    Future<void> austauschen() async {
+      final wahl = await showDialog<ZutatAuswahl>(
+        context: context,
+        builder: (_) => ZutatAuswahlDialog(
+          ohneRezepturId: rezepturId,
+          titel: fehlt
+              ? 'Fehlende Zutat ersetzen durch …'
+              : '„$name" austauschen gegen …',
+        ),
+      );
+      if (wahl == null) return;
+      await ausfuehren(
+        () => repo().positionAustauschen(
+          p,
+          zutatId: wahl.istRezeptur ? null : wahl.id,
+          unterrezepturId: wahl.istRezeptur ? wahl.id : null,
+        ),
+        'Zutat ausgetauscht',
+      );
+    }
+
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+      padding: EdgeInsets.fromLTRB(g == null ? 12 : 4, 2, 12, 2),
       constraints: const BoxConstraints(minHeight: 44),
       decoration: BoxDecoration(
         border: Border(
@@ -981,6 +1166,19 @@ class _ZeilenAnsicht extends ConsumerWidget {
       ),
       child: Row(
         children: [
+          if (g != null) g,
+          SizedBox(
+            width: _ZeilenKopf.nummer,
+            child: Text(
+              nummer.isEmpty ? '—' : nummer,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: grau,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
           if (istUnter)
             Padding(
               padding: const EdgeInsets.only(right: 6),
@@ -1093,6 +1291,8 @@ class _ZeilenAnsicht extends ConsumerWidget {
                     icon: const Icon(Icons.more_vert, size: 18),
                     onSelected: (wahl) {
                       switch (wahl) {
+                        case 'tauschen':
+                          austauschen();
                         case 'hoch':
                           ausfuehren(
                             () => repo().positionVerschieben(p, nachOben: true),
@@ -1113,6 +1313,10 @@ class _ZeilenAnsicht extends ConsumerWidget {
                       }
                     },
                     itemBuilder: (_) => [
+                      const PopupMenuItem(
+                        value: 'tauschen',
+                        child: Text('Austauschen …'),
+                      ),
                       if (!erste)
                         const PopupMenuItem(
                           value: 'hoch',

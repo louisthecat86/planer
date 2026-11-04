@@ -17,9 +17,10 @@ import '../rechenkern/rechenkern.dart';
 // Das Rezepturblatt: ein Stand einer Rezeptur auf Papier — die
 // Zusammensetzung mit Mengen (wie in der Rezeptur, umgerechnet auf eine
 // Ansatzgröße oder ein Endgewicht), nur mit Anteilen oder ganz ohne Mengen,
-// dazu Zutatenverzeichnis, Nährwerte, Allergene und Fleisch nach LMIV. Für
-// die Produktion je Zutat ein Kästchen mit Feldern für Ist-Menge und
-// Charge des Rohstoffs, dazu Felder für Datum, Charge und Kürzel.
+// auf Wunsch mit den Artikelnummern der Zutaten, dazu Zutatenverzeichnis,
+// Nährwerte, Allergene und Fleisch nach LMIV. Für die Produktion je Zutat
+// ein Kästchen mit Feldern für Ist-Menge und Charge des Rohstoffs, dazu
+// Felder für Datum, Charge und Kürzel.
 
 /// Wie die Mengen auf dem Blatt stehen.
 enum RezepturMengen {
@@ -52,6 +53,7 @@ abstract final class RezepturblattWahl {
   static const ansatzKg = 'ansatzKg';
   static const endKg = 'endKg';
   static const kennzahlen = 'kennzahlen';
+  static const artikelnummern = 'artikelnummern';
   static const notizen = 'notizen';
   static const unterrezepturen = 'unterrezepturen';
   static const zutatenliste = 'zutatenliste';
@@ -69,6 +71,7 @@ class RezepturblattInhalt {
     this.mengen = RezepturMengen.rezeptur,
     this.kg = 100,
     this.kennzahlen = true,
+    this.artikelnummern = true,
     this.notizen = true,
     this.unterrezepturen = true,
     this.zutatenliste = true,
@@ -87,6 +90,9 @@ class RezepturblattInhalt {
 
   /// Einsatz, Verlust, Endgewicht, Fleischanteil, BEFFE.
   final bool kennzahlen;
+
+  /// Vor jeder Zutat ihre Artikelnummer — soweit sie eine hat.
+  final bool artikelnummern;
 
   /// Beschreibung der Rezeptur und Grund für den Stand.
   final bool notizen;
@@ -123,6 +129,8 @@ class RezepturblattDaten {
     this.artikelnummer,
     this.beschreibung,
     this.freigegeben = false,
+    this.zutatNummern = const {},
+    this.rezepturNummern = const {},
   });
 
   /// Name der Rezeptur.
@@ -137,6 +145,33 @@ class RezepturblattDaten {
 
   /// Der Stand ist im Projekt freigegeben.
   final bool freigegeben;
+
+  /// Die Artikelnummern der Zutaten nach ihrer ID — aus dem Katalog von
+  /// heute. Wer keine hat, fehlt.
+  final Map<String, String> zutatNummern;
+
+  /// Ebenso die der Rezepturen — für Unterrezepturen.
+  final Map<String, String> rezepturNummern;
+
+  /// Die Artikelnummer einer Zeile — null ohne.
+  String? nummerVon(RechenPosition p) {
+    final z = p.zutat;
+    if (z != null) return zutatNummern[z.id];
+    return rezepturNummern[p.unterrezeptur?.id];
+  }
+
+  /// Ob eine Zeile eine Artikelnummer hat — auch in Unterrezepturen.
+  bool get mitNummern => _mitNummer(eingabe);
+
+  bool _mitNummer(RechenRezeptur r, [int tiefe = 0]) {
+    if (tiefe >= _tiefsteUnter) return false;
+    for (final p in r.positionen) {
+      if (nummerVon(p) != null) return true;
+      final u = p.unterrezeptur;
+      if (u != null && _mitNummer(u, tiefe + 1)) return true;
+    }
+    return false;
+  }
 }
 
 /// „Stand 3 · Weniger Salz · abgeschlossen am 12.10.2026" — oder Entwurf,
@@ -194,6 +229,7 @@ DruckAuftrag rezepturblattDruckAuftrag(
 }) {
   final e = berechne(daten.eingabe);
   final mitUnter = daten.eingabe.positionen.any((p) => p.unterrezeptur != null);
+  final mitNummern = daten.mitNummern;
   final mitNotizen = (daten.beschreibung?.trim() ?? '').isNotEmpty ||
       (daten.version.notiz?.trim() ?? '').isNotEmpty;
   final mitHinweisen = e.warnungen.isNotEmpty ||
@@ -264,6 +300,13 @@ DruckAuftrag rezepturblattDruckAuftrag(
         hinweis: 'Einsatz, Verlust, Endgewicht, Fleischanteil, BEFFE',
         gruppe: blatt,
       ),
+      if (mitNummern)
+        const DruckSchalter(
+          schluessel: RezepturblattWahl.artikelnummern,
+          titel: 'Artikelnummern',
+          hinweis: 'Vor jeder Zutat, soweit sie eine hat',
+          gruppe: blatt,
+        ),
       if (mitNotizen)
         const DruckSchalter(
           schluessel: RezepturblattWahl.notizen,
@@ -337,6 +380,8 @@ DruckAuftrag rezepturblattDruckAuftrag(
             _ => 0,
           },
           kennzahlen: wahl.an(RezepturblattWahl.kennzahlen),
+          artikelnummern:
+              mitNummern && wahl.an(RezepturblattWahl.artikelnummern),
           notizen: mitNotizen && wahl.an(RezepturblattWahl.notizen),
           unterrezepturen:
               mitUnter && wahl.an(RezepturblattWahl.unterrezepturen),
@@ -455,6 +500,9 @@ class _Rezepturblatt {
   final RezepturblattInhalt inhalt;
   final String gedruckt;
   final RezepturErgebnis ergebnis;
+
+  /// Die Spalte mit den Artikelnummern — nur, wenn es welche gibt.
+  late final bool mitNummer = inhalt.artikelnummern && daten.mitNummern;
 
   double get faktor => rezepturFaktor(ergebnis, inhalt);
 
@@ -585,6 +633,17 @@ class _Rezepturblatt {
 
   // ── Zusammensetzung ───────────────────────────────────────────────────
 
+  /// Die Artikelnummer einer Zeile — ohne Nummer ein grauer Strich.
+  pw.Widget nummerZelle(RechenPosition p) {
+    final nummer = daten.nummerVon(p);
+    return druckZelle(
+      nummer ?? '-',
+      zeilen: 2,
+      farbe: nummer == null ? kDruckGrau : PdfColors.black,
+      groesse: 8.5,
+    );
+  }
+
   /// Eine Tabelle der Zeilen [positionen] — Mengen mal [f], Anteile an
   /// ihrer Summe.
   pw.Widget tabelle(List<RechenPosition> positionen, {required double f}) {
@@ -595,6 +654,7 @@ class _Rezepturblatt {
     final breiten = <pw.TableColumnWidth>[
       if (abwiegen) const pw.FixedColumnWidth(18),
       const pw.FixedColumnWidth(22),
+      if (mitNummer) const pw.FixedColumnWidth(56),
       const pw.FlexColumnWidth(),
       if (mitKg) const pw.FixedColumnWidth(68),
       if (mitAnteil) const pw.FixedColumnWidth(50),
@@ -616,6 +676,7 @@ class _Rezepturblatt {
         druckKopfzeile([
           if (abwiegen) pw.SizedBox(),
           druckKopfZelle('Nr.', rechts: true),
+          if (mitNummer) druckKopfZelle('Art.-Nr.'),
           druckKopfZelle('Zutat'),
           if (mitKg) druckKopfZelle(abwiegen ? 'Soll' : 'Menge', rechts: true),
           if (mitAnteil) druckKopfZelle('Anteil', rechts: true),
@@ -638,6 +699,7 @@ class _Rezepturblatt {
                 farbe: kDruckGrau,
                 groesse: 8.5,
               ),
+              if (mitNummer) nummerZelle(p),
               pw.Container(
                 constraints: pw.BoxConstraints(minHeight: abwiegen ? 22 : 0),
                 alignment: pw.Alignment.centerLeft,
@@ -669,6 +731,7 @@ class _Rezepturblatt {
             children: [
               if (abwiegen) pw.SizedBox(),
               pw.SizedBox(),
+              if (mitNummer) pw.SizedBox(),
               druckZelle('Summe', fett: true),
               if (mitKg)
                 druckZelle(

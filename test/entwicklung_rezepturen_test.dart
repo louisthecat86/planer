@@ -203,6 +203,169 @@ void main() {
     expect(nachher.map((p) => p.zutatId), [a, c, b]);
   });
 
+  test('Zeilen ziehen: an jede Stelle, die übrigen rücken nach', () async {
+    final ids = [for (final n in ['A', 'B', 'C', 'D']) await zutat(n)];
+    final [a, b, c, d] = ids;
+    final id = await repo.rezepturAnlegen(name: 'Test');
+    final v = await neuester(id);
+    for (final z in ids) {
+      await repo.positionHinzufuegen(v.id, zutatId: z, mengeKg: 1);
+    }
+    Future<List<String?>> reihe() async =>
+        [for (final p in await repo.positionen(v.id)) p.zutatId];
+    Future<void> ziehe(String zutatId, int ziel) async {
+      final zeile =
+          (await repo.positionen(v.id)).firstWhere((p) => p.zutatId == zutatId);
+      await repo.positionVerschiebenNach(zeile, ziel);
+    }
+
+    // Die erste ganz nach unten.
+    await ziehe(a, 3);
+    expect(await reihe(), [b, c, d, a]);
+    // Die letzte ganz nach oben.
+    await ziehe(a, 0);
+    expect(await reihe(), [a, b, c, d]);
+    // Über mehrere Plätze in einem Zug.
+    await ziehe(d, 1);
+    expect(await reihe(), [a, d, b, c]);
+    // Hinter das Ende: ans Ende; vor den Anfang: an den Anfang.
+    await ziehe(d, 99);
+    expect(await reihe(), [a, b, c, d]);
+    await ziehe(c, -5);
+    expect(await reihe(), [c, a, b, d]);
+    // Dieselbe Stelle: bleibt.
+    await ziehe(b, 2);
+    expect(await reihe(), [c, a, b, d]);
+    // Die Nummern sind danach lückenlos.
+    expect(
+      [for (final p in await repo.positionen(v.id)) p.reihenfolge],
+      [0, 1, 2, 3],
+    );
+
+    // Ein abgeschlossener Stand bleibt, wie er ist.
+    await repo.versionAbschliessen(v.id);
+    final erste = (await repo.positionen(v.id)).first;
+    await expectLater(
+      repo.positionVerschiebenNach(erste, 3),
+      throwsStateError,
+    );
+  });
+
+  test('Zeile austauschen: Menge, Platz und Notiz bleiben', () async {
+    final schwein = await zutat('Schweinefleisch', fleisch: true, quid: true);
+    final rind = await zutat('Rindfleisch', fleisch: true);
+    final salz = await zutat('Speisesalz');
+    final roest = await repo.rezepturAnlegen(name: 'Röstzwiebeln');
+    final id = await repo.rezepturAnlegen(name: 'Test');
+    final v = await neuester(id);
+    await repo.positionHinzufuegen(v.id, zutatId: salz, mengeKg: 2);
+    await repo.positionHinzufuegen(v.id, zutatId: schwein, mengeKg: 95);
+    await repo.positionHinzufuegen(v.id, zutatId: salz, mengeKg: 3);
+    final zeile = (await repo.positionen(v.id))[1];
+    await repo.positionAendern(
+      zeile,
+      const EntwicklungRezepturPositionenCompanion(
+        etikettName: Value('Schweinefleisch aus der Region'),
+        quidPflicht: Value(false),
+        notiz: Value('Lieferant prüfen'),
+      ),
+    );
+    Future<RezepturPosition> mitte() async => (await repo.positionen(v.id))[1];
+
+    await repo.positionAustauschen(await mitte(), zutatId: rind);
+    var neu = await mitte();
+    expect(neu.id, zeile.id);
+    expect(neu.zutatId, rind);
+    expect(neu.unterrezepturId, isNull);
+    expect(neu.mengeKg, 95);
+    expect(neu.reihenfolge, zeile.reihenfolge);
+    expect(neu.notiz, 'Lieferant prüfen');
+    // Etikettname und QUID gehörten zur alten Zutat.
+    expect(neu.etikettName, isNull);
+    expect(neu.quidPflicht, isNull);
+    // Die Zeilen davor und danach bleiben.
+    expect(
+      [for (final p in await repo.positionen(v.id)) p.zutatId],
+      [salz, rind, salz],
+    );
+
+    // Eine Zutat gegen eine Unterrezeptur — und zurück.
+    await repo.positionAustauschen(neu, unterrezepturId: roest);
+    neu = await mitte();
+    expect(neu.zutatId, isNull);
+    expect(neu.unterrezepturId, roest);
+    expect(neu.unterVersionId, isNull);
+    expect(neu.mengeKg, 95);
+    await repo.positionAustauschen(neu, zutatId: schwein);
+    expect((await mitte()).zutatId, schwein);
+
+    // Dieselbe gewählt: Ein eigener Etikettname bleibt dann stehen.
+    await repo.positionAendern(
+      await mitte(),
+      const EntwicklungRezepturPositionenCompanion(
+        etikettName: Value('Schweinefleisch'),
+      ),
+    );
+    await repo.positionAustauschen(await mitte(), zutatId: schwein);
+    expect((await mitte()).etikettName, 'Schweinefleisch');
+
+    // Genau eines von beiden.
+    await expectLater(
+      repo.positionAustauschen(await mitte()),
+      throwsArgumentError,
+    );
+    await expectLater(
+      repo.positionAustauschen(
+        await mitte(),
+        zutatId: salz,
+        unterrezepturId: roest,
+      ),
+      throwsArgumentError,
+    );
+
+    // Nur im Entwurf.
+    await repo.versionAbschliessen(v.id);
+    await expectLater(
+      repo.positionAustauschen(await mitte(), zutatId: salz),
+      throwsStateError,
+    );
+  });
+
+  test('Artikelnummern aus dem Katalog — auch gelöschter', () async {
+    final schwein = await repo.zutatAnlegen(
+      const EntwicklungZutatenCompanion(
+        name: Value('Schweinefleisch'),
+        artikelnummer: Value(' 10010 '),
+      ),
+    );
+    final ohne = await zutat('Speisesalz');
+    final leer = await repo.zutatAnlegen(
+      const EntwicklungZutatenCompanion(
+        name: Value('Pfeffer'),
+        artikelnummer: Value('  '),
+      ),
+    );
+    final weg = await repo.zutatAnlegen(
+      const EntwicklungZutatenCompanion(
+        name: Value('Majoran'),
+        artikelnummer: Value('30020'),
+      ),
+    );
+    await repo.zutatLoeschen(weg);
+    final braet = await repo.rezepturAnlegen(
+      name: 'Kräuterbrät',
+      artikelnummer: '50100',
+    );
+    final ohneNummer = await repo.rezepturAnlegen(name: 'Würzmischung');
+
+    final n = await repo.artikelnummern();
+    expect(n.zutaten, {schwein: '10010', weg: '30020'});
+    expect(n.zutaten.containsKey(ohne), isFalse);
+    expect(n.zutaten.containsKey(leer), isFalse);
+    expect(n.rezepturen, {braet: '50100'});
+    expect(n.rezepturen.containsKey(ohneNummer), isFalse);
+  });
+
   test('Vergleich zweier Stände: neu, entfernt, geändert', () {
     const salz = RechenZutat(id: 'salz', name: 'Salz');
     const pfeffer = RechenZutat(id: 'pfeffer', name: 'Pfeffer');

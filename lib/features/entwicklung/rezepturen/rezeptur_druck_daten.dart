@@ -24,6 +24,9 @@ Future<RezepturblattDaten?> rezepturblattLaden(
   if (r == null || eingabe == null) return null;
   final projektId = r.projektId;
   final projekt = projektId == null ? null : await projekte.projekt(projektId);
+  // Die Nummern aus dem Katalog von heute — auch für einen abgeschlossenen
+  // Stand: In seinen eingefrorenen Daten stehen keine.
+  final nummern = await repo.artikelnummern();
   return RezepturblattDaten(
     name: r.name,
     artikelnummer: r.artikelnummer,
@@ -31,6 +34,8 @@ Future<RezepturblattDaten?> rezepturblattLaden(
     version: v,
     eingabe: eingabe,
     freigegeben: projekt != null && projekt.freigabeVersionId == v.id,
+    zutatNummern: nummern.zutaten,
+    rezepturNummern: nummern.rezepturen,
   );
 }
 

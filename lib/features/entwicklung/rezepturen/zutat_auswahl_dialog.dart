@@ -24,6 +24,7 @@ class ZutatAuswahlDialog extends ConsumerStatefulWidget {
     super.key,
     required this.ohneRezepturId,
     this.nurZutaten = false,
+    this.titel,
   });
 
   /// Die Rezeptur, in die eingefügt wird — sie selbst steht nicht zur
@@ -32,6 +33,9 @@ class ZutatAuswahlDialog extends ConsumerStatefulWidget {
 
   /// Nur Zutaten aus dem Katalog, keine Rezepturen.
   final bool nurZutaten;
+
+  /// Statt „Zutat oder Rezeptur einfügen" — etwa beim Austauschen.
+  final String? titel;
 
   @override
   ConsumerState<ZutatAuswahlDialog> createState() =>
@@ -96,9 +100,10 @@ class _ZutatAuswahlDialogState extends ConsumerState<ZutatAuswahlDialog> {
         children: [
           Expanded(
             child: Text(
-              widget.nurZutaten
-                  ? 'Zutat wählen'
-                  : 'Zutat oder Rezeptur einfügen',
+              widget.titel ??
+                  (widget.nurZutaten
+                      ? 'Zutat wählen'
+                      : 'Zutat oder Rezeptur einfügen'),
             ),
           ),
           TextButton.icon(
