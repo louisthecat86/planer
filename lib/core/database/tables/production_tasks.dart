@@ -49,6 +49,14 @@ class ProductionTasks extends Table {
   /// Genau dieser Wert wird gegen den Bedarf gerechnet.
   RealColumn get fertigMengeKg => real().nullable()();
 
+  /// Geplante Fleischeinwaage dieser Produktion in kg — wie viel von der
+  /// Rohware Fleisch ist.
+  ///
+  /// Wie [fertigMengeKg] nur an der Wurzel der Kette. Leer, solange
+  /// niemand sie geplant hat; dann rechnet die App sie aus dem
+  /// Fleischanteil der letzten Produktionen oder der Rezeptur.
+  RealColumn get fleischMengeKg => real().nullable()();
+
   /// Auftragszeilen aus dem Auftragsbestand, für die diese Produktion
   /// eingeplant wurde — als JSON-Liste (siehe `AuftragsBezug`).
   ///

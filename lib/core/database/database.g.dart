@@ -7212,6 +7212,12 @@ class $ProductionTasksTable extends ProductionTasks
   late final GeneratedColumn<double> fertigMengeKg = GeneratedColumn<double>(
       'fertig_menge_kg', aliasedName, true,
       type: DriftSqlType.double, requiredDuringInsert: false);
+  static const VerificationMeta _fleischMengeKgMeta =
+      const VerificationMeta('fleischMengeKg');
+  @override
+  late final GeneratedColumn<double> fleischMengeKg = GeneratedColumn<double>(
+      'fleisch_menge_kg', aliasedName, true,
+      type: DriftSqlType.double, requiredDuringInsert: false);
   static const VerificationMeta _auftragsZeilenMeta =
       const VerificationMeta('auftragsZeilen');
   @override
@@ -7295,6 +7301,7 @@ class $ProductionTasksTable extends ProductionTasks
         maschineId,
         bedarfId,
         fertigMengeKg,
+        fleischMengeKg,
         auftragsZeilen,
         startZeit,
         geplanteDauerMinuten,
@@ -7361,6 +7368,12 @@ class $ProductionTasksTable extends ProductionTasks
           _fertigMengeKgMeta,
           fertigMengeKg.isAcceptableOrUnknown(
               data['fertig_menge_kg']!, _fertigMengeKgMeta));
+    }
+    if (data.containsKey('fleisch_menge_kg')) {
+      context.handle(
+          _fleischMengeKgMeta,
+          fleischMengeKg.isAcceptableOrUnknown(
+              data['fleisch_menge_kg']!, _fleischMengeKgMeta));
     }
     if (data.containsKey('auftrags_zeilen')) {
       context.handle(
@@ -7445,6 +7458,8 @@ class $ProductionTasksTable extends ProductionTasks
           .read(DriftSqlType.string, data['${effectivePrefix}bedarf_id']),
       fertigMengeKg: attachedDatabase.typeMapping
           .read(DriftSqlType.double, data['${effectivePrefix}fertig_menge_kg']),
+      fleischMengeKg: attachedDatabase.typeMapping.read(
+          DriftSqlType.double, data['${effectivePrefix}fleisch_menge_kg']),
       auftragsZeilen: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}auftrags_zeilen']),
       startZeit: attachedDatabase.typeMapping
@@ -7512,6 +7527,14 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
   /// Genau dieser Wert wird gegen den Bedarf gerechnet.
   final double? fertigMengeKg;
 
+  /// Geplante Fleischeinwaage dieser Produktion in kg — wie viel von der
+  /// Rohware Fleisch ist.
+  ///
+  /// Wie [fertigMengeKg] nur an der Wurzel der Kette. Leer, solange
+  /// niemand sie geplant hat; dann rechnet die App sie aus dem
+  /// Fleischanteil der letzten Produktionen oder der Rezeptur.
+  final double? fleischMengeKg;
+
   /// Auftragszeilen aus dem Auftragsbestand, für die diese Produktion
   /// eingeplant wurde — als JSON-Liste (siehe `AuftragsBezug`).
   ///
@@ -7558,6 +7581,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       this.maschineId,
       this.bedarfId,
       this.fertigMengeKg,
+      this.fleischMengeKg,
       this.auftragsZeilen,
       this.startZeit,
       required this.geplanteDauerMinuten,
@@ -7585,6 +7609,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
     }
     if (!nullToAbsent || fertigMengeKg != null) {
       map['fertig_menge_kg'] = Variable<double>(fertigMengeKg);
+    }
+    if (!nullToAbsent || fleischMengeKg != null) {
+      map['fleisch_menge_kg'] = Variable<double>(fleischMengeKg);
     }
     if (!nullToAbsent || auftragsZeilen != null) {
       map['auftrags_zeilen'] = Variable<String>(auftragsZeilen);
@@ -7626,6 +7653,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       fertigMengeKg: fertigMengeKg == null && nullToAbsent
           ? const Value.absent()
           : Value(fertigMengeKg),
+      fleischMengeKg: fleischMengeKg == null && nullToAbsent
+          ? const Value.absent()
+          : Value(fleischMengeKg),
       auftragsZeilen: auftragsZeilen == null && nullToAbsent
           ? const Value.absent()
           : Value(auftragsZeilen),
@@ -7662,6 +7692,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       maschineId: serializer.fromJson<String?>(json['maschineId']),
       bedarfId: serializer.fromJson<String?>(json['bedarfId']),
       fertigMengeKg: serializer.fromJson<double?>(json['fertigMengeKg']),
+      fleischMengeKg: serializer.fromJson<double?>(json['fleischMengeKg']),
       auftragsZeilen: serializer.fromJson<String?>(json['auftragsZeilen']),
       startZeit: serializer.fromJson<String?>(json['startZeit']),
       geplanteDauerMinuten:
@@ -7689,6 +7720,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       'maschineId': serializer.toJson<String?>(maschineId),
       'bedarfId': serializer.toJson<String?>(bedarfId),
       'fertigMengeKg': serializer.toJson<double?>(fertigMengeKg),
+      'fleischMengeKg': serializer.toJson<double?>(fleischMengeKg),
       'auftragsZeilen': serializer.toJson<String?>(auftragsZeilen),
       'startZeit': serializer.toJson<String?>(startZeit),
       'geplanteDauerMinuten': serializer.toJson<double>(geplanteDauerMinuten),
@@ -7712,6 +7744,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           Value<String?> maschineId = const Value.absent(),
           Value<String?> bedarfId = const Value.absent(),
           Value<double?> fertigMengeKg = const Value.absent(),
+          Value<double?> fleischMengeKg = const Value.absent(),
           Value<String?> auftragsZeilen = const Value.absent(),
           Value<String?> startZeit = const Value.absent(),
           double? geplanteDauerMinuten,
@@ -7733,6 +7766,8 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
         bedarfId: bedarfId.present ? bedarfId.value : this.bedarfId,
         fertigMengeKg:
             fertigMengeKg.present ? fertigMengeKg.value : this.fertigMengeKg,
+        fleischMengeKg:
+            fleischMengeKg.present ? fleischMengeKg.value : this.fleischMengeKg,
         auftragsZeilen:
             auftragsZeilen.present ? auftragsZeilen.value : this.auftragsZeilen,
         startZeit: startZeit.present ? startZeit.value : this.startZeit,
@@ -7760,6 +7795,9 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       fertigMengeKg: data.fertigMengeKg.present
           ? data.fertigMengeKg.value
           : this.fertigMengeKg,
+      fleischMengeKg: data.fleischMengeKg.present
+          ? data.fleischMengeKg.value
+          : this.fleischMengeKg,
       auftragsZeilen: data.auftragsZeilen.present
           ? data.auftragsZeilen.value
           : this.auftragsZeilen,
@@ -7794,6 +7832,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           ..write('maschineId: $maschineId, ')
           ..write('bedarfId: $bedarfId, ')
           ..write('fertigMengeKg: $fertigMengeKg, ')
+          ..write('fleischMengeKg: $fleischMengeKg, ')
           ..write('auftragsZeilen: $auftragsZeilen, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
@@ -7819,6 +7858,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
       maschineId,
       bedarfId,
       fertigMengeKg,
+      fleischMengeKg,
       auftragsZeilen,
       startZeit,
       geplanteDauerMinuten,
@@ -7842,6 +7882,7 @@ class ProductionTask extends DataClass implements Insertable<ProductionTask> {
           other.maschineId == this.maschineId &&
           other.bedarfId == this.bedarfId &&
           other.fertigMengeKg == this.fertigMengeKg &&
+          other.fleischMengeKg == this.fleischMengeKg &&
           other.auftragsZeilen == this.auftragsZeilen &&
           other.startZeit == this.startZeit &&
           other.geplanteDauerMinuten == this.geplanteDauerMinuten &&
@@ -7864,6 +7905,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
   final Value<String?> maschineId;
   final Value<String?> bedarfId;
   final Value<double?> fertigMengeKg;
+  final Value<double?> fleischMengeKg;
   final Value<String?> auftragsZeilen;
   final Value<String?> startZeit;
   final Value<double> geplanteDauerMinuten;
@@ -7885,6 +7927,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.maschineId = const Value.absent(),
     this.bedarfId = const Value.absent(),
     this.fertigMengeKg = const Value.absent(),
+    this.fleischMengeKg = const Value.absent(),
     this.auftragsZeilen = const Value.absent(),
     this.startZeit = const Value.absent(),
     this.geplanteDauerMinuten = const Value.absent(),
@@ -7907,6 +7950,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     this.maschineId = const Value.absent(),
     this.bedarfId = const Value.absent(),
     this.fertigMengeKg = const Value.absent(),
+    this.fleischMengeKg = const Value.absent(),
     this.auftragsZeilen = const Value.absent(),
     this.startZeit = const Value.absent(),
     required double geplanteDauerMinuten,
@@ -7935,6 +7979,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     Expression<String>? maschineId,
     Expression<String>? bedarfId,
     Expression<double>? fertigMengeKg,
+    Expression<double>? fleischMengeKg,
     Expression<String>? auftragsZeilen,
     Expression<String>? startZeit,
     Expression<double>? geplanteDauerMinuten,
@@ -7957,6 +8002,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       if (maschineId != null) 'maschine_id': maschineId,
       if (bedarfId != null) 'bedarf_id': bedarfId,
       if (fertigMengeKg != null) 'fertig_menge_kg': fertigMengeKg,
+      if (fleischMengeKg != null) 'fleisch_menge_kg': fleischMengeKg,
       if (auftragsZeilen != null) 'auftrags_zeilen': auftragsZeilen,
       if (startZeit != null) 'start_zeit': startZeit,
       if (geplanteDauerMinuten != null)
@@ -7983,6 +8029,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       Value<String?>? maschineId,
       Value<String?>? bedarfId,
       Value<double?>? fertigMengeKg,
+      Value<double?>? fleischMengeKg,
       Value<String?>? auftragsZeilen,
       Value<String?>? startZeit,
       Value<double>? geplanteDauerMinuten,
@@ -8004,6 +8051,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
       maschineId: maschineId ?? this.maschineId,
       bedarfId: bedarfId ?? this.bedarfId,
       fertigMengeKg: fertigMengeKg ?? this.fertigMengeKg,
+      fleischMengeKg: fleischMengeKg ?? this.fleischMengeKg,
       auftragsZeilen: auftragsZeilen ?? this.auftragsZeilen,
       startZeit: startZeit ?? this.startZeit,
       geplanteDauerMinuten: geplanteDauerMinuten ?? this.geplanteDauerMinuten,
@@ -8045,6 +8093,9 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
     }
     if (fertigMengeKg.present) {
       map['fertig_menge_kg'] = Variable<double>(fertigMengeKg.value);
+    }
+    if (fleischMengeKg.present) {
+      map['fleisch_menge_kg'] = Variable<double>(fleischMengeKg.value);
     }
     if (auftragsZeilen.present) {
       map['auftrags_zeilen'] = Variable<String>(auftragsZeilen.value);
@@ -8097,6 +8148,7 @@ class ProductionTasksCompanion extends UpdateCompanion<ProductionTask> {
           ..write('maschineId: $maschineId, ')
           ..write('bedarfId: $bedarfId, ')
           ..write('fertigMengeKg: $fertigMengeKg, ')
+          ..write('fleischMengeKg: $fleischMengeKg, ')
           ..write('auftragsZeilen: $auftragsZeilen, ')
           ..write('startZeit: $startZeit, ')
           ..write('geplanteDauerMinuten: $geplanteDauerMinuten, ')
@@ -27102,6 +27154,7 @@ typedef $$ProductionTasksTableCreateCompanionBuilder = ProductionTasksCompanion
   Value<String?> maschineId,
   Value<String?> bedarfId,
   Value<double?> fertigMengeKg,
+  Value<double?> fleischMengeKg,
   Value<String?> auftragsZeilen,
   Value<String?> startZeit,
   required double geplanteDauerMinuten,
@@ -27125,6 +27178,7 @@ typedef $$ProductionTasksTableUpdateCompanionBuilder = ProductionTasksCompanion
   Value<String?> maschineId,
   Value<String?> bedarfId,
   Value<double?> fertigMengeKg,
+  Value<double?> fleischMengeKg,
   Value<String?> auftragsZeilen,
   Value<String?> startZeit,
   Value<double> geplanteDauerMinuten,
@@ -27237,6 +27291,10 @@ class $$ProductionTasksTableFilterComposer
 
   ColumnFilters<double> get fertigMengeKg => $composableBuilder(
       column: $table.fertigMengeKg, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<double> get fleischMengeKg => $composableBuilder(
+      column: $table.fleischMengeKg,
+      builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get auftragsZeilen => $composableBuilder(
       column: $table.auftragsZeilen,
@@ -27389,6 +27447,10 @@ class $$ProductionTasksTableOrderingComposer
       column: $table.fertigMengeKg,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<double> get fleischMengeKg => $composableBuilder(
+      column: $table.fleischMengeKg,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get auftragsZeilen => $composableBuilder(
       column: $table.auftragsZeilen,
       builder: (column) => ColumnOrderings(column));
@@ -27476,6 +27538,9 @@ class $$ProductionTasksTableAnnotationComposer
 
   GeneratedColumn<double> get fertigMengeKg => $composableBuilder(
       column: $table.fertigMengeKg, builder: (column) => column);
+
+  GeneratedColumn<double> get fleischMengeKg => $composableBuilder(
+      column: $table.fleischMengeKg, builder: (column) => column);
 
   GeneratedColumn<String> get auftragsZeilen => $composableBuilder(
       column: $table.auftragsZeilen, builder: (column) => column);
@@ -27630,6 +27695,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> maschineId = const Value.absent(),
             Value<String?> bedarfId = const Value.absent(),
             Value<double?> fertigMengeKg = const Value.absent(),
+            Value<double?> fleischMengeKg = const Value.absent(),
             Value<String?> auftragsZeilen = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             Value<double> geplanteDauerMinuten = const Value.absent(),
@@ -27652,6 +27718,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             maschineId: maschineId,
             bedarfId: bedarfId,
             fertigMengeKg: fertigMengeKg,
+            fleischMengeKg: fleischMengeKg,
             auftragsZeilen: auftragsZeilen,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,
@@ -27674,6 +27741,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             Value<String?> maschineId = const Value.absent(),
             Value<String?> bedarfId = const Value.absent(),
             Value<double?> fertigMengeKg = const Value.absent(),
+            Value<double?> fleischMengeKg = const Value.absent(),
             Value<String?> auftragsZeilen = const Value.absent(),
             Value<String?> startZeit = const Value.absent(),
             required double geplanteDauerMinuten,
@@ -27696,6 +27764,7 @@ class $$ProductionTasksTableTableManager extends RootTableManager<
             maschineId: maschineId,
             bedarfId: bedarfId,
             fertigMengeKg: fertigMengeKg,
+            fleischMengeKg: fleischMengeKg,
             auftragsZeilen: auftragsZeilen,
             startZeit: startZeit,
             geplanteDauerMinuten: geplanteDauerMinuten,

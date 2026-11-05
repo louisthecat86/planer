@@ -142,6 +142,7 @@ class RezepturErgebnis {
   const RezepturErgebnis({
     required this.eingesetztKg,
     required this.rohmasseKg,
+    required this.fleischRohKg,
     required this.endgewichtKg,
     required this.zeilen,
     required this.zutatenliste,
@@ -161,6 +162,11 @@ class RezepturErgebnis {
 
   /// Summe aller Rohstoffe, auch der in Unterrezepturen.
   final double rohmasseKg;
+
+  /// Davon Fleisch, roh eingewogen — auch Fleisch ohne Tierart. Anders als
+  /// [fleischanteilProzent] ohne Abzug von Fett und Bindegewebe über dem
+  /// Grenzwert: Das ist die Fleischeinwaage, nicht das Fleisch nach LMIV.
+  final double fleischRohKg;
 
   /// Nach dem Verlust.
   final double endgewichtKg;
@@ -414,6 +420,9 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
   return RezepturErgebnis(
     eingesetztKg: teil.eingesetztKg,
     rohmasseKg: blaetter.fold<double>(0, (s, b) => s + b.rohKg),
+    fleischRohKg: blaetter
+        .where((b) => b.zutat.istFleisch)
+        .fold<double>(0, (s, b) => s + b.rohKg),
     endgewichtKg: endKg,
     zeilen: fertig,
     zutatenliste: [

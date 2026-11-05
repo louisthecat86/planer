@@ -378,6 +378,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
       ref.invalidate(weekBoardProvider);
       ref.invalidate(dayBoardProvider);
       ref.invalidate(dailyTasksProvider);
+      // Die Fertigware der Produktion zählt gegen den Bedarf.
+      ref.invalidate(bedarfProvider);
     }
   }
 

@@ -34,6 +34,7 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
     required this.productId,
     this.existing,
     this.vorschlagRohKg,
+    this.vorschlagFleischKg,
     this.vorschlagDatum,
     this.vorschlagStart,
   });
@@ -43,6 +44,7 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
 
   /// Vorbelegung für eine neue Produktion, etwa aus dem Wochenplan.
   final double? vorschlagRohKg;
+  final double? vorschlagFleischKg;
   final DateTime? vorschlagDatum;
   final String? vorschlagStart;
 
@@ -53,6 +55,7 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
     String productId, {
     ProductionHistoryData? existing,
     double? vorschlagRohKg,
+    double? vorschlagFleischKg,
     DateTime? vorschlagDatum,
     String? vorschlagStart,
   }) async {
@@ -67,6 +70,7 @@ class ProductionEntryDialog extends ConsumerStatefulWidget {
           productId: productId,
           existing: existing,
           vorschlagRohKg: vorschlagRohKg,
+          vorschlagFleischKg: vorschlagFleischKg,
           vorschlagDatum: vorschlagDatum,
           vorschlagStart: vorschlagStart,
         ),
@@ -111,6 +115,10 @@ class _ProductionEntryDialogState
       _datum = DateTime(d.year, d.month, d.day);
       final roh = widget.vorschlagRohKg;
       if (roh != null && roh > 0) _rohController.text = roh.round().toString();
+      final fleisch = widget.vorschlagFleischKg;
+      if (fleisch != null && fleisch > 0) {
+        _fleischController.text = fleisch.round().toString();
+      }
       _startController.text = widget.vorschlagStart ?? '';
     }
   }

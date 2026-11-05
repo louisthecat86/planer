@@ -57,6 +57,8 @@ void main() {
       String abteilung = 'bratstrasse',
       double roh = 1200,
       double? fertig = 950,
+      double? fleisch,
+      double? rohware,
       String? start,
       String? notiz,
       int sortierung = 0,
@@ -69,6 +71,7 @@ void main() {
             datum: tag,
             abteilung: abteilung,
             fertigMengeKg: fertig,
+            fleischMengeKg: fleisch,
             startZeit: start,
             geplanteDauerMinuten: 120,
             geplanteMitarbeiter: 2,
@@ -80,6 +83,7 @@ void main() {
           ),
           artikelName: name,
           artikelNummer: nummer,
+          rohwareKg: rohware,
         );
 
     Map<DateTime, List<GeplanteProduktion>> woche() => {
@@ -145,6 +149,25 @@ void main() {
       expect(
         erfassungPlanText(y),
         'Plan: 1.200 kg Rohware · 950 kg Fertigware · erste Zeile',
+      );
+    });
+
+    test('Fertigware 0 heißt ohne — Fleischeinwaage und alle Teile', () {
+      // Ohne bekannte Ausbeute in Rohware geplant: An der Wurzel steht 0.
+      final ohne = p('7', '1', 'Z', mo, fertig: 0);
+      expect(ohne.fertigKg, isNull);
+      expect(ohne.mengeKg, 1200, reason: 'Die Übersicht zeigt die Rohware');
+      expect(erfassungPlanText(ohne), 'Plan: 1.200 kg Rohware');
+
+      // Der erste Schritt auf Tage verteilt: 400 kg an der Wurzel, die
+      // Produktion hat 1.200 kg Rohware.
+      final teile = p('6', '1', 'W', mo, roh: 400, rohware: 1200, fleisch: 800);
+      expect(teile.rohKg, 1200);
+      expect(teile.fleischKg, 800);
+      expect(teile.mengeKg, 950);
+      expect(
+        erfassungPlanText(teile),
+        'Plan: 1.200 kg Rohware · 950 kg Fertigware · 800 kg Fleisch',
       );
     });
 

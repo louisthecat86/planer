@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:drift/drift.dart' show driftRuntimeOptions;
+import 'package:drift/drift.dart' show Value, driftRuntimeOptions;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/entwicklung.dart';
 import 'package:produktion_planer/core/database/database.dart';
@@ -216,6 +216,49 @@ void main() {
       final ohne = await zweiter.select(zweiter.productionHistory).getSingle();
       expect(ohne.kgRohware, 1000);
       expect(ohne.kgFleischeinwaage, isNull);
+    });
+
+    test('geplante Fleischeinwaage im Board — auch aus älteren Backups',
+        () async {
+      await seedArtikel(db, id: 'p1', nummer: '4711');
+      await db.into(db.productionTasks).insert(
+            ProductionTasksCompanion.insert(
+              id: 't1',
+              productId: 'p1',
+              mengeKg: 1000,
+              datum: DateTime(2026, 11, 9),
+              abteilung: 'zerlegung',
+              geplanteDauerMinuten: 60,
+              geplanteMitarbeiter: 2,
+              fertigMengeKg: const Value(800),
+              fleischMengeKg: const Value(700),
+            ),
+          );
+      final inhalt = await BackupService.backupInhalt(db);
+      final daten = inhalt['data'] as Map<String, dynamic>;
+
+      final zweiter = testDatenbank();
+      addTearDown(zweiter.close);
+      final neu = await schreibeBackup(daten, version: '1.6');
+      await BackupService.importBackup(neu, zweiter, sicherungAnlegen: false);
+      final t = await zweiter.select(zweiter.productionTasks).getSingle();
+      expect(t.fertigMengeKg, 800);
+      expect(t.fleischMengeKg, 700);
+
+      final alt = await schreibeBackup(
+        {
+          ...daten,
+          'production_tasks': [
+            for (final t in daten['production_tasks'] as List)
+              Map<String, dynamic>.from(t as Map)..remove('fleischMengeKg'),
+          ],
+        },
+        version: '1.6',
+      );
+      await BackupService.importBackup(alt, zweiter, sicherungAnlegen: false);
+      final ohne = await zweiter.select(zweiter.productionTasks).getSingle();
+      expect(ohne.fertigMengeKg, 800);
+      expect(ohne.fleischMengeKg, isNull);
     });
   });
 

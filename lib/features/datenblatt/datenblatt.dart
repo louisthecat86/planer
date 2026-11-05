@@ -13,6 +13,8 @@ import '../../core/services/auftragsbestand_deckung.dart'
         ladeBedarfsPlanung,
         restBezuege;
 import '../../core/utils/pdf_text.dart';
+import '../whiteboard/produktions_mengen.dart'
+    show ProduktionsKette, fleischanteilFuer, prozessAbteilungen;
 import '../whiteboard/whiteboard_provider.dart'
     show berechneSchrittPlan, ermittleAusbeute;
 
@@ -64,6 +66,9 @@ class Datenblatt {
     this.fertigGeschaetzt = false,
     this.rohwareKg,
     this.ausbeuteProzent,
+    this.fleischKg,
+    this.fleischGeschaetzt = false,
+    this.fleischanteilProzent,
     this.tag,
     this.tagArt = DatenblattTag.produktion,
     this.status,
@@ -91,6 +96,17 @@ class Datenblatt {
 
   /// Ausbeute, mit der gerechnet wurde, in Prozent.
   final double? ausbeuteProzent;
+
+  /// Fleischeinwaage: geplant — sonst aus Rohware und Fleischanteil
+  /// geschätzt ([fleischGeschaetzt]). null, wenn sich nichts ergibt.
+  final double? fleischKg;
+
+  /// [fleischKg] ist über den Fleischanteil der letzten Produktionen oder
+  /// der Rezeptur geschätzt, nicht geplant.
+  final bool fleischGeschaetzt;
+
+  /// Fleischanteil der Rohware in Prozent.
+  final double? fleischanteilProzent;
 
   final DateTime? tag;
   final DatenblattTag tagArt;
@@ -167,14 +183,20 @@ Future<Datenblatt?> datenblattFuerMenge(
   final ausbeute = plan.schritte.isEmpty
       ? await ermittleAusbeute(db, productId)
       : plan.ausbeute;
+  final roh = ausbeute.bekannt ? ausbeute.rohAusFertig(fertigKg) : null;
+  // Die Fleischeinwaage lässt sich nur schätzen: Geplant ist noch nichts.
+  final anteil = roh == null ? null : await fleischanteilFuer(db, productId);
 
   return Datenblatt(
     artikelnummer: produkt.artikelnummer,
     bezeichnung: produkt.artikelbezeichnung,
     bezeichnung2: produkt.beschreibung,
     fertigKg: fertigKg,
-    rohwareKg: ausbeute.bekannt ? ausbeute.rohAusFertig(fertigKg) : null,
+    rohwareKg: roh,
     ausbeuteProzent: ausbeute.bekannt ? ausbeute.faktor * 100 : null,
+    fleischKg: roh != null && anteil != null ? roh * anteil.wert : null,
+    fleischGeschaetzt: anteil != null,
+    fleischanteilProzent: anteil == null ? null : anteil.wert * 100,
     tag: tag,
     tagArt: tagArt,
     status: status,
@@ -317,7 +339,15 @@ Future<Datenblatt?> datenblattFuerKette(AppDatabase db, String taskId) async {
       .getSingleOrNull();
   if (produkt == null) return null;
 
-  final roh = wurzel.mengeKg;
+  // Die Rohware der Produktion — mit allen Teilen, wenn der erste Schritt
+  // auf Tage verteilt ist. Vorher stand hier nur die Menge der Wurzel.
+  // Von der Wurzel aus, damit jeder Schritt dasselbe Blatt zeigt.
+  final kette = ProduktionsKette.aus(
+    wurzel.id,
+    alle,
+    await prozessAbteilungen(db, produkt.id),
+  );
+  final roh = kette?.rohKg ?? wurzel.mengeKg;
   var fertig = wurzel.fertigMengeKg;
   var geschaetzt = false;
   if ((fertig == null || fertig <= 0) && roh > 0) {
@@ -327,6 +357,16 @@ Future<Datenblatt?> datenblattFuerKette(AppDatabase db, String taskId) async {
     if (ausbeute.bekannt) {
       fertig = ausbeute.fertigAusRoh(roh);
       geschaetzt = true;
+    }
+  }
+  // Die Fleischeinwaage: geplant, sonst über den Fleischanteil geschätzt.
+  var fleisch = kette?.fleischKg;
+  var fleischGeschaetzt = false;
+  if (fleisch == null && roh > 0) {
+    final anteil = await fleischanteilFuer(db, produkt.id);
+    if (anteil != null) {
+      fleisch = roh * anteil.wert;
+      fleischGeschaetzt = true;
     }
   }
   final beginn = schritte.first.datum;
@@ -356,6 +396,10 @@ Future<Datenblatt?> datenblattFuerKette(AppDatabase db, String taskId) async {
     ausbeuteProzent: fertig != null && fertig > 0 && roh > 0
         ? fertig / roh * 100
         : null,
+    fleischKg: fleisch,
+    fleischGeschaetzt: fleischGeschaetzt,
+    fleischanteilProzent:
+        fleisch != null && roh > 0 ? fleisch / roh * 100 : null,
     // Bei einer mehrtägigen Kette zählt der Tag, an dem die Ware fertig
     // wird — ab dann läuft die Haltbarkeit.
     tag: ende,
@@ -506,7 +550,7 @@ DruckAuftrag datenblattDruckAuftrag(
       const DruckSchalter(
         schluessel: DatenblattWahl.mengen,
         titel: 'Mengen und Tag',
-        hinweis: 'Fertigware, Rohware, Produktionstag',
+        hinweis: 'Fertigware, Rohware, Fleischeinwaage, Produktionstag',
         gruppe: gruppe,
       ),
       const DruckSchalter(
@@ -706,6 +750,19 @@ List<pw.Widget> _seite(
                     : 'Ausbeute ${_prozent(b.ausbeuteProzent!)} %',
               ),
             ),
+            if (b.fleischKg != null)
+              pw.Expanded(
+                flex: 2,
+                child: _feld(
+                  b.fleischGeschaetzt
+                      ? 'Fleischeinwaage (ca.)'
+                      : 'Fleischeinwaage',
+                  '${_kg(b.fleischKg!)} kg',
+                  zusatz: b.fleischanteilProzent == null
+                      ? null
+                      : 'Fleischanteil ${_prozent(b.fleischanteilProzent!)} %',
+                ),
+              ),
             pw.Expanded(
               flex: 2,
               child: _feld(

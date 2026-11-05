@@ -48,6 +48,18 @@ Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
 ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
 Aufgaben" für alles, was nicht aus einem Artikel kommt.
 
+Ein Auftrag im Board öffnet sein Fenster mit den Mengen der ganzen
+Produktion untereinander: **Rohware, Fertigware und Fleischeinwaage**,
+darunter Verlust und Fleischanteil mit ihrer Herkunft (wie geplant, Ø der
+letzten Produktionen oder aus der Rezeptur). Jedes Feld lässt sich ändern,
+die anderen rechnen mit. Bis einschließlich Bratstraße arbeiten die
+Aufträge einer Produktion mit der Rohware, danach mit der Fertigware —
+das Fenster sagt, womit der geöffnete arbeitet. Beim Speichern ziehen alle
+Aufträge der Produktion mit (auf Tage verteilte Teile im selben
+Verhältnis) und bekommen eine neu gerechnete Dauer; die Fertigware zählt
+für den Bedarf. Die geplante Fleischeinwaage steht auf dem Datenblatt und
+ist in der Produktionserfassung schon eingetragen.
+
 Die acht Abteilungen sind ein Dart-Enum in
 `lib/core/constants/abteilungen.dart`: Zerlegung, Wurstküche,
 Kutterabteilung, Bratstraße, Schneideabteilung, Verpackung, Verpackung Tef1,
@@ -128,9 +140,10 @@ Standard. Strg+P druckt.
     und die Warnung, Notizen, auf Wunsch die Parameter des Steckbriefs
     ohne Grenze, jede Anlage auf einer eigenen Seite zum Aushängen.
   - **Datenblatt** (Board, Bedarf, Auftragsbestand, Planungsvorschlag):
-    welche Blätter, Mengen und Tag, Stand, Merkmale, Notiz, Ablauf,
-    Aufträge — auch ohne Kundennamen zum Aushängen —, Feld für die
-    Rückmeldung.
+    welche Blätter, Mengen und Tag (Fertigware, Rohware, Fleischeinwaage —
+    ohne geplante über den Fleischanteil geschätzt), Stand, Merkmale,
+    Notiz, Ablauf, Aufträge — auch ohne Kundennamen zum Aushängen —, Feld
+    für die Rückmeldung.
   - **Etikett-Entwurf**: Breite des Etiketts (80, 110 oder 150 mm), Kopf,
     Nährwerttabelle, Platzhalter, was noch offen ist.
   - **Projektbericht**: Kapitel, Steckbrief, Inhaltsverzeichnis, Verlauf als
@@ -372,7 +385,7 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 36.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 37.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit

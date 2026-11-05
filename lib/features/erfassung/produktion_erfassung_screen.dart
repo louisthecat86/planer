@@ -47,6 +47,22 @@ final erfassungWocheDatenProvider = FutureProvider<
 
   if (tasks.isEmpty) return {};
 
+  // Ist der erste Schritt auf Tage verteilt, hängen die übrigen Teile als
+  // Kinder derselben Abteilung an der Wurzel — die Rohware ist ihre Summe.
+  final rohware = {for (final t in tasks) t.id: t.mengeKg};
+  final abteilung = {for (final t in tasks) t.id: t.abteilung};
+  final teile = await (db.select(db.productionTasks)
+        ..where((t) => t.parentTaskId.isIn(rohware.keys))
+        ..where((t) => t.deletedAt.isNull())
+        ..where((t) => t.status.isNotIn(const ['storniert'])))
+      .get();
+  for (final teil in teile) {
+    final wurzel = teil.parentTaskId!;
+    if (teil.abteilung == abteilung[wurzel]) {
+      rohware[wurzel] = rohware[wurzel]! + teil.mengeKg;
+    }
+  }
+
   final produkte = await (db.select(db.products)
         ..where((p) => p.deletedAt.isNull()))
       .get();
@@ -77,6 +93,7 @@ final erfassungWocheDatenProvider = FutureProvider<
             task: t,
             artikelName: p?.artikelbezeichnung ?? 'Unbekannt',
             artikelNummer: p?.artikelnummer ?? '—',
+            rohwareKg: rohware[t.id],
           ),
         );
   }
@@ -303,13 +320,15 @@ class _ProduktionErfassungScreenState
   }
 
   Future<void> _erfassen(GeplanteProduktion prod) async {
-    // Dasselbe Formular wie im Artikel. Vorgeschlagen wird die geplante
-    // ROHWARE: Die Wurzel der Kette ist der erste Schritt, ihre Menge die
-    // Rohware — die Fertigmenge wird erst nach dem Wiegen eingetragen.
+    // Dasselbe Formular wie im Artikel. Vorgeschlagen werden die geplante
+    // ROHWARE — die Menge der ersten Abteilung, mit allen Teilen — und die
+    // geplante Fleischeinwaage; die Fertigmenge wird erst nach dem Wiegen
+    // eingetragen.
     final erfasst = await ProductionEntryDialog.show(
       context,
       prod.task.productId,
-      vorschlagRohKg: prod.task.mengeKg,
+      vorschlagRohKg: prod.rohKg,
+      vorschlagFleischKg: prod.fleischKg,
       vorschlagDatum: prod.task.datum,
       vorschlagStart: prod.task.startZeit,
     );

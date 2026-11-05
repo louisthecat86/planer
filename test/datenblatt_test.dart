@@ -108,6 +108,20 @@ void main() {
   Future<List<ProductionTask>> schritte() =>
       db.select(db.productionTasks).get();
 
+  /// Eine Produktion mit Fleischeinwaage: 600 von 1.000 kg Rohware sind
+  /// Fleisch — Fleischanteil 60 %, Ausbeute wie gehabt 80 %.
+  Future<void> fleischErfasst() => db.into(db.productionHistory).insert(
+        ProductionHistoryCompanion.insert(
+          id: 'h2',
+          productId: 'p1',
+          datum: DateTime(2026, 9, 15),
+          kgRohware: const Value(1000),
+          kgFleischeinwaage: const Value(600),
+          kgFertigware: const Value(800),
+          verlustAnteil: const Value(0.2),
+        ),
+      );
+
   group('Planungsauftrag', () {
     test('Artikel, Menge, spätester Tag und die gebündelten Aufträge',
         () async {
@@ -307,6 +321,75 @@ void main() {
       expect(b.fertigKg, closeTo(400, 1e-9));
       expect(b.bezuege, isEmpty);
     });
+
+    test('erster Schritt auf Tage verteilt: die Rohware aller Teile',
+        () async {
+      final e = await planeAuftragszeilen(
+        db: db,
+        productId: 'p1',
+        fertigKg: 500,
+        tag: dienstag,
+        bezuege: bezuege,
+      );
+      // Wie „Auf mehrere Tage verteilen": 400 kg am Dienstag, die übrigen
+      // 225 kg am Mittwoch.
+      await (db.update(db.productionTasks)
+            ..where((t) => t.id.equals(e.wurzelId!)))
+          .write(const ProductionTasksCompanion(mengeKg: Value(400)));
+      await db.into(db.productionTasks).insert(
+            ProductionTasksCompanion.insert(
+              id: 'teil',
+              productId: 'p1',
+              mengeKg: 225,
+              datum: termin,
+              abteilung: 'wurstkueche',
+              geplanteDauerMinuten: 60,
+              geplanteMitarbeiter: 1,
+              parentTaskId: Value(e.wurzelId),
+            ),
+          );
+      final verpackung =
+          (await schritte()).firstWhere((t) => t.abteilung == 'verpackung');
+
+      for (final id in [e.wurzelId!, 'teil', verpackung.id]) {
+        final b = (await datenblattFuerKette(db, id))!;
+        expect(b.rohwareKg, closeTo(625, 1e-9), reason: id);
+        expect(b.fertigKg, 500, reason: id);
+        expect(b.ausbeuteProzent, closeTo(80, 1e-9), reason: id);
+      }
+    });
+
+    test('Fleischeinwaage: geplant — sonst über den Fleischanteil geschätzt',
+        () async {
+      final e = await planeAuftragszeilen(
+        db: db,
+        productId: 'p1',
+        fertigKg: 500,
+        tag: dienstag,
+        bezuege: bezuege,
+      );
+      final ohne = (await datenblattFuerKette(db, e.wurzelId!))!;
+      expect(
+        ohne.fleischKg,
+        isNull,
+        reason: 'Keine Produktion mit Fleischeinwaage, keine Rezeptur',
+      );
+      expect(ohne.fleischanteilProzent, isNull);
+
+      await fleischErfasst();
+      final geschaetzt = (await datenblattFuerKette(db, e.wurzelId!))!;
+      expect(geschaetzt.fleischKg, closeTo(375, 1e-9));
+      expect(geschaetzt.fleischGeschaetzt, isTrue);
+      expect(geschaetzt.fleischanteilProzent, closeTo(60, 1e-9));
+
+      await (db.update(db.productionTasks)
+            ..where((t) => t.id.equals(e.wurzelId!)))
+          .write(const ProductionTasksCompanion(fleischMengeKg: Value(400)));
+      final geplant = (await datenblattFuerKette(db, e.wurzelId!))!;
+      expect(geplant.fleischKg, 400);
+      expect(geplant.fleischGeschaetzt, isFalse);
+      expect(geplant.fleischanteilProzent, closeTo(64, 1e-9));
+    });
   });
 
   group('Posten des Planungsvorschlags', () {
@@ -325,6 +408,20 @@ void main() {
       expect(b.rohwareKg, closeTo(375, 1e-9));
       expect(b.bezuege.map((z) => z.kg), [200, 100]);
       expect(b.schritte.every((s) => s.tag == dienstag), isTrue);
+      expect(b.fleischKg, isNull);
+    });
+
+    test('Fleischeinwaage über den Fleischanteil geschätzt', () async {
+      await fleischErfasst();
+      final b = (await datenblattFuerMenge(
+        db,
+        productId: 'p1',
+        fertigKg: 300,
+      ))!;
+      expect(b.rohwareKg, closeTo(375, 1e-9));
+      expect(b.fleischKg, closeTo(225, 1e-9));
+      expect(b.fleischGeschaetzt, isTrue);
+      expect(b.fleischanteilProzent, closeTo(60, 1e-9));
     });
   });
 
@@ -398,6 +495,35 @@ void main() {
         expect(t, contains('(${wort.split(' ').first})'), reason: wort);
       }
       expect(t, contains('(A)'));
+      expect(t, isNot(contains('(Fleischeinwaage)')));
+    });
+
+    test('Fleischeinwaage neben Fertigware und Rohware', () async {
+      Datenblatt mit({required bool geschaetzt}) => Datenblatt(
+            artikelnummer: 'T-100',
+            bezeichnung: 'Testschinken',
+            fertigKg: 500,
+            rohwareKg: 625,
+            ausbeuteProzent: 80,
+            fleischKg: 375,
+            fleischGeschaetzt: geschaetzt,
+            fleischanteilProzent: 60,
+            tag: dienstag,
+          );
+
+      final (_, t) = await setze(datenblattDruck([mit(geschaetzt: false)]));
+      for (final wort in ['Fleischeinwaage', '375', 'Fleischanteil', '60,0']) {
+        expect(t, contains('($wort)'), reason: wort);
+      }
+
+      // „(ca.)" steht bei der Rohware ohnehin — geschätzt auch beim Fleisch.
+      final (_, ca) = await setze(datenblattDruck([mit(geschaetzt: true)]));
+      const kennung = r'(\(ca.\))';
+      expect(ca, contains('(Fleischeinwaage)'));
+      expect(
+        kennung.allMatches(ca).length,
+        kennung.allMatches(t).length + 1,
+      );
     });
 
     test('nur, was gewählt ist — etwa ohne Kunden zum Aushängen', () async {

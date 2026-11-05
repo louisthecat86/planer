@@ -16,6 +16,7 @@ import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
 import '../datenblatt/datenblatt.dart';
 import '../datenblatt/datenblatt_drucken.dart';
+import 'produktions_mengen.dart';
 import 'whiteboard_provider.dart';
 
 /// Öffnet das Fenster mit allen Details zum Task — mittig, wie jedes
@@ -53,7 +54,6 @@ class _TaskDetailSheet extends ConsumerStatefulWidget {
 }
 
 class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
-  late final TextEditingController _mengeController;
   late final TextEditingController _dauerController;
   late final TextEditingController _mitarbeiterController;
   late final TextEditingController _startZeitController;
@@ -70,13 +70,27 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   bool _isDirty = false;
   bool _isSaving = false;
 
+  // ---- Mengen der Produktion ----
+  //
+  // Rohware, Fertigware und Fleischeinwaage gelten für die ganze
+  // Produktion. Ändert sich eine, rechnen die anderen über Verlust und
+  // Fleischanteil mit; dieser Auftrag nimmt davon, womit er arbeitet.
+
+  final _rohController = TextEditingController();
+  final _fertigController = TextEditingController();
+  final _fleischController = TextEditingController();
+  final _verlustController = TextEditingController();
+  final _anteilController = TextEditingController();
+
+  /// Die gekoppelten Mengen — null, solange sie laden oder wenn das Laden
+  /// scheiterte ([_mengenFehler]).
+  MengenEingabe? _eingabe;
+  String? _mengenFehler;
+
   @override
   void initState() {
     super.initState();
     final t = widget.wbTask.task;
-    _mengeController = TextEditingController(
-      text: Format.eingabe(t.mengeKg, nachkomma: 1),
-    );
     _dauerController =
         TextEditingController(text: t.geplanteDauerMinuten.toStringAsFixed(0));
     _mitarbeiterController =
@@ -85,6 +99,76 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     _notizenController = TextEditingController(text: t.notizen ?? '');
 
     _ladeModell();
+    _ladeMengen();
+  }
+
+  /// Lädt Kette, Verlust und Fleischanteil der Produktion und füllt die
+  /// Felder: was geplant ist, und was fehlt, über die Verhältnisse.
+  Future<void> _ladeMengen() async {
+    final ProduktionsMengen? m;
+    try {
+      m = await ladeProduktionsMengen(
+        ref.read(databaseProvider),
+        widget.wbTask.task.id,
+      );
+    } catch (e) {
+      if (mounted) setState(() => _mengenFehler = fehlerText(e));
+      return;
+    }
+    if (!mounted) return;
+    if (m == null) {
+      setState(() => _mengenFehler = 'Den Auftrag gibt es nicht mehr.');
+      return;
+    }
+    final eingabe = MengenEingabe(m);
+    setState(() {
+      _eingabe = eingabe;
+      _felderAus(eingabe);
+    });
+  }
+
+  /// Schreibt die Texte von [e] in die Felder — außer in [ausser], in dem
+  /// gerade getippt wird: Dort bliebe sonst der Cursor nicht stehen.
+  void _felderAus(MengenEingabe e, {TextEditingController? ausser}) {
+    void setze(TextEditingController c, String text) {
+      if (!identical(c, ausser) && c.text != text) c.text = text;
+    }
+
+    setze(_rohController, e.roh);
+    setze(_fertigController, e.fertig);
+    setze(_fleischController, e.fleisch);
+    setze(_verlustController, e.verlust);
+    setze(_anteilController, e.anteil);
+  }
+
+  /// Dieser Auftrag, wie die Kette ihn kennt.
+  ProductionTask get _auftrag {
+    final t = widget.wbTask.task;
+    return _eingabe?.mengen.kette.schritte
+            .where((x) => x.id == t.id)
+            .firstOrNull ??
+        t;
+  }
+
+  /// Die Menge dieses Auftrags nach den Feldern — null, solange die
+  /// Mengen laden.
+  double? get _auftragsMenge => _eingabe?.auftragsMenge(_auftrag);
+
+  /// Ein Feld der Mengen wurde geändert: die anderen nachziehen,
+  /// speicherbar machen und die Dauer dieses Auftrags hochrechnen.
+  void _mengeGeaendert(
+    TextEditingController feld,
+    void Function(MengenEingabe e) setze,
+  ) {
+    final e = _eingabe;
+    if (e == null) return;
+    setze(e);
+    setState(() {
+      _felderAus(e, ausser: feld);
+      _isDirty = true;
+    });
+    final menge = _auftragsMenge;
+    if (menge != null && menge > 0) _recalcDuration(menge);
   }
 
   Future<void> _ladeModell() async {
@@ -103,22 +187,13 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     if (_isDirty) _recalcDuration(_aktuelleMenge);
   }
 
-  /// Die Menge im Feld, solange sie gültig ist — sonst die des Auftrags.
+  /// Die Menge dieses Auftrags nach den Feldern, solange sie gültig ist —
+  /// sonst die eingeplante.
   double get _aktuelleMenge {
-    final v = Format.lies(_mengeController.text);
-    return (v != null && v > 0)
+    final v = _auftragsMenge;
+    return (v != null && v.isFinite && v > 0)
         ? v
         : widget.wbTask.task.mengeKg;
-  }
-
-  /// Menge geändert: speicherbar machen und die Dauer hochrechnen.
-  void _mengeGeaendert() {
-    final v = Format.lies(_mengeController.text);
-    if (v == null || v <= 0) return;
-    // Auch wenn sich die Dauer nicht hochrechnen lässt, muss die neue
-    // Menge speicherbar sein — vorher blieb „Speichern" dann gesperrt.
-    setState(() => _isDirty = true);
-    _recalcDuration(v);
   }
 
   /// Rechnet die Dauer aus der neuen Menge hoch — nach denselben Regeln
@@ -158,7 +233,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   /// geteilt.
   Future<void> _verteileAufTageDialog() async {
     final task = widget.wbTask.task;
-    final gesamtMenge = Format.lies(_mengeController.text) ?? task.mengeKg;
+    final gesamtMenge = _aktuelleMenge;
     final gesamtDauer =
         double.tryParse(_dauerController.text) ?? task.geplanteDauerMinuten;
 
@@ -376,7 +451,21 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     }
   }
 
+  /// Ob „Speichern" geht: Etwas ist geändert, und geänderte Mengen sind
+  /// gültig. Ließen sich die Mengen nicht laden, speichert das Fenster ohne
+  /// sie.
+  bool get _kannSpeichern {
+    if (_isSaving || !_isDirty) return false;
+    final e = _eingabe;
+    if (e == null) return _mengenFehler != null;
+    return !e.geaendert || e.gueltig;
+  }
+
+  /// Speichert an diesem Auftrag Dauer, Personen, Start und Notiz — und,
+  /// wenn sie geändert sind, die Mengen für die ganze Produktion: Alle
+  /// Aufträge der Kette ziehen mit.
   Future<void> _save() async {
+    final eingabe = _eingabe;
     setState(() => _isSaving = true);
     try {
       final db = ref.read(databaseProvider);
@@ -387,8 +476,6 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
         return (v != null && v >= 0) ? v : null;
       }
 
-      final newMenge = sicher(_mengeController.text) ??
-          widget.wbTask.task.mengeKg;
       final newDauer = sicher(_dauerController.text) ??
           widget.wbTask.task.geplanteDauerMinuten;
       final newMa = int.tryParse(_mitarbeiterController.text) ??
@@ -396,19 +483,34 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
       final startZeit = _startZeitController.text.trim();
       final notizen = _notizenController.text.trim();
 
-      await (db.update(db.productionTasks)
-            ..where((t) => t.id.equals(widget.wbTask.task.id)))
-          .write(
-        ProductionTasksCompanion(
-          mengeKg: Value(newMenge),
-          geplanteDauerMinuten: Value(newDauer),
-          geplanteMitarbeiter: Value(newMa),
-          startZeit: Value(startZeit.isEmpty ? null : startZeit),
-          notizen: Value(notizen.isEmpty ? null : notizen),
-          updatedAt: Value(DateTime.now()),
-        ),
+      final auftrag = ProductionTasksCompanion(
+        geplanteDauerMinuten: Value(newDauer),
+        geplanteMitarbeiter: Value(newMa),
+        startZeit: Value(startZeit.isEmpty ? null : startZeit),
+        notizen: Value(notizen.isEmpty ? null : notizen),
       );
+      if (eingabe != null && eingabe.geaendert) {
+        await produktionsMengenSpeichern(
+          db,
+          eingabe.mengen.kette,
+          rohKg: eingabe.rohKg,
+          fertigKg: eingabe.fertigKg,
+          fleischKg: eingabe.fleischKg,
+          auftragId: widget.wbTask.task.id,
+          auftrag: auftrag,
+        );
+      } else {
+        // Mengen unverändert (oder nicht geladen): nur dieser Auftrag. Die
+        // übrigen der Produktion bleiben, wie sie sind — auch eine
+        // geschätzte Fleischeinwaage wird so nicht zur geplanten.
+        await (db.update(db.productionTasks)
+              ..where((t) => t.id.equals(widget.wbTask.task.id)))
+            .write(auftrag.copyWith(updatedAt: Value(DateTime.now())));
+      }
 
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Auftrag im Board geändert');
       ref.invalidate(dailyTasksProvider);
 
       if (mounted) Navigator.of(context).pop(true);
@@ -548,7 +650,11 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
   @override
   void dispose() {
-    _mengeController.dispose();
+    _rohController.dispose();
+    _fertigController.dispose();
+    _fleischController.dispose();
+    _verlustController.dispose();
+    _anteilController.dispose();
     _dauerController.dispose();
     _mitarbeiterController.dispose();
     _startZeitController.dispose();
@@ -557,6 +663,165 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   }
 
   // ---- UI ----
+
+  /// Die drei Mengen untereinander, darunter Verlust und Fleischanteil —
+  /// und womit dieser Auftrag arbeitet.
+  List<Widget> _mengenFelder(ThemeData theme) {
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final fehler = _mengenFehler;
+    if (fehler != null) {
+      return [
+        HinweisBox(
+          fehler,
+          art: StatusArt.fehler,
+          titel: 'Die Mengen der Produktion ließen sich nicht laden',
+          auswaehlbar: true,
+        ),
+      ];
+    }
+    final e = _eingabe;
+    if (e == null) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+    final k = e.mengen.kette;
+    final t = _auftrag;
+    final teile = k.teileVon(t);
+    final menge = _auftragsMenge;
+    final mitRohware = k.bezugVon(t) == MengenBezug.rohware;
+    final hinweis = [
+      if (mitRohware && k.hatBratstrasse)
+        'Dieser Auftrag arbeitet mit der Rohware, wie alle Schritte bis '
+            'einschließlich Bratstraße.'
+      else if (mitRohware)
+        'Dieser Auftrag arbeitet mit der Rohware.'
+      else
+        'Dieser Auftrag arbeitet mit der Fertigware, wie alle Schritte nach '
+            'der Bratstraße.',
+      if (teile.length > 1 && menge != null)
+        'Er ist auf ${teile.length} Tage verteilt — an diesem Tag '
+            '${Format.kg(menge)}.',
+      if (k.schritte.length > 1)
+        'Die Mengen gelten für die ganze Produktion: Beim Speichern ziehen '
+            'alle ${k.schritte.length} Aufträge mit.',
+    ].join(' ');
+
+    InputDecoration deko(
+      String label,
+      String einheit, {
+      String? hilfe,
+      String? fehler,
+    }) =>
+        InputDecoration(
+          labelText: label,
+          suffixText: einheit,
+          helperText: hilfe,
+          helperMaxLines: 2,
+          errorText: fehler,
+          errorMaxLines: 2,
+        );
+
+    Widget feld(
+      String schluessel,
+      TextEditingController controller,
+      ValueChanged<String> onChanged,
+      InputDecoration decoration,
+    ) =>
+        TextField(
+          key: ValueKey(schluessel),
+          controller: controller,
+          decoration: decoration,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+          ],
+          onChanged: onChanged,
+        );
+
+    return [
+      feld(
+        'menge-roh',
+        _rohController,
+        (text) => _mengeGeaendert(_rohController, (m) => m.setzeRoh(text)),
+        deko('Rohware', 'kg', fehler: e.rohFehler),
+      ),
+      const SizedBox(height: 12),
+      feld(
+        'menge-fertig',
+        _fertigController,
+        (text) =>
+            _mengeGeaendert(_fertigController, (m) => m.setzeFertig(text)),
+        deko('Fertigware', 'kg', fehler: e.fertigFehler),
+      ),
+      const SizedBox(height: 12),
+      feld(
+        'menge-fleisch',
+        _fleischController,
+        (text) =>
+            _mengeGeaendert(_fleischController, (m) => m.setzeFleisch(text)),
+        deko('Fleischeinwaage', 'kg', fehler: e.fleischFehler),
+      ),
+      const SizedBox(height: 12),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: feld(
+              'menge-verlust',
+              _verlustController,
+              (text) => _mengeGeaendert(
+                _verlustController,
+                (m) => m.setzeVerlust(text),
+              ),
+              deko(
+                'Verlust',
+                '%',
+                hilfe: e.verlustHerkunft ??
+                    'unbekannt — ergibt sich aus der Fertigware',
+                fehler: e.verlustFehler,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: feld(
+              'menge-anteil',
+              _anteilController,
+              (text) => _mengeGeaendert(
+                _anteilController,
+                (m) => m.setzeAnteil(text),
+              ),
+              deko(
+                'Fleischanteil',
+                '%',
+                hilfe: e.anteilHerkunft ??
+                    'unbekannt — ergibt sich aus der Fleischeinwaage',
+                fehler: e.anteilFehler,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 10),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline, size: 16, color: grau),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              hinweis,
+              style: theme.textTheme.bodySmall?.copyWith(color: grau),
+            ),
+          ),
+        ],
+      ),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -625,39 +890,9 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
 
               const SizedBox(height: 20),
 
-              // Menge + automatische Neuberechnung
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _mengeController,
-                      decoration: const InputDecoration(
-                        labelText: 'Menge (kg)',
-                      ),
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(
-                          RegExp(r'[\d.,]'),
-                        ),
-                      ],
-                      onChanged: (_) => _mengeGeaendert(),
-                    ),
-                  ),
-                  if (modell != null) ...[
-                    const SizedBox(width: 8),
-                    Tooltip(
-                      message: 'Die Dauer wird aus der Menge hochgerechnet',
-                      child: Icon(
-                        Icons.auto_fix_high,
-                        color: colors.primary,
-                        size: 20,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
+              // Rohware, Fertigware und Fleischeinwaage der Produktion —
+              // gekoppelt über Verlust und Fleischanteil.
+              ..._mengenFelder(theme),
 
               const SizedBox(height: 14),
 
@@ -735,7 +970,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
-                    onPressed: _isSaving || !_isDirty ? null : _save,
+                    onPressed: _kannSpeichern ? _save : null,
                     // Ohne feste Farbe: Der gesperrte Knopf ist hellgrau,
                     // ein weißer Kreisel wäre darauf unsichtbar.
                     icon: _isSaving

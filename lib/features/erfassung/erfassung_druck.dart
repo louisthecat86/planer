@@ -256,16 +256,18 @@ DruckAuftrag erfassungDruckAuftrag({
 }
 
 /// Was für eine Produktion geplant ist, in einer Zeile: „Plan: 1.200 kg
-/// Rohware · 950 kg Fertigware · Start 06:00 · Notiz" — von der Notiz nur
-/// die erste Zeile.
+/// Rohware · 950 kg Fertigware · 800 kg Fleisch · Start 06:00 · Notiz" —
+/// von der Notiz nur die erste Zeile.
 String erfassungPlanText(GeplanteProduktion p) {
   final t = p.task;
-  final fertig = t.fertigMengeKg;
+  final fertig = p.fertigKg;
+  final fleisch = p.fleischKg;
   final start = t.startZeit?.trim() ?? '';
   final notiz = (t.notizen ?? '').trim().split('\n').first.trim();
   return 'Plan: ${[
-    '${Format.kg(t.mengeKg)} Rohware',
+    '${Format.kg(p.rohKg)} Rohware',
     if (fertig != null) '${Format.kg(fertig)} Fertigware',
+    if (fleisch != null) '${Format.kg(fleisch)} Fleisch',
     if (start.isNotEmpty) 'Start $start',
     if (notiz.isNotEmpty) notiz,
   ].join(' · ')}';
