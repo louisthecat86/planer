@@ -17,6 +17,7 @@ import '../../../core/utils/format.dart';
 import '../../../core/utils/pdf_text.dart';
 import '../../../core/utils/platten_raster_pdf.dart';
 import '../daten/entwicklung_repository.dart' show VersionStatus;
+import '../daten/etikett_scan.dart' show originaletikettStand;
 import '../entwicklung_format.dart';
 import '../haccp/haccp_modell.dart';
 import '../haccp/prozess_kette.dart';
@@ -1116,7 +1117,7 @@ List<pw.Widget> _kacheln(_Satz s) {
       [
         artikel.artikelbezeichnung,
         [
-          if (b.version case final v? when v.id == p.freigabeVersionId)
+          if (b.versionen[p.freigabeVersionId] case final v?)
             'Stand ${v.nummer}',
           if (p.freigegebenAm case final d?) 'am ${_datum(d)}',
           if (artikel.deletedAt != null) 'im Planer gelöscht',
@@ -1532,6 +1533,11 @@ String _merkmale(RechenPosition pos) {
   ].where((t) => t.isNotEmpty).join(' · ');
 }
 
+/// Der Name der Rezeptur von [v].
+String _rezepturName(ProjektBericht b, RezepturVersion v) =>
+    b.rezepturen.where((r) => r.id == v.rezepturId).firstOrNull?.name ??
+    'Rezeptur';
+
 String _standStatus(_Satz s, RezepturVersion v) {
   if (v.id == s.p.freigabeVersionId) return 'freigegeben';
   return v.status == VersionStatus.abgeschlossen ? 'abgeschlossen' : 'Entwurf';
@@ -1549,6 +1555,9 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
     ];
   }
   final status = _standStatus(s, v);
+  // Zeigt das Kapitel einen neueren Stand als den freigegebenen, steht
+  // dabei, welcher freigegeben ist.
+  final freigegeben = b.versionen[s.p.freigabeVersionId];
   final untertitel = [
     b.rezepturName ?? 'Rezeptur',
     'Stand ${v.nummer}',
@@ -1557,7 +1566,21 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
       'abgeschlossen am ${_datum(d)}'
     else
       'zuletzt geändert am ${_datum(v.updatedAt)}',
+    if (freigegeben != null && freigegeben.id != v.id)
+      freigegeben.rezepturId == v.rezepturId
+          ? 'freigegeben ist Stand ${freigegeben.nummer}'
+          : 'freigegeben ist ${_rezepturName(b, freigegeben)} · '
+              'Stand ${freigegeben.nummer}',
   ].join(' · ');
+  // Woher die Nährwerte stammen: ein abgeschlossener Stand ist mit den
+  // Zutatendaten seines Tages eingefroren, ein Entwurf rechnet mit denen
+  // von heute.
+  final eingefroren = v.status == VersionStatus.abgeschlossen
+      ? v.abgeschlossenAm
+      : null;
+  final naehrwertStand = eingefroren == null
+      ? 'mit den Zutatendaten von heute'
+      : 'mit den Zutatendaten vom ${_datum(eingefroren)}';
   final summe = eingabe == null
       ? 0.0
       : eingabe.positionen.fold<double>(0, (a, x) => a + x.mengeKg);
@@ -1660,7 +1683,10 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
       ),
     ]),
     ..._mitTitel(
-      _abschnitt('Nährwerte', zusatz: 'je 100 g, gerundet wie auf dem Etikett'),
+      _abschnitt(
+        'Nährwerte',
+        zusatz: 'je 100 g, gerundet wie auf dem Etikett · $naehrwertStand',
+      ),
       zeilen: 7,
       [_naehrwertTabelle(s, e)],
     ),
@@ -2124,6 +2150,45 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
         ],
       ),
     ]),
+    ..._originaletikett(s),
+  ];
+}
+
+/// Das Originaletikett unter den Pflichtangaben: der Scan, wie er abgelegt
+/// ist — ein PDF als seine ersten Seiten. Ließ sich ein PDF nicht als Bild
+/// setzen, steht es als Datei da.
+List<pw.Widget> _originaletikett(_Satz s) {
+  final d = s.b.etikettDatei;
+  if (s.p.etikettDateiId == null || d == null) {
+    return [_leer('Noch kein Originaletikett hinterlegt.')];
+  }
+  final zeile = '${d.name} · abgelegt am ${_datum(d.createdAt)}';
+  final bilder = [
+    for (final bytes in s.b.etikettBilder)
+      if (_bildAus(bytes) case final bild?) bild,
+  ];
+  if (bilder.isEmpty) {
+    return [
+      _etikett('Originaletikett'),
+      _t('$zeile — liegt unter „Dateien".', groesse: 8.5, farbe: _grau),
+    ];
+  }
+  pw.Widget seite(pw.ImageProvider bild) => pw.Container(
+    constraints: const pw.BoxConstraints(maxHeight: 430),
+    margin: const pw.EdgeInsets.only(top: 4),
+    padding: const pw.EdgeInsets.all(3),
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(color: _linie, width: .6),
+    ),
+    child: pw.Image(bild, fit: pw.BoxFit.contain),
+  );
+  return [
+    _zusammen([
+      _etikett('Originaletikett'),
+      _t(zeile, groesse: 8, farbe: _grau),
+      seite(bilder.first),
+    ]),
+    for (final bild in bilder.skip(1)) seite(bild),
   ];
 }
 
@@ -2582,8 +2647,8 @@ List<pw.Widget> _kapitelFreigabe(_Satz s, _Kapitel k) {
           'Rezepturstand',
           freigabeStand == null
               ? ''
-              : 'Stand ${freigabeStand.nummer}'
-                    '${b.rezepturName == null ? '' : ' · ${b.rezepturName}'}',
+              : 'Stand ${freigabeStand.nummer} · '
+                    '${_rezepturName(b, freigabeStand)}',
         ),
         ('Produktgruppe', produktgruppeLabel(artikel.produktgruppe)),
         (
@@ -2636,6 +2701,8 @@ List<pw.Widget> _kapitelFreigabe(_Satz s, _Kapitel k) {
           if (c.zurueckgestellt && !c.erledigt) 'zurückgestellt',
           if (c.vonHand) 'von Hand',
           if (_oderNull(c.text) case final t?) t,
+          if (c.punkt.schluessel == 'etikettErstellt')
+            originaletikettStand(p),
         ].join(' · '),
       ),
   ];
@@ -3623,7 +3690,13 @@ List<pw.Widget> _kapitelDateien(_Satz s, _Kapitel k) => [
     zeilen: [
       for (final d in s.b.dateien)
         [
-          _zelle(d.id == s.p.bildDateiId ? '${d.name} (Produktfoto)' : d.name),
+          _zelle(
+            d.id == s.p.bildDateiId
+                ? '${d.name} (Produktfoto)'
+                : d.id == s.p.etikettDateiId
+                ? '${d.name} (Originaletikett)'
+                : d.name,
+          ),
           _zelle(_dateiArt(d), farbe: _grau),
           _zelle(_groesse(d.groesse)),
           _zelle(_datum(d.createdAt)),

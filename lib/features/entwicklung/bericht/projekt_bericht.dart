@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../../../core/database/database.dart';
 import '../daten/dateien.dart';
 import '../daten/entwicklung_repository.dart';
+import '../daten/etikett_scan.dart';
 import '../freigabe/freigabe.dart' show FreigabeDienst, VerlustAbgleich;
 import '../projekte/entwicklungsstrang.dart';
 import '../projekte/fliessdiagramm_liste.dart';
@@ -53,13 +54,15 @@ class ProjektBericht {
     this.gesamtprojekt,
     this.muster = const [],
     this.gesamtVerlauf = const [],
+    this.etikettDatei,
+    this.etikettBilder = const [],
   });
 
   final EntwicklungsProjekt projekt;
   final String? rezepturName;
 
-  /// Der Stand, um den es geht: der freigegebene, sonst der neueste
-  /// abgeschlossene, sonst der neueste.
+  /// Der Stand, um den es geht: der neueste der Rezeptur, wie sie ihn
+  /// beim Öffnen zeigt ([berichtStand]).
   final RezepturVersion? version;
 
   /// Seine Zusammensetzung und was der Rechenkern daraus macht.
@@ -124,6 +127,14 @@ class ProjektBericht {
   /// Korrespondenz und Unterlagen, die alle Muster betreffen.
   final List<ProjektEintrag> gesamtVerlauf;
 
+  /// Das Originaletikett — der Scan des gedruckten Etiketts. null: keins.
+  final EntwicklungsDatei? etikettDatei;
+
+  /// Das Originaletikett als Bilder: ein Bild, wie es ist, ein PDF als
+  /// seine ersten Seiten. Leer, wenn es keins gibt oder sich ein PDF hier
+  /// nicht rastern ließ.
+  final List<Uint8List> etikettBilder;
+
   /// So steht ein Eintrag aus dem Gesamtprojekt im Bericht eines Musters.
   static const String gesamtMarke = ' (Gesamtprojekt)';
 
@@ -162,16 +173,58 @@ class ProjektBericht {
       gesamtprojekt: gesamtprojekt,
       muster: muster,
       gesamtVerlauf: gesamtVerlauf,
+      etikettDatei: etikettDatei,
+      etikettBilder: etikettBilder,
     );
   }
 }
 
-/// Lädt alles für den Bericht.
+/// Der Stand für das Kapitel Rezeptur: der neueste seiner Rezeptur — so,
+/// wie die Rezeptur ihn beim Öffnen zeigt. Ein Entwurf rechnet mit den
+/// Zutatendaten von heute, ein abgeschlossener Stand mit denen, mit denen
+/// er eingefroren wurde.
+///
+/// Welche Rezeptur: die des freigegebenen Stands, sonst die des zuletzt
+/// abgeschlossenen, sonst die zuletzt bearbeitete. null ohne Stände.
+RezepturVersion? berichtStand(
+  EntwicklungsProjekt projekt,
+  Iterable<RezepturVersion> versionen,
+) {
+  if (versionen.isEmpty) return null;
+  // Der neueste zuerst — bei gleicher Zeit der mit der höheren Nummer.
+  int neuer(
+    RezepturVersion a,
+    RezepturVersion b,
+    DateTime Function(RezepturVersion v) zeit,
+  ) {
+    final z = zeit(b).compareTo(zeit(a));
+    return z != 0 ? z : b.nummer.compareTo(a.nummer);
+  }
+
+  final freigegeben =
+      versionen.where((v) => v.id == projekt.freigabeVersionId).firstOrNull;
+  final abgeschlossen = [
+    for (final v in versionen)
+      if (v.status == VersionStatus.abgeschlossen) v,
+  ]..sort((a, b) => neuer(a, b, (v) => v.abgeschlossenAm ?? v.updatedAt));
+  final alle = [...versionen]..sort((a, b) => neuer(a, b, (v) => v.updatedAt));
+  final rezepturId =
+      (freigegeben ?? abgeschlossen.firstOrNull ?? alle.first).rezepturId;
+  return ([
+    for (final v in versionen)
+      if (v.rezepturId == rezepturId) v,
+  ]..sort((a, b) => b.nummer.compareTo(a.nummer)))
+      .first;
+}
+
+/// Lädt alles für den Bericht. [pdfSeiten] rastert ein Originaletikett,
+/// das ein PDF ist — ohne sie steht es nur als Datei im Bericht.
 Future<ProjektBericht> berichtLaden(
   AppDatabase db,
   EntwicklungDateienDienst dateien,
-  EntwicklungsProjekt projekt,
-) async {
+  EntwicklungsProjekt projekt, {
+  PdfSeiten? pdfSeiten,
+}) async {
   final repo = EntwicklungRepository(db);
   final rezepturen =
       await (db.select(db.entwicklungRezepturen)
@@ -188,30 +241,7 @@ Future<ProjektBericht> berichtLaden(
           .get(),
     );
   }
-  RezepturVersion? version;
-  for (final v in versionen) {
-    if (v.id == projekt.freigabeVersionId) version = v;
-  }
-  if (version == null) {
-    // Der neueste zuerst — bei gleicher Zeit der mit der höheren Nummer.
-    int neuer(
-      RezepturVersion a,
-      RezepturVersion b,
-      DateTime Function(RezepturVersion v) zeit,
-    ) {
-      final z = zeit(b).compareTo(zeit(a));
-      return z != 0 ? z : b.nummer.compareTo(a.nummer);
-    }
-
-    final abgeschlossen =
-        versionen.where((v) => v.status == VersionStatus.abgeschlossen).toList()
-          ..sort(
-            (a, b) => neuer(a, b, (v) => v.abgeschlossenAm ?? v.updatedAt),
-          );
-    final alle = [...versionen]
-      ..sort((a, b) => neuer(a, b, (v) => v.updatedAt));
-    version = abgeschlossen.firstOrNull ?? alle.firstOrNull;
-  }
+  final version = berichtStand(projekt, versionen);
   final rezeptur = rezepturen
       .where((r) => r.id == version?.rezepturId)
       .firstOrNull;
@@ -232,6 +262,27 @@ Future<ProjektBericht> berichtLaden(
       bild = await dateien.lesen(bildId);
     } catch (_) {
       bild = null;
+    }
+  }
+
+  // Das Originaletikett: ein Bild, wie es ist, ein PDF als Seiten.
+  EntwicklungsDatei? etikettDatei;
+  var etikettBilder = const <Uint8List>[];
+  final etikettId = projekt.etikettDateiId;
+  if (etikettId != null) {
+    try {
+      etikettDatei = await dateien.datei(etikettId);
+      final inhalt =
+          etikettDatei == null ? null : await dateien.lesen(etikettId);
+      if (etikettDatei != null && inhalt != null) {
+        etikettBilder = await etikettAlsBilder(
+          etikettDatei,
+          inhalt,
+          pdfSeiten: pdfSeiten,
+        );
+      }
+    } catch (_) {
+      etikettBilder = const [];
     }
   }
 
@@ -391,6 +442,8 @@ Future<ProjektBericht> berichtLaden(
     gesamtprojekt: gesamtprojekt,
     muster: muster,
     gesamtVerlauf: gesamtVerlauf,
+    etikettDatei: etikettDatei,
+    etikettBilder: etikettBilder,
   );
 }
 

@@ -224,6 +224,7 @@ class ProjektDateien extends StatelessWidget {
   Widget build(BuildContext context) => DateienListe(
         zielId: projekt.id,
         bildDateiId: projekt.bildDateiId,
+        etikettDateiId: projekt.etikettDateiId,
         gesamtprojektId: projekt.gesamtprojektId,
       );
 }
@@ -258,6 +259,7 @@ class DateienListe extends ConsumerWidget {
     super.key,
     required this.zielId,
     this.bildDateiId,
+    this.etikettDateiId,
     this.gesamtprojektId,
   });
 
@@ -265,6 +267,9 @@ class DateienListe extends ConsumerWidget {
 
   /// Das Produktfoto — es ist in der Liste gekennzeichnet.
   final String? bildDateiId;
+
+  /// Das Originaletikett — ebenso.
+  final String? etikettDateiId;
   final String? gesamtprojektId;
 
   @override
@@ -379,9 +384,11 @@ class DateienListe extends ConsumerWidget {
                     datei: d,
                     zusatz: d.id == bildDateiId
                         ? 'Produktfoto'
-                        : eigeneEintraege[d.id] == null
-                            ? null
-                            : 'Verlauf: ${eigeneEintraege[d.id]!.titel}',
+                        : d.id == etikettDateiId
+                            ? 'Originaletikett'
+                            : eigeneEintraege[d.id] == null
+                                ? null
+                                : 'Verlauf: ${eigeneEintraege[d.id]!.titel}',
                     onVerschieben: verschieben(d, eigeneEintraege),
                   ),
               ]),

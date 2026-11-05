@@ -19847,6 +19847,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
   late final GeneratedColumn<String> etikettCheckliste =
       GeneratedColumn<String>('etikett_checkliste', aliasedName, true,
           type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _etikettDateiIdMeta =
+      const VerificationMeta('etikettDateiId');
+  @override
+  late final GeneratedColumn<String> etikettDateiId = GeneratedColumn<String>(
+      'etikett_datei_id', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _prozessMeta =
       const VerificationMeta('prozess');
   @override
@@ -19937,6 +19943,7 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
         sensorik,
         checkliste,
         etikettCheckliste,
+        etikettDateiId,
         prozess,
         prozessHistorie,
         haccp,
@@ -20061,6 +20068,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           etikettCheckliste.isAcceptableOrUnknown(
               data['etikett_checkliste']!, _etikettChecklisteMeta));
     }
+    if (data.containsKey('etikett_datei_id')) {
+      context.handle(
+          _etikettDateiIdMeta,
+          etikettDateiId.isAcceptableOrUnknown(
+              data['etikett_datei_id']!, _etikettDateiIdMeta));
+    }
     if (data.containsKey('prozess')) {
       context.handle(_prozessMeta,
           prozess.isAcceptableOrUnknown(data['prozess']!, _prozessMeta));
@@ -20162,6 +20175,8 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           .read(DriftSqlType.string, data['${effectivePrefix}checkliste']),
       etikettCheckliste: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}etikett_checkliste']),
+      etikettDateiId: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}etikett_datei_id']),
       prozess: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}prozess']),
       prozessHistorie: attachedDatabase.typeMapping.read(
@@ -20230,6 +20245,11 @@ class EntwicklungsProjekt extends DataClass
   /// JSON: erledigte Punkte der Etiketten-Checkliste.
   final String? etikettCheckliste;
 
+  /// Das Originaletikett, wie es gedruckt aus der Warenwirtschaft kam —
+  /// eingescannt, ein Bild oder ein PDF aus [EntwicklungDateien]. Ein
+  /// neuer Scan ersetzt es; der alte bleibt unter den Dateien.
+  final String? etikettDateiId;
+
   /// JSON: Prozessparameter nach Abschnitten.
   final String? prozess;
 
@@ -20276,6 +20296,7 @@ class EntwicklungsProjekt extends DataClass
       this.sensorik,
       this.checkliste,
       this.etikettCheckliste,
+      this.etikettDateiId,
       this.prozess,
       this.prozessHistorie,
       this.haccp,
@@ -20336,6 +20357,9 @@ class EntwicklungsProjekt extends DataClass
     }
     if (!nullToAbsent || etikettCheckliste != null) {
       map['etikett_checkliste'] = Variable<String>(etikettCheckliste);
+    }
+    if (!nullToAbsent || etikettDateiId != null) {
+      map['etikett_datei_id'] = Variable<String>(etikettDateiId);
     }
     if (!nullToAbsent || prozess != null) {
       map['prozess'] = Variable<String>(prozess);
@@ -20417,6 +20441,9 @@ class EntwicklungsProjekt extends DataClass
       etikettCheckliste: etikettCheckliste == null && nullToAbsent
           ? const Value.absent()
           : Value(etikettCheckliste),
+      etikettDateiId: etikettDateiId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(etikettDateiId),
       prozess: prozess == null && nullToAbsent
           ? const Value.absent()
           : Value(prozess),
@@ -20474,6 +20501,7 @@ class EntwicklungsProjekt extends DataClass
       checkliste: serializer.fromJson<String?>(json['checkliste']),
       etikettCheckliste:
           serializer.fromJson<String?>(json['etikettCheckliste']),
+      etikettDateiId: serializer.fromJson<String?>(json['etikettDateiId']),
       prozess: serializer.fromJson<String?>(json['prozess']),
       prozessHistorie: serializer.fromJson<String?>(json['prozessHistorie']),
       haccp: serializer.fromJson<String?>(json['haccp']),
@@ -20511,6 +20539,7 @@ class EntwicklungsProjekt extends DataClass
       'sensorik': serializer.toJson<String?>(sensorik),
       'checkliste': serializer.toJson<String?>(checkliste),
       'etikettCheckliste': serializer.toJson<String?>(etikettCheckliste),
+      'etikettDateiId': serializer.toJson<String?>(etikettDateiId),
       'prozess': serializer.toJson<String?>(prozess),
       'prozessHistorie': serializer.toJson<String?>(prozessHistorie),
       'haccp': serializer.toJson<String?>(haccp),
@@ -20545,6 +20574,7 @@ class EntwicklungsProjekt extends DataClass
           Value<String?> sensorik = const Value.absent(),
           Value<String?> checkliste = const Value.absent(),
           Value<String?> etikettCheckliste = const Value.absent(),
+          Value<String?> etikettDateiId = const Value.absent(),
           Value<String?> prozess = const Value.absent(),
           Value<String?> prozessHistorie = const Value.absent(),
           Value<String?> haccp = const Value.absent(),
@@ -20584,6 +20614,8 @@ class EntwicklungsProjekt extends DataClass
         etikettCheckliste: etikettCheckliste.present
             ? etikettCheckliste.value
             : this.etikettCheckliste,
+        etikettDateiId:
+            etikettDateiId.present ? etikettDateiId.value : this.etikettDateiId,
         prozess: prozess.present ? prozess.value : this.prozess,
         prozessHistorie: prozessHistorie.present
             ? prozessHistorie.value
@@ -20642,6 +20674,9 @@ class EntwicklungsProjekt extends DataClass
       etikettCheckliste: data.etikettCheckliste.present
           ? data.etikettCheckliste.value
           : this.etikettCheckliste,
+      etikettDateiId: data.etikettDateiId.present
+          ? data.etikettDateiId.value
+          : this.etikettDateiId,
       prozess: data.prozess.present ? data.prozess.value : this.prozess,
       prozessHistorie: data.prozessHistorie.present
           ? data.prozessHistorie.value
@@ -20688,6 +20723,7 @@ class EntwicklungsProjekt extends DataClass
           ..write('sensorik: $sensorik, ')
           ..write('checkliste: $checkliste, ')
           ..write('etikettCheckliste: $etikettCheckliste, ')
+          ..write('etikettDateiId: $etikettDateiId, ')
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
@@ -20724,6 +20760,7 @@ class EntwicklungsProjekt extends DataClass
         sensorik,
         checkliste,
         etikettCheckliste,
+        etikettDateiId,
         prozess,
         prozessHistorie,
         haccp,
@@ -20759,6 +20796,7 @@ class EntwicklungsProjekt extends DataClass
           other.sensorik == this.sensorik &&
           other.checkliste == this.checkliste &&
           other.etikettCheckliste == this.etikettCheckliste &&
+          other.etikettDateiId == this.etikettDateiId &&
           other.prozess == this.prozess &&
           other.prozessHistorie == this.prozessHistorie &&
           other.haccp == this.haccp &&
@@ -20793,6 +20831,7 @@ class EntwicklungProjekteCompanion
   final Value<String?> sensorik;
   final Value<String?> checkliste;
   final Value<String?> etikettCheckliste;
+  final Value<String?> etikettDateiId;
   final Value<String?> prozess;
   final Value<String?> prozessHistorie;
   final Value<String?> haccp;
@@ -20825,6 +20864,7 @@ class EntwicklungProjekteCompanion
     this.sensorik = const Value.absent(),
     this.checkliste = const Value.absent(),
     this.etikettCheckliste = const Value.absent(),
+    this.etikettDateiId = const Value.absent(),
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
@@ -20858,6 +20898,7 @@ class EntwicklungProjekteCompanion
     this.sensorik = const Value.absent(),
     this.checkliste = const Value.absent(),
     this.etikettCheckliste = const Value.absent(),
+    this.etikettDateiId = const Value.absent(),
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
@@ -20892,6 +20933,7 @@ class EntwicklungProjekteCompanion
     Expression<String>? sensorik,
     Expression<String>? checkliste,
     Expression<String>? etikettCheckliste,
+    Expression<String>? etikettDateiId,
     Expression<String>? prozess,
     Expression<String>? prozessHistorie,
     Expression<String>? haccp,
@@ -20927,6 +20969,7 @@ class EntwicklungProjekteCompanion
       if (sensorik != null) 'sensorik': sensorik,
       if (checkliste != null) 'checkliste': checkliste,
       if (etikettCheckliste != null) 'etikett_checkliste': etikettCheckliste,
+      if (etikettDateiId != null) 'etikett_datei_id': etikettDateiId,
       if (prozess != null) 'prozess': prozess,
       if (prozessHistorie != null) 'prozess_historie': prozessHistorie,
       if (haccp != null) 'haccp': haccp,
@@ -20962,6 +21005,7 @@ class EntwicklungProjekteCompanion
       Value<String?>? sensorik,
       Value<String?>? checkliste,
       Value<String?>? etikettCheckliste,
+      Value<String?>? etikettDateiId,
       Value<String?>? prozess,
       Value<String?>? prozessHistorie,
       Value<String?>? haccp,
@@ -20994,6 +21038,7 @@ class EntwicklungProjekteCompanion
       sensorik: sensorik ?? this.sensorik,
       checkliste: checkliste ?? this.checkliste,
       etikettCheckliste: etikettCheckliste ?? this.etikettCheckliste,
+      etikettDateiId: etikettDateiId ?? this.etikettDateiId,
       prozess: prozess ?? this.prozess,
       prozessHistorie: prozessHistorie ?? this.prozessHistorie,
       haccp: haccp ?? this.haccp,
@@ -21070,6 +21115,9 @@ class EntwicklungProjekteCompanion
     if (etikettCheckliste.present) {
       map['etikett_checkliste'] = Variable<String>(etikettCheckliste.value);
     }
+    if (etikettDateiId.present) {
+      map['etikett_datei_id'] = Variable<String>(etikettDateiId.value);
+    }
     if (prozess.present) {
       map['prozess'] = Variable<String>(prozess.value);
     }
@@ -21131,6 +21179,7 @@ class EntwicklungProjekteCompanion
           ..write('sensorik: $sensorik, ')
           ..write('checkliste: $checkliste, ')
           ..write('etikettCheckliste: $etikettCheckliste, ')
+          ..write('etikettDateiId: $etikettDateiId, ')
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
@@ -33762,6 +33811,7 @@ typedef $$EntwicklungProjekteTableCreateCompanionBuilder
   Value<String?> sensorik,
   Value<String?> checkliste,
   Value<String?> etikettCheckliste,
+  Value<String?> etikettDateiId,
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
@@ -33796,6 +33846,7 @@ typedef $$EntwicklungProjekteTableUpdateCompanionBuilder
   Value<String?> sensorik,
   Value<String?> checkliste,
   Value<String?> etikettCheckliste,
+  Value<String?> etikettDateiId,
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
@@ -33878,6 +33929,10 @@ class $$EntwicklungProjekteTableFilterComposer
 
   ColumnFilters<String> get etikettCheckliste => $composableBuilder(
       column: $table.etikettCheckliste,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get etikettDateiId => $composableBuilder(
+      column: $table.etikettDateiId,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get prozess => $composableBuilder(
@@ -33989,6 +34044,10 @@ class $$EntwicklungProjekteTableOrderingComposer
       column: $table.etikettCheckliste,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get etikettDateiId => $composableBuilder(
+      column: $table.etikettDateiId,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get prozess => $composableBuilder(
       column: $table.prozess, builder: (column) => ColumnOrderings(column));
 
@@ -34094,6 +34153,9 @@ class $$EntwicklungProjekteTableAnnotationComposer
   GeneratedColumn<String> get etikettCheckliste => $composableBuilder(
       column: $table.etikettCheckliste, builder: (column) => column);
 
+  GeneratedColumn<String> get etikettDateiId => $composableBuilder(
+      column: $table.etikettDateiId, builder: (column) => column);
+
   GeneratedColumn<String> get prozess =>
       $composableBuilder(column: $table.prozess, builder: (column) => column);
 
@@ -34177,6 +34239,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> sensorik = const Value.absent(),
             Value<String?> checkliste = const Value.absent(),
             Value<String?> etikettCheckliste = const Value.absent(),
+            Value<String?> etikettDateiId = const Value.absent(),
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
@@ -34210,6 +34273,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             sensorik: sensorik,
             checkliste: checkliste,
             etikettCheckliste: etikettCheckliste,
+            etikettDateiId: etikettDateiId,
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,
@@ -34243,6 +34307,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> sensorik = const Value.absent(),
             Value<String?> checkliste = const Value.absent(),
             Value<String?> etikettCheckliste = const Value.absent(),
+            Value<String?> etikettDateiId = const Value.absent(),
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
@@ -34276,6 +34341,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             sensorik: sensorik,
             checkliste: checkliste,
             etikettCheckliste: etikettCheckliste,
+            etikettDateiId: etikettDateiId,
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,

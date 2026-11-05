@@ -266,6 +266,11 @@ class EntwicklungProjekte extends Table {
   /// JSON: erledigte Punkte der Etiketten-Checkliste.
   TextColumn get etikettCheckliste => text().nullable()();
 
+  /// Das Originaletikett, wie es gedruckt aus der Warenwirtschaft kam —
+  /// eingescannt, ein Bild oder ein PDF aus [EntwicklungDateien]. Ein
+  /// neuer Scan ersetzt es; der alte bleibt unter den Dateien.
+  TextColumn get etikettDateiId => text().nullable()();
+
   /// JSON: Prozessparameter nach Abschnitten.
   TextColumn get prozess => text().nullable()();
 

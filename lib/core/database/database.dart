@@ -86,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 37;
+  int get schemaVersion => 38;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -590,6 +590,16 @@ class AppDatabase extends _$AppDatabase {
               'production_tasks',
               'fleisch_menge_kg',
               'REAL',
+            );
+          }
+
+          // --- v37 → v38: Originaletikett eines Projekts --------------
+          // Der Scan des gedruckten Etiketts beim Etikett nach LMIV.
+          if (from < 38) {
+            await _addColumnIfNotExists(
+              'entwicklung_projekte',
+              'etikett_datei_id',
+              'TEXT',
             );
           }
         },

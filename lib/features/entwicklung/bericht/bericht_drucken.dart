@@ -6,6 +6,7 @@ import '../../../core/druck/druck_fenster.dart';
 import '../../../core/providers/database_provider.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../daten/dateien.dart';
+import '../projekte/originaletikett.dart' show pdfSeitenGerastert;
 import 'bericht_pdf.dart';
 import 'projekt_bericht.dart';
 
@@ -26,6 +27,8 @@ Future<void> projektberichtDrucken(
       ref.read(databaseProvider),
       ref.read(entwicklungDateienProvider),
       projekt,
+      // Ein Originaletikett als PDF kommt als Bild seiner Seiten hinein.
+      pdfSeiten: pdfSeitenGerastert,
     );
     if (!navigator.mounted) return;
     await druckFensterOeffnen(navigator.context, berichtDruckAuftrag(bericht));

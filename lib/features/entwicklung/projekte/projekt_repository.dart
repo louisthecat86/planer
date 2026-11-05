@@ -224,6 +224,21 @@ class ProjektRepository {
         );
       });
 
+  /// Nimmt die Datei [dateiId] als Originaletikett — den Scan des
+  /// gedruckten Etiketts. Ein früheres bleibt als Datei des Projekts.
+  Future<void> originaletikettSetzen(String id, String dateiId) =>
+      projektAendern(
+        id,
+        EntwicklungProjekteCompanion(etikettDateiId: Value(dateiId)),
+      );
+
+  /// Löst das Originaletikett vom Etikett nach LMIV — die Datei bleibt
+  /// unter den Dateien des Projekts.
+  Future<void> originaletikettLoesen(String id) => projektAendern(
+        id,
+        const EntwicklungProjekteCompanion(etikettDateiId: Value(null)),
+      );
+
   /// Setzt eine Pflichtangabe des Etiketts auf [stand] (F28).
   Future<void> lmivPunkt(
     String id, {
@@ -519,7 +534,8 @@ class ProjektRepository {
       });
 
   /// Setzt die Datei [dateiId] von [von] nach [nach] — ist sie das
-  /// Produktfoto des bisherigen Projekts, ist sie es danach nicht mehr.
+  /// Produktfoto oder das Originaletikett des bisherigen Projekts, ist sie
+  /// es danach nicht mehr.
   Future<void> _dateiUmziehen(
     String dateiId, {
     required String von,
@@ -531,6 +547,13 @@ class ProjektRepository {
     await (_db.update(_db.entwicklungProjekte)
           ..where((p) => p.id.equals(von) & p.bildDateiId.equals(dateiId)))
         .write(const EntwicklungProjekteCompanion(bildDateiId: Value(null)));
+    await (_db.update(_db.entwicklungProjekte)
+          ..where(
+            (p) => p.id.equals(von) & p.etikettDateiId.equals(dateiId),
+          ))
+        .write(
+      const EntwicklungProjekteCompanion(etikettDateiId: Value(null)),
+    );
   }
 
   /// Die Anhänge einer Mail im Verlauf: Beim Ablegen kamen sie als eigene
@@ -701,7 +724,8 @@ class ProjektRepository {
             ..orderBy([(d) => OrderingTerm.desc(d.createdAt)]))
           .watch();
 
-  /// Nimmt eine gelöschte Datei aus Einträgen und Produktbild.
+  /// Nimmt eine gelöschte Datei aus Einträgen, Produktbild und
+  /// Originaletikett.
   Future<void> dateiVerweiseEntfernen(String dateiId) =>
       _db.transaction(() async {
         await (_db.update(_db.entwicklungProjektEintraege)
@@ -712,6 +736,11 @@ class ProjektRepository {
         await (_db.update(_db.entwicklungProjekte)
               ..where((p) => p.bildDateiId.equals(dateiId)))
             .write(const EntwicklungProjekteCompanion(bildDateiId: Value(null)));
+        await (_db.update(_db.entwicklungProjekte)
+              ..where((p) => p.etikettDateiId.equals(dateiId)))
+            .write(
+          const EntwicklungProjekteCompanion(etikettDateiId: Value(null)),
+        );
       });
 
   /// Die Rezepturen eines Projekts, nach Namen.

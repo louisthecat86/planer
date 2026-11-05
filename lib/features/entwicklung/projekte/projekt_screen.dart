@@ -11,6 +11,7 @@ import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../bericht/bericht_drucken.dart';
 import '../daten/entwicklung_repository.dart';
+import '../daten/etikett_scan.dart' show originaletikettStand;
 import '../entwicklung_format.dart';
 import '../etikett/etikett_dialog.dart';
 import '../freigabe/freigabe_ansicht.dart';
@@ -24,6 +25,7 @@ import 'fliessdiagramme_dialog.dart';
 import 'gesamtprojekt_dialoge.dart';
 import 'gesamtprojekt_modell.dart';
 import 'gesamtprojekt_screen.dart';
+import 'originaletikett.dart';
 import 'produkt_foto.dart';
 import 'produkt_reiter.dart';
 import 'projekt_checkliste.dart';
@@ -1290,7 +1292,9 @@ class _AutoPunkt extends StatelessWidget {
 }
 
 /// „Etikett erstellt" mit den Pflichtangaben nach LMIV zum Aufklappen
-/// (F28): erledigt, sobald jede abgehakt ist oder nicht zutrifft.
+/// (F28): erledigt, sobald jede abgehakt ist oder nicht zutrifft. Darunter
+/// das Originaletikett — der Scan des gedruckten Etiketts; es zählt nicht
+/// für den Punkt, er sagt nur, ob es hinterlegt ist.
 class _EtikettPunkt extends ConsumerWidget {
   const _EtikettPunkt({
     required this.projekt,
@@ -1347,7 +1351,14 @@ class _EtikettPunkt extends ConsumerWidget {
             'nicht zutrifft',
       ),
       title: Text(stand.punkt.label),
-      subtitle: text == null ? null : Text(text),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (text != null) Text(text),
+          Text(originaletikettStand(projekt)),
+        ],
+      ),
       children: [
         for (final l in kEtikettCheckliste)
           _LmivZeile(
@@ -1376,6 +1387,7 @@ class _EtikettPunkt extends ConsumerWidget {
               label: const Text('Früheren Haken zurücknehmen'),
             ),
           ),
+        OriginaletikettFeld(projekt: projekt),
       ],
     );
   }

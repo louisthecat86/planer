@@ -845,8 +845,9 @@ void main() {
         final projekt = (await projekte.projekt(a.projekt.id))!;
 
         final b = await berichtLaden(db, dateien, projekt);
-        // Ohne Freigabe: der neueste abgeschlossene Stand.
-        expect(b.version?.id, a.v1);
+        // Wie die Rezeptur beim Öffnen: der neueste Stand — hier der
+        // Entwurf.
+        expect(b.version?.id, a.v2);
         expect(b.rezepturName, 'Frikadelle Testart');
         expect(b.ergebnis, isNotNull);
         expect(b.bild, png);
@@ -932,8 +933,7 @@ void main() {
         final a = await anlegen();
         final projekt = (await projekte.projekt(a.projekt.id))!;
         final b = await berichtLaden(db, dateien, projekt);
-        // Ohne Freigabe: der neueste abgeschlossene Stand — mit seiner
-        // Zusammensetzung für die Tabelle.
+        // Der neueste Stand — mit seiner Zusammensetzung für die Tabelle.
         expect(b.eingabe?.positionen, hasLength(2));
         expect(b.eingaben.keys, containsAll([a.v1, a.v2]));
         expect(b.dateien, isEmpty);
@@ -1109,15 +1109,92 @@ void main() {
         expect(nurSteckbrief.dateiname, startsWith('Projektbericht_'));
       });
 
-      test('der freigegebene Stand geht vor', () async {
+      test('der neueste Stand wie in der Rezeptur — mit der Freigabe dabei',
+          () async {
         final a = await anlegen();
         await projekte.projektAendern(
           a.projekt.id,
-          EntwicklungProjekteCompanion(freigabeVersionId: Value(a.v2)),
+          EntwicklungProjekteCompanion(freigabeVersionId: Value(a.v1)),
         );
         final projekt = (await projekte.projekt(a.projekt.id))!;
         final b = await berichtLaden(db, dateien, projekt);
         expect(b.version?.id, a.v2);
+
+        final roh = latin1.decode(
+          await baueProjektPdf(b, gedrucktAm: datum, komprimiert: false),
+        );
+        // Im Kopf des Kapitels: welcher Stand freigegeben ist.
+        expect(roh, contains('(freigegeben)'));
+        expect(roh, contains('(ist)'));
+        expect(roh, contains('(heute)'), reason: 'Ein Entwurf rechnet frisch');
+
+        // Ist der neueste freigegeben, geht es um ihn.
+        await projekte.projektAendern(
+          a.projekt.id,
+          EntwicklungProjekteCompanion(freigabeVersionId: Value(a.v2)),
+        );
+        final b2 = await berichtLaden(
+          db,
+          dateien,
+          (await projekte.projekt(a.projekt.id))!,
+        );
+        expect(b2.version?.id, a.v2);
+        final roh2 = latin1.decode(
+          await baueProjektPdf(b2, gedrucktAm: datum, komprimiert: false),
+        );
+        expect(roh2, isNot(contains('(ist)')));
+      });
+
+      test('Nährwerte: wie die Rezeptur sie zeigt — nicht aus einem älteren '
+          'eingefrorenen Stand', () async {
+        // Stand 1 eingefroren, als die Zutat noch keine Nährwerte hatte;
+        // danach Werte im Katalog und Stand 2 als Entwurf.
+        final id = await projekte.projektAnlegen(name: 'Leberkäse Testart');
+        final rezeptur = await rezepte.rezepturAnlegen(
+          name: 'Leberkäse Testart',
+          projektId: id,
+        );
+        final braet = await rezepte.zutatAnlegen(
+          const EntwicklungZutatenCompanion(name: Value('Brät Testart')),
+        );
+        final v1 = (await rezepte.neuesteVersion(rezeptur))!;
+        await rezepte.positionHinzufuegen(v1.id, zutatId: braet, mengeKg: 100);
+        await rezepte.versionAbschliessen(v1.id);
+        await rezepte.zutatAendern(
+          braet,
+          const EntwicklungZutatenCompanion(
+            fett: Value(25),
+            eiweiss: Value(12),
+            salz: Value(2),
+          ),
+        );
+        final v2 = await rezepte.versionAnlegen(rezeptur, vorlageId: v1.id);
+
+        final b = await berichtLaden(
+          db,
+          dateien,
+          (await projekte.projekt(id))!,
+        );
+        expect(b.version?.id, v2);
+        expect(b.ergebnis!.ohneNaehrwerte, isEmpty);
+        expect(b.ergebnis!.je100g.fett, closeTo(25, 1e-9));
+        // Stand 1 bleibt, wie er eingefroren wurde.
+        expect(b.ergebnisse[v1.id]!.ohneNaehrwerte, ['Brät Testart']);
+
+        // Abgeschlossen: mit den Zutatendaten seines Tages.
+        await rezepte.versionAbschliessen(v2);
+        final b2 = await berichtLaden(
+          db,
+          dateien,
+          (await projekte.projekt(id))!,
+        );
+        expect(b2.version?.id, v2);
+        expect(b2.ergebnis!.je100g.fett, closeTo(25, 1e-9));
+        final roh = latin1.decode(
+          await baueProjektPdf(b2, gedrucktAm: datum, komprimiert: false),
+        );
+        expect(roh, contains('(vom)'));
+        expect(roh, isNot(contains('(heute)')));
       });
 
       test('ohne Rezeptur, mit kaputtem Bild und sehr langem Text', () async {

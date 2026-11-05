@@ -238,7 +238,13 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   und der Kopf zeigt „Produktfoto fehlt noch". „Etikett erstellt" klappt
   die zwölf Pflichtangaben nach LMIV auf und ist erledigt,
   sobald jede abgehakt ist oder „trifft nicht zu" (ein früherer Haken von
-  Hand gilt weiter) — von Hand bleibt nur Navision. Liste, Übersicht,
+  Hand gilt weiter) — von Hand bleibt nur Navision. Darunter liegt das
+  **Originaletikett**: der Scan des gedruckten Etiketts, ein Bild oder ein
+  PDF (die App zeigt dessen erste Seiten als Bilder), mit Vorschau, groß
+  ansehen, ersetzen und lösen. Ein neuer Scan ersetzt den alten, der unter
+  „Dateien" bleibt; dort ist das Originaletikett gekennzeichnet. Für den
+  Punkt zählt es nicht — er sagt nur „Originaletikett hinterlegt" oder
+  „… fehlt noch". Liste, Übersicht,
   Zahlen und Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
   (antippen schaltet um). „Fällig bis" nimmt ein Datum, eine Kalenderwoche
   oder einen Satz; ist der Tag vorbei und der Eintrag noch offen, steht er
@@ -363,10 +369,14 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   (Freigabe, Rezeptur, Checkliste, Prozess, HACCP, offene Punkte, Ziele)
   und dem Inhalt mit Seitenzahlen; die Kapitel stehen auch als Lesezeichen
   im PDF. Dahinter: Projekt (Stammdaten, Phasen, Ziele gegen die Rezeptur,
-  Anfrage und Notizen), Rezeptur (Zusammensetzung mit Mengen und Anteilen,
-  Zutatenverzeichnis, Allergene, Nährwerte, Fleisch nach LMIV, die Stände im
-  Vergleich), Produkt und Spezifikation (Sensorik, Angaben, Verpackung,
-  Etikett nach LMIV), Herstellung und HACCP (Prozesskette nach Stationen mit
+  Anfrage und Notizen), Rezeptur (der neueste Stand, wie die Rezeptur ihn
+  beim Öffnen zeigt — ist ein anderer freigegeben, steht das dabei —:
+  Zusammensetzung mit Mengen und Anteilen, Zutatenverzeichnis, Allergene,
+  Nährwerte mit dem Stand der Zutatendaten — ein Entwurf rechnet mit denen
+  von heute, ein abgeschlossener Stand mit denen seines Abschlusses —,
+  Fleisch nach LMIV, die Stände im Vergleich), Produkt und Spezifikation
+  (Sensorik, Angaben, Verpackung, Etikett nach LMIV mit dem
+  Originaletikett), Herstellung und HACCP (Prozesskette nach Stationen mit
   Werten, die Platten von Bratstraße und Kombiofen als Raster wie im
   Prozessblatt, festgehaltene Versionen, — wenn der Artikel davon
   abweicht — der Prozess im Artikel, Gefahrenanalyse und Lenkungspunkte),
@@ -385,7 +395,7 @@ Firmenangaben.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 37.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 38.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit
