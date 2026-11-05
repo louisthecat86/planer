@@ -2047,6 +2047,7 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
   ].where((r) => r.$2.trim().isNotEmpty || r.$3.trim().isNotEmpty).toList();
 
   final etikett = lmivAus(p.etikettCheckliste);
+  final original = _originaletikett(s);
   final geprueft = kEtikettCheckliste
       .where((c) => lmivStand(etikett, c.schluessel).geprueft)
       .length;
@@ -2149,18 +2150,27 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
           pw.Expanded(child: lmivSpalte(kEtikettCheckliste.sublist(mitte))),
         ],
       ),
+      // Das eingescannte Originaletikett direkt darunter — auf derselben
+      // Seite wie der Check.
+      ...original.kopf,
     ]),
-    ..._originaletikett(s),
+    ...original.weitere,
   ];
 }
 
-/// Das Originaletikett unter den Pflichtangaben: der Scan, wie er abgelegt
-/// ist — ein PDF als seine ersten Seiten. Ließ sich ein PDF nicht als Bild
-/// setzen, steht es als Datei da.
-List<pw.Widget> _originaletikett(_Satz s) {
+/// Das Originaletikett unter den Pflichtangaben: der eingescannte, so wie
+/// er abgelegt ist — ein PDF als seine ersten Seiten. Ließ sich ein PDF
+/// nicht als Bild setzen, steht es als Datei da. [kopf] steht mit dem
+/// Check auf einer Seite, [weitere] Seiten eines PDFs folgen.
+({List<pw.Widget> kopf, List<pw.Widget> weitere}) _originaletikett(
+  _Satz s,
+) {
   final d = s.b.etikettDatei;
   if (s.p.etikettDateiId == null || d == null) {
-    return [_leer('Noch kein Originaletikett hinterlegt.')];
+    return (
+      kopf: [_leer('Noch kein Originaletikett hinterlegt.')],
+      weitere: const <pw.Widget>[],
+    );
   }
   final zeile = '${d.name} · abgelegt am ${_datum(d.createdAt)}';
   final bilder = [
@@ -2168,13 +2178,19 @@ List<pw.Widget> _originaletikett(_Satz s) {
       if (_bildAus(bytes) case final bild?) bild,
   ];
   if (bilder.isEmpty) {
-    return [
-      _etikett('Originaletikett'),
-      _t('$zeile — liegt unter „Dateien".', groesse: 8.5, farbe: _grau),
-    ];
+    return (
+      kopf: [
+        _etikett('Originaletikett'),
+        _t('$zeile — liegt unter „Dateien".', groesse: 8.5, farbe: _grau),
+      ],
+      weitere: const <pw.Widget>[],
+    );
   }
+  // So hoch, dass der Scan mit dem Check auf eine Seite passt — auch im
+  // Querformat.
+  final maxHoehe = math.max(120.0, math.min(360.0, s.rahmen.hoehe - 270));
   pw.Widget seite(pw.ImageProvider bild) => pw.Container(
-    constraints: const pw.BoxConstraints(maxHeight: 430),
+    constraints: pw.BoxConstraints(maxHeight: maxHoehe),
     margin: const pw.EdgeInsets.only(top: 4),
     padding: const pw.EdgeInsets.all(3),
     decoration: pw.BoxDecoration(
@@ -2182,14 +2198,14 @@ List<pw.Widget> _originaletikett(_Satz s) {
     ),
     child: pw.Image(bild, fit: pw.BoxFit.contain),
   );
-  return [
-    _zusammen([
+  return (
+    kopf: [
       _etikett('Originaletikett'),
       _t(zeile, groesse: 8, farbe: _grau),
       seite(bilder.first),
-    ]),
-    for (final bild in bilder.skip(1)) seite(bild),
-  ];
+    ],
+    weitere: [for (final bild in bilder.skip(1)) seite(bild)],
+  );
 }
 
 // ── 4 Herstellung und HACCP ────────────────────────────────────────────

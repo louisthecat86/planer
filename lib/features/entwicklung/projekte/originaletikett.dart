@@ -159,9 +159,12 @@ Future<void> originaletikettAnsehen(
                           Expanded(
                             child: Padding(
                               padding: const EdgeInsets.all(8),
-                              child: Image.memory(
-                                seite,
-                                fit: BoxFit.contain,
+                              child: ColoredBox(
+                                color: Colors.white,
+                                child: Image.memory(
+                                  seite,
+                                  fit: BoxFit.contain,
+                                ),
                               ),
                             ),
                           ),
@@ -249,7 +252,9 @@ class OriginaletikettFeld extends ConsumerWidget {
                       key: ValueKey('originaletikett-seite-$i'),
                       onTap: ansehen,
                       child: DecoratedBox(
+                        // Weiß wie das Papier — auch im dunklen Design.
                         decoration: BoxDecoration(
+                          color: Colors.white,
                           border: Border.all(
                             color: theme.colorScheme.outlineVariant,
                           ),
