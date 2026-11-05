@@ -385,8 +385,15 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Grund, Kennzahlen, Änderungen und Rückmeldungen), der Verlauf als
   Zeitstrahl wie in der App (Phasen, Stationen, Bezüge zu den Ständen, in
   Zeilen zu sechs Einträgen) mit jedem Eintrag im Einzelnen und die
-  Dateien. Was fehlt, steht als Hinweis da; Kapitel ohne Inhalt beginnen
-  keine eigene Seite.
+  Dateien. Was fehlt, steht als Hinweis da. Jedes Kapitel beginnt auf
+  einer neuen Seite (im Druckfenster abwählbar: dann fortlaufend). Blöcke
+  brechen nicht, sondern beginnen auf der nächsten Seite: ein Schritt mit
+  seinen Einstellungen (das Band einer Station bei ihrem ersten Schritt,
+  die Überschrift bei der ersten Station), eine Überschrift mit ihrer
+  Tabelle, eine Station auf dem Entwicklungsweg, ein Eintrag im Verlauf.
+  Nur was länger ist als eine Seite — lange Texte und Tabellen —, läuft
+  weiter, beginnt aber nicht ganz unten auf einer Seite; Tabellen
+  wiederholen dann ihre Kopfzeile.
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
 in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine

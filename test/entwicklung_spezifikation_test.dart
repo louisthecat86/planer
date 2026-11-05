@@ -928,7 +928,7 @@ void main() {
         expect(utf8.decode(pdf.sublist(0, 5), allowMalformed: true), '%PDF-');
       });
 
-      test('Kapitel mit Lesezeichen — ein junges Projekt bleibt kurz',
+      test('Kapitel mit Lesezeichen, jedes auf einer neuen Seite',
           () async {
         final a = await anlegen();
         final projekt = (await projekte.projekt(a.projekt.id))!;
@@ -953,9 +953,10 @@ void main() {
         }
         // Ohne Dateien kein Kapitel dafür.
         expect(roh, isNot(contains('Dateien)')));
-        // Kapitel ohne Inhalt beginnen keine eigene Seite.
+        // Der Steckbrief und sieben Kapitel, jedes auf einer eigenen Seite
+        // — auch die, die nur sagen, was noch fehlt.
         final seiten = RegExp(r'/Type\s*/Page\b').allMatches(roh).length;
-        expect(seiten, inInclusiveRange(3, 8));
+        expect(seiten, 8);
       });
 
       test('Platten als Raster wie im Prozessblatt, der Verlauf als '

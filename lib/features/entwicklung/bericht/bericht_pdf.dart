@@ -255,12 +255,31 @@ pw.Widget _etikett(String text) => pw.Padding(
   child: _t(text, groesse: 7.5, fett: true, farbe: _grau),
 );
 
-/// Ein längerer Text mit Überschrift — leer: nichts.
-List<pw.Widget> _absatz(String titel, String? text) {
+/// Passt [text] sicher auf eine Seite? Dann darf er in einen Block; ein
+/// längerer läuft über die Seiten.
+bool _kurzerText(String text) =>
+    text.length <= 1500 && '\n'.allMatches(text).length <= 20;
+
+/// Ein Text mit Überschrift: kurz als Block, lang so, dass er nicht ganz
+/// unten auf einer Seite beginnt — von dort läuft er weiter.
+List<pw.Widget> _textMitTitel(_Satz s, pw.Widget titel, pw.Widget text, {
+  required bool kurz,
+}) => kurz
+    ? [
+        _zusammen(s, [titel, text]),
+      ]
+    : [if (s.rahmen.umbrueche) pw.NewPage(freeSpace: 160), titel, text];
+
+/// Ein längerer Text mit kleiner Überschrift — leer: nichts.
+List<pw.Widget> _absatz(_Satz s, String titel, String? text) {
   final t = _oderNull(text);
   if (t == null) return const [];
-  return [_etikett(titel), _fliess(t)];
+  return _textMitTitel(s, _etikett(titel), _fliess(t), kurz: _kurzerText(t));
 }
+
+/// Ein Abschnitt aus freiem Text.
+List<pw.Widget> _textAbschnitt(_Satz s, String titel, String text) =>
+    _textMitTitel(s, _abschnitt(titel), _fliess(text), kurz: _kurzerText(text));
 
 /// Bezeichnung und Wert untereinander; leere Werte fallen weg.
 pw.Widget _felder(
@@ -449,26 +468,83 @@ pw.Widget _punkt(String text, {double einzug = 0, PdfColor farbe = _schwarz}) =>
       ),
     );
 
-/// Hält [kinder] zusammen auf einer Seite.
-pw.Widget _zusammen(List<pw.Widget> kinder) => pw.Inseparable(
+/// Hält [kinder] als Block zusammen: Passt er nicht mehr auf die
+/// angefangene Seite, beginnt er auf der nächsten ([_Block]).
+pw.Widget _zusammen(_Satz s, List<pw.Widget> kinder) => _Block(
+  maxHoehe: s.blockHoehe,
   child: pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.start,
     children: kinder,
   ),
 );
 
-/// Eine Überschrift mit ihrem Inhalt — bei bis zu [maxZeilen] Zeilen
-/// zusammen auf einer Seite, sonst darf der Inhalt umbrechen.
+/// Eine Überschrift mit ihrem Inhalt: bis 22 Zeilen als Block, länger so,
+/// dass er nicht ganz unten auf einer Seite beginnt — von dort läuft er
+/// über die Seiten, die Kopfzeile einer Tabelle wiederholt sich.
 List<pw.Widget> _mitTitel(
+  _Satz s,
   pw.Widget titel,
   List<pw.Widget> inhalt, {
   required int zeilen,
-  int maxZeilen = 22,
-}) => zeilen <= maxZeilen
+}) => zeilen <= 22
     ? [
-        _zusammen([titel, ...inhalt]),
+        _zusammen(s, [titel, ...inhalt]),
       ]
-    : [titel, ...inhalt];
+    : [if (s.rahmen.umbrueche) pw.NewPage(freeSpace: 180), titel, ...inhalt];
+
+/// Ein Block, der auf einer Seite zusammenbleibt: Passt er nicht mehr auf
+/// die angefangene Seite, beginnt er auf der nächsten — wie die Stationen
+/// auf dem Entwicklungsweg. Er bricht nie: Was länger als eine Seite sein
+/// kann (lange Texte, lange Tabellen), steht nicht in einem Block. Ist
+/// einer doch höher als [maxHoehe] (eine Seite ohne Kopf und Fuß), wird er
+/// verkleinert gesetzt — so lässt sich der Bericht immer setzen.
+class _Block extends pw.SingleChildWidget {
+  _Block({required pw.Widget child, required this.maxHoehe})
+    : super(
+        child: pw.Transform(
+          // Die Matrix ändert [layout]: 1 — oder kleiner, wenn es sein muss.
+          transform: pw.Transform.scale(scale: 1).transform,
+          adjustLayout: true,
+          child: child,
+        ),
+      );
+
+  final double maxHoehe;
+
+  @override
+  void layout(
+    pw.Context context,
+    pw.BoxConstraints constraints, {
+    bool parentUsesSize = false,
+  }) {
+    void massstab(double f) => (child! as pw.Transform).transform
+      ..setZero()
+      ..setEntry(0, 0, f)
+      ..setEntry(1, 1, f)
+      ..setEntry(2, 2, 1)
+      ..setEntry(3, 3, 1);
+
+    massstab(1);
+    super.layout(context, constraints, parentUsesSize: parentUsesSize);
+    final hoehe = box!.height;
+    if (hoehe > maxHoehe) {
+      massstab(maxHoehe / hoehe);
+      super.layout(context, constraints, parentUsesSize: parentUsesSize);
+    }
+  }
+
+  @override
+  bool get canSpan => false;
+
+  @override
+  bool get hasMoreWidgets => false;
+
+  @override
+  void paint(pw.Context context) {
+    super.paint(context);
+    paintChild(context);
+  }
+}
 
 // ── Inhaltsverzeichnis und Lesezeichen ─────────────────────────────────
 
@@ -504,15 +580,12 @@ class _Marke extends pw.Anchor {
 
 /// Ein Kapitel des Berichts.
 class _Kapitel {
-  _Kapitel(this.schluessel, this.titel, this.bauen, {this.neueSeite = true});
+  _Kapitel(this.schluessel, this.titel, this.bauen);
 
   /// Unter diesem Wert steht es in der Wahl ([BerichtWahl.kapitel]).
   final String schluessel;
   final String titel;
   final List<pw.Widget> Function(_Satz s, _Kapitel k) bauen;
-
-  /// Beginnt auf einer neuen Seite.
-  final bool neueSeite;
 
   int nr = 0;
 
@@ -537,9 +610,13 @@ class _Satz {
   /// Die Seiten der Kapitel aus dem ersten Durchgang.
   Map<String, int> get bekannt => rahmen.bekannt;
 
-  /// Kapitel mit Inhalt beginnen auf einer neuen Seite — nicht, wenn es
-  /// abgewählt ist oder der Bericht auf feste Seiten passen soll.
+  /// Kapitel beginnen auf einer neuen Seite — nicht, wenn es abgewählt ist
+  /// oder der Bericht auf feste Seiten passen soll.
   bool get neueSeiten => inhalt.neueSeiten && rahmen.umbrueche;
+
+  /// Höher als das darf ein Block umbrechen: die Seite ohne Kopf und Fuß,
+  /// mit etwas Luft.
+  double get blockHoehe => rahmen.hoehe - 80;
 
   /// Wie viele Einträge eine Zeile des Zeitstrahls trägt: auf A4 hoch
   /// sechs, quer oder verkleinert mehr.
@@ -548,14 +625,19 @@ class _Satz {
 
 /// Der Kopf eines Kapitels: Nummer und Titel, darunter [untertitel].
 List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
-  if (k.neueSeite && s.neueSeiten) pw.NewPage(),
+  // Jedes Kapitel auf einer neuen Seite — fortlaufend wenigstens nicht
+  // allein unten auf einer.
+  if (s.neueSeiten)
+    pw.NewPage()
+  else if (s.rahmen.umbrueche)
+    pw.NewPage(freeSpace: 160),
   _Marke(
     name: k.anker,
     titel: '${k.nr}  ${k.titel}',
     rahmen: s.rahmen,
     child: pw.Container(
       margin: pw.EdgeInsets.only(
-        top: k.neueSeite && s.neueSeiten ? 0 : 22,
+        top: s.neueSeiten ? 0 : 22,
         bottom: 6,
       ),
       padding: const pw.EdgeInsets.only(bottom: 5),
@@ -745,61 +827,33 @@ Future<Uint8List> baueProjektPdf(
   return ergebnis.bytes;
 }
 
-/// Alle Kapitel, die es für [b] gibt. Eins mit Inhalt beginnt auf einer
-/// neuen Seite; eins, das nur sagt, was noch fehlt, folgt dem davor — so
-/// bleibt der Bericht eines jungen Projekts kurz.
+/// Alle Kapitel, die es für [b] gibt. Jedes beginnt auf einer neuen Seite
+/// (abwählbar: „Kapitel auf neuen Seiten").
 List<_Kapitel> _alleKapitel(ProjektBericht b) {
-  final p = b.projekt;
-  final mitProzess = !Prozessparameter.aus(p.prozess).leer ||
-      b.artikelSchritte.isNotEmpty ||
-      !Haccp.aus(p.haccp).leer;
   return [
     _Kapitel(BerichtKapitel.projekt, 'Projekt', _kapitelProjekt),
-    _Kapitel(
-      BerichtKapitel.rezeptur,
-      'Rezeptur',
-      _kapitelRezeptur,
-      neueSeite: b.version != null,
-    ),
+    _Kapitel(BerichtKapitel.rezeptur, 'Rezeptur', _kapitelRezeptur),
     _Kapitel(
       BerichtKapitel.produkt,
       'Produkt und Spezifikation',
       _kapitelProdukt,
-      neueSeite: false,
     ),
     _Kapitel(
       BerichtKapitel.herstellung,
       'Herstellung und HACCP',
       _kapitelHerstellung,
-      neueSeite: mitProzess,
     ),
     _Kapitel(
       BerichtKapitel.freigabe,
       'Freigabe und Checkliste',
       _kapitelFreigabe,
-      neueSeite: false,
     ),
     if (b.verlauf.isNotEmpty || b.versionen.isNotEmpty)
-      _Kapitel(
-        BerichtKapitel.weg,
-        'Entwicklungsweg',
-        _kapitelWeg,
-        neueSeite: b.versionen.isNotEmpty,
-      ),
+      _Kapitel(BerichtKapitel.weg, 'Entwicklungsweg', _kapitelWeg),
     if (b.verlauf.isNotEmpty)
-      _Kapitel(
-        BerichtKapitel.verlauf,
-        'Verlauf',
-        _kapitelVerlauf,
-        neueSeite: b.verlauf.length > 3,
-      ),
+      _Kapitel(BerichtKapitel.verlauf, 'Verlauf', _kapitelVerlauf),
     if (b.dateien.isNotEmpty)
-      _Kapitel(
-        BerichtKapitel.dateien,
-        'Dateien',
-        _kapitelDateien,
-        neueSeite: false,
-      ),
+      _Kapitel(BerichtKapitel.dateien, 'Dateien', _kapitelDateien),
   ];
 }
 
@@ -1417,14 +1471,26 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
   final g = b.gesamtprojekt;
   return [
     ..._kapitelKopf(s, k),
-    _felderZweispaltig(felder),
-    // Ein Muster: das Gesamtprojekt und wie seine Muster stehen.
+    _zusammen(s, [_felderZweispaltig(felder)]),
+    // Ein Muster: das Gesamtprojekt und wie seine Muster stehen — eine
+    // lange Anfrage läuft vorweg über die Seiten.
+    if (g != null && !_kurzerText(g.anfrage ?? ''))
+      ..._textMitTitel(
+        s,
+        _abschnitt('Gesamtprojekt', zusatz: g.name),
+        _fliess(g.anfrage!.trim()),
+        kurz: false,
+      ),
     if (g != null)
       ..._mitTitel(
-        _abschnitt('Gesamtprojekt', zusatz: g.name),
+        s,
+        _abschnitt(
+          _kurzerText(g.anfrage ?? '') ? 'Gesamtprojekt' : 'Muster',
+          zusatz: g.name,
+        ),
         zeilen: b.muster.length + 2,
         [
-          if (_oderNull(g.anfrage) case final a?) ...[
+          if (_oderNull(g.anfrage) case final a? when _kurzerText(a)) ...[
             _fliess(a),
             pw.SizedBox(height: 5),
           ],
@@ -1450,7 +1516,7 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
         ],
       ),
     if (phasen.length > 1)
-      ..._mitTitel(_abschnitt('Phasen'), zeilen: phasen.length, [
+      ..._mitTitel(s, _abschnitt('Phasen'), zeilen: phasen.length, [
         _tabelle(
           kopf: const ['Seit', 'Phase', 'Anlass'],
           breiten: const {
@@ -1466,6 +1532,7 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
       ]),
     if (ziele.isNotEmpty)
       ..._mitTitel(
+        s,
         _abschnitt(
           'Ziele',
           zusatz: b.version == null
@@ -1498,18 +1565,12 @@ List<pw.Widget> _kapitelProjekt(_Satz s, _Kapitel k) {
           ),
         ],
       ),
-    if (_oderNull(p.produktidee) != null) ...[
-      _abschnitt('Produktidee'),
-      _fliess(p.produktidee!.trim()),
-    ],
-    if (_oderNull(p.kundenvereinbarungen) != null) ...[
-      _abschnitt('Anfrage und Vereinbarungen'),
-      _fliess(p.kundenvereinbarungen!.trim()),
-    ],
-    if (_oderNull(p.notizen) != null) ...[
-      _abschnitt('Notizen'),
-      _fliess(p.notizen!.trim()),
-    ],
+    if (_oderNull(p.produktidee) case final t?)
+      ..._textAbschnitt(s, 'Produktidee', t),
+    if (_oderNull(p.kundenvereinbarungen) case final t?)
+      ..._textAbschnitt(s, 'Anfrage und Vereinbarungen', t),
+    if (_oderNull(p.notizen) case final t?)
+      ..._textAbschnitt(s, 'Notizen', t),
   ];
 }
 
@@ -1590,9 +1651,9 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
 
   return [
     ..._kapitelKopf(s, k, untertitel: untertitel),
-    ..._absatz('Grund für diesen Stand', v.notiz),
+    ..._absatz(s, 'Grund für diesen Stand', v.notiz),
     if (_oderNull(v.bezeichnung) case final bez?)
-      ..._absatz('Bezeichnung des Stands', bez),
+      ..._absatz(s, 'Bezeichnung des Stands', bez),
     pw.SizedBox(height: 8),
     _kennzahlen([
       _kennzahl('EINSATZ', '${mengeText(e.eingesetztKg)} kg'),
@@ -1611,78 +1672,93 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
         unten: e.ohneBeffe.isEmpty ? null : 'unvollständig',
       ),
     ]),
-    if (eingabe != null && eingabe.positionen.isNotEmpty) ...[
-      _abschnitt('Zusammensetzung', zusatz: 'je Ansatz'),
-      _tabelle(
-        kopf: const ['Nr.', 'Zutat', 'Menge', 'Anteil', 'Merkmale'],
-        rechts: const {2, 3},
-        breiten: const {
-          0: pw.FixedColumnWidth(24),
-          1: pw.FlexColumnWidth(3),
-          2: pw.FixedColumnWidth(62),
-          3: pw.FixedColumnWidth(50),
-          4: pw.FlexColumnWidth(2.2),
-        },
-        zeilen: [
-          for (final (i, pos) in eingabe.positionen.indexed)
-            [
-              _zelle('${i + 1}', farbe: _grau),
-              _zelle(_positionsName(pos)),
-              _zelle('${mengeText(pos.mengeKg)} kg'),
-              _zelle(summe <= 0 ? '' : prozentText(pos.mengeKg / summe * 100)),
-              _zelle(_merkmale(pos), farbe: _grau, groesse: 7.5),
-            ],
-          [
-            _zelle(''),
-            _zelle('Summe', fett: true),
-            _zelle('${mengeText(summe)} kg', fett: true),
-            _zelle(summe <= 0 ? '' : '100 %', fett: true),
-            _zelle(''),
-          ],
-        ],
-        hintergruende: [for (final _ in eingabe.positionen) null, _flaeche],
-      ),
-    ],
-    _abschnitt('Zutatenverzeichnis', zusatz: 'wie auf dem Etikett'),
-    if (e.zutatenliste.trim().isEmpty)
-      _leer('Ohne Zutaten.')
-    else if (e.zutatenliste.length < 2500)
-      pw.Container(
-        width: double.infinity,
-        padding: const pw.EdgeInsets.all(8),
-        decoration: pw.BoxDecoration(
-          border: pw.Border.all(color: _linie, width: .6),
-        ),
-        child: _t(e.zutatenliste, groesse: 9),
-      )
-    else
-      _fliess(e.zutatenliste),
-    pw.SizedBox(height: 6),
-    _felder([
-      (
-        'Allergene',
-        e.allergene.isEmpty
-            ? 'keine'
-            : [
-                for (final MapEntry(:key, :value) in e.allergene.entries)
-                  '${merkmalLabel(key, kAllergene) ?? key} '
-                      '(${value.join(', ')})',
-              ].join('; '),
-      ),
-      (
-        'Spuren möglich',
-        spuren.isEmpty ? '' : merkmaleLabel(spuren.join(','), kAllergene),
-      ),
-      (
-        'Verarbeitungshilfsstoffe',
+    if (eingabe != null && eingabe.positionen.isNotEmpty)
+      ..._mitTitel(
+        s,
+        _abschnitt('Zusammensetzung', zusatz: 'je Ansatz'),
+        zeilen: eingabe.positionen.length + 2,
         [
-          for (final MapEntry(:key, :value)
-              in e.verarbeitungshilfsstoffe.entries)
-            '$key (${value.join(', ')})',
-        ].join('; '),
+          _tabelle(
+            kopf: const ['Nr.', 'Zutat', 'Menge', 'Anteil', 'Merkmale'],
+            rechts: const {2, 3},
+            breiten: const {
+              0: pw.FixedColumnWidth(24),
+              1: pw.FlexColumnWidth(3),
+              2: pw.FixedColumnWidth(62),
+              3: pw.FixedColumnWidth(50),
+              4: pw.FlexColumnWidth(2.2),
+            },
+            zeilen: [
+              for (final (i, pos) in eingabe.positionen.indexed)
+                [
+                  _zelle('${i + 1}', farbe: _grau),
+                  _zelle(_positionsName(pos)),
+                  _zelle('${mengeText(pos.mengeKg)} kg'),
+                  _zelle(summe <= 0 ? '' : prozentText(pos.mengeKg / summe * 100)),
+                  _zelle(_merkmale(pos), farbe: _grau, groesse: 7.5),
+                ],
+              [
+                _zelle(''),
+                _zelle('Summe', fett: true),
+                _zelle('${mengeText(summe)} kg', fett: true),
+                _zelle(summe <= 0 ? '' : '100 %', fett: true),
+                _zelle(''),
+              ],
+            ],
+            hintergruende: [for (final _ in eingabe.positionen) null, _flaeche],
+          ),
+        ],
       ),
+    // Verzeichnis und Allergene als ein Block — ein sehr langes
+    // Verzeichnis läuft über die Seiten, ohne ganz unten zu beginnen.
+    if (e.zutatenliste.length >= 2500) ...[
+      if (s.rahmen.umbrueche) pw.NewPage(freeSpace: 160),
+      _abschnitt('Zutatenverzeichnis', zusatz: 'wie auf dem Etikett'),
+      _fliess(e.zutatenliste),
+    ],
+    _zusammen(s, [
+      if (e.zutatenliste.length < 2500) ...[
+        _abschnitt('Zutatenverzeichnis', zusatz: 'wie auf dem Etikett'),
+        if (e.zutatenliste.trim().isEmpty)
+          _leer('Ohne Zutaten.')
+        else
+          pw.Container(
+            width: double.infinity,
+            padding: const pw.EdgeInsets.all(8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _linie, width: .6),
+            ),
+            child: _t(e.zutatenliste, groesse: 9),
+          ),
+      ],
+      pw.SizedBox(height: 6),
+      _felder([
+        (
+          'Allergene',
+          e.allergene.isEmpty
+              ? 'keine'
+              : [
+                  for (final MapEntry(:key, :value) in e.allergene.entries)
+                    '${merkmalLabel(key, kAllergene) ?? key} '
+                        '(${value.join(', ')})',
+                ].join('; '),
+        ),
+        (
+          'Spuren möglich',
+          spuren.isEmpty ? '' : merkmaleLabel(spuren.join(','), kAllergene),
+        ),
+        (
+          'Verarbeitungshilfsstoffe',
+          [
+            for (final MapEntry(:key, :value)
+                in e.verarbeitungshilfsstoffe.entries)
+              '$key (${value.join(', ')})',
+          ].join('; '),
+        ),
+      ]),
     ]),
     ..._mitTitel(
+      s,
       _abschnitt(
         'Nährwerte',
         zusatz: 'je 100 g, gerundet wie auf dem Etikett · $naehrwertStand',
@@ -1692,6 +1768,7 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
     ),
     if (e.tierarten.isNotEmpty)
       ..._mitTitel(
+        s,
         _abschnitt(
           'Fleisch nach LMIV',
           zusatz: 'Grenzwerte für Fett und Bindegewebe',
@@ -1739,50 +1816,63 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
       ),
     if (e.warnungen.isNotEmpty ||
         e.ohneNaehrwerte.isNotEmpty ||
-        e.ohneBeffe.isNotEmpty) ...[
-      _abschnitt('Hinweise der Berechnung'),
-      for (final w in e.warnungen) _punkt(w, farbe: _warn),
-      if (e.ohneNaehrwerte.isNotEmpty)
-        _punkt(
-          'Ohne Nährwerte: ${e.ohneNaehrwerte.join(', ')} — die Tabelle ist '
-          'zu niedrig.',
-          farbe: _warn,
-        ),
-      if (e.ohneBeffe.isNotEmpty)
-        _punkt('Ohne BEFFE-Wert: ${e.ohneBeffe.join(', ')}', farbe: _warn),
-    ],
-    ..._staendeVergleich(s, v),
-    if (b.rezepturen.length > 1) ...[
-      _abschnitt('Alle Rezepturen des Projekts'),
-      _tabelle(
-        kopf: const ['Rezeptur', 'Neuester Stand', 'Status', 'Datum'],
-        breiten: const {
-          0: pw.FlexColumnWidth(),
-          1: pw.FixedColumnWidth(80),
-          2: pw.FixedColumnWidth(80),
-          3: pw.FixedColumnWidth(62),
-        },
-        zeilen: [
-          for (final r in b.rezepturen)
-            () {
-              final staende =
-                  b.versionen.values.where((x) => x.rezepturId == r.id).toList()
-                    ..sort((a, c) => c.nummer.compareTo(a.nummer));
-              final neu = staende.firstOrNull;
-              return [
-                _zelle(r.name),
-                _zelle(neu == null ? '-' : 'Stand ${neu.nummer}'),
-                _zelle(neu == null ? '' : _standStatus(s, neu)),
-                _zelle(
-                  neu == null
-                      ? ''
-                      : _datum(neu.abgeschlossenAm ?? neu.updatedAt),
-                ),
-              ];
-            }(),
+        e.ohneBeffe.isNotEmpty)
+      ..._mitTitel(
+        s,
+        _abschnitt('Hinweise der Berechnung'),
+        zeilen: e.warnungen.length + 2,
+        [
+          for (final w in e.warnungen) _punkt(w, farbe: _warn),
+          if (e.ohneNaehrwerte.isNotEmpty)
+            _punkt(
+              'Ohne Nährwerte: ${e.ohneNaehrwerte.join(', ')} — die Tabelle '
+              'ist zu niedrig.',
+              farbe: _warn,
+            ),
+          if (e.ohneBeffe.isNotEmpty)
+            _punkt(
+              'Ohne BEFFE-Wert: ${e.ohneBeffe.join(', ')}',
+              farbe: _warn,
+            ),
         ],
       ),
-    ],
+    ..._staendeVergleich(s, v),
+    if (b.rezepturen.length > 1)
+      ..._mitTitel(
+        s,
+        _abschnitt('Alle Rezepturen des Projekts'),
+        zeilen: b.rezepturen.length + 1,
+        [
+          _tabelle(
+            kopf: const ['Rezeptur', 'Neuester Stand', 'Status', 'Datum'],
+            breiten: const {
+              0: pw.FlexColumnWidth(),
+              1: pw.FixedColumnWidth(80),
+              2: pw.FixedColumnWidth(80),
+              3: pw.FixedColumnWidth(62),
+            },
+            zeilen: [
+              for (final r in b.rezepturen)
+                () {
+                  final staende =
+                      b.versionen.values.where((x) => x.rezepturId == r.id).toList()
+                        ..sort((a, c) => c.nummer.compareTo(a.nummer));
+                  final neu = staende.firstOrNull;
+                  return [
+                    _zelle(r.name),
+                    _zelle(neu == null ? '-' : 'Stand ${neu.nummer}'),
+                    _zelle(neu == null ? '' : _standStatus(s, neu)),
+                    _zelle(
+                      neu == null
+                          ? ''
+                          : _datum(neu.abgeschlossenAm ?? neu.updatedAt),
+                    ),
+                  ];
+                }(),
+            ],
+          ),
+        ],
+      ),
   ];
 }
 
@@ -1921,6 +2011,7 @@ List<pw.Widget> _staendeVergleich(_Satz s, RezepturVersion v) {
 
   final spalten = gezeigt.length + 1;
   return _mitTitel(
+    s,
     _abschnitt(
       'Stände im Vergleich',
       zusatz:
@@ -2070,54 +2161,58 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
 
   return [
     ..._kapitelKopf(s, k),
-    _abschnitt('Sensorik'),
-    if (sensorik.leer && bild == null)
-      _leer('Noch keine Sensorik beschrieben.')
-    else
-      pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(
-            child: sensorik.leer
-                ? _leer('Noch keine Sensorik beschrieben.')
-                : _felder(sensorikFelder, labelBreite: 92),
-          ),
-          if (bild != null)
-            pw.Container(
-              width: 190,
-              height: 142,
-              margin: const pw.EdgeInsets.only(left: 14),
-              padding: const pw.EdgeInsets.all(3),
-              decoration: pw.BoxDecoration(
-                border: pw.Border.all(color: _linie, width: .6),
-              ),
-              child: pw.Image(bild, fit: pw.BoxFit.contain),
+    _zusammen(s, [
+      _abschnitt('Sensorik'),
+      if (sensorik.leer && bild == null)
+        _leer('Noch keine Sensorik beschrieben.')
+      else
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: sensorik.leer
+                  ? _leer('Noch keine Sensorik beschrieben.')
+                  : _felder(sensorikFelder, labelBreite: 92),
             ),
-        ],
-      ),
-    _abschnitt('Spezifikation'),
-    if (spez.leer)
-      _leer('Noch keine Angaben für die Spezifikation.')
-    else ...[
-      _felder([
-        ('Bezeichnung', spez.bezeichnung),
-        ('Lagerung', spez.lagerung),
-        ('Haltbarkeit', spez.haltbarkeit),
-        ('Gewichtstoleranz', spez.toleranz),
-        (
-          'Spuren möglich',
-          spez.spuren.isEmpty
-              ? ''
-              : merkmaleLabel(spez.spuren.join(','), kAllergene),
+            if (bild != null)
+              pw.Container(
+                width: 190,
+                height: 142,
+                margin: const pw.EdgeInsets.only(left: 14),
+                padding: const pw.EdgeInsets.all(3),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: _linie, width: .6),
+                ),
+                child: pw.Image(bild, fit: pw.BoxFit.contain),
+              ),
+          ],
         ),
-      ]),
-      if (hinweise.isNotEmpty) ...[
-        _etikett('Produkthinweise'),
-        for (final h in hinweise) _punkt(h),
+    ]),
+    _zusammen(s, [
+      _abschnitt('Spezifikation'),
+      if (spez.leer)
+        _leer('Noch keine Angaben für die Spezifikation.')
+      else ...[
+        _felder([
+          ('Bezeichnung', spez.bezeichnung),
+          ('Lagerung', spez.lagerung),
+          ('Haltbarkeit', spez.haltbarkeit),
+          ('Gewichtstoleranz', spez.toleranz),
+          (
+            'Spuren möglich',
+            spez.spuren.isEmpty
+                ? ''
+                : merkmaleLabel(spez.spuren.join(','), kAllergene),
+          ),
+        ]),
+        if (hinweise.isNotEmpty) ...[
+          _etikett('Produkthinweise'),
+          for (final h in hinweise) _punkt(h),
+        ],
       ],
-    ],
+    ]),
     if (verpackung.isNotEmpty)
-      ..._mitTitel(_abschnitt('Verpackung'), zeilen: verpackung.length, [
+      ..._mitTitel(s, _abschnitt('Verpackung'), zeilen: verpackung.length, [
         _tabelle(
           kopf: const ['', 'Einzelverpackung', 'Umverpackung'],
           breiten: const {
@@ -2135,7 +2230,7 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
           ],
         ),
       ]),
-    _zusammen([
+    _zusammen(s, [
       _abschnitt(
         'Etikett nach LMIV',
         zusatz:
@@ -2237,11 +2332,28 @@ pw.Widget _stationsBand(int nr, String abteilung, {String? zusatz}) =>
 
 /// Was von einem Schritt im Bericht steht: die Maschineneinstellungen und
 /// die eingetragenen Werte — die Platten zeigt [_plattenRaster].
-List<(String, String)> _schrittWerte(ProzessSchritt s) => [
-  if (s.notiz.trim().isNotEmpty) ('Maschineneinstellungen', s.notiz.trim()),
-  for (final w in s.werte)
-    if (!istPlattenWert(w) && !w.leer) (w.label, w.wert.trim()),
-];
+List<(String, String)> _schrittWerte(ProzessSchritt s) {
+  final notiz = s.notiz.trim();
+  final zeilen = notiz.isEmpty
+      ? const <String>[]
+      : notiz.split(RegExp(r'\r?\n'));
+  return [
+    // Lange Einstellungen in Stücken zu zwölf Zeilen — dazwischen darf die
+    // Tabelle umbrechen.
+    for (var i = 0; i < zeilen.length; i += 12)
+      (
+        i == 0 ? 'Maschineneinstellungen' : '',
+        zeilen.sublist(i, math.min(i + 12, zeilen.length)).join('\n'),
+      ),
+    for (final w in s.werte)
+      if (!istPlattenWert(w) && !w.leer) (w.label, w.wert.trim()),
+  ];
+}
+
+/// Wie viele Zeilen [text] etwa braucht, bei [breite] Zeichen je Zeile.
+int _zeilenFuer(String text, int breite) => text
+    .split('\n')
+    .fold(0, (n, z) => n + math.max(1, (z.length / breite).ceil()));
 
 /// Die Platten eines Schritts an Bratstraße oder Kombiofen als Raster —
 /// wie im Prozessblatt, etwas kleiner. Null ohne Raster oder ohne eine
@@ -2280,8 +2392,9 @@ String _signatur(ProzessSchritt s, [List<(String, String)> mehr = const []]) =>
       ]..sort()),
     ].join('|');
 
-/// Ein Schritt mit seinen Werten.
-pw.Widget _schrittBlock(
+/// Ein Schritt mit seinen Werten: sein Kopf (Nummer und Titel), darunter
+/// die Werte und die Platten — und wie viele Zeilen das etwa sind.
+({pw.Widget kopf, List<pw.Widget> werte, int zeilen}) _schritt(
   int nr,
   ProzessSchritt s, {
   List<(String, String)> mehr = const [],
@@ -2293,84 +2406,97 @@ pw.Widget _schrittBlock(
       : s.bezeichnung(nr);
   final zeilen = [..._schrittWerte(s), ...mehr];
   final raster = _plattenRaster(s);
-  return pw.Padding(
-    padding: const pw.EdgeInsets.only(left: 4, top: 5, bottom: 2),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Container(
-              width: 15,
-              height: 15,
-              alignment: pw.Alignment.center,
-              decoration: const pw.BoxDecoration(
-                color: _akzentHell,
-                shape: pw.BoxShape.circle,
-              ),
-              child: _t('$nr', groesse: 7.5, fett: true, farbe: _akzent),
+  return (
+    kopf: pw.Padding(
+      padding: const pw.EdgeInsets.only(left: 4, top: 5),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: 15,
+            height: 15,
+            alignment: pw.Alignment.center,
+            decoration: const pw.BoxDecoration(
+              color: _akzentHell,
+              shape: pw.BoxShape.circle,
             ),
-            pw.SizedBox(width: 6),
-            pw.Expanded(
-              child: pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 2),
-                child: _t(titel, groesse: 9.5, fett: true),
-              ),
+            child: _t('$nr', groesse: 7.5, fett: true, farbe: _akzent),
+          ),
+          pw.SizedBox(width: 6),
+          pw.Expanded(
+            child: pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 2),
+              child: _t(titel, groesse: 9.5, fett: true),
             ),
-            if (zusatz != null)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 2, left: 8),
-                child: _t(zusatz, groesse: 7.5, farbe: _grau),
-              ),
-          ],
-        ),
-        if (zeilen.isNotEmpty)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 21, top: 2),
-            child: _felder(zeilen, labelBreite: 130, groesse: 8.3),
           ),
-        if (raster != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 21, top: 5, bottom: 2),
-            child: raster,
-          ),
-      ],
+          if (zusatz != null)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 2, left: 8),
+              child: _t(zusatz, groesse: 7.5, farbe: _grau),
+            ),
+        ],
+      ),
     ),
+    werte: [
+      if (zeilen.isNotEmpty)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 25, top: 2),
+          child: _felder(zeilen, labelBreite: 130, groesse: 8.3),
+        ),
+      if (raster != null)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 25, top: 5, bottom: 2),
+          child: raster,
+        ),
+      pw.SizedBox(height: 2),
+    ],
+    zeilen:
+        2 +
+        zeilen.fold<int>(0, (n, z) => n + _zeilenFuer(z.$2, 70)) +
+        (raster == null ? 0 : 12),
   );
 }
 
-/// Die Kette nach Stationen.
+/// Die Kette nach Stationen — jeder Schritt mit seinen Einstellungen als
+/// Block, das Band bei seinem ersten Schritt und [kopf] (die Überschrift)
+/// bei der ersten Station: Nichts davon steht allein unten auf einer
+/// Seite.
 List<pw.Widget> _kette(
+  _Satz s,
   List<ProzessSchritt> schritte, {
+  List<pw.Widget> kopf = const [],
   Map<String, List<(String, String)>> mehr = const {},
   Map<String, String> zusatz = const {},
 }) {
   final widgets = <pw.Widget>[];
   var nr = 0;
   for (final (i, station) in stationenAus(schritte).indexed) {
-    final schrittBloecke = <pw.Widget>[];
-    for (final schritt in station) {
+    for (final (j, schritt) in station.indexed) {
       nr++;
-      schrittBloecke.add(
-        _schrittBlock(
-          nr,
-          schritt,
-          mehr: mehr[schritt.id] ?? const [],
-          zusatz: zusatz[schritt.id],
-        ),
+      final teil = _schritt(
+        nr,
+        schritt,
+        mehr: mehr[schritt.id] ?? const [],
+        zusatz: zusatz[schritt.id],
       );
+      final davor = [
+        if (i == 0 && j == 0) ...kopf,
+        if (j == 0) _stationsBand(i + 1, station.first.abteilung),
+      ];
+      if (teil.zeilen <= 40) {
+        widgets.add(_zusammen(s, [...davor, teil.kopf, ...teil.werte]));
+      } else {
+        // Länger als ein Block sein darf: Der Schritt beginnt nicht ganz
+        // unten auf einer Seite, seine Werte laufen dann weiter.
+        widgets.addAll([
+          if (s.rahmen.umbrueche) pw.NewPage(freeSpace: 200),
+          _zusammen(s, [...davor, teil.kopf]),
+          ...teil.werte,
+        ]);
+      }
     }
-    // Das Band bleibt bei seinem ersten Schritt.
-    widgets
-      ..add(
-        _zusammen([
-          _stationsBand(i + 1, station.first.abteilung),
-          schrittBloecke.first,
-        ]),
-      )
-      ..addAll(schrittBloecke.skip(1));
   }
+  if (widgets.isEmpty && kopf.isNotEmpty) widgets.add(_zusammen(s, kopf));
   return widgets;
 }
 
@@ -2462,53 +2588,64 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
   final nummer = artikel?.artikelnummer ?? '';
   return [
     ..._kapitelKopf(s, k),
-    _abschnitt(
-      'Prozess',
-      zusatz: prozess.leer
-          ? null
-          : '${fassung.text} · ${prozessKurztext(prozess)}',
-    ),
-    if (prozess.leer && artikelKette.isEmpty)
-      _leer('Noch kein Prozess beschrieben.'),
-    if (wieImProjekt)
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 2),
-        child: _t(
-          'So auch im Artikel $nummer hinterlegt — Personen und Leistung je '
-          'Schritt aus der Planung.',
-          groesse: 8,
-          farbe: _grau,
+    // Die Überschrift bleibt bei der ersten Station, jeder Schritt bei
+    // seinen Einstellungen.
+    ..._kette(
+      s,
+      prozess.schritte,
+      kopf: [
+        _abschnitt(
+          'Prozess',
+          zusatz: prozess.leer
+              ? null
+              : '${fassung.text} · ${prozessKurztext(prozess)}',
         ),
-      ),
-    if (prozess.schritte.isNotEmpty)
-      ..._kette(
-        prozess.schritte,
-        zusatz: wieImProjekt
-            ? {
-                for (final (i, a) in artikelKette.indexed)
-                  if (leistung[a.id] case final l?) prozess.schritte[i].id: l,
-              }
-            : const {},
-      ),
+        if (prozess.leer && artikelKette.isEmpty)
+          _leer('Noch kein Prozess beschrieben.'),
+        if (wieImProjekt)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(bottom: 2),
+            child: _t(
+              'So auch im Artikel $nummer hinterlegt — Personen und Leistung '
+              'je Schritt aus der Planung.',
+              groesse: 8,
+              farbe: _grau,
+            ),
+          ),
+      ],
+      zusatz: wieImProjekt
+          ? {
+              for (final (i, a) in artikelKette.indexed)
+                if (leistung[a.id] case final l?) prozess.schritte[i].id: l,
+            }
+          : const {},
+    ),
     for (final a in prozess.abschnitte)
-      _zusammen([
+      _zusammen(s, [
         _etikett(a.titel),
         _felder([for (final f in a.felder) (f.label, f.wert)]),
       ]),
-    if (artikelKette.isNotEmpty && !wieImProjekt) ...[
-      _abschnitt(
-        'Prozess im Artikel $nummer',
-        zusatz: prozess.schritte.isEmpty
-            ? 'aus der Planung, mit Personen und Leistung'
-            : 'weicht vom Projekt ab · aus der Planung, mit Personen und '
-                  'Leistung',
+    if (artikelKette.isNotEmpty && !wieImProjekt)
+      ..._kette(
+        s,
+        artikelKette,
+        kopf: [
+          _abschnitt(
+            'Prozess im Artikel $nummer',
+            zusatz: prozess.schritte.isEmpty
+                ? 'aus der Planung, mit Personen und Leistung'
+                : 'weicht vom Projekt ab · aus der Planung, mit Personen '
+                      'und Leistung',
+          ),
+        ],
+        mehr: alteWerte,
+        zusatz: leistung,
       ),
-      ..._kette(artikelKette, mehr: alteWerte, zusatz: leistung),
-    ],
     if (historie.isNotEmpty)
       ..._mitTitel(
+        s,
         _abschnitt('Festgehaltene Versionen'),
-        zeilen: historie.length,
+        zeilen: historie.fold(1, (n, st) => n + _zeilenFuer(st.notiz, 50)),
         [
           _tabelle(
             kopf: const ['Version', 'Datum', 'Was sich geändert hat', 'Kette'],
@@ -2530,13 +2667,25 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
           ),
         ],
       ),
-    if (haccp.gefahren.isEmpty) ...[
-      _abschnitt('HACCP-Gefahrenanalyse'),
-      _leer('Noch keine Gefahren bewertet.'),
-    ] else
-      ..._mitTitel(
+    if (haccp.gefahren.isEmpty)
+      _zusammen(s, [
         _abschnitt('HACCP-Gefahrenanalyse'),
-        zeilen: haccp.gefahren.length,
+        _leer('Noch keine Gefahren bewertet.'),
+      ])
+    else
+      ..._mitTitel(
+        s,
+        _abschnitt('HACCP-Gefahrenanalyse'),
+        // Zeilen, wie sie gesetzt werden: lange Maßnahmen brauchen mehr.
+        zeilen: haccp.gefahren.fold(
+          2,
+          (n, g) =>
+              n +
+              math.max(
+                _zeilenFuer(g.gefahr, 30),
+                _zeilenFuer(g.massnahmen, 55),
+              ),
+        ),
         [
           _tabelle(
             kopf: const ['Gefahr', 'Art', 'S x W', 'Risiko', 'Maßnahmen'],
@@ -2575,8 +2724,17 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
       ),
     if (haccp.lenkungspunkte.isNotEmpty)
       ..._mitTitel(
+        s,
         _abschnitt('Lenkungspunkte'),
-        zeilen: haccp.lenkungspunkte.length,
+        zeilen: haccp.lenkungspunkte.fold(
+          1,
+          (n, l) =>
+              n +
+              math.max(
+                _zeilenFuer('${l.schritt}\n${l.beschreibung}', 30),
+                _zeilenFuer(l.lenkung, 45),
+              ),
+        ),
         [
           _tabelle(
             kopf: const [
@@ -2644,83 +2802,87 @@ List<pw.Widget> _kapitelFreigabe(_Satz s, _Kapitel k) {
   final a = b.abgleich;
   return [
     ..._kapitelKopf(s, k),
-    _abschnitt('Freigabe als Artikel'),
-    if (artikel == null)
-      _leer(
-        p.artikelId == null
-            ? 'Noch nicht als Artikel freigegeben.'
-            : 'Der freigegebene Artikel ist nicht mehr da.',
-      )
-    else ...[
-      _felder([
-        (
-          'Artikel',
-          '${artikel.artikelnummer} · ${artikel.artikelbezeichnung}'
-              '${artikel.deletedAt == null ? '' : ' (im Planer gelöscht)'}',
-        ),
-        ('Freigegeben am', _datum(p.freigegebenAm)),
-        (
-          'Rezepturstand',
-          freigabeStand == null
-              ? ''
-              : 'Stand ${freigabeStand.nummer} · '
-                    '${_rezepturName(b, freigabeStand)}',
-        ),
-        ('Produktgruppe', produktgruppeLabel(artikel.produktgruppe)),
-        (
-          'Haltbarkeit',
-          artikel.haltbarkeitTage == null
-              ? ''
-              : '${artikel.haltbarkeitTage} Tage',
-        ),
-        ('Allergene', merkmaleLabel(artikel.allergene, kAllergene)),
-        (
-          'aw-Wert (Ziel)',
-          artikel.zielAw == null ? '' : _zahl(artikel.zielAw, nachkomma: 2),
-        ),
-      ]),
-      if (a != null) ...[
-        _etikett('Verlust in der Produktion'),
-        _fliess(
-          'Verlust ${a.produktionen == 1 ? 'der letzten Produktion' : 'im Mittel der letzten ${a.produktionen} Produktionen'}: '
-          '${prozentText(a.gemessenProzent)} — die Rezeptur rechnet mit '
-          '${prozentText(a.rezepturProzent)}.',
-        ),
-        if (a.fleischZuHoch &&
-            a.fleischRezeptur != null &&
-            a.fleischGemessen != null)
-          _punkt(
-            'Mit dem gemessenen Verlust enthält das Produkt '
-            '${prozentText(a.fleischGemessen!)} Fleisch — die Rezeptur und '
-            'das Etikett nennen ${prozentText(a.fleischRezeptur!)}. '
-            'Verlust in der Rezeptur anpassen und die Mengenangaben prüfen.',
-            farbe: _fehler,
-          )
-        else if (a.verlustWeichtAb)
-          _punkt(
-            'Der gemessene Verlust weicht um '
-            '${_zahl(a.differenz.abs())} Prozentpunkte ab.',
-            farbe: _warn,
-          )
-        else
-          _punkt('Rezeptur und Produktion passen zusammen.', farbe: _ok),
+    _zusammen(s, [
+      _abschnitt('Freigabe als Artikel'),
+      if (artikel == null)
+        _leer(
+          p.artikelId == null
+              ? 'Noch nicht als Artikel freigegeben.'
+              : 'Der freigegebene Artikel ist nicht mehr da.',
+        )
+      else ...[
+        _felder([
+          (
+            'Artikel',
+            '${artikel.artikelnummer} · ${artikel.artikelbezeichnung}'
+                '${artikel.deletedAt == null ? '' : ' (im Planer gelöscht)'}',
+          ),
+          ('Freigegeben am', _datum(p.freigegebenAm)),
+          (
+            'Rezepturstand',
+            freigabeStand == null
+                ? ''
+                : 'Stand ${freigabeStand.nummer} · '
+                      '${_rezepturName(b, freigabeStand)}',
+          ),
+          ('Produktgruppe', produktgruppeLabel(artikel.produktgruppe)),
+          (
+            'Haltbarkeit',
+            artikel.haltbarkeitTage == null
+                ? ''
+                : '${artikel.haltbarkeitTage} Tage',
+          ),
+          ('Allergene', merkmaleLabel(artikel.allergene, kAllergene)),
+          (
+            'aw-Wert (Ziel)',
+            artikel.zielAw == null ? '' : _zahl(artikel.zielAw, nachkomma: 2),
+          ),
+        ]),
+        if (a != null) ...[
+          _etikett('Verlust in der Produktion'),
+          _fliess(
+            'Verlust ${a.produktionen == 1 ? 'der letzten Produktion' : 'im Mittel der letzten ${a.produktionen} Produktionen'}: '
+            '${prozentText(a.gemessenProzent)} — die Rezeptur rechnet mit '
+            '${prozentText(a.rezepturProzent)}.',
+          ),
+          if (a.fleischZuHoch &&
+              a.fleischRezeptur != null &&
+              a.fleischGemessen != null)
+            _punkt(
+              'Mit dem gemessenen Verlust enthält das Produkt '
+              '${prozentText(a.fleischGemessen!)} Fleisch — die Rezeptur und '
+              'das Etikett nennen ${prozentText(a.fleischRezeptur!)}. '
+              'Verlust in der Rezeptur anpassen und die Mengenangaben prüfen.',
+              farbe: _fehler,
+            )
+          else if (a.verlustWeichtAb)
+            _punkt(
+              'Der gemessene Verlust weicht um '
+              '${_zahl(a.differenz.abs())} Prozentpunkte ab.',
+              farbe: _warn,
+            )
+          else
+            _punkt('Rezeptur und Produktion passen zusammen.', farbe: _ok),
+        ],
       ],
-    ],
-    _abschnitt('Projekt-Checkliste', zusatz: '${check.text} erledigt'),
-    for (final c in check.punkte)
-      _mitZeichen(
-        c.erledigt
-            ? _Zeichen.erledigt
-            : (c.zurueckgestellt ? _Zeichen.spaeter : _Zeichen.offen),
-        c.punkt.label,
-        zusatz: [
-          if (c.zurueckgestellt && !c.erledigt) 'zurückgestellt',
-          if (c.vonHand) 'von Hand',
-          if (_oderNull(c.text) case final t?) t,
-          if (c.punkt.schluessel == 'etikettErstellt')
-            originaletikettStand(p),
-        ].join(' · '),
-      ),
+    ]),
+    _zusammen(s, [
+      _abschnitt('Projekt-Checkliste', zusatz: '${check.text} erledigt'),
+      for (final c in check.punkte)
+        _mitZeichen(
+          c.erledigt
+              ? _Zeichen.erledigt
+              : (c.zurueckgestellt ? _Zeichen.spaeter : _Zeichen.offen),
+          c.punkt.label,
+          zusatz: [
+            if (c.zurueckgestellt && !c.erledigt) 'zurückgestellt',
+            if (c.vonHand) 'von Hand',
+            if (_oderNull(c.text) case final t?) t,
+            if (c.punkt.schluessel == 'etikettErstellt')
+              originaletikettStand(p),
+          ].join(' · '),
+        ),
+    ]),
   ];
 }
 
@@ -2750,110 +2912,129 @@ List<pw.Widget> _kapitelWeg(_Satz s, _Kapitel k) {
     ),
   ];
   if (projektStaende.isNotEmpty) {
-    widgets.addAll([
-      _abschnitt('Die Stände im Überblick'),
-      _tabelle(
-        kopf: [
-          if (mehrereRezepturen) 'Rezeptur',
-          'Stand',
-          'Status',
-          'Datum',
-          'Grund',
-          'Fleisch',
-          'Fett',
-          'Salz',
-        ],
-        rechts: {for (var i = 0; i < 3; i++) (mehrereRezepturen ? 5 : 4) + i},
-        breiten: {
-          if (mehrereRezepturen) 0: const pw.FlexColumnWidth(1.4),
-          (mehrereRezepturen ? 1 : 0): const pw.FixedColumnWidth(34),
-          (mehrereRezepturen ? 2 : 1): const pw.FixedColumnWidth(72),
-          (mehrereRezepturen ? 3 : 2): const pw.FixedColumnWidth(54),
-          (mehrereRezepturen ? 4 : 3): const pw.FlexColumnWidth(2.6),
-          (mehrereRezepturen ? 5 : 4): const pw.FixedColumnWidth(42),
-          (mehrereRezepturen ? 6 : 5): const pw.FixedColumnWidth(36),
-          (mehrereRezepturen ? 7 : 6): const pw.FixedColumnWidth(38),
-        },
-        zeilen: [
-          for (final v in projektStaende)
-            () {
-              final e = b.ergebnisse[v.id];
-              final status = _standStatus(s, v);
-              return [
-                if (mehrereRezepturen) _zelle(namen[v.rezepturId] ?? ''),
-                _zelle('${v.nummer}', fett: true),
-                _zelle(
-                  status,
-                  farbe: switch (status) {
-                    'freigegeben' => _ok,
-                    'Entwurf' => _warn,
-                    _ => _schwarz,
-                  },
-                ),
-                _zelle(_datum(v.abgeschlossenAm ?? v.updatedAt)),
-                _zelle(_oderNull(v.notiz) ?? '-', groesse: 7.8),
-                _zelle(e == null ? '' : prozentText(e.fleischanteilProzent)),
-                _zelle(
-                  e?.je100g.fett == null ? '' : '${_zahl(e!.je100g.fett)} g',
-                ),
-                _zelle(
-                  e?.je100g.salz == null
-                      ? ''
-                      : '${_zahl(e!.je100g.salz, nachkomma: 2)} g',
-                ),
-              ];
-            }(),
+    widgets.addAll(
+      _mitTitel(
+        s,
+        _abschnitt('Die Stände im Überblick'),
+        zeilen: projektStaende.length + 1,
+        [
+          _tabelle(
+            kopf: [
+              if (mehrereRezepturen) 'Rezeptur',
+              'Stand',
+              'Status',
+              'Datum',
+              'Grund',
+              'Fleisch',
+              'Fett',
+              'Salz',
+            ],
+            rechts: {for (var i = 0; i < 3; i++) (mehrereRezepturen ? 5 : 4) + i},
+            breiten: {
+              if (mehrereRezepturen) 0: const pw.FlexColumnWidth(1.4),
+              (mehrereRezepturen ? 1 : 0): const pw.FixedColumnWidth(34),
+              (mehrereRezepturen ? 2 : 1): const pw.FixedColumnWidth(72),
+              (mehrereRezepturen ? 3 : 2): const pw.FixedColumnWidth(54),
+              (mehrereRezepturen ? 4 : 3): const pw.FlexColumnWidth(2.6),
+              (mehrereRezepturen ? 5 : 4): const pw.FixedColumnWidth(42),
+              (mehrereRezepturen ? 6 : 5): const pw.FixedColumnWidth(36),
+              (mehrereRezepturen ? 7 : 6): const pw.FixedColumnWidth(38),
+            },
+            zeilen: [
+              for (final v in projektStaende)
+                () {
+                  final e = b.ergebnisse[v.id];
+                  final status = _standStatus(s, v);
+                  return [
+                    if (mehrereRezepturen) _zelle(namen[v.rezepturId] ?? ''),
+                    _zelle('${v.nummer}', fett: true),
+                    _zelle(
+                      status,
+                      farbe: switch (status) {
+                        'freigegeben' => _ok,
+                        'Entwurf' => _warn,
+                        _ => _schwarz,
+                      },
+                    ),
+                    _zelle(_datum(v.abgeschlossenAm ?? v.updatedAt)),
+                    _zelle(_oderNull(v.notiz) ?? '-', groesse: 7.8),
+                    _zelle(e == null ? '' : prozentText(e.fleischanteilProzent)),
+                    _zelle(
+                      e?.je100g.fett == null ? '' : '${_zahl(e!.je100g.fett)} g',
+                    ),
+                    _zelle(
+                      e?.je100g.salz == null
+                          ? ''
+                          : '${_zahl(e!.je100g.salz, nachkomma: 2)} g',
+                    ),
+                  ];
+                }(),
+            ],
+          ),
         ],
       ),
-    ]);
+    );
   }
 
-  widgets.add(_abschnitt('Der Weg'));
+  // Jeder Punkt des Wegs als Block, die Überschrift bei seinem ersten.
+  var kopf = <pw.Widget>[_abschnitt('Der Weg')];
   for (final punkt in weg) {
     switch (punkt) {
       case WegAnfang(:final eintraege):
         widgets.add(
-          _wegKopf(
-            'START',
-            'Idee und Anfrage · ${_datum(s.p.createdAt)}',
-            _akzent,
-          ),
+          _zusammen(s, [
+            ...kopf,
+            _wegKopf(
+              'START',
+              'Idee und Anfrage · ${_datum(s.p.createdAt)}',
+              _akzent,
+            ),
+            if (eintraege.isNotEmpty) _wegEintrag(s, eintraege.first),
+          ]),
         );
-        for (final e in eintraege) {
-          widgets.add(_wegEintrag(s, e));
+        for (final e in eintraege.skip(1)) {
+          widgets.add(_zusammen(s, [_wegEintrag(s, e)]));
         }
       case WegStation():
-        widgets.addAll(_wegStation(s, punkt));
+        widgets.addAll(_wegStation(s, punkt, kopf: kopf));
       case WegPhase():
         final e = punkt.eintrag;
         final w = statusWechsel(e);
         widgets.add(
-          _wegKopf(
-            'PHASE',
-            [
-              if (w == null)
-                _phasenName(punkt.status)
-              else
-                '${w.alt == null ? '' : '${_phasenName(w.alt!)} » '}'
-                    '${_phasenName(w.neu)}',
-              _datum(e.datum),
-              e.titel,
-            ].join(' · '),
-            _phasenFarbe(punkt.status),
-          ),
+          _zusammen(s, [
+            ...kopf,
+            _wegKopf(
+              'PHASE',
+              [
+                if (w == null)
+                  _phasenName(punkt.status)
+                else
+                  '${w.alt == null ? '' : '${_phasenName(w.alt!)} » '}'
+                      '${_phasenName(w.neu)}',
+                _datum(e.datum),
+                e.titel,
+              ].join(' · '),
+              _phasenFarbe(punkt.status),
+            ),
+            for (final a in texteAus(e.aenderungen))
+              _punkt(a, einzug: 12, farbe: _grau),
+          ]),
         );
-        for (final a in texteAus(e.aenderungen)) {
-          widgets.add(_punkt(a, einzug: 12, farbe: _grau));
-        }
     }
+    kopf = const [];
   }
   if (!weg.any((w) => w is WegStation)) {
-    widgets.add(_leer('Noch kein abgeschlossener Rezepturstand.'));
+    widgets.add(
+      _zusammen(s, [
+        ...kopf,
+        _leer('Noch kein abgeschlossener Rezepturstand.'),
+      ]),
+    );
   }
   for (final a in b.inArbeit) {
     final e = b.ergebnisse[a.version.id];
     widgets.add(
-      _zusammen([
+      _zusammen(s, [
         _wegKopf(
           'IN ARBEIT',
           [
@@ -2947,7 +3128,11 @@ pw.Widget _wegEintrag(_Satz s, ProjektEintrag e) {
   );
 }
 
-List<pw.Widget> _wegStation(_Satz s, WegStation punkt) {
+List<pw.Widget> _wegStation(
+  _Satz s,
+  WegStation punkt, {
+  List<pw.Widget> kopf = const [],
+}) {
   final b = s.b;
   final e = punkt.eintrag;
   final v = b.versionen[punkt.versionId];
@@ -2963,7 +3148,8 @@ List<pw.Widget> _wegStation(_Satz s, WegStation punkt) {
       .firstOrNull
       ?.name;
   return [
-    _zusammen([
+    _zusammen(s, [
+      ...kopf,
       _wegKopf(
         'STAND $nummer',
         [
@@ -3031,26 +3217,34 @@ List<pw.Widget> _wegStation(_Satz s, WegStation punkt) {
           ),
         ),
     ]),
-    if (grund != null && !kurz) ...[
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(left: 12, top: 4),
-        child: _t('Warum', groesse: 8, farbe: _grau),
+    if (grund != null && !kurz)
+      ..._textMitTitel(
+        s,
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 12, top: 4),
+          child: _t('Warum', groesse: 8, farbe: _grau),
+        ),
+        _fliess(grund, groesse: 8.5, einzug: 12),
+        kurz: _kurzerText(grund),
       ),
-      _fliess(grund, groesse: 8.5, einzug: 12),
-    ],
-    if (aenderungen.isNotEmpty) ...[
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(left: 12, top: 4),
-        child: _t('Was sich geändert hat', groesse: 8, farbe: _grau),
-      ),
-      for (final a in aenderungen) _punkt(a, einzug: 12),
-    ],
+    if (aenderungen.isNotEmpty)
+      _zusammen(s, [
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 12, top: 4),
+          child: _t('Was sich geändert hat', groesse: 8, farbe: _grau),
+        ),
+        for (final a in aenderungen) _punkt(a, einzug: 12),
+      ]),
     if (punkt.rueckmeldungen.isNotEmpty) ...[
-      pw.Padding(
-        padding: const pw.EdgeInsets.only(left: 12, top: 4),
-        child: _t('Rückmeldungen dazu', groesse: 8, farbe: _grau),
-      ),
-      for (final r in punkt.rueckmeldungen) _wegEintrag(s, r),
+      _zusammen(s, [
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 12, top: 4),
+          child: _t('Rückmeldungen dazu', groesse: 8, farbe: _grau),
+        ),
+        _wegEintrag(s, punkt.rueckmeldungen.first),
+      ]),
+      for (final r in punkt.rueckmeldungen.skip(1))
+        _zusammen(s, [_wegEintrag(s, r)]),
     ],
   ];
 }
@@ -3209,6 +3403,9 @@ List<pw.Widget> _kapitelVerlauf(_Satz s, _Kapitel k) {
   final phasen = statusJeEintrag(eintraege, ProjektStatus.aus(s.p.status));
   final erster = eintraege.first.datum;
   final letzter = eintraege.last.datum;
+  final strahl = s.inhalt.zeitstrahl
+      ? _zeitstrahl(s, eintraege, phasen)
+      : const <pw.Widget>[];
   return [
     ..._kapitelKopf(
       s,
@@ -3220,14 +3417,19 @@ List<pw.Widget> _kapitelVerlauf(_Satz s, _Kapitel k) {
                 '${_datum(letzter)}${zahl.offen == 0 ? '' : offen}.',
     ),
     if (s.inhalt.zeitstrahl) ...[
-      _zeitstrahlLegende(eintraege, phasen),
-      ..._zeitstrahl(s, eintraege, phasen),
+      // Die Legende bleibt bei der ersten Zeile.
+      _zusammen(s, [_zeitstrahlLegende(eintraege, phasen), ...strahl.take(1)]),
+      ...strahl.skip(1),
     ],
-    if (s.inhalt.verlaufEinzeln) ...[
-      if (s.inhalt.zeitstrahl)
-        _abschnitt('Im Einzelnen', zusatz: 'der älteste Eintrag zuerst'),
-      ..._verlaufImEinzelnen(s, eintraege),
-    ],
+    if (s.inhalt.verlaufEinzeln)
+      ..._verlaufImEinzelnen(
+        s,
+        eintraege,
+        ueberschrift: [
+          if (s.inhalt.zeitstrahl)
+            _abschnitt('Im Einzelnen', zusatz: 'der älteste Eintrag zuerst'),
+        ],
+      ),
   ];
 }
 
@@ -3555,12 +3757,19 @@ pw.Widget _zeitstrahlKarte(_Satz s, ProjektEintrag e, double breite) {
 
 /// Jeder Eintrag im Einzelnen — nach Monaten, mit Beschreibung,
 /// Änderungen und Kommentaren.
-List<pw.Widget> _verlaufImEinzelnen(_Satz s, List<ProjektEintrag> eintraege) {
+/// Jeder Eintrag als Block — mit Text, Änderungen und Kommentaren, der
+/// Monat bei seinem ersten Eintrag, [ueberschrift] beim ersten überhaupt.
+List<pw.Widget> _verlaufImEinzelnen(
+  _Satz s,
+  List<ProjektEintrag> eintraege, {
+  List<pw.Widget> ueberschrift = const [],
+}) {
   final b = s.b;
   final dateien = {for (final d in b.dateien) d.id: d};
   const einzug = 74.0;
   final widgets = <pw.Widget>[];
   String? monat;
+  var ersterEintrag = true;
   for (final e in eintraege) {
     final art = EintragArt.aus(e.art);
     final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
@@ -3618,26 +3827,11 @@ List<pw.Widget> _verlaufImEinzelnen(_Satz s, List<ProjektEintrag> eintraege) {
             padding: const pw.EdgeInsets.only(top: 2),
             child: _fliess(beschreibung, groesse: 8.3, einzug: einzug),
           );
-    // Eine kurze Beschreibung bleibt bei ihrem Eintrag, der Monat bei
-    // seinem ersten Eintrag; eine lange darf über die Seite laufen.
-    final kurz = beschreibung == null || beschreibung.length <= 600;
     final m = '${Format.monate[e.datum.month - 1]} ${e.datum.year}';
-    widgets.add(
-      _zusammen([
-        if (m != monat)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 8, bottom: 1),
-            child: _t(m, groesse: 8.5, fett: true, farbe: _akzent),
-          ),
-        kopf,
-        if (kurz && text != null) text,
-      ]),
-    );
-    monat = m;
-    if (!kurz && text != null) widgets.add(text);
     final aenderungen = texteAus(e.aenderungen);
-    if (aenderungen.isNotEmpty) {
-      widgets.add(
+    final kommentare = Kommentar.listeAus(e.kommentare);
+    final nachtrag = [
+      if (aenderungen.isNotEmpty)
         pw.Padding(
           padding: const pw.EdgeInsets.only(top: 2),
           child: _fliess(
@@ -3647,10 +3841,7 @@ List<pw.Widget> _verlaufImEinzelnen(_Satz s, List<ProjektEintrag> eintraege) {
             einzug: einzug,
           ),
         ),
-      );
-    }
-    for (final kom in Kommentar.listeAus(e.kommentare)) {
-      widgets.add(
+      for (final kom in kommentare)
         pw.Padding(
           padding: const pw.EdgeInsets.only(top: 2),
           child: _fliess(
@@ -3661,8 +3852,40 @@ List<pw.Widget> _verlaufImEinzelnen(_Satz s, List<ProjektEintrag> eintraege) {
             einzug: einzug,
           ),
         ),
-      );
+    ];
+    // Ein Eintrag mit Text, Änderungen und Kommentaren als Block, der
+    // Monat bei seinem ersten Eintrag. Ist etwas davon lang, läuft es
+    // nach dem Kopf über die Seiten — der Kopf beginnt dann nicht ganz
+    // unten auf einer Seite.
+    final kurz = _kurzerText(
+      [
+        beschreibung ?? '',
+        aenderungen.join(' · '),
+        for (final kom in kommentare) kom.text,
+      ].join('\n'),
+    );
+    if (!kurz && s.rahmen.umbrueche) widgets.add(pw.NewPage(freeSpace: 140));
+    widgets.add(
+      _zusammen(s, [
+        if (ersterEintrag) ...ueberschrift,
+        if (m != monat)
+          pw.Padding(
+            padding: const pw.EdgeInsets.only(top: 8, bottom: 1),
+            child: _t(m, groesse: 8.5, fett: true, farbe: _akzent),
+          ),
+        kopf,
+        if (kurz) ...[
+          if (text != null) text,
+          ...nachtrag,
+        ],
+      ]),
+    );
+    if (!kurz) {
+      if (text != null) widgets.add(text);
+      widgets.addAll(nachtrag);
     }
+    monat = m;
+    ersterEintrag = false;
   }
   return widgets;
 }
