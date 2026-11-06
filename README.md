@@ -147,7 +147,8 @@ Standard. Strg+P druckt.
   - **Etikett-Entwurf**: Breite des Etiketts (80, 110 oder 150 mm), Kopf,
     Nährwerttabelle, Platzhalter, was noch offen ist.
   - **Projektbericht**: Kapitel, Steckbrief, Inhaltsverzeichnis, Verlauf als
-    Zeitstrahl und im Einzelnen, Kapitel auf neuen Seiten oder fortlaufend.
+    Zeitstrahl und im Einzelnen, Kapitel auf neuen Seiten oder fortlaufend;
+    links unten „Kopf- und Fußzeile …" — die Vorschau folgt gleich.
   - **Rezepturblatt** (Rezeptur, Knopf neben „Mehr"): ein Stand mit Mengen
     wie in der Rezeptur, **umgerechnet auf eine Ansatzgröße oder ein
     Endgewicht** (in kg einzugeben; der Verlust ist eingerechnet), nur mit
@@ -336,7 +337,8 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Vorschau, alles oder nichts. Die Mappe selbst ist nicht verschlüsselt.
 - **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil
   einer Rezeptur (nach Wahl, ihr neuester Stand) auf ein Ziel einstellen,
-  Entwicklung in Zahlen.
+  Kopf- und Fußzeile und leere Vorlage des Projektberichts, Entwicklung in
+  Zahlen.
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
   Die Prozesskette des Projekts wird die des Artikels: Schritte derselben
@@ -394,10 +396,32 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Nur was länger ist als eine Seite — lange Texte und Tabellen —, läuft
   weiter, beginnt aber nicht ganz unten auf einer Seite; Tabellen
   wiederholen dann ihre Kopfzeile.
+- **Kopf- und Fußzeile des Projektberichts** wie auf einem Formblatt, auf
+  jeder Seite: oben links die Nummer des Formblatts, in der Mitte der
+  Bericht und sein Projekt, rechts das Logo aus der Kopfzeile der
+  Spezifikationsvorlage (die deutsche, sonst die englische; JPEG oder PNG,
+  so groß, wie die Vorlage es druckt, abschaltbar); unten links „Erstellt
+  von", „Geprüft von" und „Version", rechts „Stand", „ersetzt den Stand"
+  und darunter die Seite. Die Angaben trägt man unter Werkzeuge »
+  Projektbericht oder im Druckfenster des Berichts ein („Kopf- und
+  Fußzeile …"); „Neue Version ab heute" zählt die Version weiter, setzt
+  den Stand auf heute und trägt den bisherigen bei „ersetzt den Stand" ein.
+  Leere Angaben fallen weg; ohne jede steht unten links, wann gedruckt
+  wurde. Die Angaben liegen verschlüsselt bei den Dateien der
+  Produktentwicklung und wandern mit ihr ins Backup. Wann gedruckt wurde,
+  steht auf Seite 1.
+- **Projektbericht-Vorlage** (Werkzeuge » Projektbericht » „Vorlage
+  speichern…" oder unter „Erstellen"): der Bericht leer zum Ablegen bei den
+  Formblättern — mit Kopf und Fuß, jedem Kapitel und jedem Abschnitt, den
+  ein Bericht haben kann. Statt der Angaben eines Projekts steht in «»,
+  was dort erscheint; was nur unter Umständen erscheint, sagt die graue
+  Zeile neben der Überschrift. Ein Test hält sie beim Bericht: Jede
+  Überschrift und jede Spalte des Berichts muss auch in der Vorlage stehen.
 
 Firmenvorlagen, Logos und Schlüssel gehören nicht ins Repository: Sie werden
 in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine
-Firmenangaben.
+Firmenangaben. Auch Formblattnummer, Namen und Stand für Kopf und Fuß des
+Projektberichts trägt jeder selbst ein.
 
 ## Daten und Sicherung
 

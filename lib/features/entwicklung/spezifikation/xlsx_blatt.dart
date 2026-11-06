@@ -195,6 +195,10 @@ class XlsxMappe {
 
   bool hat(String pfad) => _dateien.containsKey(pfad);
 
+  /// Der Inhalt von [pfad], wie er ist — etwa ein Bild. null, wenn es die
+  /// Datei nicht gibt.
+  Uint8List? bytes(String pfad) => _dateien[pfad];
+
   /// Der Inhalt von [pfad] als Text — null, wenn es die Datei nicht gibt.
   String? text(String pfad) {
     final schon = _texte[pfad];

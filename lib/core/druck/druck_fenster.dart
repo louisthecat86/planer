@@ -22,16 +22,35 @@ import 'druck_speicher.dart';
 /// Vorschau, die jeder Änderung folgt. Gedruckt wird über den
 /// Druckdialog des Systems — oder als PDF gespeichert.
 ///
-/// Liefert true, wenn gedruckt oder gespeichert wurde.
+/// Liefert true, wenn gedruckt oder gespeichert wurde. [aktionen] stehen
+/// links unter der Wahl — etwa die Kopf- und Fußzeile eines Berichts.
 Future<bool> druckFensterOeffnen(
   BuildContext context,
-  DruckAuftrag auftrag,
-) async {
+  DruckAuftrag auftrag, {
+  List<DruckAktion> aktionen = const [],
+}) async {
   final ergebnis = await showDialog<bool>(
     context: context,
-    builder: (_) => DruckFenster(auftrag: auftrag),
+    builder: (_) => DruckFenster(auftrag: auftrag, aktionen: aktionen),
   );
   return ergebnis ?? false;
+}
+
+/// Ein Knopf im Druckfenster für etwas, das nicht zur Wahl gehört — etwa
+/// die Kopf- und Fußzeile eines Berichts. Liefert [ausfuehren] true, hat
+/// sich etwas geändert: Das Fenster setzt das Dokument neu.
+class DruckAktion {
+  const DruckAktion({
+    required this.titel,
+    required this.ausfuehren,
+    this.hinweis,
+    this.icon = Icons.tune,
+  });
+
+  final String titel;
+  final String? hinweis;
+  final IconData icon;
+  final Future<bool> Function(BuildContext context) ausfuehren;
 }
 
 /// Was das Druckfenster vom System braucht: gemerkte Einstellungen, die
@@ -177,9 +196,16 @@ final druckSystemProvider = Provider<DruckSystem>(
 
 /// Das Fenster zu [druckFensterOeffnen].
 class DruckFenster extends ConsumerStatefulWidget {
-  const DruckFenster({super.key, required this.auftrag});
+  const DruckFenster({
+    super.key,
+    required this.auftrag,
+    this.aktionen = const [],
+  });
 
   final DruckAuftrag auftrag;
+
+  /// Knöpfe links unter der Wahl ([DruckAktion]).
+  final List<DruckAktion> aktionen;
 
   @override
   ConsumerState<DruckFenster> createState() => _DruckFensterState();
@@ -378,6 +404,17 @@ class _DruckFensterState extends ConsumerState<DruckFenster> {
         ),
       );
 
+  /// Führt [a] aus — hat sich etwas geändert, wird neu gesetzt.
+  Future<void> _aktion(DruckAktion a) async {
+    try {
+      final geaendert = await a.ausfuehren(context);
+      final wahl = _wahl;
+      if (geaendert && mounted && wahl != null) _aendern(wahl);
+    } catch (e) {
+      _melde(fehlerText(e));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -471,6 +508,19 @@ class _DruckFensterState extends ConsumerState<DruckFenster> {
         if (optionen.isNotEmpty) ...[
           _abschnitt(theme, 'Was wird gedruckt?'),
           ..._optionen(theme, wahl, optionen),
+          const SizedBox(height: 8),
+        ],
+        if (widget.aktionen.isNotEmpty) ...[
+          _abschnitt(theme, 'Einstellen'),
+          for (final a in widget.aktionen)
+            ListTile(
+              leading: Icon(a.icon),
+              title: Text(a.titel),
+              subtitle: a.hinweis == null ? null : Text(a.hinweis!),
+              onTap: _beschaeftigt ? null : () => _aktion(a),
+              contentPadding: EdgeInsets.zero,
+              dense: true,
+            ),
           const SizedBox(height: 8),
         ],
         _abschnitt(theme, 'Wie wird gedruckt?'),

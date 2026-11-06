@@ -877,6 +877,7 @@ void main() {
         'Spezifikation…',
         'Etikett…',
         'Projektbericht (PDF)…',
+        'Projektbericht-Vorlage (leer)…',
       ]) {
         expect(find.text(t), findsOneWidget, reason: t);
       }

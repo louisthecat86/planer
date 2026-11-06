@@ -7,6 +7,8 @@ import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
+import '../bericht/bericht_drucken.dart';
+import '../bericht/formblatt_dialog.dart';
 import '../daten/entwicklung_repository.dart';
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
@@ -50,8 +52,8 @@ Future<void> fleischanteilMitWahl(BuildContext context, WidgetRef ref) async {
   await oeffneRezeptur(context, rezeptur.id);
 }
 
-/// Der Reiter „Werkzeuge": Rückrechnung, Fleischanteil und die Zahlen der
-/// Entwicklung.
+/// Der Reiter „Werkzeuge": Rückrechnung, Fleischanteil, Kopf- und Fußzeile
+/// und Vorlage des Projektberichts und die Zahlen der Entwicklung.
 class WerkzeugeAnsicht extends ConsumerWidget {
   const WerkzeugeAnsicht({super.key});
 
@@ -114,6 +116,44 @@ class WerkzeugeAnsicht extends ConsumerWidget {
                       onPressed: () => fleischanteilMitWahl(context, ref),
                       icon: const Icon(Icons.tune, size: 18),
                       label: const Text('Rezeptur wählen…'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(
+              width: 460,
+              child: Bereich(
+                titel: 'Projektbericht',
+                icon: Icons.picture_as_pdf_outlined,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Kopf- und Fußzeile wie auf den Formblättern: Nummer, '
+                      'Logo, Erstellt und Geprüft von, Version und Stand. Die '
+                      'leere Vorlage zeigt, was wo im Bericht steht — zum '
+                      'Ablegen bei den Formblättern.',
+                      style: klein,
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          key: const ValueKey('werkzeug-kopf-fuss'),
+                          onPressed: () => formblattBearbeiten(context),
+                          icon: const Icon(Icons.edit_note, size: 18),
+                          label: const Text('Kopf- und Fußzeile…'),
+                        ),
+                        FilledButton.icon(
+                          key: const ValueKey('werkzeug-berichtvorlage'),
+                          onPressed: () => projektberichtVorlage(context, ref),
+                          icon: const Icon(Icons.save_alt, size: 18),
+                          label: const Text('Vorlage speichern…'),
+                        ),
+                      ],
                     ),
                   ],
                 ),

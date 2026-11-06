@@ -10,6 +10,7 @@ import 'package:produktion_planer/features/entwicklung/haccp/haccp_modell.dart';
 import 'package:produktion_planer/features/entwicklung/haccp/prozess_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 
+import 'helpers/pdf_lesen.dart';
 import 'helpers/test_db.dart';
 
 /// Die Seitenumbrüche des Projektberichts: Jedes Kapitel beginnt auf einer
@@ -49,45 +50,6 @@ void main() {
     return latin1.decode(bytes);
   }
 
-  /// Der Inhalt jeder Seite, der Reihe nach.
-  List<String> seiten(String roh) {
-    String objekt(String nr) {
-      final anfang = RegExp('(^|\\n)$nr 0 obj\\b').firstMatch(roh)!.end;
-      return roh.substring(anfang, roh.indexOf('endobj', anfang));
-    }
-
-    final kinder =
-        RegExp(r'/Type/Pages/Kids\[([^\]]*)\]').firstMatch(roh)!.group(1)!;
-    return [
-      for (final k in RegExp(r'(\d+) 0 R').allMatches(kinder))
-        objekt(
-          RegExp(r'/Contents (\d+) 0 R')
-              .firstMatch(objekt(k.group(1)!))!
-              .group(1)!,
-        ),
-    ];
-  }
-
-  /// Wo die Kapitel beginnen: je Kapitel die Seite (ab 1) und die Höhe auf
-  /// ihr — aus den Sprungzielen der Lesezeichen.
-  List<({int seite, double hoehe})> kapitelAnfaenge(String roh) {
-    final kinder = [
-      for (final k in RegExp(r'(\d+) 0 R').allMatches(
-        RegExp(r'/Type/Pages/Kids\[([^\]]*)\]').firstMatch(roh)!.group(1)!,
-      ))
-        k.group(1)!,
-    ];
-    return [
-      for (final m in RegExp(
-        r'\(kapitel-\d+\)<</D\[(\d+) 0 R/XYZ [\d.]+ ([\d.]+)',
-      ).allMatches(roh))
-        (
-          seite: kinder.indexOf(m.group(1)!) + 1,
-          hoehe: double.parse(m.group(2)!),
-        ),
-    ];
-  }
-
   test('jedes Kapitel beginnt oben auf einer neuen Seite', () async {
     final id = await projekte.projektAnlegen(name: 'Kurz Testart');
     final roh = await pdf(id);
@@ -101,7 +63,7 @@ void main() {
       isTrue,
       reason: 'Jedes oben auf der Seite',
     );
-    expect(seiten(roh), hasLength(8));
+    expect(pdfSeiten(roh), hasLength(8));
   });
 
   test(
@@ -132,7 +94,7 @@ void main() {
         ),
       ),
     );
-    final s = seiten(await pdf(id));
+    final s = pdfSeiten(await pdf(id));
     int seiteVon(String wort) => s.indexWhere((t) => t.contains('($wort)'));
 
     final verteilt = <int>{};
@@ -179,7 +141,7 @@ void main() {
         ),
       ),
     );
-    final s = seiten(await pdf(id));
+    final s = pdfSeiten(await pdf(id));
     final alles = s.join();
     for (final wort in ['Notiz0', 'Notiz299', 'Zeile0', 'Zeile149']) {
       expect(alles, contains('($wort)'), reason: wort);

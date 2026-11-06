@@ -30,7 +30,10 @@ import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
 import '../spezifikation/spez_angaben.dart';
+import 'bericht_formblatt.dart';
 import 'projekt_bericht.dart';
+
+part 'bericht_vorlage.dart';
 
 // Der Projektbericht als PDF — eine Projektakte zum Nachschlagen: vorn ein
 // Steckbrief mit dem Stand auf einen Blick und dem Inhalt, dahinter je ein
@@ -38,6 +41,11 @@ import 'projekt_bericht.dart';
 // Entwicklungsweg, den ganzen Verlauf und die Dateien. Was fehlt, steht
 // als Hinweis da — so sieht man auch bei einem offenen Projekt, was noch
 // aussteht.
+//
+// Kopf und Fuß jeder Seite sind die eines Formblatts ([BerichtFormblatt]):
+// oben Nummer und Logo, unten wer es erstellt und geprüft hat, Version,
+// Stand und die Seite. Dieselben trägt die leere Vorlage
+// (bericht_vorlage.dart), die zeigt, was wo im Bericht steht.
 //
 // Gesetzt wird zweimal (das erledigt der Satz, druck_satz.dart): Der erste
 // Durchgang findet die Seiten der Kapitel für das Inhaltsverzeichnis, der
@@ -594,10 +602,13 @@ class _Kapitel {
 
 /// Was beim Setzen mitläuft.
 class _Satz {
-  _Satz(this.b, this.jetzt, this.rahmen, this.inhalt);
+  _Satz(this.b, this.jetzt, this.rahmen, this.inhalt, {this.vorlage = false});
 
   final ProjektBericht b;
   final DateTime jetzt;
+
+  /// Die leere Vorlage: Statt eines Datums steht, was dort erscheint.
+  final bool vorlage;
 
   /// Breite, Maßstab und die Seiten der Kapitel aus dem ersten Durchgang
   /// ([DruckRahmen.bekannt]).
@@ -614,9 +625,9 @@ class _Satz {
   /// oder der Bericht auf feste Seiten passen soll.
   bool get neueSeiten => inhalt.neueSeiten && rahmen.umbrueche;
 
-  /// Höher als das darf ein Block umbrechen: die Seite ohne Kopf und Fuß,
-  /// mit etwas Luft.
-  double get blockHoehe => rahmen.hoehe - 80;
+  /// Höher als das darf ein Block nicht werden: die Seite ohne Kopf und
+  /// Fuß, mit etwas Luft.
+  double get blockHoehe => rahmen.hoehe - _kopfHoehe - _fussHoehe - 20;
 
   /// Wie viele Einträge eine Zeile des Zeitstrahls trägt: auf A4 hoch
   /// sechs, quer oder verkleinert mehr.
@@ -728,8 +739,14 @@ List<(String, String)> berichtKapitelVon(ProjektBericht b) => [
   for (final k in _alleKapitel(b)) (k.schluessel, k.titel),
 ];
 
-/// Der Druck des Berichts für das Druckfenster.
-DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
+/// Der Druck des Berichts für das Druckfenster. [formblatt] liefert Kopf
+/// und Fuß bei jedem Setzen — so zeigt die Vorschau gleich, was im
+/// Fenster daran geändert wurde.
+DruckAuftrag berichtDruckAuftrag(
+  ProjektBericht b, {
+  DateTime? gedrucktAm,
+  BerichtFormblatt Function()? formblatt,
+}) {
   final kapitel = berichtKapitelVon(b);
   const gruppe = 'Im Bericht';
   return DruckAuftrag(
@@ -807,7 +824,12 @@ DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
           'Wähle mindestens ein Kapitel oder den Steckbrief.',
         );
       }
-      return berichtDruck(b, inhalt: inhalt, gedrucktAm: gedrucktAm);
+      return berichtDruck(
+        b,
+        inhalt: inhalt,
+        gedrucktAm: gedrucktAm,
+        formblatt: formblatt?.call() ?? const BerichtFormblatt(),
+      );
     },
   );
 }
@@ -817,43 +839,48 @@ DruckAuftrag berichtDruckAuftrag(ProjektBericht b, {DateTime? gedrucktAm}) {
 Future<Uint8List> baueProjektPdf(
   ProjektBericht b, {
   DateTime? gedrucktAm,
+  BerichtFormblatt formblatt = const BerichtFormblatt(),
   bool komprimiert = true,
 }) async {
   final ergebnis = await druckSetzen(
-    berichtDruck(b, gedrucktAm: gedrucktAm),
+    berichtDruck(b, gedrucktAm: gedrucktAm, formblatt: formblatt),
     const DruckLayout(),
     komprimiert: komprimiert,
   );
   return ergebnis.bytes;
 }
 
+/// Die Titel der Kapitel — im Bericht und in der leeren Vorlage.
+const Map<String, String> _kapitelTitel = {
+  BerichtKapitel.projekt: 'Projekt',
+  BerichtKapitel.rezeptur: 'Rezeptur',
+  BerichtKapitel.produkt: 'Produkt und Spezifikation',
+  BerichtKapitel.herstellung: 'Herstellung und HACCP',
+  BerichtKapitel.freigabe: 'Freigabe und Checkliste',
+  BerichtKapitel.weg: 'Entwicklungsweg',
+  BerichtKapitel.verlauf: 'Verlauf',
+  BerichtKapitel.dateien: 'Dateien',
+};
+
+/// Das Kapitel [schluessel] mit seinem Titel.
+_Kapitel _kapitel(
+  String schluessel,
+  List<pw.Widget> Function(_Satz s, _Kapitel k) bauen,
+) => _Kapitel(schluessel, _kapitelTitel[schluessel]!, bauen);
+
 /// Alle Kapitel, die es für [b] gibt. Jedes beginnt auf einer neuen Seite
 /// (abwählbar: „Kapitel auf neuen Seiten").
 List<_Kapitel> _alleKapitel(ProjektBericht b) {
   return [
-    _Kapitel(BerichtKapitel.projekt, 'Projekt', _kapitelProjekt),
-    _Kapitel(BerichtKapitel.rezeptur, 'Rezeptur', _kapitelRezeptur),
-    _Kapitel(
-      BerichtKapitel.produkt,
-      'Produkt und Spezifikation',
-      _kapitelProdukt,
-    ),
-    _Kapitel(
-      BerichtKapitel.herstellung,
-      'Herstellung und HACCP',
-      _kapitelHerstellung,
-    ),
-    _Kapitel(
-      BerichtKapitel.freigabe,
-      'Freigabe und Checkliste',
-      _kapitelFreigabe,
-    ),
+    _kapitel(BerichtKapitel.projekt, _kapitelProjekt),
+    _kapitel(BerichtKapitel.rezeptur, _kapitelRezeptur),
+    _kapitel(BerichtKapitel.produkt, _kapitelProdukt),
+    _kapitel(BerichtKapitel.herstellung, _kapitelHerstellung),
+    _kapitel(BerichtKapitel.freigabe, _kapitelFreigabe),
     if (b.verlauf.isNotEmpty || b.versionen.isNotEmpty)
-      _Kapitel(BerichtKapitel.weg, 'Entwicklungsweg', _kapitelWeg),
-    if (b.verlauf.isNotEmpty)
-      _Kapitel(BerichtKapitel.verlauf, 'Verlauf', _kapitelVerlauf),
-    if (b.dateien.isNotEmpty)
-      _Kapitel(BerichtKapitel.dateien, 'Dateien', _kapitelDateien),
+      _kapitel(BerichtKapitel.weg, _kapitelWeg),
+    if (b.verlauf.isNotEmpty) _kapitel(BerichtKapitel.verlauf, _kapitelVerlauf),
+    if (b.dateien.isNotEmpty) _kapitel(BerichtKapitel.dateien, _kapitelDateien),
   ];
 }
 
@@ -875,21 +902,66 @@ List<_Kapitel> _kapitelFuer(ProjektBericht b, BerichtInhalt inhalt) {
 }
 
 /// Der Bericht zum Drucken: ein Blatt, das über viele Seiten läuft — mit
-/// Lesezeichen für jedes Kapitel.
+/// Lesezeichen für jedes Kapitel, Kopf und Fuß aus [formblatt].
 DruckDokument berichtDruck(
   ProjektBericht bericht, {
   BerichtInhalt inhalt = const BerichtInhalt(),
   DateTime? gedrucktAm,
+  BerichtFormblatt formblatt = const BerichtFormblatt(),
 }) {
   // Beim Muster auf Wunsch mit dem Verlauf des Gesamtprojekts.
   final b = inhalt.gesamtKorrespondenz ? bericht.mitGesamtVerlauf() : bericht;
-  final jetzt = gedrucktAm ?? DateTime.now();
   final p = b.projekt;
-  final kunde = _oderNull(p.kunde);
-  final nummer = _oderNull(b.artikel?.artikelnummer ?? p.artikelnummer);
-  return DruckDokument(
-    titel: pdfText('Projektbericht ${p.name}'),
+  return _dokument(
+    b: b,
+    inhalt: inhalt,
+    jetzt: gedrucktAm ?? DateTime.now(),
+    formblatt: formblatt,
+    titel: 'Projektbericht ${p.name}',
     dateiname: druckDateiname('Projektbericht ${p.name}'),
+    projektZeile: [
+      p.name,
+      if (_oderNull(p.kunde) case final k?) k,
+      if (_oderNull(b.artikel?.artikelnummer ?? p.artikelnummer)
+          case final n?)
+        'Art.-Nr. $n',
+    ].join(' · '),
+    kapitel: () => _kapitelFuer(b, inhalt),
+    deckblatt: _deckblatt,
+  );
+}
+
+/// Ein Bericht als Blatt über viele Seiten, Kopf und Fuß aus [formblatt]
+/// — der eines Projekts wie die leere Vorlage ([vorlage]).
+DruckDokument _dokument({
+  required ProjektBericht b,
+  required BerichtInhalt inhalt,
+  required DateTime jetzt,
+  required BerichtFormblatt formblatt,
+  required String titel,
+  required String dateiname,
+  required String projektZeile,
+  required List<_Kapitel> Function() kapitel,
+  required List<pw.Widget> Function(_Satz s, List<_Kapitel> kapitel)
+  deckblatt,
+  bool vorlage = false,
+}) {
+  // Das Logo einmal für das ganze Dokument — so steht es nur einmal im
+  // PDF, auch wenn es jede Seite trägt.
+  final logo = formblatt.logoZeigen ? formblatt.logo : null;
+  final logoBild = _bildAus(logo?.bytes);
+  final nummer = formblatt.nummer.trim();
+  var links = formblatt.fussLinks;
+  final rechts = formblatt.fussRechts;
+  if (links.isEmpty && rechts.isEmpty) {
+    links = [
+      '${vorlage ? 'Leere Vorlage' : 'Gedruckt am ${_datum(jetzt)}'}'
+          ' · Produktions Planer',
+    ];
+  }
+  return DruckDokument(
+    titel: pdfText(titel),
+    dateiname: dateiname,
     lesezeichen: true,
     theme: pw.ThemeData.withFont(
       base: pw.Font.helvetica(),
@@ -899,65 +971,150 @@ DruckDokument berichtDruck(
     ),
     blaetter: [
       DruckBlatt(
-        rand: const pw.EdgeInsets.fromLTRB(42, 38, 42, 34),
+        // Oben und unten schmal: Kopf und Fuß stehen im Rand, wie auf den
+        // Formblättern.
+        rand: const pw.EdgeInsets.fromLTRB(42, 24, 42, 22),
         bauen: (r) {
-          final s = _Satz(b, jetzt, r, inhalt);
-          final kapitel = _kapitelFuer(b, inhalt);
+          final s = _Satz(b, jetzt, r, inhalt, vorlage: vorlage);
+          final k = kapitel();
           return DruckSeiten(
             maxSeiten: 500,
-            kopf: (ctx) => r.seiteImBlatt(ctx) == 1
-                ? pw.SizedBox()
-                : pw.Container(
-                    margin: const pw.EdgeInsets.only(bottom: 12),
-                    padding: const pw.EdgeInsets.only(bottom: 4),
-                    decoration: const pw.BoxDecoration(
-                      border: pw.Border(
-                        bottom: pw.BorderSide(color: _linie, width: .5),
-                      ),
-                    ),
-                    child: pw.Row(
-                      children: [
-                        pw.Expanded(
-                          child: _t(
-                            'Projektbericht · ${p.name}',
-                            groesse: 7.5,
-                            farbe: _grau,
-                            maxLines: 1,
-                          ),
-                        ),
-                        _t(
-                          [
-                            if (kunde != null) kunde,
-                            if (nummer != null) 'Art.-Nr. $nummer',
-                          ].join(' · '),
-                          groesse: 7.5,
-                          farbe: _grau,
-                        ),
-                      ],
-                    ),
-                  ),
-            fuss: (ctx) => pw.Container(
-              margin: const pw.EdgeInsets.only(top: 10),
-              child: pw.Row(
-                children: [
-                  _t(
-                    'Stand ${_datum(jetzt)} · Produktions Planer',
-                    groesse: 7,
-                    farbe: _hellgrau,
-                  ),
-                  pw.Spacer(),
-                  _t(r.seitenText(ctx), groesse: 7, farbe: _hellgrau),
-                ],
-              ),
+            kopf: (_) => _kopfzeile(
+              nummer: nummer,
+              projekt: projektZeile,
+              logo: logoBild,
+              logoBreite: logo?.breite ?? 0,
+              logoHoehe: logo?.hoehe ?? 0,
             ),
+            // Die Seite unten rechts, unter Stand und „ersetzt den Stand".
+            fuss: (ctx) => _fusszeile(links, [...rechts, r.seitenText(ctx)]),
             inhalt: (ctx) => [
-              ..._deckblatt(s, kapitel),
-              for (final k in kapitel) ...k.bauen(s, k),
+              ...deckblatt(s, k),
+              for (final x in k) ...x.bauen(s, x),
             ],
           );
         },
       ),
     ],
+  );
+}
+
+// ── Kopf und Fuß ───────────────────────────────────────────────────────
+
+// Kopf und Fuß sind auf jeder Seite gleich hoch, auch ohne Angaben oder
+// Logo — so bricht jede Seite gleich um, und ein Block, der auf eine
+// Seite passen soll ([_Satz.blockHoehe]), passt auch.
+const double _kopfInhalt = 30;
+const double _kopfHoehe = _kopfInhalt + 4 + 10;
+const double _fussInhalt = 27;
+const double _fussHoehe = 8 + 4 + _fussInhalt;
+
+/// Die Kopfzeile: links die Nummer des Formblatts, in der Mitte der
+/// Bericht und sein Projekt, rechts das Logo.
+pw.Widget _kopfzeile({
+  required String nummer,
+  required String projekt,
+  required pw.ImageProvider? logo,
+  required double logoBreite,
+  required double logoHoehe,
+}) {
+  // Das Logo so groß, wie die Vorlage es druckt — höchstens so hoch wie
+  // der Kopf und so breit wie seine Spalte.
+  const spalte = 150.0;
+  final hoehe = logoHoehe > 0
+      ? math.min(_kopfInhalt, logoHoehe)
+      : _kopfInhalt;
+  final breite = logoBreite > 0 && logoHoehe > 0
+      ? math.min(spalte, logoBreite * hoehe / logoHoehe)
+      : spalte;
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(bottom: _kopfHoehe - _kopfInhalt - 4),
+    child: pw.Container(
+      padding: const pw.EdgeInsets.only(bottom: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(bottom: pw.BorderSide(color: _linie, width: .5)),
+      ),
+      child: pw.SizedBox(
+        height: _kopfInhalt,
+        child: pw.Row(
+          children: [
+            pw.SizedBox(
+              width: spalte,
+              child: pw.Align(
+                alignment: pw.Alignment.centerLeft,
+                child: _t(nummer, groesse: 9.5, fett: true, maxLines: 1),
+              ),
+            ),
+            pw.Expanded(
+              child: pw.Column(
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  _t('Projektbericht', groesse: 11, fett: true, farbe: _akzent),
+                  pw.SizedBox(height: 1.5),
+                  _t(
+                    projekt,
+                    groesse: 7.5,
+                    farbe: _grau,
+                    maxLines: 1,
+                    ausrichtung: pw.TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            pw.SizedBox(
+              width: spalte,
+              child: pw.Align(
+                alignment: pw.Alignment.centerRight,
+                child: logo == null
+                    ? pw.SizedBox()
+                    : pw.ConstrainedBox(
+                        constraints: pw.BoxConstraints(
+                          maxWidth: breite,
+                          maxHeight: hoehe,
+                        ),
+                        child: pw.Image(logo, fit: pw.BoxFit.contain),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+/// Die Fußzeile: [links] und [rechts] je untereinander — rechts zuletzt
+/// die Seite, also unten rechts.
+pw.Widget _fusszeile(List<String> links, List<String> rechts) {
+  pw.Widget zeile(String text) =>
+      _t(text, groesse: 7, farbe: _grau, maxLines: 1);
+  return pw.Padding(
+    padding: const pw.EdgeInsets.only(top: _fussHoehe - _fussInhalt - 4),
+    child: pw.Container(
+      padding: const pw.EdgeInsets.only(top: 4),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: _linie, width: .5)),
+      ),
+      child: pw.SizedBox(
+        height: _fussInhalt,
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [for (final z in links) zeile(z)],
+              ),
+            ),
+            pw.SizedBox(width: 12),
+            pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [for (final z in rechts) zeile(z)],
+            ),
+          ],
+        ),
+      ),
+    ),
   );
 }
 
@@ -1000,7 +1157,8 @@ List<pw.Widget> _deckblatt(_Satz s, List<_Kapitel> kapitel) {
           sperrung: 1,
         ),
         pw.Spacer(),
-        _t('Stand ${_datum(s.jetzt)}', groesse: 8, farbe: _grau),
+        // „Stand" ist im Fuß der Stand des Formblatts.
+        _t('Gedruckt am ${_datum(s.jetzt)}', groesse: 8, farbe: _grau),
       ],
     ),
     pw.SizedBox(height: 14),
@@ -1296,21 +1454,23 @@ List<pw.Widget> _kacheln(_Satz s) {
     ],
     farbe: offen.isEmpty ? _ok : (ueberfaellig > 0 ? _fehler : _warn),
   );
-  pw.Widget reihe(List<pw.Widget> felder) => pw.Row(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: [
-      for (final (i, f) in felder.indexed) ...[
-        if (i > 0) pw.SizedBox(width: 8),
-        pw.Expanded(child: f),
-      ],
-    ],
-  );
   return [
-    reihe([freigabe, rezeptur, checkliste]),
+    _reihe([freigabe, rezeptur, checkliste]),
     pw.SizedBox(height: 8),
-    reihe([prozessKachel, haccpKachel, offenKachel]),
+    _reihe([prozessKachel, haccpKachel, offenKachel]),
   ];
 }
+
+/// Felder gleich breit nebeneinander — etwa die Kacheln im Steckbrief.
+pw.Widget _reihe(List<pw.Widget> felder) => pw.Row(
+  crossAxisAlignment: pw.CrossAxisAlignment.start,
+  children: [
+    for (final (i, f) in felder.indexed) ...[
+      if (i > 0) pw.SizedBox(width: 8),
+      pw.Expanded(child: f),
+    ],
+  ],
+);
 
 /// Die Checkliste, wie sie steht.
 ProjektCheckStand _check(_Satz s) =>
@@ -2142,22 +2302,6 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
   final geprueft = kEtikettCheckliste
       .where((c) => lmivStand(etikett, c.schluessel).geprueft)
       .length;
-  final mitte = (kEtikettCheckliste.length + 1) ~/ 2;
-  pw.Widget lmivSpalte(List<CheckPunkt> punkte) => pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.start,
-    children: [
-      for (final c in punkte)
-        switch (lmivStand(etikett, c.schluessel)) {
-          LmivStand.erledigt => _mitZeichen(_Zeichen.erledigt, c.label),
-          LmivStand.trifftNichtZu => _mitZeichen(
-            _Zeichen.trifftNichtZu,
-            c.label,
-            zusatz: 'trifft nicht zu',
-          ),
-          LmivStand.offen => _mitZeichen(_Zeichen.offen, c.label),
-        },
-    ],
-  );
 
   return [
     ..._kapitelKopf(s, k),
@@ -2237,20 +2381,41 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
             '$geprueft von ${kEtikettCheckliste.length} Pflichtangaben '
             'geprüft',
       ),
-      pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(child: lmivSpalte(kEtikettCheckliste.sublist(0, mitte))),
-          pw.SizedBox(width: 16),
-          pw.Expanded(child: lmivSpalte(kEtikettCheckliste.sublist(mitte))),
-        ],
-      ),
+      _lmivPunkte((schluessel) => lmivStand(etikett, schluessel)),
       // Das eingescannte Originaletikett direkt darunter — auf derselben
       // Seite wie der Check.
       ...original.kopf,
     ]),
     ...original.weitere,
   ];
+}
+
+/// Die Pflichtangaben nach LMIV in zwei Spalten, jede mit ihrem [stand].
+pw.Widget _lmivPunkte(LmivStand Function(String schluessel) stand) {
+  final mitte = (kEtikettCheckliste.length + 1) ~/ 2;
+  pw.Widget spalte(List<CheckPunkt> punkte) => pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      for (final c in punkte)
+        switch (stand(c.schluessel)) {
+          LmivStand.erledigt => _mitZeichen(_Zeichen.erledigt, c.label),
+          LmivStand.trifftNichtZu => _mitZeichen(
+            _Zeichen.trifftNichtZu,
+            c.label,
+            zusatz: 'trifft nicht zu',
+          ),
+          LmivStand.offen => _mitZeichen(_Zeichen.offen, c.label),
+        },
+    ],
+  );
+  return pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Expanded(child: spalte(kEtikettCheckliste.sublist(0, mitte))),
+      pw.SizedBox(width: 16),
+      pw.Expanded(child: spalte(kEtikettCheckliste.sublist(mitte))),
+    ],
+  );
 }
 
 /// Das Originaletikett unter den Pflichtangaben: der eingescannte, so wie
@@ -2312,16 +2477,24 @@ PdfColor _abteilungsFarbe(String wert) {
 }
 
 /// Das Band über einer Station.
-pw.Widget _stationsBand(int nr, String abteilung, {String? zusatz}) =>
+pw.Widget _stationsBand(int nr, String abteilung, {String? zusatz}) => _band(
+  'STATION $nr',
+  abteilungsName(abteilung),
+  _abteilungsFarbe(abteilung),
+  zusatz: zusatz,
+);
+
+/// Ein farbiges Band: [art] und [text] weiß darauf.
+pw.Widget _band(String art, String text, PdfColor farbe, {String? zusatz}) =>
     pw.Container(
       margin: const pw.EdgeInsets.only(top: 8, bottom: 2),
       padding: const pw.EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: pw.BoxDecoration(color: _abteilungsFarbe(abteilung)),
+      decoration: pw.BoxDecoration(color: farbe),
       child: pw.Row(
         children: [
-          _t('STATION $nr', groesse: 7.5, fett: true, farbe: PdfColors.white),
+          _t(art, groesse: 7.5, fett: true, farbe: PdfColors.white),
           pw.SizedBox(width: 8),
-          _t(abteilungsName(abteilung), groesse: 8.5, farbe: PdfColors.white),
+          _t(text, groesse: 8.5, farbe: PdfColors.white),
           if (zusatz != null) ...[
             pw.Spacer(),
             _t(zusatz, groesse: 7.5, farbe: PdfColors.white),
@@ -2392,22 +2565,10 @@ String _signatur(ProzessSchritt s, [List<(String, String)> mehr = const []]) =>
       ]..sort()),
     ].join('|');
 
-/// Ein Schritt mit seinen Werten: sein Kopf (Nummer und Titel), darunter
-/// die Werte und die Platten — und wie viele Zeilen das etwa sind.
-({pw.Widget kopf, List<pw.Widget> werte, int zeilen}) _schritt(
-  int nr,
-  ProzessSchritt s, {
-  List<(String, String)> mehr = const [],
-  String? zusatz,
-}) {
-  final prozess = s.prozessschritt.trim();
-  final titel = s.maschine.trim().isNotEmpty && prozess.isNotEmpty
-      ? '${s.bezeichnung(nr)} - $prozess'
-      : s.bezeichnung(nr);
-  final zeilen = [..._schrittWerte(s), ...mehr];
-  final raster = _plattenRaster(s);
-  return (
-    kopf: pw.Padding(
+/// Der Kopf eines Schritts: seine Nummer im Kreis, der Titel und rechts
+/// [zusatz] (Personen und Leistung).
+pw.Widget _schrittKopf(String nr, String titel, {String? zusatz}) =>
+    pw.Padding(
       padding: const pw.EdgeInsets.only(left: 4, top: 5),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -2420,7 +2581,7 @@ String _signatur(ProzessSchritt s, [List<(String, String)> mehr = const []]) =>
               color: _akzentHell,
               shape: pw.BoxShape.circle,
             ),
-            child: _t('$nr', groesse: 7.5, fett: true, farbe: _akzent),
+            child: _t(nr, groesse: 7.5, fett: true, farbe: _akzent),
           ),
           pw.SizedBox(width: 6),
           pw.Expanded(
@@ -2436,13 +2597,33 @@ String _signatur(ProzessSchritt s, [List<(String, String)> mehr = const []]) =>
             ),
         ],
       ),
-    ),
+    );
+
+/// Die Einstellungen und Werte eines Schritts, eingerückt unter seinem
+/// Kopf.
+pw.Widget _schrittFelder(List<(String, String)> zeilen) => pw.Padding(
+  padding: const pw.EdgeInsets.only(left: 25, top: 2),
+  child: _felder(zeilen, labelBreite: 130, groesse: 8.3),
+);
+
+/// Ein Schritt mit seinen Werten: sein Kopf (Nummer und Titel), darunter
+/// die Werte und die Platten — und wie viele Zeilen das etwa sind.
+({pw.Widget kopf, List<pw.Widget> werte, int zeilen}) _schritt(
+  int nr,
+  ProzessSchritt s, {
+  List<(String, String)> mehr = const [],
+  String? zusatz,
+}) {
+  final prozess = s.prozessschritt.trim();
+  final titel = s.maschine.trim().isNotEmpty && prozess.isNotEmpty
+      ? '${s.bezeichnung(nr)} - $prozess'
+      : s.bezeichnung(nr);
+  final zeilen = [..._schrittWerte(s), ...mehr];
+  final raster = _plattenRaster(s);
+  return (
+    kopf: _schrittKopf('$nr', titel, zusatz: zusatz),
     werte: [
-      if (zeilen.isNotEmpty)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 25, top: 2),
-          child: _felder(zeilen, labelBreite: 130, groesse: 8.3),
-        ),
+      if (zeilen.isNotEmpty) _schrittFelder(zeilen),
       if (raster != null)
         pw.Padding(
           padding: const pw.EdgeInsets.only(left: 25, top: 5, bottom: 2),
@@ -3086,47 +3267,49 @@ pw.Widget _wegEintrag(_Satz s, ProjektEintrag e) {
   final offen = EintragStatus.aus(e.status) == EintragStatus.offen;
   final vorbei = eintragUeberfaellig(e, heute: s.jetzt);
   final beschreibung = _oderNull(e.beschreibung);
-  return pw.Padding(
-    padding: const pw.EdgeInsets.only(left: 12, top: 3),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.SizedBox(
-              width: 54,
-              child: _t(_datum(e.datum), groesse: 8, farbe: _grau),
-            ),
-            pw.SizedBox(
-              width: 58,
-              child: _t(EintragArt.aus(e.art).label, groesse: 8, farbe: _grau),
-            ),
-            pw.Expanded(child: _t(e.titel, groesse: 8.5)),
-            if (offen) ...[
-              pw.SizedBox(width: 6),
-              vorbei ? _marke('ÜBERFÄLLIG', _fehler) : _marke('OFFEN', _warn),
-            ],
-          ],
-        ),
-        if (beschreibung != null && beschreibung.length <= 400)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 112, top: 1),
-            child: _t(beschreibung, groesse: 7.8, farbe: _grau),
-          )
-        else if (beschreibung != null)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(left: 112, top: 1),
-            child: _t(
-              '${beschreibung.substring(0, 400)} ... (vollständig im Verlauf)',
-              groesse: 7.8,
-              farbe: _grau,
-            ),
-          ),
-      ],
-    ),
+  return _wegZeile(
+    datum: _datum(e.datum),
+    art: EintragArt.aus(e.art).label,
+    titel: e.titel,
+    beschreibung: beschreibung == null || beschreibung.length <= 400
+        ? beschreibung
+        : '${beschreibung.substring(0, 400)} ... (vollständig im Verlauf)',
+    marke: !offen
+        ? null
+        : (vorbei ? _marke('ÜBERFÄLLIG', _fehler) : _marke('OFFEN', _warn)),
   );
 }
+
+/// Ein Eintrag auf dem Weg: Datum, Art und Titel in einer Zeile, rechts
+/// [marke], darunter die Beschreibung.
+pw.Widget _wegZeile({
+  required String datum,
+  required String art,
+  required String titel,
+  String? beschreibung,
+  pw.Widget? marke,
+}) => pw.Padding(
+  padding: const pw.EdgeInsets.only(left: 12, top: 3),
+  child: pw.Column(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.SizedBox(width: 54, child: _t(datum, groesse: 8, farbe: _grau)),
+          pw.SizedBox(width: 58, child: _t(art, groesse: 8, farbe: _grau)),
+          pw.Expanded(child: _t(titel, groesse: 8.5)),
+          if (marke != null) ...[pw.SizedBox(width: 6), marke],
+        ],
+      ),
+      if (beschreibung != null)
+        pw.Padding(
+          padding: const pw.EdgeInsets.only(left: 112, top: 1),
+          child: _t(beschreibung, groesse: 7.8, farbe: _grau),
+        ),
+    ],
+  ),
+);
 
 List<pw.Widget> _wegStation(
   _Satz s,
@@ -3173,49 +3356,7 @@ List<pw.Widget> _wegStation(
             ],
           ),
         ),
-      if (kennzahlen.isNotEmpty)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(left: 12, top: 4),
-          child: pw.Wrap(
-            spacing: 5,
-            runSpacing: 3,
-            children: [
-              for (final kz in kennzahlen)
-                pw.Container(
-                  padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 2,
-                  ),
-                  decoration: pw.BoxDecoration(
-                    border: pw.Border.all(color: _linie, width: .6),
-                    borderRadius: const pw.BorderRadius.all(
-                      pw.Radius.circular(2.5),
-                    ),
-                  ),
-                  child: pw.RichText(
-                    text: pw.TextSpan(
-                      style: const pw.TextStyle(fontSize: 7.6, color: _grau),
-                      children: [
-                        pw.TextSpan(text: pdfText('${kz.label} ')),
-                        pw.TextSpan(
-                          text: pdfText(kz.wert),
-                          style: pw.TextStyle(
-                            color: _schwarz,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                        if (kz.aenderung case final d?)
-                          pw.TextSpan(
-                            text: pdfText(' ($d)'),
-                            style: const pw.TextStyle(color: _akzent),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+      if (kennzahlen.isNotEmpty) _kennzahlMarken(kennzahlen),
     ]),
     if (grund != null && !kurz)
       ..._textMitTitel(
@@ -3248,6 +3389,46 @@ List<pw.Widget> _wegStation(
     ],
   ];
 }
+
+/// Die Kennzahlen eines Stands als kleine Marken — mit der Änderung zum
+/// Stand davor.
+pw.Widget _kennzahlMarken(List<WegKennzahl> kennzahlen) => pw.Padding(
+  padding: const pw.EdgeInsets.only(left: 12, top: 4),
+  child: pw.Wrap(
+    spacing: 5,
+    runSpacing: 3,
+    children: [
+      for (final kz in kennzahlen)
+        pw.Container(
+          padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _linie, width: .6),
+            borderRadius: const pw.BorderRadius.all(pw.Radius.circular(2.5)),
+          ),
+          child: pw.RichText(
+            text: pw.TextSpan(
+              style: const pw.TextStyle(fontSize: 7.6, color: _grau),
+              children: [
+                pw.TextSpan(text: pdfText('${kz.label} ')),
+                pw.TextSpan(
+                  text: pdfText(kz.wert),
+                  style: pw.TextStyle(
+                    color: _schwarz,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                if (kz.aenderung case final d?)
+                  pw.TextSpan(
+                    text: pdfText(' ($d)'),
+                    style: const pw.TextStyle(color: _akzent),
+                  ),
+              ],
+            ),
+          ),
+        ),
+    ],
+  ),
+);
 
 // ── 7 Verlauf ──────────────────────────────────────────────────────────
 
@@ -3737,7 +3918,7 @@ pw.Widget _zeitstrahlKarte(_Satz s, ProjektEintrag e, double breite) {
         pw.SizedBox(height: .5),
         _t(
           [
-            _datum(e.datum),
+            if (s.vorlage) _v('Datum') else _datum(e.datum),
             if (stand != null) 'zu Stand ${stand.nummer}',
           ].join(' · '),
           groesse: 6.2,
@@ -3766,7 +3947,6 @@ List<pw.Widget> _verlaufImEinzelnen(
 }) {
   final b = s.b;
   final dateien = {for (final d in b.dateien) d.id: d};
-  const einzug = 74.0;
   final widgets = <pw.Widget>[];
   String? monat;
   var ersterEintrag = true;
@@ -3784,73 +3964,27 @@ List<pw.Widget> _verlaufImEinzelnen(
         art == EintragArt.datei ? datei.name : 'Datei: ${datei.name}',
       if (_oderNull(e.ziel) case final z?) 'fällig bis $z',
     ];
-    final kopf = pw.Container(
-      margin: const pw.EdgeInsets.only(top: 5),
-      padding: const pw.EdgeInsets.only(top: 4),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: _linie, width: .4)),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: .5),
-            child: _symbol(art),
-          ),
-          pw.SizedBox(width: 6),
-          pw.SizedBox(
-            width: einzug - 17,
-            child: _t(_datum(e.datum), groesse: 8, fett: true),
-          ),
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _t(e.titel, groesse: 8.8, fett: true),
-                _t(meta.join(' · '), groesse: 7.3, farbe: _grau),
-              ],
-            ),
-          ),
-          if (offen) ...[
-            pw.SizedBox(width: 6),
-            vorbei
-                ? _marke('ÜBERFÄLLIG', _fehler)
-                : _marke('OFFEN', _warn),
-          ],
-        ],
-      ),
+    final kopf = _eintragKopf(
+      art: art,
+      datum: _datum(e.datum),
+      titel: e.titel,
+      meta: meta.join(' · '),
+      marke: !offen
+          ? null
+          : (vorbei ? _marke('ÜBERFÄLLIG', _fehler) : _marke('OFFEN', _warn)),
     );
     final beschreibung = _oderNull(e.beschreibung);
-    final text = beschreibung == null
-        ? null
-        : pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 2),
-            child: _fliess(beschreibung, groesse: 8.3, einzug: einzug),
-          );
+    final text = beschreibung == null ? null : _eintragText(beschreibung);
     final m = '${Format.monate[e.datum.month - 1]} ${e.datum.year}';
     final aenderungen = texteAus(e.aenderungen);
     final kommentare = Kommentar.listeAus(e.kommentare);
     final nachtrag = [
       if (aenderungen.isNotEmpty)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 2),
-          child: _fliess(
-            'Änderungen: ${aenderungen.join(' · ')}',
-            groesse: 7.6,
-            farbe: _grau,
-            einzug: einzug,
-          ),
-        ),
+        _eintragNachtrag('Änderungen: ${aenderungen.join(' · ')}'),
       for (final kom in kommentare)
-        pw.Padding(
-          padding: const pw.EdgeInsets.only(top: 2),
-          child: _fliess(
-            '${kom.name.isEmpty ? 'Kommentar' : kom.name} '
-            '(${_datum(kom.datum)}): ${kom.text}',
-            groesse: 7.6,
-            farbe: _grau,
-            einzug: einzug,
-          ),
+        _eintragNachtrag(
+          '${kom.name.isEmpty ? 'Kommentar' : kom.name} '
+          '(${_datum(kom.datum)}): ${kom.text}',
         ),
     ];
     // Ein Eintrag mit Text, Änderungen und Kommentaren als Block, der
@@ -3868,11 +4002,7 @@ List<pw.Widget> _verlaufImEinzelnen(
     widgets.add(
       _zusammen(s, [
         if (ersterEintrag) ...ueberschrift,
-        if (m != monat)
-          pw.Padding(
-            padding: const pw.EdgeInsets.only(top: 8, bottom: 1),
-            child: _t(m, groesse: 8.5, fett: true, farbe: _akzent),
-          ),
+        if (m != monat) _monat(m),
         kopf,
         if (kurz) ...[
           if (text != null) text,
@@ -3889,6 +4019,68 @@ List<pw.Widget> _verlaufImEinzelnen(
   }
   return widgets;
 }
+
+/// So weit stehen Text, Änderungen und Kommentare eines Eintrags im
+/// Einzelnen eingerückt — unter seinem Titel.
+const double _einzug = 74;
+
+/// Der Monat über seinem ersten Eintrag.
+pw.Widget _monat(String text) => pw.Padding(
+  padding: const pw.EdgeInsets.only(top: 8, bottom: 1),
+  child: _t(text, groesse: 8.5, fett: true, farbe: _akzent),
+);
+
+/// Der Kopf eines Eintrags im Einzelnen: sein Zeichen, Datum und Titel,
+/// darunter [meta] — rechts [marke].
+pw.Widget _eintragKopf({
+  required EintragArt art,
+  required String datum,
+  required String titel,
+  required String meta,
+  pw.Widget? marke,
+}) => pw.Container(
+  margin: const pw.EdgeInsets.only(top: 5),
+  padding: const pw.EdgeInsets.only(top: 4),
+  decoration: const pw.BoxDecoration(
+    border: pw.Border(top: pw.BorderSide(color: _linie, width: .4)),
+  ),
+  child: pw.Row(
+    crossAxisAlignment: pw.CrossAxisAlignment.start,
+    children: [
+      pw.Padding(
+        padding: const pw.EdgeInsets.only(top: .5),
+        child: _symbol(art),
+      ),
+      pw.SizedBox(width: 6),
+      pw.SizedBox(
+        width: _einzug - 17,
+        child: _t(datum, groesse: 8, fett: true),
+      ),
+      pw.Expanded(
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _t(titel, groesse: 8.8, fett: true),
+            _t(meta, groesse: 7.3, farbe: _grau),
+          ],
+        ),
+      ),
+      if (marke != null) ...[pw.SizedBox(width: 6), marke],
+    ],
+  ),
+);
+
+/// Der Text eines Eintrags im Einzelnen — darf über die Seite laufen.
+pw.Widget _eintragText(String text) => pw.Padding(
+  padding: const pw.EdgeInsets.only(top: 2),
+  child: _fliess(text, groesse: 8.3, einzug: _einzug),
+);
+
+/// Eine Zeile unter einem Eintrag: seine Änderungen, ein Kommentar.
+pw.Widget _eintragNachtrag(String text) => pw.Padding(
+  padding: const pw.EdgeInsets.only(top: 2),
+  child: _fliess(text, groesse: 7.6, farbe: _grau, einzug: _einzug),
+);
 
 // ── 8 Dateien ──────────────────────────────────────────────────────────
 

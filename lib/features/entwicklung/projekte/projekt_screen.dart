@@ -436,6 +436,15 @@ class ProjektScreen extends ConsumerWidget {
                       title: Text('Projektbericht (PDF)…'),
                     ),
                   ),
+                  // Ohne Angaben eines Projekts — zum Ablegen bei den
+                  // Formblättern.
+                  PopupMenuItem(
+                    value: () => projektberichtVorlage(context, ref),
+                    child: const ListTile(
+                      leading: Icon(Icons.description_outlined),
+                      title: Text('Projektbericht-Vorlage (leer)…'),
+                    ),
+                  ),
                 ],
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
