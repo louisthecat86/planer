@@ -242,8 +242,15 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Hand gilt weiter) — von Hand bleibt nur Navision. Darunter liegt das
   **Originaletikett**: der Scan des gedruckten Etiketts, ein Bild oder ein
   PDF (die App zeigt dessen erste Seiten als Bilder), mit Vorschau, groß
-  ansehen, ersetzen und lösen. Ein neuer Scan ersetzt den alten, der unter
-  „Dateien" bleibt; dort ist das Originaletikett gekennzeichnet. Für den
+  ansehen, ersetzen und lösen. Ist das Etikett im Scan zu klein (etwa ein
+  kleines Etikett auf einem A4-Scan), zoomt man mit „Vergrößern …" in einem
+  Rahmen von der Form seines Platzes im Bericht darauf (Mausrad, Regler,
+  verschieben mit der Maus, bis zehnfach); der Bericht zeigt dann nur
+  diesen Ausschnitt, so groß, wie Platz ist, mit dem Vermerk
+  „vergrößerter Ausschnitt" — bei einem PDF auf jeder Seite. „Ganzes
+  Etikett" nimmt ihn zurück. Ein neuer Scan ersetzt den alten, der unter
+  „Dateien" bleibt, und zeigt wieder das ganze Etikett; dort ist das
+  Originaletikett gekennzeichnet. Für den
   Punkt zählt es nicht — er sagt nur „Originaletikett hinterlegt" oder
   „… fehlt noch". Liste, Übersicht,
   Zahlen und Bericht zählen gleich. Einträge im Verlauf sind offen oder erledigt
@@ -409,7 +416,9 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Leere Angaben fallen weg; ohne jede steht unten links, wann gedruckt
   wurde. Die Angaben liegen verschlüsselt bei den Dateien der
   Produktentwicklung und wandern mit ihr ins Backup. Wann gedruckt wurde,
-  steht auf Seite 1.
+  steht auf Seite 1, unten darüber ein leeres, umrahmtes Feld „Freigabe"
+  für den Stempel der Qualitätssicherung — immer an derselben Stelle,
+  auch in der leeren Vorlage.
 - **Projektbericht-Vorlage** (Werkzeuge » Projektbericht » „Vorlage
   speichern…" oder unter „Erstellen"): der Bericht leer zum Ablegen bei den
   Formblättern — mit Kopf und Fuß, jedem Kapitel und jedem Abschnitt, den
@@ -426,7 +435,7 @@ Projektberichts trägt jeder selbst ein.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 38.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 39.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit

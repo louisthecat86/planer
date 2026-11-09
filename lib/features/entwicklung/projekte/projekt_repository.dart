@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../../core/database/database.dart';
 import '../../../core/providers/database_provider.dart';
 import '../daten/entwicklung_repository.dart' show nachName;
+import '../daten/etikett_scan.dart' show EtikettAusschnitt;
 import 'entwicklungsstrang.dart';
 import 'gesamtprojekt_modell.dart';
 import 'projekt_modell.dart';
@@ -225,18 +226,38 @@ class ProjektRepository {
       });
 
   /// Nimmt die Datei [dateiId] als Originaletikett — den Scan des
-  /// gedruckten Etiketts. Ein früheres bleibt als Datei des Projekts.
+  /// gedruckten Etiketts. Ein früheres bleibt als Datei des Projekts; ein
+  /// Ausschnitt des früheren gilt nicht mehr.
   Future<void> originaletikettSetzen(String id, String dateiId) =>
       projektAendern(
         id,
-        EntwicklungProjekteCompanion(etikettDateiId: Value(dateiId)),
+        EntwicklungProjekteCompanion(
+          etikettDateiId: Value(dateiId),
+          etikettAusschnitt: const Value(null),
+        ),
       );
 
   /// Löst das Originaletikett vom Etikett nach LMIV — die Datei bleibt
   /// unter den Dateien des Projekts.
   Future<void> originaletikettLoesen(String id) => projektAendern(
         id,
-        const EntwicklungProjekteCompanion(etikettDateiId: Value(null)),
+        const EntwicklungProjekteCompanion(
+          etikettDateiId: Value(null),
+          etikettAusschnitt: Value(null),
+        ),
+      );
+
+  /// Zeigt im Bericht nur [ausschnitt] des Originaletiketts, vergrößert —
+  /// null: wieder das ganze Etikett.
+  Future<void> originaletikettAusschnitt(
+    String id,
+    EtikettAusschnitt? ausschnitt,
+  ) =>
+      projektAendern(
+        id,
+        EntwicklungProjekteCompanion(
+          etikettAusschnitt: Value(ausschnitt?.alsJson()),
+        ),
       );
 
   /// Setzt eine Pflichtangabe des Etiketts auf [stand] (F28).

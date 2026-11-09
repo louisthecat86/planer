@@ -44,8 +44,9 @@ part 'bericht_vorlage.dart';
 //
 // Kopf und Fuß jeder Seite sind die eines Formblatts ([BerichtFormblatt]):
 // oben Nummer und Logo, unten wer es erstellt und geprüft hat, Version,
-// Stand und die Seite. Dieselben trägt die leere Vorlage
-// (bericht_vorlage.dart), die zeigt, was wo im Bericht steht.
+// Stand und die Seite; auf Seite 1 darüber das Feld für die Freigabe.
+// Dieselben trägt die leere Vorlage (bericht_vorlage.dart), die zeigt, was
+// wo im Bericht steht.
 //
 // Gesetzt wird zweimal (das erledigt der Satz, druck_satz.dart): Der erste
 // Durchgang findet die Seiten der Kapitel für das Inhaltsverzeichnis, der
@@ -986,8 +987,13 @@ DruckDokument _dokument({
               logoBreite: logo?.breite ?? 0,
               logoHoehe: logo?.hoehe ?? 0,
             ),
-            // Die Seite unten rechts, unter Stand und „ersetzt den Stand".
-            fuss: (ctx) => _fusszeile(links, [...rechts, r.seitenText(ctx)]),
+            // Die Seite unten rechts, unter Stand und „ersetzt den Stand" —
+            // auf Seite 1 darüber das Feld für die Freigabe.
+            fuss: (ctx) => _fusszeile(
+              links,
+              [...rechts, r.seitenText(ctx)],
+              freigabe: r.seiteImBlatt(ctx) == 1,
+            ),
             inhalt: (ctx) => [
               ...deckblatt(s, k),
               for (final x in k) ...x.bauen(s, x),
@@ -1084,11 +1090,16 @@ pw.Widget _kopfzeile({
 }
 
 /// Die Fußzeile: [links] und [rechts] je untereinander — rechts zuletzt
-/// die Seite, also unten rechts.
-pw.Widget _fusszeile(List<String> links, List<String> rechts) {
+/// die Seite, also unten rechts. Mit [freigabe] steht darüber das Feld für
+/// die Freigabe (Seite 1).
+pw.Widget _fusszeile(
+  List<String> links,
+  List<String> rechts, {
+  bool freigabe = false,
+}) {
   pw.Widget zeile(String text) =>
       _t(text, groesse: 7, farbe: _grau, maxLines: 1);
-  return pw.Padding(
+  final fuss = pw.Padding(
     padding: const pw.EdgeInsets.only(top: _fussHoehe - _fussInhalt - 4),
     child: pw.Container(
       padding: const pw.EdgeInsets.only(top: 4),
@@ -1116,7 +1127,31 @@ pw.Widget _fusszeile(List<String> links, List<String> rechts) {
       ),
     ),
   );
+  if (!freigabe) return fuss;
+  return pw.Column(
+    mainAxisSize: pw.MainAxisSize.min,
+    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+    children: [pw.SizedBox(height: 10), _freigabeFeld(), fuss],
+  );
 }
+
+/// So hoch ist das Feld für die Freigabe — Platz für einen Stempel.
+const double _freigabeHoehe = 96;
+
+/// Das Feld für die Freigabe auf Seite 1: leer und umrahmt, unten über
+/// dem Fuß — immer an derselben Stelle. Die Qualitätssicherung setzt
+/// ihren Stempel hinein.
+pw.Widget _freigabeFeld() => pw.Container(
+  height: _freigabeHoehe,
+  padding: const pw.EdgeInsets.fromLTRB(7, 5, 7, 5),
+  decoration: pw.BoxDecoration(
+    border: pw.Border.all(color: _grau, width: .8),
+  ),
+  child: pw.Align(
+    alignment: pw.Alignment.topLeft,
+    child: _t('Freigabe', groesse: 9, fett: true),
+  ),
+);
 
 // ── Steckbrief (Seite 1) ───────────────────────────────────────────────
 
@@ -2432,7 +2467,10 @@ pw.Widget _lmivPunkte(LmivStand Function(String schluessel) stand) {
       weitere: const <pw.Widget>[],
     );
   }
-  final zeile = '${d.name} · abgelegt am ${_datum(d.createdAt)}';
+  final zeile = [
+    '${d.name} · abgelegt am ${_datum(d.createdAt)}',
+    if (s.b.etikettAusschnitt != null) 'vergrößerter Ausschnitt',
+  ].join(' · ');
   final bilder = [
     for (final bytes in s.b.etikettBilder)
       if (_bildAus(bytes) case final bild?) bild,

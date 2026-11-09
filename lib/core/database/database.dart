@@ -86,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 38;
+  int get schemaVersion => 39;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -599,6 +599,17 @@ class AppDatabase extends _$AppDatabase {
             await _addColumnIfNotExists(
               'entwicklung_projekte',
               'etikett_datei_id',
+              'TEXT',
+            );
+          }
+
+          // --- v38 → v39: Ausschnitt des Originaletiketts -------------
+          // Was der Bericht vom Scan vergrößert zeigt. Leer: das ganze
+          // Etikett, wie bisher.
+          if (from < 39) {
+            await _addColumnIfNotExists(
+              'entwicklung_projekte',
+              'etikett_ausschnitt',
               'TEXT',
             );
           }

@@ -56,6 +56,7 @@ class ProjektBericht {
     this.gesamtVerlauf = const [],
     this.etikettDatei,
     this.etikettBilder = const [],
+    this.etikettAusschnitt,
   });
 
   final EntwicklungsProjekt projekt;
@@ -135,6 +136,10 @@ class ProjektBericht {
   /// nicht rastern ließ.
   final List<Uint8List> etikettBilder;
 
+  /// Der vergrößerte Ausschnitt, wenn es einen gibt — [etikettBilder] sind
+  /// dann schon zugeschnitten.
+  final EtikettAusschnitt? etikettAusschnitt;
+
   /// So steht ein Eintrag aus dem Gesamtprojekt im Bericht eines Musters.
   static const String gesamtMarke = ' (Gesamtprojekt)';
 
@@ -175,6 +180,7 @@ class ProjektBericht {
       gesamtVerlauf: gesamtVerlauf,
       etikettDatei: etikettDatei,
       etikettBilder: etikettBilder,
+      etikettAusschnitt: etikettAusschnitt,
     );
   }
 }
@@ -265,9 +271,11 @@ Future<ProjektBericht> berichtLaden(
     }
   }
 
-  // Das Originaletikett: ein Bild, wie es ist, ein PDF als Seiten.
+  // Das Originaletikett: ein Bild, wie es ist, ein PDF als Seiten — mit
+  // einem Ausschnitt nur der, vergrößert.
   EntwicklungsDatei? etikettDatei;
   var etikettBilder = const <Uint8List>[];
+  EtikettAusschnitt? ausschnitt;
   final etikettId = projekt.etikettDateiId;
   if (etikettId != null) {
     try {
@@ -283,6 +291,18 @@ Future<ProjektBericht> berichtLaden(
       }
     } catch (_) {
       etikettBilder = const [];
+    }
+    final a = etikettAusschnitt(projekt);
+    if (a != null && etikettBilder.isNotEmpty) {
+      try {
+        etikettBilder = [
+          for (final seite in etikettBilder)
+            await etikettZuschneidenImHintergrund(seite, a),
+        ];
+        ausschnitt = a;
+      } catch (_) {
+        // Dann eben das ganze Etikett.
+      }
     }
   }
 
@@ -444,6 +464,7 @@ Future<ProjektBericht> berichtLaden(
     gesamtVerlauf: gesamtVerlauf,
     etikettDatei: etikettDatei,
     etikettBilder: etikettBilder,
+    etikettAusschnitt: ausschnitt,
   );
 }
 

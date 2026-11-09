@@ -271,6 +271,11 @@ class EntwicklungProjekte extends Table {
   /// neuer Scan ersetzt es; der alte bleibt unter den Dateien.
   TextColumn get etikettDateiId => text().nullable()();
 
+  /// JSON: der Ausschnitt des Originaletiketts, den der Bericht vergrößert
+  /// zeigt — in Bruchteilen des Scans, mit der ID des Scans, zu dem er
+  /// gehört. null: das ganze Etikett.
+  TextColumn get etikettAusschnitt => text().nullable()();
+
   /// JSON: Prozessparameter nach Abschnitten.
   TextColumn get prozess => text().nullable()();
 

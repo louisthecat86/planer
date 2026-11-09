@@ -308,6 +308,25 @@ void main() {
       expect(aus, isNot(contains('/Subtype/Image')));
     });
 
+    test('Seite 1 trägt über dem Fuß das Feld für die Freigabe', () async {
+      final seiten = pdfSeiten(await bericht(angaben));
+      // Im Satz steht es vor den Zeilen des Fußes — also über ihm.
+      expect(
+        seitenText(seiten.first),
+        contains('Freigabe Erstellt von: A. Beispiel'),
+      );
+      for (final seite in seiten.skip(1)) {
+        expect(seitenText(seite), isNot(contains('Freigabe Erstellt')));
+      }
+      // Auch ohne Angaben für Kopf und Fuß.
+      final ohne = pdfSeiten(await bericht(const BerichtFormblatt()));
+      expect(
+        seitenText(ohne.first),
+        contains('Freigabe Gedruckt am 06.11.2026'),
+      );
+      expect(seitenText(ohne[1]), isNot(contains('Freigabe Gedruckt')));
+    });
+
     test(
         'verschlüsselt gespeichert, mit dem Logo der Spezifikationsvorlage '
         'geladen — und im Backup', () async {
@@ -501,6 +520,16 @@ void main() {
       // Kein Datum außer denen des Formblatts — auch nicht am Zeitstrahl.
       expect(roh, isNot(contains('06.11.2026')));
       expect(roh, isNot(contains('07.11.2026')));
+    });
+
+    test('auf Seite 1 das Feld für die Freigabe — wie im Bericht', () {
+      expect(
+        seitenText(seiten.first),
+        contains('Freigabe Erstellt von: A. Beispiel'),
+      );
+      for (final seite in seiten.skip(1)) {
+        expect(seitenText(seite), isNot(contains('Freigabe Erstellt')));
+      }
     });
 
     test('ohne Angaben „Leere Vorlage" unten — der Dateiname nennt den Stand',

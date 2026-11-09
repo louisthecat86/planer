@@ -703,7 +703,8 @@ List<pw.Widget> _vorlageProdukt(_Satz s, _Kapitel k) => [
         _vHinweis('Je Angabe: geprüft, offen oder trifft nicht zu.'),
         _etikett('Originaletikett'),
         _t(
-          '${_v('Dateiname')} · abgelegt am ${_v('Datum')}',
+          '${_v('Dateiname')} · abgelegt am ${_v('Datum')} · '
+          'vergrößerter Ausschnitt, wenn gewählt',
           groesse: 8,
           farbe: _grau,
         ),

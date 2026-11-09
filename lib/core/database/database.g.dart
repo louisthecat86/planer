@@ -19853,6 +19853,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
   late final GeneratedColumn<String> etikettDateiId = GeneratedColumn<String>(
       'etikett_datei_id', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _etikettAusschnittMeta =
+      const VerificationMeta('etikettAusschnitt');
+  @override
+  late final GeneratedColumn<String> etikettAusschnitt =
+      GeneratedColumn<String>('etikett_ausschnitt', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _prozessMeta =
       const VerificationMeta('prozess');
   @override
@@ -19944,6 +19950,7 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
         checkliste,
         etikettCheckliste,
         etikettDateiId,
+        etikettAusschnitt,
         prozess,
         prozessHistorie,
         haccp,
@@ -20074,6 +20081,12 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           etikettDateiId.isAcceptableOrUnknown(
               data['etikett_datei_id']!, _etikettDateiIdMeta));
     }
+    if (data.containsKey('etikett_ausschnitt')) {
+      context.handle(
+          _etikettAusschnittMeta,
+          etikettAusschnitt.isAcceptableOrUnknown(
+              data['etikett_ausschnitt']!, _etikettAusschnittMeta));
+    }
     if (data.containsKey('prozess')) {
       context.handle(_prozessMeta,
           prozess.isAcceptableOrUnknown(data['prozess']!, _prozessMeta));
@@ -20177,6 +20190,8 @@ class $EntwicklungProjekteTable extends EntwicklungProjekte
           DriftSqlType.string, data['${effectivePrefix}etikett_checkliste']),
       etikettDateiId: attachedDatabase.typeMapping.read(
           DriftSqlType.string, data['${effectivePrefix}etikett_datei_id']),
+      etikettAusschnitt: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}etikett_ausschnitt']),
       prozess: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}prozess']),
       prozessHistorie: attachedDatabase.typeMapping.read(
@@ -20250,6 +20265,11 @@ class EntwicklungsProjekt extends DataClass
   /// neuer Scan ersetzt es; der alte bleibt unter den Dateien.
   final String? etikettDateiId;
 
+  /// JSON: der Ausschnitt des Originaletiketts, den der Bericht vergrößert
+  /// zeigt — in Bruchteilen des Scans, mit der ID des Scans, zu dem er
+  /// gehört. null: das ganze Etikett.
+  final String? etikettAusschnitt;
+
   /// JSON: Prozessparameter nach Abschnitten.
   final String? prozess;
 
@@ -20297,6 +20317,7 @@ class EntwicklungsProjekt extends DataClass
       this.checkliste,
       this.etikettCheckliste,
       this.etikettDateiId,
+      this.etikettAusschnitt,
       this.prozess,
       this.prozessHistorie,
       this.haccp,
@@ -20360,6 +20381,9 @@ class EntwicklungsProjekt extends DataClass
     }
     if (!nullToAbsent || etikettDateiId != null) {
       map['etikett_datei_id'] = Variable<String>(etikettDateiId);
+    }
+    if (!nullToAbsent || etikettAusschnitt != null) {
+      map['etikett_ausschnitt'] = Variable<String>(etikettAusschnitt);
     }
     if (!nullToAbsent || prozess != null) {
       map['prozess'] = Variable<String>(prozess);
@@ -20444,6 +20468,9 @@ class EntwicklungsProjekt extends DataClass
       etikettDateiId: etikettDateiId == null && nullToAbsent
           ? const Value.absent()
           : Value(etikettDateiId),
+      etikettAusschnitt: etikettAusschnitt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(etikettAusschnitt),
       prozess: prozess == null && nullToAbsent
           ? const Value.absent()
           : Value(prozess),
@@ -20502,6 +20529,8 @@ class EntwicklungsProjekt extends DataClass
       etikettCheckliste:
           serializer.fromJson<String?>(json['etikettCheckliste']),
       etikettDateiId: serializer.fromJson<String?>(json['etikettDateiId']),
+      etikettAusschnitt:
+          serializer.fromJson<String?>(json['etikettAusschnitt']),
       prozess: serializer.fromJson<String?>(json['prozess']),
       prozessHistorie: serializer.fromJson<String?>(json['prozessHistorie']),
       haccp: serializer.fromJson<String?>(json['haccp']),
@@ -20540,6 +20569,7 @@ class EntwicklungsProjekt extends DataClass
       'checkliste': serializer.toJson<String?>(checkliste),
       'etikettCheckliste': serializer.toJson<String?>(etikettCheckliste),
       'etikettDateiId': serializer.toJson<String?>(etikettDateiId),
+      'etikettAusschnitt': serializer.toJson<String?>(etikettAusschnitt),
       'prozess': serializer.toJson<String?>(prozess),
       'prozessHistorie': serializer.toJson<String?>(prozessHistorie),
       'haccp': serializer.toJson<String?>(haccp),
@@ -20575,6 +20605,7 @@ class EntwicklungsProjekt extends DataClass
           Value<String?> checkliste = const Value.absent(),
           Value<String?> etikettCheckliste = const Value.absent(),
           Value<String?> etikettDateiId = const Value.absent(),
+          Value<String?> etikettAusschnitt = const Value.absent(),
           Value<String?> prozess = const Value.absent(),
           Value<String?> prozessHistorie = const Value.absent(),
           Value<String?> haccp = const Value.absent(),
@@ -20616,6 +20647,9 @@ class EntwicklungsProjekt extends DataClass
             : this.etikettCheckliste,
         etikettDateiId:
             etikettDateiId.present ? etikettDateiId.value : this.etikettDateiId,
+        etikettAusschnitt: etikettAusschnitt.present
+            ? etikettAusschnitt.value
+            : this.etikettAusschnitt,
         prozess: prozess.present ? prozess.value : this.prozess,
         prozessHistorie: prozessHistorie.present
             ? prozessHistorie.value
@@ -20677,6 +20711,9 @@ class EntwicklungsProjekt extends DataClass
       etikettDateiId: data.etikettDateiId.present
           ? data.etikettDateiId.value
           : this.etikettDateiId,
+      etikettAusschnitt: data.etikettAusschnitt.present
+          ? data.etikettAusschnitt.value
+          : this.etikettAusschnitt,
       prozess: data.prozess.present ? data.prozess.value : this.prozess,
       prozessHistorie: data.prozessHistorie.present
           ? data.prozessHistorie.value
@@ -20724,6 +20761,7 @@ class EntwicklungsProjekt extends DataClass
           ..write('checkliste: $checkliste, ')
           ..write('etikettCheckliste: $etikettCheckliste, ')
           ..write('etikettDateiId: $etikettDateiId, ')
+          ..write('etikettAusschnitt: $etikettAusschnitt, ')
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
@@ -20761,6 +20799,7 @@ class EntwicklungsProjekt extends DataClass
         checkliste,
         etikettCheckliste,
         etikettDateiId,
+        etikettAusschnitt,
         prozess,
         prozessHistorie,
         haccp,
@@ -20797,6 +20836,7 @@ class EntwicklungsProjekt extends DataClass
           other.checkliste == this.checkliste &&
           other.etikettCheckliste == this.etikettCheckliste &&
           other.etikettDateiId == this.etikettDateiId &&
+          other.etikettAusschnitt == this.etikettAusschnitt &&
           other.prozess == this.prozess &&
           other.prozessHistorie == this.prozessHistorie &&
           other.haccp == this.haccp &&
@@ -20832,6 +20872,7 @@ class EntwicklungProjekteCompanion
   final Value<String?> checkliste;
   final Value<String?> etikettCheckliste;
   final Value<String?> etikettDateiId;
+  final Value<String?> etikettAusschnitt;
   final Value<String?> prozess;
   final Value<String?> prozessHistorie;
   final Value<String?> haccp;
@@ -20865,6 +20906,7 @@ class EntwicklungProjekteCompanion
     this.checkliste = const Value.absent(),
     this.etikettCheckliste = const Value.absent(),
     this.etikettDateiId = const Value.absent(),
+    this.etikettAusschnitt = const Value.absent(),
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
@@ -20899,6 +20941,7 @@ class EntwicklungProjekteCompanion
     this.checkliste = const Value.absent(),
     this.etikettCheckliste = const Value.absent(),
     this.etikettDateiId = const Value.absent(),
+    this.etikettAusschnitt = const Value.absent(),
     this.prozess = const Value.absent(),
     this.prozessHistorie = const Value.absent(),
     this.haccp = const Value.absent(),
@@ -20934,6 +20977,7 @@ class EntwicklungProjekteCompanion
     Expression<String>? checkliste,
     Expression<String>? etikettCheckliste,
     Expression<String>? etikettDateiId,
+    Expression<String>? etikettAusschnitt,
     Expression<String>? prozess,
     Expression<String>? prozessHistorie,
     Expression<String>? haccp,
@@ -20970,6 +21014,7 @@ class EntwicklungProjekteCompanion
       if (checkliste != null) 'checkliste': checkliste,
       if (etikettCheckliste != null) 'etikett_checkliste': etikettCheckliste,
       if (etikettDateiId != null) 'etikett_datei_id': etikettDateiId,
+      if (etikettAusschnitt != null) 'etikett_ausschnitt': etikettAusschnitt,
       if (prozess != null) 'prozess': prozess,
       if (prozessHistorie != null) 'prozess_historie': prozessHistorie,
       if (haccp != null) 'haccp': haccp,
@@ -21006,6 +21051,7 @@ class EntwicklungProjekteCompanion
       Value<String?>? checkliste,
       Value<String?>? etikettCheckliste,
       Value<String?>? etikettDateiId,
+      Value<String?>? etikettAusschnitt,
       Value<String?>? prozess,
       Value<String?>? prozessHistorie,
       Value<String?>? haccp,
@@ -21039,6 +21085,7 @@ class EntwicklungProjekteCompanion
       checkliste: checkliste ?? this.checkliste,
       etikettCheckliste: etikettCheckliste ?? this.etikettCheckliste,
       etikettDateiId: etikettDateiId ?? this.etikettDateiId,
+      etikettAusschnitt: etikettAusschnitt ?? this.etikettAusschnitt,
       prozess: prozess ?? this.prozess,
       prozessHistorie: prozessHistorie ?? this.prozessHistorie,
       haccp: haccp ?? this.haccp,
@@ -21118,6 +21165,9 @@ class EntwicklungProjekteCompanion
     if (etikettDateiId.present) {
       map['etikett_datei_id'] = Variable<String>(etikettDateiId.value);
     }
+    if (etikettAusschnitt.present) {
+      map['etikett_ausschnitt'] = Variable<String>(etikettAusschnitt.value);
+    }
     if (prozess.present) {
       map['prozess'] = Variable<String>(prozess.value);
     }
@@ -21180,6 +21230,7 @@ class EntwicklungProjekteCompanion
           ..write('checkliste: $checkliste, ')
           ..write('etikettCheckliste: $etikettCheckliste, ')
           ..write('etikettDateiId: $etikettDateiId, ')
+          ..write('etikettAusschnitt: $etikettAusschnitt, ')
           ..write('prozess: $prozess, ')
           ..write('prozessHistorie: $prozessHistorie, ')
           ..write('haccp: $haccp, ')
@@ -33812,6 +33863,7 @@ typedef $$EntwicklungProjekteTableCreateCompanionBuilder
   Value<String?> checkliste,
   Value<String?> etikettCheckliste,
   Value<String?> etikettDateiId,
+  Value<String?> etikettAusschnitt,
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
@@ -33847,6 +33899,7 @@ typedef $$EntwicklungProjekteTableUpdateCompanionBuilder
   Value<String?> checkliste,
   Value<String?> etikettCheckliste,
   Value<String?> etikettDateiId,
+  Value<String?> etikettAusschnitt,
   Value<String?> prozess,
   Value<String?> prozessHistorie,
   Value<String?> haccp,
@@ -33933,6 +33986,10 @@ class $$EntwicklungProjekteTableFilterComposer
 
   ColumnFilters<String> get etikettDateiId => $composableBuilder(
       column: $table.etikettDateiId,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get etikettAusschnitt => $composableBuilder(
+      column: $table.etikettAusschnitt,
       builder: (column) => ColumnFilters(column));
 
   ColumnFilters<String> get prozess => $composableBuilder(
@@ -34048,6 +34105,10 @@ class $$EntwicklungProjekteTableOrderingComposer
       column: $table.etikettDateiId,
       builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get etikettAusschnitt => $composableBuilder(
+      column: $table.etikettAusschnitt,
+      builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<String> get prozess => $composableBuilder(
       column: $table.prozess, builder: (column) => ColumnOrderings(column));
 
@@ -34156,6 +34217,9 @@ class $$EntwicklungProjekteTableAnnotationComposer
   GeneratedColumn<String> get etikettDateiId => $composableBuilder(
       column: $table.etikettDateiId, builder: (column) => column);
 
+  GeneratedColumn<String> get etikettAusschnitt => $composableBuilder(
+      column: $table.etikettAusschnitt, builder: (column) => column);
+
   GeneratedColumn<String> get prozess =>
       $composableBuilder(column: $table.prozess, builder: (column) => column);
 
@@ -34240,6 +34304,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> checkliste = const Value.absent(),
             Value<String?> etikettCheckliste = const Value.absent(),
             Value<String?> etikettDateiId = const Value.absent(),
+            Value<String?> etikettAusschnitt = const Value.absent(),
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
@@ -34274,6 +34339,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             checkliste: checkliste,
             etikettCheckliste: etikettCheckliste,
             etikettDateiId: etikettDateiId,
+            etikettAusschnitt: etikettAusschnitt,
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,
@@ -34308,6 +34374,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             Value<String?> checkliste = const Value.absent(),
             Value<String?> etikettCheckliste = const Value.absent(),
             Value<String?> etikettDateiId = const Value.absent(),
+            Value<String?> etikettAusschnitt = const Value.absent(),
             Value<String?> prozess = const Value.absent(),
             Value<String?> prozessHistorie = const Value.absent(),
             Value<String?> haccp = const Value.absent(),
@@ -34342,6 +34409,7 @@ class $$EntwicklungProjekteTableTableManager extends RootTableManager<
             checkliste: checkliste,
             etikettCheckliste: etikettCheckliste,
             etikettDateiId: etikettDateiId,
+            etikettAusschnitt: etikettAusschnitt,
             prozess: prozess,
             prozessHistorie: prozessHistorie,
             haccp: haccp,
