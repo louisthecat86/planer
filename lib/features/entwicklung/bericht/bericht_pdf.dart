@@ -244,20 +244,34 @@ pw.Widget _markeZelle(String text, PdfColor farbe, {bool voll = false}) =>
       child: _marke(text, farbe, voll: voll),
     );
 
-/// Eine Überschrift innerhalb eines Kapitels.
-pw.Widget _abschnitt(String titel, {String? zusatz}) => pw.Padding(
-  padding: const pw.EdgeInsets.only(top: 14, bottom: 5),
-  child: pw.Row(
-    crossAxisAlignment: pw.CrossAxisAlignment.end,
-    children: [
-      _t(titel, groesse: 10.5, fett: true, farbe: _akzent),
-      if (zusatz != null && zusatz.trim().isNotEmpty) ...[
-        pw.SizedBox(width: 8),
-        pw.Expanded(child: _t(zusatz, groesse: 8, farbe: _grau, maxLines: 1)),
-      ],
-    ],
-  ),
-);
+/// Eine Überschrift innerhalb eines Kapitels — [aus]: ausgegraut, für
+/// einen Abschnitt, der entfällt.
+pw.Widget _abschnitt(String titel, {String? zusatz, bool aus = false}) =>
+    pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 14, bottom: 5),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.end,
+        children: [
+          _t(
+            titel,
+            groesse: 10.5,
+            fett: true,
+            farbe: aus ? _hellgrau : _akzent,
+          ),
+          if (zusatz != null && zusatz.trim().isNotEmpty) ...[
+            pw.SizedBox(width: 8),
+            pw.Expanded(
+              child: _t(
+                zusatz,
+                groesse: 8,
+                farbe: aus ? _hellgrau : _grau,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
 
 /// Eine kleine Überschrift über einem Absatz.
 pw.Widget _etikett(String text) => pw.Padding(
@@ -344,13 +358,15 @@ pw.Widget _felderZweispaltig(List<(String, String)> paare) {
   );
 }
 
-/// Eine Tabelle mit Kopfzeile, die auf jeder Seite wiederkehrt.
+/// Eine Tabelle mit Kopfzeile, die auf jeder Seite wiederkehrt — [aus]:
+/// ausgegraut, für einen Abschnitt, der entfällt.
 pw.Widget _tabelle({
   required List<String> kopf,
   required List<List<pw.Widget>> zeilen,
   Map<int, pw.TableColumnWidth>? breiten,
   Set<int> rechts = const {},
   List<PdfColor?> hintergruende = const [],
+  bool aus = false,
 }) => pw.Table(
   columnWidths: breiten,
   border: const pw.TableBorder(
@@ -360,7 +376,7 @@ pw.Widget _tabelle({
   children: [
     pw.TableRow(
       repeat: true,
-      decoration: const pw.BoxDecoration(color: _akzentHell),
+      decoration: pw.BoxDecoration(color: aus ? _linie : _akzentHell),
       children: [
         for (final (i, k) in kopf.indexed)
           pw.Padding(
@@ -372,7 +388,7 @@ pw.Widget _tabelle({
               k,
               groesse: 7.3,
               fett: true,
-              farbe: _akzent,
+              farbe: aus ? _hellgrau : _akzent,
               ausrichtung: rechts.contains(i) ? pw.TextAlign.right : null,
             ),
           ),
@@ -1458,7 +1474,18 @@ List<pw.Widget> _kacheln(_Satz s) {
     0,
     (m, g) => g.risiko > m ? g.risiko : m,
   );
-  final haccpKachel = haccp.leer
+  // „Nichts Neues": keine neuen Prozesse — es gilt das bestehende Konzept.
+  final haccpKachel = haccp.nichtsNeues
+      ? _kachel(
+          'HACCP',
+          'Nichts Neues',
+          const [
+            'Keine neuen Prozesse',
+            'Es gilt das bestehende HACCP-Konzept',
+          ],
+          farbe: _ok,
+        )
+      : haccp.leer
       ? _kachel('HACCP', 'Noch keine Analyse', const [], farbe: _hellgrau)
       : _kachel(
           'HACCP',
@@ -2889,7 +2916,10 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
           ),
         ],
       ),
-    if (haccp.gefahren.isEmpty)
+    // „Nichts Neues": Gefahrenanalyse und Lenkungspunkte entfallen.
+    if (haccp.nichtsNeues)
+      _zusammen(s, [_haccpEntfaellt()])
+    else if (haccp.gefahren.isEmpty)
       _zusammen(s, [
         _abschnitt('HACCP-Gefahrenanalyse'),
         _leer('Noch keine Gefahren bewertet.'),
@@ -2944,7 +2974,7 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
           ),
         ],
       ),
-    if (haccp.lenkungspunkte.isNotEmpty)
+    if (haccp.lenkungspunkte.isNotEmpty && !haccp.nichtsNeues)
       ..._mitTitel(
         s,
         _abschnitt('Lenkungspunkte'),
@@ -3011,6 +3041,66 @@ List<pw.Widget> _kapitelHerstellung(_Satz s, _Kapitel k) {
         ],
       ),
   ];
+}
+
+/// Gefahrenanalyse und Lenkungspunkte, wenn bei HACCP „Nichts Neues"
+/// angehakt ist: ausgegraut wie ein Feld, das nicht auszufüllen ist — ohne
+/// Einträge, darunter warum.
+pw.Widget _haccpEntfaellt() {
+  List<pw.Widget> leer(int spalten) => [
+    for (var i = 0; i < spalten; i++) _zelle('—', farbe: _hellgrau),
+  ];
+  return pw.Container(
+    padding: const pw.EdgeInsets.fromLTRB(8, 0, 8, 8),
+    decoration: pw.BoxDecoration(
+      color: _flaeche,
+      border: pw.Border.all(color: _linie, width: .6),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        _abschnitt('HACCP-Gefahrenanalyse', zusatz: 'entfällt', aus: true),
+        _tabelle(
+          kopf: const ['Gefahr', 'Art', 'S x W', 'Risiko', 'Maßnahmen'],
+          breiten: const {
+            0: pw.FlexColumnWidth(2),
+            1: pw.FixedColumnWidth(72),
+            2: pw.FixedColumnWidth(34),
+            3: pw.FixedColumnWidth(54),
+            4: pw.FlexColumnWidth(2.4),
+          },
+          zeilen: [leer(5)],
+          aus: true,
+        ),
+        _abschnitt('Lenkungspunkte', zusatz: 'entfällt', aus: true),
+        _tabelle(
+          kopf: const [
+            'Einstufung',
+            'Prozessschritt',
+            'Lenkung',
+            'Entscheidungsbaum',
+          ],
+          breiten: const {
+            0: pw.FixedColumnWidth(58),
+            1: pw.FlexColumnWidth(1.4),
+            2: pw.FlexColumnWidth(2.4),
+            3: pw.FlexColumnWidth(1.4),
+          },
+          zeilen: [leer(4)],
+          aus: true,
+        ),
+        pw.SizedBox(height: 8),
+        _t(
+          'Nichts Neues: keine neuen Prozesse — es gilt das bestehende '
+          'HACCP-Konzept. Gefahrenanalyse und Lenkungspunkte sind nicht '
+          'auszufüllen.',
+          groesse: 8.5,
+          kursiv: true,
+          farbe: _grau,
+        ),
+      ],
+    ),
+  );
 }
 
 // ── 5 Freigabe und Checkliste ──────────────────────────────────────────

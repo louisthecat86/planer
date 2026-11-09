@@ -289,6 +289,15 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   reduziert dieser Schritt die Gefahr? ja → CCP), Frage 3 (Kontamination
   oder Anstieg möglich? nein → CP), Frage 4 (ein späterer Schritt? ja →
   CP, nein → CCP).
+- **HACCP „Nichts Neues"**: Bewertet wird nur ein Prozess, den das
+  bestehende HACCP-Konzept noch nicht abdeckt. Bringt ein Projekt nichts
+  Neues, hakt man oben bei HACCP „Nichts Neues — keine neuen Prozesse"
+  an: Gefahrenanalyse und Lenkungspunkte sind dann ausgegraut und
+  gesperrt (schon Erfasstes bleibt erhalten, steht aber nicht im
+  Bericht). Im Projektbericht steht auf Seite 1 bei HACCP „Nichts Neues",
+  im Kapitel Herstellung und HACCP stehen beide Abschnitte ausgegraut, ohne
+  Einträge. Der Haken nimmt „Neuer Prozess" in der Übersicht zurück — und
+  „Neuer Prozess" den Haken.
 - **Fließdiagramme** als Auswahlliste: Kennung und Bezeichnung (etwa
   „FD_101 · Testware paniert"), einmal als Liste eingefügt
   (je Zeile Kennung und Bezeichnung, getrennt durch Tabulator, Semikolon

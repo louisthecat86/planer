@@ -7,6 +7,11 @@ import 'dart:convert';
 // Lenkungspunkt (CP) ist, entscheidet der Entscheidungsbaum mit vier
 // Fragen und einer Zusatzfrage zu Frage 1 — im Wortlaut des
 // HACCP-Konzepts.
+//
+// Bewertet wird nur, was das bestehende HACCP-Konzept nicht abdeckt: ein
+// Prozess, den es noch nicht gibt. Bringt ein Projekt nichts Neues, hakt
+// man das ab ([Haccp.nichtsNeues]) — dann entfallen Gefahrenanalyse und
+// Lenkungspunkte.
 
 /// Art einer Gefahr.
 enum Gefahrenart {
@@ -187,25 +192,42 @@ class Lenkungspunkt {
 
 /// Gefahrenanalyse und Lenkungspunkte eines Projekts.
 class Haccp {
-  const Haccp({this.gefahren = const [], this.lenkungspunkte = const []});
+  const Haccp({
+    this.gefahren = const [],
+    this.lenkungspunkte = const [],
+    this.nichtsNeues = false,
+  });
 
   final List<Gefahr> gefahren;
   final List<Lenkungspunkt> lenkungspunkte;
 
+  /// „Nichts Neues": keine neuen Prozesse, es gilt das bestehende
+  /// HACCP-Konzept — Gefahrenanalyse und Lenkungspunkte entfallen. Was
+  /// schon erfasst ist, bleibt, falls doch etwas neu ist.
+  final bool nichtsNeues;
+
+  /// Weder Gefahren noch Lenkungspunkte erfasst.
   bool get leer => gefahren.isEmpty && lenkungspunkte.isEmpty;
 
-  Haccp kopie({List<Gefahr>? gefahren, List<Lenkungspunkt>? lenkungspunkte}) =>
+  Haccp kopie({
+    List<Gefahr>? gefahren,
+    List<Lenkungspunkt>? lenkungspunkte,
+    bool? nichtsNeues,
+  }) =>
       Haccp(
         gefahren: gefahren ?? this.gefahren,
         lenkungspunkte: lenkungspunkte ?? this.lenkungspunkte,
+        nichtsNeues: nichtsNeues ?? this.nichtsNeues,
       );
 
-  /// JSON für die Datenbank — null, wenn nichts erfasst ist.
-  String? alsJson() => leer
+  /// JSON für die Datenbank — null, wenn nichts erfasst und nichts
+  /// abgehakt ist.
+  String? alsJson() => leer && !nichtsNeues
       ? null
       : jsonEncode({
           'gefahren': [for (final g in gefahren) g.toJson()],
           'lenkungspunkte': [for (final l in lenkungspunkte) l.toJson()],
+          if (nichtsNeues) 'nichtsNeues': true,
         });
 
   static Haccp aus(String? json) {
@@ -222,6 +244,7 @@ class Haccp {
           for (final l in (d['lenkungspunkte'] as List?) ?? const [])
             if (l is Map<String, dynamic>) Lenkungspunkt.ausJson(l),
         ],
+        nichtsNeues: d['nichtsNeues'] == true,
       );
     } on FormatException {
       return const Haccp();

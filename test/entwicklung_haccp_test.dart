@@ -719,6 +719,69 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('HACCP: „Nichts Neues" anhaken nimmt „Neuer Prozess" zurück',
+        (tester) async {
+      await zeige(tester, projekt(prozessJson: prozess.alsJson()));
+      await reiter(tester, 'Herstellung');
+      // Noch offen: die Bewertung in voller Farbe; der Haken sagt, was er
+      // mit „Neuer Prozess" in der Übersicht macht.
+      expect(
+        tester
+            .widget<Opacity>(find.byKey(const ValueKey('haccp-bewertung')))
+            .opacity,
+        1,
+      );
+      expect(find.textContaining('hier nimmt das zurück'), findsOneWidget);
+
+      await tester.tap(find.text('Nichts Neues — keine neuen Prozesse'));
+      await tester.pump();
+      final daten = speicher.gespeichert.lastWhere((d) => d.haccp.present);
+      expect(daten.neuerProzess.present, isTrue);
+      expect(daten.neuerProzess.value, isFalse);
+      final h = Haccp.aus(daten.haccp.value);
+      expect(h.nichtsNeues, isTrue);
+      // Was erfasst ist, bleibt.
+      expect(h.gefahren, hasLength(2));
+      expect(h.lenkungspunkte, hasLength(2));
+    });
+
+    testWidgets('HACCP: mit „Nichts Neues" ausgegraut und gesperrt',
+        (tester) async {
+      final p = projekt(prozessJson: prozess.alsJson());
+      await zeige(
+        tester,
+        EntwicklungsProjekt.fromJson({
+          ...p.toJson(),
+          'haccp': haccp.kopie(nichtsNeues: true).alsJson(),
+        }),
+      );
+      await reiter(tester, 'Herstellung');
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.byKey(const ValueKey('haccp-nichts-neues')),
+            )
+            .value,
+        isTrue,
+      );
+      expect(find.textContaining('bleibt erhalten'), findsOneWidget);
+      // Erfasstes steht noch da, aber ausgegraut — ohne die Warnung, auch
+      // wenn „Neuer Prozess" noch angehakt ist.
+      expect(find.text('Metallteile'), findsOneWidget);
+      expect(
+        tester
+            .widget<Opacity>(find.byKey(const ValueKey('haccp-bewertung')))
+            .opacity,
+        lessThan(1),
+      );
+      expect(find.textContaining('Gefahrenanalyse fehlt noch'), findsNothing);
+      // Gesperrt: Der Knopf öffnet nichts.
+      await tester.tap(find.text('Gefahr bewerten'), warnIfMissed: false);
+      await tester.pump();
+      expect(find.byType(HaccpAssistent), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('Herstellung: breit nebeneinander, schmal umschalten',
         (tester) async {
       await zeige(tester, projekt(prozessJson: prozess.alsJson()));

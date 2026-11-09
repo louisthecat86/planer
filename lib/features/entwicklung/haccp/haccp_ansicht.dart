@@ -14,6 +14,10 @@ import 'haccp_modell.dart';
 // Bedeutung und Vorkommen bewerten, ab einem Risiko von 6 mit dem
 // Entscheidungsbaum prüfen, ob der Schritt ein kritischer Lenkungspunkt
 // ist.
+//
+// Bewertet wird nur ein Prozess, den es noch nicht gibt. Bringt das
+// Projekt nichts Neues, hakt man oben „Nichts Neues" an: Darunter ist
+// alles ausgegraut und gesperrt, im Projektbericht ebenso.
 
 /// Ab diesem Risiko (Bedeutung × Vorkommen) folgt der Entscheidungsbaum.
 const int kRisikoHoch = 6;
@@ -40,6 +44,34 @@ StatusArt lenkungsArt(Lenkungsart a) => switch (a) {
       Lenkungsart.cp => StatusArt.warnung,
       Lenkungsart.kp => StatusArt.neutral,
     };
+
+/// Was „Nichts Neues" bei HACCP auf [wert] setzt. Angehakt gibt es keinen
+/// neuen Prozess — ein Haken bei „Neuer Prozess" in der Übersicht geht
+/// mit.
+EntwicklungProjekteCompanion nichtsNeuesSetzen(
+  EntwicklungsProjekt p,
+  bool wert,
+) =>
+    EntwicklungProjekteCompanion(
+      haccp: Value(Haccp.aus(p.haccp).kopie(nichtsNeues: wert).alsJson()),
+      neuerProzess:
+          wert && p.neuerProzess ? const Value(false) : const Value.absent(),
+    );
+
+/// Was „Neuer Prozess" in der Übersicht auf [wert] setzt. Ein neuer
+/// Prozess will bewertet werden — ein Haken bei „Nichts Neues" geht mit.
+EntwicklungProjekteCompanion neuerProzessSetzen(
+  EntwicklungsProjekt p,
+  bool wert,
+) {
+  final h = Haccp.aus(p.haccp);
+  return EntwicklungProjekteCompanion(
+    neuerProzess: Value(wert),
+    haccp: wert && h.nichtsNeues
+        ? Value(h.kopie(nichtsNeues: false).alsJson())
+        : const Value.absent(),
+  );
+}
 
 /// Die HACCP-Gefahrenanalyse eines Projekts — im Reiter „Herstellung".
 class ProjektHaccp extends ConsumerWidget {
@@ -118,112 +150,203 @@ class ProjektHaccp extends ConsumerWidget {
         h.lenkungspunkte.where((l) => l.ergebnis == Lenkungsart.ccp).length;
     final cp = h.lenkungspunkte.where((l) => l.ergebnis == Lenkungsart.cp).length;
     final hoch = h.gefahren.where((g) => g.risiko >= kRisikoHoch).length;
+    final nichtsNeues = h.nichtsNeues;
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            FilledButton.icon(
-              onPressed: assistent,
-              icon: const Icon(Icons.health_and_safety_outlined, size: 18),
-              label: const Text('Gefahr bewerten'),
-            ),
-            OutlinedButton.icon(
-              onPressed: () => punktBearbeiten(null),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Lenkungspunkt von Hand'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        if (projekt.neuerProzess && h.gefahren.isEmpty) ...[
-          const HinweisBox(
-            'Das Projekt bringt einen neuen Prozess mit — die '
-            'Gefahrenanalyse fehlt noch.',
-            art: StatusArt.warnung,
+        _NichtsNeues(
+          haccp: h,
+          neuerProzess: projekt.neuerProzess,
+          onChanged: (wert) => projektSpeichern(
+            context,
+            ref,
+            projekt.id,
+            nichtsNeuesSetzen(projekt, wert),
           ),
-          const SizedBox(height: 10),
-        ],
-        Bereich(
-          titel: 'Gefahrenanalyse',
-          icon: Icons.warning_amber_rounded,
-          untertitel: h.gefahren.isEmpty
-              ? null
-              : '${h.gefahren.length} '
-                  '${h.gefahren.length == 1 ? 'Gefahr' : 'Gefahren'}'
-                  '${hoch == 0 ? '' : ', $hoch mit hohem Risiko'}',
-          innenAbstand: const EdgeInsets.fromLTRB(12, 6, 4, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (h.gefahren.isEmpty)
-                const LeerHinweis(
-                  'Noch keine Gefahr bewertet.',
+        ),
+        const SizedBox(height: 12),
+        // Mit „Nichts Neues" ausgegraut und gesperrt — was schon erfasst
+        // ist, bleibt, falls doch etwas neu ist.
+        IgnorePointer(
+          ignoring: nichtsNeues,
+          child: Opacity(
+            key: const ValueKey('haccp-bewertung'),
+            opacity: nichtsNeues ? .4 : 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: assistent,
+                      icon: const Icon(
+                        Icons.health_and_safety_outlined,
+                        size: 18,
+                      ),
+                      label: const Text('Gefahr bewerten'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => punktBearbeiten(null),
+                      icon: const Icon(Icons.add, size: 18),
+                      label: const Text('Lenkungspunkt von Hand'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                if (projekt.neuerProzess &&
+                    h.gefahren.isEmpty &&
+                    !nichtsNeues) ...[
+                  const HinweisBox(
+                    'Das Projekt bringt einen neuen Prozess mit — die '
+                    'Gefahrenanalyse fehlt noch.',
+                    art: StatusArt.warnung,
+                  ),
+                  const SizedBox(height: 10),
+                ],
+                Bereich(
+                  titel: 'Gefahrenanalyse',
                   icon: Icons.warning_amber_rounded,
-                ),
-              for (final g in h.gefahren)
-                _GefahrZeile(
-                  gefahr: g,
-                  onPruefen: () => assistent(g),
-                  onBearbeiten: () => gefahrBearbeiten(g),
-                  onLoeschen: () => speichern(
-                    h.kopie(
-                      gefahren: [
-                        for (final x in h.gefahren)
-                          if (x.id != g.id) x,
-                      ],
-                    ),
+                  untertitel: h.gefahren.isEmpty
+                      ? null
+                      : '${h.gefahren.length} '
+                          '${h.gefahren.length == 1 ? 'Gefahr' : 'Gefahren'}'
+                          '${hoch == 0 ? '' : ', $hoch mit hohem Risiko'}',
+                  innenAbstand: const EdgeInsets.fromLTRB(12, 6, 4, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (h.gefahren.isEmpty)
+                        LeerHinweis(
+                          nichtsNeues
+                              ? 'Entfällt — keine neuen Prozesse.'
+                              : 'Noch keine Gefahr bewertet.',
+                          icon: Icons.warning_amber_rounded,
+                        ),
+                      for (final g in h.gefahren)
+                        _GefahrZeile(
+                          gefahr: g,
+                          onPruefen: () => assistent(g),
+                          onBearbeiten: () => gefahrBearbeiten(g),
+                          onLoeschen: () => speichern(
+                            h.kopie(
+                              gefahren: [
+                                for (final x in h.gefahren)
+                                  if (x.id != g.id) x,
+                              ],
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Risiko = Bedeutung × Vorkommen (je 1 bis 3). Ab '
+                        '$kRisikoHoch prüft der Entscheidungsbaum, ob der '
+                        'Schritt ein kritischer Lenkungspunkt ist; darunter '
+                        'genügt die gute Hygienepraxis.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              const SizedBox(height: 8),
-              Text(
-                'Risiko = Bedeutung × Vorkommen (je 1 bis 3). Ab '
-                '$kRisikoHoch prüft der Entscheidungsbaum, ob der Schritt '
-                'ein kritischer Lenkungspunkt ist; darunter genügt die gute '
-                'Hygienepraxis.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 16),
-        Bereich(
-          titel: 'Lenkungspunkte',
-          icon: Icons.account_tree_outlined,
-          untertitel: h.lenkungspunkte.isEmpty ? null : '$ccp CCP · $cp CP',
-          innenAbstand: const EdgeInsets.fromLTRB(12, 6, 4, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (h.lenkungspunkte.isEmpty)
-                const LeerHinweis(
-                  'Keine Lenkungspunkte. Sie entstehen, wenn eine Gefahr mit '
-                  'hohem Risiko den Entscheidungsbaum durchläuft.',
+                const SizedBox(height: 16),
+                Bereich(
+                  titel: 'Lenkungspunkte',
                   icon: Icons.account_tree_outlined,
-                ),
-              for (final l in h.lenkungspunkte)
-                _PunktZeile(
-                  punkt: l,
-                  onBearbeiten: () => punktBearbeiten(l),
-                  onLoeschen: () => speichern(
-                    h.kopie(
-                      lenkungspunkte: [
-                        for (final x in h.lenkungspunkte)
-                          if (x.id != l.id) x,
-                      ],
-                    ),
+                  untertitel:
+                      h.lenkungspunkte.isEmpty ? null : '$ccp CCP · $cp CP',
+                  innenAbstand: const EdgeInsets.fromLTRB(12, 6, 4, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (h.lenkungspunkte.isEmpty)
+                        LeerHinweis(
+                          nichtsNeues
+                              ? 'Entfällt — keine neuen Prozesse.'
+                              : 'Keine Lenkungspunkte. Sie entstehen, wenn '
+                                  'eine Gefahr mit hohem Risiko den '
+                                  'Entscheidungsbaum durchläuft.',
+                          icon: Icons.account_tree_outlined,
+                        ),
+                      for (final l in h.lenkungspunkte)
+                        _PunktZeile(
+                          punkt: l,
+                          onBearbeiten: () => punktBearbeiten(l),
+                          onLoeschen: () => speichern(
+                            h.kopie(
+                              lenkungspunkte: [
+                                for (final x in h.lenkungspunkte)
+                                  if (x.id != l.id) x,
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Oben bei HACCP: „Nichts Neues" — keine neuen Prozesse, also nichts zu
+/// bewerten.
+class _NichtsNeues extends StatelessWidget {
+  const _NichtsNeues({
+    required this.haccp,
+    required this.neuerProzess,
+    required this.onChanged,
+  });
+
+  final Haccp haccp;
+
+  /// Ist in der Übersicht „Neuer Prozess" angehakt?
+  final bool neuerProzess;
+
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final farben = Theme.of(context).colorScheme;
+    final an = haccp.nichtsNeues;
+    final String text;
+    if (an) {
+      text = 'Es gilt das bestehende HACCP-Konzept: Gefahrenanalyse und '
+          'Lenkungspunkte entfallen, auch im Projektbericht.'
+          '${haccp.leer ? '' : ' Was schon erfasst ist, bleibt erhalten.'}';
+    } else if (neuerProzess) {
+      text = 'In der Übersicht ist „Neuer Prozess" angehakt — der Haken '
+          'hier nimmt das zurück.';
+    } else {
+      text = 'Es gilt das bestehende HACCP-Konzept, hier ist nichts '
+          'auszufüllen. Bewertet wird nur ein Prozess, den es noch nicht '
+          'gibt.';
+    }
+    return Material(
+      color: an ? AppFarben.von(context).okFlaeche : farben.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppMasse.ecken,
+        side: BorderSide(color: farben.outline),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: CheckboxListTile(
+        key: const ValueKey('haccp-nichts-neues'),
+        dense: true,
+        controlAffinity: ListTileControlAffinity.leading,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+        value: an,
+        title: const Text('Nichts Neues — keine neuen Prozesse'),
+        subtitle: Text(text),
+        onChanged: (v) => onChanged(v ?? false),
+      ),
     );
   }
 }

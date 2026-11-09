@@ -263,6 +263,7 @@ List<pw.Widget> _vorlageDeckblatt(_Satz s, List<_Kapitel> kapitel) => [
         _kachel('HACCP', '${_v('Anzahl')} Gefahren', [
           '${_v('Anzahl')} Lenkungspunkte, davon ${_v('Anzahl')} CCP',
           'höchstes Risiko ${_v('Wert')}',
+          'oder „Nichts Neues", wenn angehakt',
         ]),
         _kachel('OFFENE PUNKTE', '${_v('Anzahl')} Einträge offen', [
           '${_v('fällig bis')}: ${_v('Titel')}',
@@ -816,6 +817,11 @@ List<pw.Widget> _vorlageHerstellung(_Satz s, _Kapitel k) => [
               _zelle(_v('Antworten'), farbe: _grau, groesse: 7.5),
             ],
           ],
+        ),
+        _vHinweis(
+          'Mit „Nichts Neues" bei HACCP (keine neuen Prozesse, es gilt das '
+          'bestehende HACCP-Konzept) stehen Gefahrenanalyse und '
+          'Lenkungspunkte ausgegraut da, ohne Einträge.',
         ),
       ]),
     ];

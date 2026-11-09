@@ -15,6 +15,8 @@ import '../daten/etikett_scan.dart' show originaletikettStand;
 import '../entwicklung_format.dart';
 import '../etikett/etikett_dialog.dart';
 import '../freigabe/freigabe_ansicht.dart';
+import '../haccp/haccp_ansicht.dart' show neuerProzessSetzen;
+import '../haccp/haccp_modell.dart' show Haccp;
 import '../haccp/herstellung_reiter.dart';
 import '../rechenkern/naehrwert_rundung.dart';
 import '../rezepturen/rezeptur_screen.dart' show TextFeld;
@@ -952,12 +954,14 @@ class ProjektStammdaten extends ConsumerWidget {
             controlAffinity: ListTileControlAffinity.leading,
             value: p.neuerProzess,
             title: const Text('Neuer Prozess'),
-            subtitle: const Text(
-              'Für einen neuen Ablauf gehört eine Gefahrenanalyse dazu.',
+            subtitle: Text(
+              // „Nichts Neues" bei HACCP sagt das Gegenteil.
+              Haccp.aus(p.haccp).nichtsNeues
+                  ? 'Bei HACCP ist „Nichts Neues" angehakt — der Haken hier '
+                      'nimmt das zurück.'
+                  : 'Für einen neuen Ablauf gehört eine Gefahrenanalyse dazu.',
             ),
-            onChanged: (v) => speichern(
-              EntwicklungProjekteCompanion(neuerProzess: Value(v ?? false)),
-            ),
+            onChanged: (v) => speichern(neuerProzessSetzen(p, v ?? false)),
           ),
           CheckboxListTile(
             dense: true,
