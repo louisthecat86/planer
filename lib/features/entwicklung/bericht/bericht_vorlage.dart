@@ -233,12 +233,7 @@ List<pw.Widget> _vorlageDeckblatt(_Satz s, List<_Kapitel> kapitel) => [
               ],
             ),
           ),
-          _vFlaeche(
-            'Produktfoto',
-            breite: 168,
-            hoehe: 126,
-            rand: const pw.EdgeInsets.only(left: 16),
-          ),
+          _fotoUndFreigabe(_vFlaeche('Produktfoto', hoehe: 126)),
         ],
       ),
       _abschnitt('Auf einen Blick'),

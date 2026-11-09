@@ -416,8 +416,8 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Leere Angaben fallen weg; ohne jede steht unten links, wann gedruckt
   wurde. Die Angaben liegen verschlüsselt bei den Dateien der
   Produktentwicklung und wandern mit ihr ins Backup. Wann gedruckt wurde,
-  steht auf Seite 1, unten darüber ein leeres, umrahmtes Feld „Freigabe"
-  für den Stempel der Qualitätssicherung — immer an derselben Stelle,
+  steht auf Seite 1; dort rechts unter dem Produktfoto ein leeres,
+  umrahmtes Feld „Freigabe QS:" für den Stempel der Qualitätssicherung —
   auch in der leeren Vorlage.
 - **Projektbericht-Vorlage** (Werkzeuge » Projektbericht » „Vorlage
   speichern…" oder unter „Erstellen"): der Bericht leer zum Ablegen bei den
