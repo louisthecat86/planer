@@ -353,8 +353,27 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Vorschau, alles oder nichts. Die Mappe selbst ist nicht verschlüsselt.
 - **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil
   einer Rezeptur (nach Wahl, ihr neuester Stand) auf ein Ziel einstellen,
-  Kopf- und Fußzeile und leere Vorlage des Projektberichts, Entwicklung in
-  Zahlen.
+  Kopf- und Fußzeile und leere Vorlage des Projektberichts.
+- **Statistik** (eigener Reiter, etwa für die Managementbewertung am
+  Jahresende): Zeitraum nach Jahr, Quartal, Monat oder frei (nicht in die
+  Zukunft), dazu ein Kundenfilter. Kennzahlen mit dem Vorjahr: neue Muster
+  (davon in Gesamtprojekten), neue Anfragen (Gesamtprojekte), gelistet
+  (davon als Artikel freigegeben), nicht weiter verfolgt, Listungsquote
+  (Anteil der im Zeitraum angelegten Muster, die heute gelistet sind; unter
+  den entschiedenen), Tage bis zur Listung (Mittel und Median), in Arbeit am
+  Ende, neue Prozesse und Zutaten, Rezepturstände. Dazu der Verlauf je
+  Monat (Quartal, Jahr), was aus den Mustern wurde, je Kunde (antippen
+  filtert), die Gründe für „nicht weiter verfolgt", die Muster im Einzelnen
+  und der Stand heute (Phasen, Projekte in Arbeit, ruhende, Lücken im
+  Zutaten-Katalog). Gezählt wird so: Ein Muster ist jedes Projekt, auch in
+  einem Gesamtprojekt. Gelistet heißt in Produktion gegangen (Freigabe als
+  Artikel oder von Hand), am Tag des Wechsels im Verlauf. Nicht weiter
+  verfolgt zählt, wer im Zeitraum dazu kam und an dessen Ende noch so steht.
+  **Bericht …** erstellt daraus ein PDF: Seite 1 auf einen Blick mit
+  Vorjahr und Inhalt, dann Kennzahlen (mit „Wie gezählt wird"), Verlauf,
+  was aus den Mustern wurde (auch je Kunde), Gründe, die Muster im
+  Einzelnen und der Stand heute — Kapitel wählbar, Lesezeichen je Kapitel,
+  oben rechts das Logo des Projektberichts (dessen Formblatt-Angaben nicht).
 - **Freigabe als Artikel:** Ein abgeschlossener Stand wird zum Artikel der
   Planung; sein Verlust gilt dort als Vorgabe, bis Produktionen erfasst sind.
   Die Prozesskette des Projekts wird die des Artikels: Schritte derselben

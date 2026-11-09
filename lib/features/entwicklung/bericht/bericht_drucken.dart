@@ -80,6 +80,36 @@ Future<void> projektberichtVorlage(BuildContext context, WidgetRef ref) async {
   }
 }
 
+/// Der Bericht über die Produktentwicklung im Druckfenster — oben rechts
+/// mit dem Logo des Projektberichts.
+Future<void> entwicklungsberichtDrucken(
+  BuildContext context,
+  WidgetRef ref,
+  EntwicklungsberichtDaten daten,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final navigator = Navigator.of(context, rootNavigator: true);
+  try {
+    final formblatt = await berichtFormblattLaden(
+      ref.read(entwicklungDateienProvider),
+    );
+    if (!navigator.mounted) return;
+    await druckFensterOeffnen(
+      navigator.context,
+      entwicklungsberichtDruckAuftrag(daten, formblatt: formblatt),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(
+          'Der Bericht ließ sich nicht erstellen. (${fehlerText(e)})',
+        ),
+      ),
+    );
+  }
+}
+
 /// „Kopf- und Fußzeile …" im Druckfenster: Gespeichertes geht an
 /// [uebernehmen], die Vorschau folgt.
 DruckAktion _kopfUndFuss(void Function(BerichtFormblatt neu) uebernehmen) =>

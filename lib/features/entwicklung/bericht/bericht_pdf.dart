@@ -30,10 +30,13 @@ import '../rechenkern/naehrwert_rundung.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
 import '../spezifikation/spez_angaben.dart';
+import '../statistik/entwicklung_auswertung.dart';
+import '../werkzeuge/entwicklung_statistik.dart';
 import 'bericht_formblatt.dart';
 import 'projekt_bericht.dart';
 
 part 'bericht_vorlage.dart';
+part 'entwicklungsbericht.dart';
 
 // Der Projektbericht als PDF — eine Projektakte zum Nachschlagen: vorn ein
 // Steckbrief mit dem Stand auf einen Blick und dem Inhalt, dahinter je ein
@@ -653,22 +656,38 @@ class _Satz {
 }
 
 /// Der Kopf eines Kapitels: Nummer und Titel, darunter [untertitel].
-List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
+List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) =>
+    _kapitelKopfFuer(
+      neueSeiten: s.neueSeiten,
+      rahmen: s.rahmen,
+      anker: k.anker,
+      nr: k.nr,
+      titel: k.titel,
+      untertitel: untertitel,
+    );
+
+/// Der Kopf eines Kapitels mit der Sprungmarke [anker] — im Projektbericht
+/// wie im Bericht über die Produktentwicklung.
+List<pw.Widget> _kapitelKopfFuer({
+  required bool neueSeiten,
+  required DruckRahmen rahmen,
+  required String anker,
+  required int nr,
+  required String titel,
+  String? untertitel,
+}) => [
   // Jedes Kapitel auf einer neuen Seite — fortlaufend wenigstens nicht
   // allein unten auf einer.
-  if (s.neueSeiten)
+  if (neueSeiten)
     pw.NewPage()
-  else if (s.rahmen.umbrueche)
+  else if (rahmen.umbrueche)
     pw.NewPage(freeSpace: 160),
   _Marke(
-    name: k.anker,
-    titel: '${k.nr}  ${k.titel}',
-    rahmen: s.rahmen,
+    name: anker,
+    titel: '$nr  $titel',
+    rahmen: rahmen,
     child: pw.Container(
-      margin: pw.EdgeInsets.only(
-        top: s.neueSeiten ? 0 : 22,
-        bottom: 6,
-      ),
+      margin: pw.EdgeInsets.only(top: neueSeiten ? 0 : 22, bottom: 6),
       padding: const pw.EdgeInsets.only(bottom: 5),
       decoration: const pw.BoxDecoration(
         border: pw.Border(bottom: pw.BorderSide(color: _akzent, width: 1.2)),
@@ -676,10 +695,10 @@ List<pw.Widget> _kapitelKopf(_Satz s, _Kapitel k, {String? untertitel}) => [
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
-          _t('${k.nr}', groesse: 20, fett: true, farbe: _akzent),
+          _t('$nr', groesse: 20, fett: true, farbe: _akzent),
           pw.SizedBox(width: 10),
           pw.Expanded(
-            child: _t(k.titel, groesse: 16, fett: true, farbe: _akzent),
+            child: _t(titel, groesse: 16, fett: true, farbe: _akzent),
           ),
         ],
       ),
@@ -1028,13 +1047,14 @@ const double _fussInhalt = 27;
 const double _fussHoehe = 8 + 4 + _fussInhalt;
 
 /// Die Kopfzeile: links die Nummer des Formblatts, in der Mitte der
-/// Bericht und sein Projekt, rechts das Logo.
+/// Bericht ([titel]) und sein Projekt, rechts das Logo.
 pw.Widget _kopfzeile({
   required String nummer,
   required String projekt,
   required pw.ImageProvider? logo,
   required double logoBreite,
   required double logoHoehe,
+  String titel = 'Projektbericht',
 }) {
   // Das Logo so groß, wie die Vorlage es druckt — höchstens so hoch wie
   // der Kopf und so breit wie seine Spalte.
@@ -1067,7 +1087,7 @@ pw.Widget _kopfzeile({
               child: pw.Column(
                 mainAxisAlignment: pw.MainAxisAlignment.center,
                 children: [
-                  _t('Projektbericht', groesse: 11, fett: true, farbe: _akzent),
+                  _t(titel, groesse: 11, fett: true, farbe: _akzent),
                   pw.SizedBox(height: 1.5),
                   _t(
                     projekt,
@@ -1601,43 +1621,49 @@ pw.Widget _zieleZeile(_Satz s) => pw.Wrap(
 );
 
 /// Eine Zeile im Inhaltsverzeichnis — ein Sprung zum Kapitel.
-pw.Widget _inhaltZeile(_Satz s, _Kapitel k) => pw.Link(
-  destination: k.anker,
-  child: pw.Padding(
-    padding: const pw.EdgeInsets.symmetric(vertical: 3),
-    child: pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.end,
-      children: [
-        pw.SizedBox(
-          width: 18,
-          child: _t('${k.nr}', groesse: 10, fett: true, farbe: _akzent),
-        ),
-        _t(k.titel, groesse: 10),
-        pw.SizedBox(width: 6),
-        pw.Expanded(
-          child: pw.Padding(
-            padding: const pw.EdgeInsets.only(bottom: 2.5),
-            child: pw.Divider(
-              height: 1,
-              thickness: .6,
-              color: _hellgrau,
-              borderStyle: pw.BorderStyle.dotted,
+pw.Widget _inhaltZeile(_Satz s, _Kapitel k) =>
+    _inhaltSprung(k.anker, k.nr, k.titel, s.bekannt[k.anker]);
+
+/// Eine Zeile im Inhaltsverzeichnis: Nummer, Titel und [seite] — ein
+/// Sprung zu [anker].
+pw.Widget _inhaltSprung(String anker, int nr, String titel, int? seite) =>
+    pw.Link(
+      destination: anker,
+      child: pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 3),
+        child: pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.SizedBox(
+              width: 18,
+              child: _t('$nr', groesse: 10, fett: true, farbe: _akzent),
             ),
-          ),
+            _t(titel, groesse: 10),
+            pw.SizedBox(width: 6),
+            pw.Expanded(
+              child: pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 2.5),
+                child: pw.Divider(
+                  height: 1,
+                  thickness: .6,
+                  color: _hellgrau,
+                  borderStyle: pw.BorderStyle.dotted,
+                ),
+              ),
+            ),
+            pw.SizedBox(width: 6),
+            pw.SizedBox(
+              width: 22,
+              child: _t(
+                '${seite ?? ''}',
+                groesse: 10,
+                ausrichtung: pw.TextAlign.right,
+              ),
+            ),
+          ],
         ),
-        pw.SizedBox(width: 6),
-        pw.SizedBox(
-          width: 22,
-          child: _t(
-            '${s.bekannt[k.anker] ?? ''}',
-            groesse: 10,
-            ausrichtung: pw.TextAlign.right,
-          ),
-        ),
-      ],
-    ),
-  ),
-);
+      ),
+    );
 
 // ── 1 Projekt ──────────────────────────────────────────────────────────
 

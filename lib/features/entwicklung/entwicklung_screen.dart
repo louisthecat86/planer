@@ -8,11 +8,12 @@ import 'entwicklung_zugang.dart';
 import 'projekte/datei_aktionen.dart';
 import 'projekte/projekte_ansicht.dart';
 import 'rezepturen/rezepturen_ansicht.dart';
+import 'statistik/statistik_ansicht.dart';
 import 'werkzeuge/werkzeuge_ansicht.dart';
 import 'zutaten/zutaten_ansicht.dart';
 
-/// Produktentwicklung: Projekte, Rezepturen und Zutaten — hinter einem
-/// eigenen Passwort.
+/// Produktentwicklung: Projekte, Rezepturen und Zutaten, Werkzeuge und die
+/// Statistik — hinter einem eigenen Passwort.
 ///
 /// Gesperrt zeigt die Seite nur die Passwortabfrage — beim ersten Mal das
 /// Festlegen. Offen bleibt sie, bis jemand sperrt, eine Viertelstunde
@@ -79,6 +80,7 @@ class EntwicklungScreen extends ConsumerWidget {
             RezepturenAnsicht(),
             ZutatenAnsicht(),
             WerkzeugeAnsicht(),
+            StatistikAnsicht(),
           ],
         ),
       ),
@@ -463,7 +465,8 @@ enum EntwicklungsReiter {
   projekte('Projekte', Icons.folder_open_outlined),
   rezepturen('Rezepturen', Icons.menu_book_outlined),
   zutaten('Zutaten', Icons.egg_outlined),
-  werkzeuge('Werkzeuge', Icons.calculate_outlined);
+  werkzeuge('Werkzeuge', Icons.calculate_outlined),
+  statistik('Statistik', Icons.query_stats);
 
   const EntwicklungsReiter(this.label, this.icon);
 

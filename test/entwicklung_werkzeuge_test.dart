@@ -16,6 +16,7 @@ import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dar
 import 'package:produktion_planer/features/entwicklung/rechenkern/rueckrechnung.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/fleischanteil_dialog.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/rezeptur_wahl.dart';
+import 'package:produktion_planer/features/entwicklung/statistik/stand_heute.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/entwicklung_statistik.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/werkzeuge/werkzeuge_ansicht.dart';
@@ -23,8 +24,9 @@ import 'package:produktion_planer/features/entwicklung/werkzeuge/werkzeuge_ansic
 import 'helpers/test_db.dart';
 
 /// Tests für die Werkzeuge der Produktentwicklung: Rückrechnung aus einem
-/// Etikett, Fleischanteil einstellen, die Zahlen der Entwicklung und die
-/// Fenster dazu. Zutaten, Rezepturen und Projekte sind erfunden.
+/// Etikett, Fleischanteil einstellen, die Zahlen der Entwicklung (Stand
+/// heute) und die Fenster dazu. Zutaten, Rezepturen und Projekte sind
+/// erfunden.
 void main() {
   RechenZutat zutat(
     String name, {
@@ -692,10 +694,18 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('Werkzeuge mit den Zahlen der Entwicklung', (tester) async {
+    testWidgets('Werkzeuge — die Zahlen stehen in der Statistik',
+        (tester) async {
+      await zeige(tester, const WerkzeugeAnsicht());
+      expect(find.text('Rezeptur rückrechnen'), findsOneWidget);
+      expect(find.text('Fleischanteil einstellen'), findsOneWidget);
+      expect(find.text('Stand heute'), findsNothing);
+    });
+
+    testWidgets('Stand heute: die Zahlen der Entwicklung', (tester) async {
       await zeige(
         tester,
-        const WerkzeugeAnsicht(),
+        const EntwicklungsStatistikAnsicht(),
         overrides: [
           projekteProvider.overrideWith(
             (ref) => Stream.value([
@@ -716,9 +726,7 @@ void main() {
           alleEintraegeProvider.overrideWith((ref) => Stream.value(const [])),
         ],
       );
-      expect(find.text('Rezeptur rückrechnen'), findsOneWidget);
-      expect(find.text('Fleischanteil einstellen'), findsOneWidget);
-      expect(find.text('Entwicklung in Zahlen'), findsOneWidget);
+      expect(find.text('Stand heute'), findsOneWidget);
       expect(find.text('Schnitzel Wiener Art'), findsOneWidget);
       expect(
         find.text('0 von ${kProjektCheckliste.length}'),
