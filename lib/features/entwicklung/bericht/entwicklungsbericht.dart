@@ -10,7 +10,7 @@ part of 'bericht_pdf.dart';
 // Projektbericht und stehen hier nicht.
 //
 // Gerechnet wird in statistik/entwicklung_auswertung.dart — dieselben
-// Zahlen wie im Reiter „Statistik".
+// Zahlen wie im Bereich „Statistik".
 
 /// Was der Bericht braucht: die Auswertung des Zeitraums und den Stand
 /// heute.

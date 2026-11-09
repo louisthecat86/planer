@@ -45,9 +45,9 @@ Future<void> fleischanteilMitWahl(BuildContext context, WidgetRef ref) async {
   await oeffneRezeptur(context, rezeptur.id);
 }
 
-/// Der Reiter „Werkzeuge": Rückrechnung, Fleischanteil, Kopf- und Fußzeile
+/// Der Bereich „Werkzeuge": Rückrechnung, Fleischanteil, Kopf- und Fußzeile
 /// und Vorlage des Projektberichts. Die Zahlen der Entwicklung stehen im
-/// Reiter „Statistik".
+/// Bereich „Statistik".
 class WerkzeugeAnsicht extends ConsumerWidget {
   const WerkzeugeAnsicht({super.key});
 

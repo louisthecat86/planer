@@ -51,6 +51,7 @@ Future<void> neueProjektRezeptur(
     builder: (_) => NeueRezepturDialog(
       projektId: projekt.id,
       vorschlag: projekt.name,
+      artikelnummer: projekt.artikelnummer,
     ),
   );
   if (id == null || !context.mounted) return;

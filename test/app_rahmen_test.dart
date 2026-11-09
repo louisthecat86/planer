@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
+import 'package:produktion_planer/features/entwicklung/entwicklung_bereiche.dart';
 import 'package:produktion_planer/features/shell/app_rahmen.dart';
 
 /// Tests für den Rahmen mit der Navigationsleiste und für die gemeinsamen
@@ -67,13 +68,46 @@ void main() {
 
     await zeige(tester, ort: '/data', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Einstellungen'), FontWeight.w600);
+  });
 
-    await zeige(
-      tester,
-      ort: '/entwicklung',
-      groesse: const Size(1600, 1000),
-    );
-    expect(gewicht(tester, 'Produktentwicklung'), FontWeight.w600);
+  testWidgets('Produktentwicklung: ihre Bereiche und der Weg zurück',
+      (tester) async {
+    const breit = Size(1600, 1000);
+    await zeige(tester, ort: '/entwicklung', groesse: breit);
+
+    // Oben ihr Name, darunter ihre Bereiche — die des Planers nicht.
+    expect(find.text('Produktentwicklung'), findsOneWidget);
+    for (final b in EntwicklungsBereich.values) {
+      expect(find.text(b.label), findsOneWidget, reason: b.label);
+    }
+    expect(find.text('ENTWICKELN'), findsOneWidget);
+    expect(find.text('Zum Planer'), findsOneWidget);
+    expect(find.text('Einstellungen'), findsOneWidget);
+    expect(find.text('Planungsboard'), findsNothing);
+    expect(gewicht(tester, 'Übersicht'), FontWeight.w600);
+    expect(gewicht(tester, 'Projekte'), FontWeight.w400);
+
+    // Unterseiten heben ihren Bereich hervor.
+    for (final (ort, bereich) in const [
+      ('/entwicklung/projekte', 'Projekte'),
+      ('/entwicklung/projekt/p1', 'Projekte'),
+      ('/entwicklung/gesamtprojekt/g1', 'Projekte'),
+      ('/entwicklung/kunden', 'Kunden'),
+      ('/entwicklung/rezeptur/r1', 'Rezepturen'),
+      ('/entwicklung/rueckrechnung', 'Werkzeuge'),
+      ('/entwicklung/statistik', 'Statistik'),
+    ]) {
+      await zeige(tester, ort: ort, groesse: breit);
+      expect(gewicht(tester, bereich), FontWeight.w600, reason: ort);
+      expect(gewicht(tester, 'Übersicht'), FontWeight.w400, reason: ort);
+    }
+
+    // Eingeklappt stehen die Namen im Tooltip.
+    await tester.tap(find.byTooltip('Leiste einklappen'));
+    await tester.pump();
+    expect(find.byTooltip('Produktentwicklung'), findsOneWidget);
+    expect(find.byTooltip('Zum Planer'), findsOneWidget);
+    expect(find.byTooltip('Kunden'), findsOneWidget);
   });
 
   testWidgets('schmales Fenster: nur Symbole, Namen im Tooltip',

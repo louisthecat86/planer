@@ -282,6 +282,39 @@ void main() {
       expect(statusWechsel(nochmal.single), isNull);
     });
 
+    test('die freigegebene Rezeptur bekommt die Nummer — eine eigene bleibt',
+        () async {
+      final a = await anlegen();
+      final rezepturId = (await rezepte.version(a.versionId))!.rezepturId;
+      expect((await rezepte.rezeptur(rezepturId))!.artikelnummer, isNull);
+      final w = (await dienst.vorschlag(a.projekt, a.versionId))
+          .kopie(produktgruppe: 'bratstrasse_paniert');
+      await dienst.freigeben(
+        projekt: a.projekt,
+        versionId: a.versionId,
+        werte: w,
+      );
+      expect((await rezepte.rezeptur(rezepturId))!.artikelnummer, 'A-100');
+
+      // Hat die Rezeptur ihre eigene Nummer, bleibt sie.
+      await rezepte.rezepturAendern(
+        rezepturId,
+        const EntwicklungRezepturenCompanion(artikelnummer: Value('B-7')),
+      );
+      final p = (await projekte.projekt(a.projekt.id))!;
+      await dienst.freigeben(projekt: p, versionId: a.versionId, werte: w);
+      expect((await rezepte.rezeptur(rezepturId))!.artikelnummer, 'B-7');
+      expect(await rezepte.artikelnummerErgaenzen(rezepturId, 'C-1'), isFalse);
+      // Leer zählt wie keine.
+      await rezepte.rezepturAendern(
+        rezepturId,
+        const EntwicklungRezepturenCompanion(artikelnummer: Value('  ')),
+      );
+      expect(await rezepte.artikelnummerErgaenzen(rezepturId, ' '), isFalse);
+      expect(await rezepte.artikelnummerErgaenzen(rezepturId, 'C-1'), isTrue);
+      expect((await rezepte.rezeptur(rezepturId))!.artikelnummer, 'C-1');
+    });
+
     test('ein vorhandener Artikel bekommt nur die gewählten Felder',
         () async {
       final a = await anlegen();

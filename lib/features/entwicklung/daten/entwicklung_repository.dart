@@ -238,6 +238,25 @@ class EntwicklungRepository {
       (_db.update(_db.entwicklungRezepturen)..where((r) => r.id.equals(id)))
           .write(daten.copyWith(updatedAt: Value(DateTime.now())));
 
+  /// Trägt [nummer] als Artikelnummer der Rezeptur [id] ein — nur, wenn
+  /// sie noch keine hat. Gibt zurück, ob sie eingetragen wurde.
+  Future<bool> artikelnummerErgaenzen(String id, String nummer) async {
+    final n = nummer.trim();
+    if (n.isEmpty) return false;
+    final geaendert = await (_db.update(_db.entwicklungRezepturen)
+          ..where((r) => r.id.equals(id))
+          ..where(
+            (r) => r.artikelnummer.isNull() | r.artikelnummer.trim().equals(''),
+          ))
+        .write(
+      EntwicklungRezepturenCompanion(
+        artikelnummer: Value(n),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+    return geaendert > 0;
+  }
+
   /// Markiert eine Rezeptur als gelöscht. Wer sie als Unterrezeptur nutzt,
   /// rechnet weiter mit ihr.
   Future<void> rezepturLoeschen(String id) => rezepturAendern(
@@ -719,6 +738,40 @@ class EntwicklungRepository {
         return id;
       });
 
+  /// Je Projekt (ID) die letzte Änderung an den Zeilen seiner Rezepturen —
+  /// für „Zuletzt bearbeitet": Wer an einer Rezeptur arbeitet, ändert vor
+  /// allem ihre Zeilen, und die rühren ihren Stand nicht an.
+  Stream<Map<String, DateTime>> zeilenAenderungenBeobachten() {
+    final zeilen = _db.entwicklungRezepturPositionen;
+    final staende = _db.entwicklungRezepturVersionen;
+    final rezepturen = _db.entwicklungRezepturen;
+    final zuletzt = zeilen.updatedAt.max();
+    final abfrage = _db.selectOnly(zeilen)
+      ..addColumns([rezepturen.projektId, zuletzt])
+      ..join([
+        innerJoin(
+          staende,
+          staende.id.equalsExp(zeilen.versionId),
+          useColumns: false,
+        ),
+        innerJoin(
+          rezepturen,
+          rezepturen.id.equalsExp(staende.rezepturId),
+          useColumns: false,
+        ),
+      ])
+      ..where(rezepturen.projektId.isNotNull())
+      ..groupBy([rezepturen.projektId]);
+    return abfrage.watch().map(
+          (reihen) => {
+            for (final r in reihen)
+              if ((r.read(rezepturen.projektId), r.read(zuletzt))
+                  case (final String id, final DateTime am))
+                id: am,
+          },
+        );
+  }
+
   /// Ein Zeichen bei jeder Änderung an Zutaten oder Rezepturen — Ergebnisse
   /// rechnen dann neu, auch wenn sich nur eine Unterrezeptur geändert hat.
   Stream<void> aenderungen() => _db
@@ -775,6 +828,12 @@ final positionenProvider =
     StreamProvider.autoDispose.family<List<RezepturPosition>, String>(
   (ref, versionId) =>
       ref.watch(entwicklungRepositoryProvider).positionenBeobachten(versionId),
+);
+
+/// Je Projekt die letzte Änderung an den Zeilen seiner Rezepturen.
+final zeilenAenderungenProvider = StreamProvider<Map<String, DateTime>>(
+  (ref) =>
+      ref.watch(entwicklungRepositoryProvider).zeilenAenderungenBeobachten(),
 );
 
 /// Meldet jede Änderung an Zutaten und Rezepturen.

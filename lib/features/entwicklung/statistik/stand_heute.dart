@@ -12,7 +12,7 @@ import '../projekte/projekte_ansicht.dart' show oeffneProjekt;
 import '../werkzeuge/entwicklung_statistik.dart';
 import 'entwicklung_auswertung.dart' show kOhneKunde, kundePasst;
 
-// Der Stand heute im Reiter „Statistik": wo die Projekte stehen, welche
+// Der Stand heute im Bereich „Statistik": wo die Projekte stehen, welche
 // in Arbeit sind und welche ruhen, der Verlauf der letzten zwölf Monate
 // und die Lücken im Zutaten-Katalog. Gerechnet wird in
 // werkzeuge/entwicklung_statistik.dart.

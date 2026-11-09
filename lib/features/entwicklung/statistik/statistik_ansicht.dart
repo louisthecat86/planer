@@ -18,7 +18,7 @@ import '../werkzeuge/entwicklung_statistik.dart';
 import 'entwicklung_auswertung.dart';
 import 'stand_heute.dart';
 
-// Der Reiter „Statistik" der Produktentwicklung: wie die Entwicklung in
+// Der Bereich „Statistik" der Produktentwicklung: wie die Entwicklung in
 // einem Zeitraum lief — etwa für die Managementbewertung am Jahresende.
 // Oben Zeitraum (Jahr, Quartal, Monat oder frei gewählt) und Kunde,
 // daneben der Bericht als PDF; darunter die Kennzahlen mit dem Vorjahr,
@@ -56,7 +56,7 @@ StatusArt _ergebnisArt(MusterErgebnis e) => switch (e) {
 
 DateTime _tag(DateTime d) => DateTime(d.year, d.month, d.day);
 
-/// Der Reiter „Statistik".
+/// Der Bereich „Statistik".
 class StatistikAnsicht extends ConsumerStatefulWidget {
   const StatistikAnsicht({super.key, this.heute});
 

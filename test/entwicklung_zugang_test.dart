@@ -15,6 +15,8 @@ import 'package:produktion_planer/features/entwicklung/entwicklung_auto_sperre.d
 import 'package:produktion_planer/features/entwicklung/entwicklung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
+import 'package:produktion_planer/features/entwicklung/uebersicht/angeheftet.dart';
+import 'package:produktion_planer/features/entwicklung/uebersicht/uebersicht_ansicht.dart';
 
 import 'helpers/test_db.dart';
 
@@ -268,6 +270,11 @@ void main() {
                 .overrideWith((ref) => Stream.value(const [])),
             alleEintraegeProvider
                 .overrideWith((ref) => Stream.value(const [])),
+            zeilenAenderungenProvider
+                .overrideWith((ref) => Stream.value(const {})),
+            // Ohne Datenbank: Angeheftetes wird nicht gespeichert.
+            angehefteteProjekteProvider
+                .overrideWith((ref) => AngeheftetNotifier(null)),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),
@@ -288,8 +295,8 @@ void main() {
 
     Finder feld(String label) => find.widgetWithText(TextField, label);
 
-    /// Offen: die Reiter der Produktentwicklung.
-    Finder offen() => find.byType(TabBar);
+    /// Offen: die Übersicht der Produktentwicklung.
+    Finder offen() => find.byType(EntwicklungUebersicht);
 
     testWidgets('beim ersten Mal: Passwort festlegen, Fehler, dann offen',
         (tester) async {

@@ -30,12 +30,16 @@ const String kEntwicklungDeeplSchluessel = '${kEntwicklungPraefix}deepl';
 /// Das Kürzel dessen, der an diesem Rechner Spezifikationen erstellt.
 const String kEntwicklungKuerzel = '${kEntwicklungPraefix}kuerzel';
 
+/// Die auf der Übersicht angehefteten Projekte (IDs als JSON-Liste).
+const String kEntwicklungAngeheftet = '${kEntwicklungPraefix}angeheftet';
+
 /// Einstellungen der Produktentwicklung, die nur diesem Rechner gehören:
 /// Kein Backup nimmt sie mit, und ein eingespieltes Backup lässt sie
 /// stehen. Nur „Zurücksetzen" der Produktentwicklung löscht sie.
 const Set<String> kEntwicklungNurLokal = {
   kEntwicklungDeeplSchluessel,
   kEntwicklungKuerzel,
+  kEntwicklungAngeheftet,
 };
 
 /// Ob [schluessel] eine Einstellung der Produktentwicklung ist.

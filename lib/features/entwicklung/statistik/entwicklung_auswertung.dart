@@ -521,7 +521,9 @@ MusterLauf _lauf(
 
 // ── Kunden ────────────────────────────────────────────────────────────
 
-String? _kundeSchluessel(String? kunde) {
+/// Woran ein Kunde erkannt wird: klein geschrieben, ohne Leerraum am Rand
+/// — null ohne Kunden. „Muster Markt" und „muster markt " sind derselbe.
+String? kundeSchluessel(String? kunde) {
   final k = kunde?.trim().toLowerCase() ?? '';
   return k.isEmpty ? null : k;
 }
@@ -531,9 +533,9 @@ String? _kundeSchluessel(String? kunde) {
 /// achten).
 bool kundePasst(String? kunde, String? filter) {
   if (filter == null) return true;
-  final k = _kundeSchluessel(kunde);
+  final k = kundeSchluessel(kunde);
   if (filter == kOhneKunde) return k == null;
-  return k == _kundeSchluessel(filter);
+  return k == kundeSchluessel(filter);
 }
 
 /// Alle Kunden der Muster und Gesamtprojekte zur Auswahl — jeder einmal,
@@ -544,7 +546,7 @@ List<String> kundenListe(
 ]) {
   final namen = <String, String>{};
   void merke(String? kunde) {
-    final k = _kundeSchluessel(kunde);
+    final k = kundeSchluessel(kunde);
     if (k != null) namen.putIfAbsent(k, () => kunde!.trim());
   }
 
@@ -969,7 +971,7 @@ EntwicklungsAuswertung entwicklungAuswerten({
   final jeKunde = <String?, Map<MusterErgebnis, int>>{};
   final kundenNamen = <String?, String?>{};
   for (final l in neu) {
-    final k = _kundeSchluessel(l.projekt.kunde);
+    final k = kundeSchluessel(l.projekt.kunde);
     kundenNamen.putIfAbsent(k, () => l.kunde);
     final e = l.ergebnisAm(tag) ?? MusterErgebnis.offen;
     final m = jeKunde.putIfAbsent(

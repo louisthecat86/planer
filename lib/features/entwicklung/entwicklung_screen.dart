@@ -4,22 +4,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import 'entwicklung_auto_sperre.dart';
+import 'entwicklung_bereiche.dart';
 import 'entwicklung_zugang.dart';
+import 'kunden/kunden_ansicht.dart';
 import 'projekte/datei_aktionen.dart';
 import 'projekte/projekte_ansicht.dart';
 import 'rezepturen/rezepturen_ansicht.dart';
 import 'statistik/statistik_ansicht.dart';
+import 'uebersicht/uebersicht_ansicht.dart';
 import 'werkzeuge/werkzeuge_ansicht.dart';
 import 'zutaten/zutaten_ansicht.dart';
 
-/// Produktentwicklung: Projekte, Rezepturen und Zutaten, Werkzeuge und die
-/// Statistik — hinter einem eigenen Passwort.
+/// Ein Bereich der Produktentwicklung — Übersicht, Projekte, Kunden,
+/// Rezepturen, Zutaten, Werkzeuge oder Statistik; gewählt wird er in der
+/// Leiste links. Alles hinter einem eigenen Passwort.
 ///
 /// Gesperrt zeigt die Seite nur die Passwortabfrage — beim ersten Mal das
 /// Festlegen. Offen bleibt sie, bis jemand sperrt, eine Viertelstunde
 /// niemand etwas eingibt (EntwicklungAutoSperre) oder die App schließt.
 class EntwicklungScreen extends ConsumerWidget {
-  const EntwicklungScreen({super.key});
+  const EntwicklungScreen({
+    super.key,
+    this.bereich = EntwicklungsBereich.uebersicht,
+  });
+
+  final EntwicklungsBereich bereich;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -30,60 +39,51 @@ class EntwicklungScreen extends ConsumerWidget {
         body: const _Sperre(),
       );
     }
-    return DefaultTabController(
-      length: EntwicklungsReiter.values.length,
-      initialIndex: ref.read(entwicklungReiterProvider).index,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Produktentwicklung'),
-          actions: [
-            // Was man selten braucht, liegt im Menü — Sperren bleibt vorn.
-            PopupMenuButton<VoidCallback>(
-              key: const ValueKey('entwicklung-mehr'),
-              tooltip: 'Passwort ändern',
-              onSelected: (aktion) => aktion(),
-              itemBuilder: (_) => [
-                PopupMenuItem(
-                  value: () => _passwortAendern(context, ref),
-                  child: const ListTile(
-                    leading: Icon(Icons.password_outlined),
-                    title: Text('Passwort ändern…'),
-                  ),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          bereich == EntwicklungsBereich.uebersicht
+              ? 'Produktentwicklung'
+              : bereich.label,
+        ),
+        actions: [
+          // Was man selten braucht, liegt im Menü — Sperren bleibt vorn.
+          PopupMenuButton<VoidCallback>(
+            key: const ValueKey('entwicklung-mehr'),
+            tooltip: 'Passwort ändern',
+            onSelected: (aktion) => aktion(),
+            itemBuilder: (_) => [
+              PopupMenuItem(
+                value: () => _passwortAendern(context, ref),
+                child: const ListTile(
+                  leading: Icon(Icons.password_outlined),
+                  title: Text('Passwort ändern…'),
                 ),
-              ],
-            ),
-            IconButton(
-              tooltip: 'Sperren',
-              icon: const Icon(Icons.lock_outline),
-              onPressed: () {
-                ref.read(entwicklungEntsperrtProvider.notifier).state = false;
-                ref.read(entwicklungAutoGesperrtProvider.notifier).state =
-                    false;
-                // Zum Öffnen entschlüsselte Dateien wieder wegräumen.
-                entwicklungTempLeeren();
-              },
-            ),
-            const SizedBox(width: 8),
-          ],
-          bottom: TabBar(
-            onTap: (i) => ref.read(entwicklungReiterProvider.notifier).state =
-                EntwicklungsReiter.values[i],
-            tabs: [
-              for (final r in EntwicklungsReiter.values)
-                Tab(icon: Icon(r.icon), text: r.label),
+              ),
             ],
           ),
-        ),
-        body: const TabBarView(
-          children: [
-            ProjekteAnsicht(),
-            RezepturenAnsicht(),
-            ZutatenAnsicht(),
-            WerkzeugeAnsicht(),
-            StatistikAnsicht(),
-          ],
-        ),
+          IconButton(
+            tooltip: 'Sperren',
+            icon: const Icon(Icons.lock_outline),
+            onPressed: () {
+              ref.read(entwicklungEntsperrtProvider.notifier).state = false;
+              ref.read(entwicklungAutoGesperrtProvider.notifier).state = false;
+              // Zum Öffnen entschlüsselte Dateien wieder wegräumen.
+              entwicklungTempLeeren();
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
+      body: switch (bereich) {
+        EntwicklungsBereich.uebersicht => const EntwicklungUebersicht(),
+        EntwicklungsBereich.projekte => const ProjekteAnsicht(),
+        EntwicklungsBereich.kunden => const KundenAnsicht(),
+        EntwicklungsBereich.rezepturen => const RezepturenAnsicht(),
+        EntwicklungsBereich.zutaten => const ZutatenAnsicht(),
+        EntwicklungsBereich.werkzeuge => const WerkzeugeAnsicht(),
+        EntwicklungsBereich.statistik => const StatistikAnsicht(),
+      },
     );
   }
 
@@ -455,29 +455,6 @@ class _ZuruecksetzenDialogState extends State<_ZuruecksetzenDialog> {
     );
   }
 }
-
-// ---------------------------------------------------------------------------
-// Offen
-// ---------------------------------------------------------------------------
-
-/// Die Reiter der offenen Produktentwicklung.
-enum EntwicklungsReiter {
-  projekte('Projekte', Icons.folder_open_outlined),
-  rezepturen('Rezepturen', Icons.menu_book_outlined),
-  zutaten('Zutaten', Icons.egg_outlined),
-  werkzeuge('Werkzeuge', Icons.calculate_outlined),
-  statistik('Statistik', Icons.query_stats);
-
-  const EntwicklungsReiter(this.label, this.icon);
-
-  final String label;
-  final IconData icon;
-}
-
-/// Der zuletzt gewählte Reiter — nach dem Zurückkommen steht man wieder
-/// dort.
-final entwicklungReiterProvider =
-    StateProvider<EntwicklungsReiter>((ref) => EntwicklungsReiter.projekte);
 
 // ---------------------------------------------------------------------------
 // Passwort ändern

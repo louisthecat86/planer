@@ -39,7 +39,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
 |             | Navision-Artikel      | Artikelübersicht aus Navision abgleichen: neue Artikel und Allergene übernehmen              |
 |             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
-| Entwickeln  | Produktentwicklung    | Projekte, Rezepturen und Zutaten — hinter einem eigenen Passwort (siehe unten)               |
+| Entwickeln  | Produktentwicklung    | Eigene Leiste: Übersicht, Projekte, Kunden, Rezepturen, Zutaten, Statistik — mit Passwort    |
 |             | Einstellungen         | Kapazität je Abteilung, Darstellung, Stammdaten-Mappe, Backups, Zurücksetzen                 |
 
 Im Board zeigt jede Abteilung je Tag einen Balken bis zu ihrer Kapazität
@@ -188,6 +188,28 @@ Ein eigener Bereich für die Entwicklung neuer Produkte. Er ist mit einem
 eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 (`entwicklung_*`), Anhänge und Vorlagen verschlüsselt (ChaCha20-Poly1305).
 
+- **Leiste:** In der Produktentwicklung zeigt die Leiste links ihre eigenen
+  Bereiche — Übersicht, Projekte, Kunden, Rezepturen, Zutaten, Werkzeuge und
+  Statistik, jeder mit eigener Seite — und unten „Zum Planer". Ein- und
+  ausklappen wie beim Planer; ein geöffnetes Projekt oder eine Rezeptur hebt
+  ihren Bereich hervor.
+- **Übersicht** (die Startseite): Suche über Projekte, Gesamtprojekte und
+  Rezepturen, „Neues Projekt" und „Neue Rezeptur", vier Kacheln (in Arbeit,
+  überfällige Einträge, ruhende Projekte, gelistet im laufenden Jahr — wie
+  in der Statistik gezählt). Darunter **Zuletzt bearbeitet**: die fünf
+  Projekte in Arbeit mit der jüngsten Aktivität (am Projekt, im Verlauf, an
+  Rezeptur, Stand oder Zeile) als Karten — mit Phase, Checkliste und einem
+  Infofeld, was fehlt: Überfälliges, wie lange es ruht, „Als Nächstes",
+  bald Fälliges, ein Stand in Arbeit. Mit der Nadel angeheftete Projekte
+  stehen immer vorn, auch ruhende (gemerkt nur auf diesem Rechner). Dazu
+  die Kunden mit Projekten in Arbeit und **Was ansteht**: überfällige und
+  in den nächsten 14 Tagen fällige Einträge, dazu Projekte, an denen sich
+  seit 30 Tagen nichts getan hat.
+- **Kunden:** je Kunde ein Ordner zum Aufklappen mit seinen
+  Gesamtprojekten (samt Mustern) und Projekten — die in Arbeit zuerst, dann
+  die in Produktion, zuletzt die ruhenden; Projekte ohne Kunden in einem
+  eigenen Ordner. Suche, „Nur mit Projekten in Arbeit", alle auf- oder
+  zuklappen. Groß- und Kleinschreibung des Kunden zählt nicht.
 - **Projekte** in sechs Reitern: **Verlauf** (mit Kommentaren),
   **Übersicht** (Stammdaten mit Artikelnummer und Fließdiagramm, Ziele für
   Fett, Eiweiß und aw, Notizen, Freigabe, Produktfoto klein, Rezepturen,
@@ -315,7 +337,12 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Im Entwurf lassen sich die Zeilen am Griff links an eine neue Stelle
   ziehen, und „Austauschen …" im Menü der Zeile setzt eine andere Zutat
   oder Unterrezeptur ein: Menge, Platz und Notiz bleiben, Etikettname und
-  QUID gelten wieder wie bei der neuen.
+  QUID gelten wieder wie bei der neuen. Jede Rezeptur hat ihre eigene
+  Artikelnummer — auch im Projekt, wo etwa ein Brät eine andere hat als das
+  fertige Produkt. Sie steht beim Anlegen und unter „Name und Angaben…"; im
+  Projekt ist die Nummer aus seinen Stammdaten vorgeschlagen. Die Freigabe
+  trägt die Nummer in die freigegebene Rezeptur ein, wenn sie noch keine
+  hat.
 - **Entwicklungsstrang:** Beim Abschließen eines Stands fragt die App „Was
   ist neu und warum?" und vergleicht selbst mit dem vorigen Stand (Zeilen,
   Verlust, Fleischanteil, Nährwerte wie auf dem Etikett, Allergene,
@@ -354,7 +381,7 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 - **Werkzeuge:** Rezeptur aus einem Etikett zurückrechnen, Fleischanteil
   einer Rezeptur (nach Wahl, ihr neuester Stand) auf ein Ziel einstellen,
   Kopf- und Fußzeile und leere Vorlage des Projektberichts.
-- **Statistik** (eigener Reiter, etwa für die Managementbewertung am
+- **Statistik** (eigener Bereich, etwa für die Managementbewertung am
   Jahresende): Zeitraum nach Jahr, Quartal, Monat oder frei (nicht in die
   Zukunft), dazu ein Kundenfilter. Kennzahlen mit dem Vorjahr: neue Muster
   (davon in Gesamtprojekten), neue Anfragen (Gesamtprojekte), gelistet

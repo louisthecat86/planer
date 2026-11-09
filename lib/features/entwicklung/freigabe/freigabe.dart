@@ -481,6 +481,11 @@ class FreigabeDienst {
         );
       }
       final version = await _rezepte.version(versionId);
+      // Die freigegebene Rezeptur trägt die Nummer — wenn sie noch keine
+      // eigene hat.
+      if (version != null) {
+        await _rezepte.artikelnummerErgaenzen(version.rezepturId, nummer);
+      }
       await _projekte.eintragAnlegen(
         projektId: projekt.id,
         art: EintragArt.meilenstein,

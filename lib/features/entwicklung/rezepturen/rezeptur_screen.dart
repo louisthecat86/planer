@@ -13,6 +13,7 @@ import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../entwicklung_format.dart';
 import '../etikett/etikett_dialog.dart';
+import '../projekte/projekt_repository.dart' show projekteProvider;
 import '../rechenkern/rechen_modell.dart';
 import 'fleischanteil_dialog.dart';
 import 'rezeptur_drucken.dart';
@@ -68,9 +69,26 @@ class _RezepturScreenState extends ConsumerState<RezepturScreen> {
   }
 
   Future<void> _bearbeiten(Rezeptur r) async {
+    // Hat die Rezeptur eines Projekts noch keine Nummer, schlägt das
+    // Fenster die aus den Stammdaten des Projekts vor.
+    final projektId = r.projektId;
+    String? vorschlag;
+    if (projektId != null && (r.artikelnummer?.trim() ?? '').isEmpty) {
+      try {
+        final projekte = await ref.read(projekteProvider.future);
+        vorschlag = projekte
+            .where((p) => p.id == projektId)
+            .firstOrNull
+            ?.artikelnummer
+            ?.trim();
+      } catch (_) {
+        // Ohne Vorschlag geht es auch.
+      }
+    }
+    if (!mounted) return;
     final neu = await showDialog<_Angaben>(
       context: context,
-      builder: (_) => _AngabenDialog(rezeptur: r),
+      builder: (_) => _AngabenDialog(rezeptur: r, nummerVorschlag: vorschlag),
     );
     if (neu == null) return;
     try {
@@ -1511,9 +1529,13 @@ class _Angaben {
 }
 
 class _AngabenDialog extends StatefulWidget {
-  const _AngabenDialog({required this.rezeptur});
+  const _AngabenDialog({required this.rezeptur, this.nummerVorschlag});
 
   final Rezeptur rezeptur;
+
+  /// Die Artikelnummer aus den Stammdaten des Projekts — vorbelegt, wenn
+  /// die Rezeptur noch keine eigene hat.
+  final String? nummerVorschlag;
 
   @override
   State<_AngabenDialog> createState() => _AngabenDialogState();
@@ -1522,8 +1544,16 @@ class _AngabenDialog extends StatefulWidget {
 class _AngabenDialogState extends State<_AngabenDialog> {
   late final TextEditingController _name =
       TextEditingController(text: widget.rezeptur.name);
-  late final TextEditingController _nummer =
-      TextEditingController(text: widget.rezeptur.artikelnummer ?? '');
+
+  /// Ob die Nummer aus dem Projekt vorgeschlagen ist.
+  late final bool _vorgeschlagen =
+      (widget.rezeptur.artikelnummer?.trim() ?? '').isEmpty &&
+          (widget.nummerVorschlag?.trim() ?? '').isNotEmpty;
+  late final TextEditingController _nummer = TextEditingController(
+    text: _vorgeschlagen
+        ? widget.nummerVorschlag!.trim()
+        : widget.rezeptur.artikelnummer ?? '',
+  );
   late final TextEditingController _beschreibung =
       TextEditingController(text: widget.rezeptur.beschreibung ?? '');
 
@@ -1564,14 +1594,19 @@ class _AngabenDialogState extends State<_AngabenDialog> {
               autofocus: true,
               decoration: const InputDecoration(labelText: 'Name'),
             ),
-            // Im Projekt steht die Artikelnummer in den Stammdaten.
-            if (widget.rezeptur.projektId == null) ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: _nummer,
-                decoration: const InputDecoration(labelText: 'Artikelnummer'),
+            // Jede Rezeptur hat ihre eigene Nummer — auch im Projekt, wo
+            // etwa ein Brät eine andere hat als das fertige Produkt.
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('rezeptur-artikelnummer'),
+              controller: _nummer,
+              decoration: InputDecoration(
+                labelText: 'Artikelnummer',
+                helperText: _vorgeschlagen
+                    ? 'Vorschlag aus den Stammdaten des Projekts'
+                    : null,
               ),
-            ],
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: _beschreibung,

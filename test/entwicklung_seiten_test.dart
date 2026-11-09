@@ -296,6 +296,92 @@ void main() {
     expect(find.text('Rezeptur löschen…'), findsOneWidget);
   });
 
+  /// Öffnet „Name und Angaben…" und gibt das Feld der Artikelnummer.
+  Future<TextField> angaben(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('rezeptur-mehr')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.tap(find.text('Name und Angaben…'));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+    return tester.widget<TextField>(
+      find.byKey(const ValueKey('rezeptur-artikelnummer')),
+    );
+  }
+
+  testWidgets('Rezeptur: Name und Angaben mit der Artikelnummer',
+      (tester) async {
+    await zeige(tester, const RezepturScreen(rezepturId: 'r1'));
+    await tester.pump();
+    final feld = await angaben(tester);
+    expect(feld.controller!.text, '4711');
+    expect(
+      find.text('Vorschlag aus den Stammdaten des Projekts'),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+      'Rezeptur im Projekt ohne Nummer: die Nummer des Projekts als '
+      'Vorschlag', (tester) async {
+    final imProjekt = Rezeptur(
+      id: 'r1',
+      name: 'Bratwurst grob',
+      projektId: 'pr1',
+      createdAt: zeit,
+      updatedAt: zeit,
+    );
+    await zeige(
+      tester,
+      const RezepturScreen(rezepturId: 'r1'),
+      dazu: [
+        rezepturProvider.overrideWith((ref, id) => Stream.value(imProjekt)),
+        projekteProvider.overrideWith(
+          (ref) => Stream.value([
+            EntwicklungsProjekt(
+              id: 'pr1',
+              name: 'Bratwurst grob',
+              status: 'entwicklung',
+              artikelnummer: '12345',
+              neuerProzess: false,
+              neueZutaten: false,
+              createdAt: zeit,
+              updatedAt: zeit,
+            ),
+          ]),
+        ),
+      ],
+    );
+    await tester.pump();
+    final feld = await angaben(tester);
+    expect(feld.controller!.text, '12345');
+    expect(
+      find.text('Vorschlag aus den Stammdaten des Projekts'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Neue Rezeptur im Projekt: Artikelnummer vorbelegt',
+      (tester) async {
+    await zeige(
+      tester,
+      const NeueRezepturDialog(
+        projektId: 'pr1',
+        vorschlag: 'Bratwurst grob',
+        artikelnummer: '12345',
+      ),
+    );
+    final feld = tester.widget<TextField>(
+      find.byKey(const ValueKey('neue-rezeptur-artikelnummer')),
+    );
+    expect(feld.controller!.text, '12345');
+    expect(
+      find.text('Vorschlag aus den Stammdaten des Projekts'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
       'Rezeptur: Art.-Nr. vor der Zutat — im Entwurf Griff und '
       'Austauschen', (tester) async {

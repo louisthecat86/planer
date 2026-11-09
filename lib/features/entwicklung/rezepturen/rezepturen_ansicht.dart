@@ -363,13 +363,21 @@ class StandMarke extends StatelessWidget {
 /// Eine neue Rezeptur: Name, Artikelnummer, Beschreibung. Gibt die ID
 /// zurück.
 class NeueRezepturDialog extends ConsumerStatefulWidget {
-  const NeueRezepturDialog({super.key, this.projektId, this.vorschlag});
+  const NeueRezepturDialog({
+    super.key,
+    this.projektId,
+    this.vorschlag,
+    this.artikelnummer,
+  });
 
   /// Das Projekt, zu dem die Rezeptur gehört.
   final String? projektId;
 
   /// Name zum Vorbelegen.
   final String? vorschlag;
+
+  /// Artikelnummer zum Vorbelegen — im Projekt die aus seinen Stammdaten.
+  final String? artikelnummer;
 
   @override
   ConsumerState<NeueRezepturDialog> createState() =>
@@ -378,15 +386,21 @@ class NeueRezepturDialog extends ConsumerStatefulWidget {
 
 class _NeueRezepturDialogState extends ConsumerState<NeueRezepturDialog> {
   late final TextEditingController _name;
-  final _nummer = TextEditingController();
+  late final TextEditingController _nummer;
   final _beschreibung = TextEditingController();
   bool _speichert = false;
   String? _fehler;
+
+  /// Ob die Nummer aus dem Projekt vorgeschlagen ist.
+  bool get _vorgeschlagen =>
+      widget.projektId != null &&
+      (widget.artikelnummer?.trim() ?? '').isNotEmpty;
 
   @override
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.vorschlag ?? '');
+    _nummer = TextEditingController(text: widget.artikelnummer?.trim() ?? '');
   }
 
   @override
@@ -447,14 +461,19 @@ class _NeueRezepturDialogState extends ConsumerState<NeueRezepturDialog> {
               decoration: const InputDecoration(labelText: 'Name'),
               onSubmitted: (_) => _anlegen(),
             ),
-            // Im Projekt steht die Artikelnummer schon in den Stammdaten.
-            if (widget.projektId == null) ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: _nummer,
-                decoration: const InputDecoration(labelText: 'Artikelnummer'),
+            // Jede Rezeptur hat ihre eigene Nummer — im Projekt mit der
+            // aus seinen Stammdaten als Vorschlag.
+            const SizedBox(height: 10),
+            TextField(
+              key: const ValueKey('neue-rezeptur-artikelnummer'),
+              controller: _nummer,
+              decoration: InputDecoration(
+                labelText: 'Artikelnummer',
+                helperText: _vorgeschlagen
+                    ? 'Vorschlag aus den Stammdaten des Projekts'
+                    : null,
               ),
-            ],
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: _beschreibung,

@@ -23,6 +23,7 @@ import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
 import 'features/data_management/data_management_screen.dart';
 import 'features/entwicklung/entwicklung_auto_sperre.dart';
+import 'features/entwicklung/entwicklung_bereiche.dart';
 import 'features/entwicklung/entwicklung_screen.dart';
 import 'features/entwicklung/projekte/gesamtprojekt_screen.dart';
 import 'features/entwicklung/projekte/projekt_screen.dart';
@@ -212,15 +213,17 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: StatistikScreen(),
             ),
           ),
-          // Produktentwicklung: Projekte, Rezepturen und Zutaten — hinter
+          // Produktentwicklung: Übersicht, Projekte, Kunden, Rezepturen,
+          // Zutaten, Werkzeuge und Statistik — je eine Seite, alle hinter
           // einem eigenen Passwort, das die Seite selbst abfragt.
-          GoRoute(
-            path: '/entwicklung',
-            name: 'entwicklung',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: EntwicklungScreen(),
+          for (final bereich in EntwicklungsBereich.values)
+            GoRoute(
+              path: bereich.pfad,
+              name: bereich.route,
+              pageBuilder: (context, state) => NoTransitionPage(
+                child: EntwicklungScreen(bereich: bereich),
+              ),
             ),
-          ),
           // Ein Projekt mit Verlauf, Dateien und Sensorik — nur bei offener
           // Entwicklung.
           GoRoute(

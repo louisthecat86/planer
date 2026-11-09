@@ -8,6 +8,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/utils/vollbild.dart';
+import '../entwicklung/entwicklung_bereiche.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Rahmen der App: Navigationsleiste links, die Seite rechts
@@ -16,6 +17,9 @@ import '../../core/utils/vollbild.dart';
 // Wie der Navigationsbereich in Navision: immer sichtbar, die aktive Seite
 // hervorgehoben, jeder Bereich einen Klick entfernt. Vorher führte jeder
 // Wechsel über die Startseite — zurück, Kasten aufklappen, Ziel wählen.
+//
+// In der Produktentwicklung zeigt die Leiste deren eigene Bereiche;
+// „Zum Planer" unten führt zurück.
 //
 // Unten in der Leiste sitzen die Fensterknöpfe. Die App läuft im
 // Vollbild, ohne Titelleiste — bisher gab es Minimieren und Beenden nur auf
@@ -67,7 +71,15 @@ final navigationEingeklapptProvider =
 
 /// Ein Ziel der Navigation.
 class _Ziel {
-  const _Ziel(this.name, this.titel, this.icon, this.pfade);
+  const _Ziel(this.name, this.titel, this.icon, this.pfade) : bereich = null;
+
+  /// Ein Bereich der Produktentwicklung.
+  _Ziel.entwicklung(EntwicklungsBereich b)
+      : name = b.route,
+        titel = b.label,
+        icon = b.icon,
+        pfade = const <String>[],
+        bereich = b;
 
   /// Name der Route (go_router).
   final String name;
@@ -78,7 +90,12 @@ class _Ziel {
   /// Unterseiten wie die Stammdaten eines Artikels.
   final List<String> pfade;
 
+  /// Der Bereich der Produktentwicklung — er weiß selbst, welche Seiten
+  /// zu ihm gehören.
+  final EntwicklungsBereich? bereich;
+
   bool passt(String ort) =>
+      bereich?.passt(ort) ??
       pfade.any((p) => ort == p || ort.startsWith('$p/'));
 }
 
@@ -170,6 +187,35 @@ const List<(String?, List<_Ziel>)> _gruppen = [
   ),
 ];
 
+/// In der Produktentwicklung zeigt die Leiste deren Bereiche — wie die des
+/// Planers nach Arbeitsschritten gruppiert. Zurück geht es unten über
+/// [_zumPlaner].
+final List<(String?, List<_Ziel>)> _entwicklungsGruppen = [
+  (null, [_Ziel.entwicklung(EntwicklungsBereich.uebersicht)]),
+  (
+    'Entwickeln',
+    [
+      for (final b in const [
+        EntwicklungsBereich.projekte,
+        EntwicklungsBereich.kunden,
+        EntwicklungsBereich.rezepturen,
+        EntwicklungsBereich.zutaten,
+        EntwicklungsBereich.werkzeuge,
+      ])
+        _Ziel.entwicklung(b),
+    ],
+  ),
+  ('Auswerten', [_Ziel.entwicklung(EntwicklungsBereich.statistik)]),
+];
+
+/// Aus der Produktentwicklung zurück zur Übersicht des Planers.
+const _Ziel _zumPlaner = _Ziel(
+  'home',
+  'Zum Planer',
+  Icons.arrow_back,
+  <String>[],
+);
+
 /// Einstellungen stehen unten, getrennt von der Arbeit.
 const _Ziel _einstellungen = _Ziel(
   'settings',
@@ -234,6 +280,9 @@ class _Navigationsleiste extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = AppFarben.von(context);
+    // In der Produktentwicklung ihre Bereiche — sonst die des Planers.
+    final entwicklung = istEntwicklungsOrt(ort);
+    final gruppen = entwicklung ? _entwicklungsGruppen : _gruppen;
 
     return Container(
       width: eingeklappt ? AppMasse.leisteSchmal : AppMasse.leisteBreit,
@@ -244,12 +293,12 @@ class _Navigationsleiste extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _Kopf(eingeklappt: eingeklappt),
+          _Kopf(eingeklappt: eingeklappt, entwicklung: entwicklung),
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                for (final (titel, ziele) in _gruppen) ...[
+                for (final (titel, ziele) in gruppen) ...[
                   if (titel != null)
                     _Gruppentitel(titel: titel, eingeklappt: eingeklappt),
                   for (final z in ziele)
@@ -264,6 +313,12 @@ class _Navigationsleiste extends StatelessWidget {
           ),
           Divider(height: 1, color: theme.colorScheme.outline),
           const SizedBox(height: 4),
+          if (entwicklung)
+            _Eintrag(
+              ziel: _zumPlaner,
+              aktiv: false,
+              eingeklappt: eingeklappt,
+            ),
           _Eintrag(
             ziel: _einstellungen,
             aktiv: _einstellungen.passt(ort),
@@ -281,15 +336,18 @@ class _Navigationsleiste extends StatelessWidget {
 }
 
 /// Name der App oben in der Leiste — so hoch wie die Kopfzeile der Seiten,
-/// damit beide Linien durchlaufen.
+/// damit beide Linien durchlaufen. In der Produktentwicklung steht dort
+/// ihr Name.
 class _Kopf extends StatelessWidget {
-  const _Kopf({required this.eingeklappt});
+  const _Kopf({required this.eingeklappt, required this.entwicklung});
 
   final bool eingeklappt;
+  final bool entwicklung;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final name = entwicklung ? 'Produktentwicklung' : 'Produktions Planer';
     final marke = Container(
       width: 28,
       height: 28,
@@ -299,7 +357,7 @@ class _Kopf extends StatelessWidget {
         borderRadius: AppMasse.ecken,
       ),
       child: Text(
-        'PP',
+        entwicklung ? 'PE' : 'PP',
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w800,
@@ -319,14 +377,14 @@ class _Kopf extends StatelessWidget {
         ),
       ),
       child: eingeklappt
-          ? Tooltip(message: 'Produktions Planer', child: marke)
+          ? Tooltip(message: name, child: marke)
           : Row(
               children: [
                 marke,
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Produktions Planer',
+                    name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
