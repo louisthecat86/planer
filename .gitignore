@@ -25,6 +25,6 @@ android/captures/
 .vscode/
 
 # Deaktivierte Plattformen — niemals wieder ins Repo
-android/
-ios/
-web/
+/android/
+/ios/
+/web/
