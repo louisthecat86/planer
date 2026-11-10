@@ -1,0 +1,28 @@
+name: erfassung
+description: >-
+  Planer Erfassung — die Android-App zum Produktions Planer: Produktionen
+  und Maschineneinstellungen direkt an der Anlage erfassen, ohne Netz.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Das Austauschformat mit dem Planer — dasselbe Paket nutzt der Planer.
+  erfassung_format:
+    path: ../packages/erfassung_format
+  # Paket öffnen und Ergebnis speichern über den Dateidialog von Android.
+  file_picker: ^11.0.0
+  # Der Ordner der App für den Stand der Erfassung.
+  path_provider: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

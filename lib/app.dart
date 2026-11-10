@@ -32,6 +32,7 @@ import 'features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
 import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/intro/intro_screen.dart';
+import 'features/handy_erfassung/handy_erfassung_screen.dart';
 import 'features/settings/maschinen_katalog_screen.dart';
 import 'features/settings/parameter_grenzen_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -292,6 +293,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'settings',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: SettingsScreen(),
+            ),
+          ),
+          // Handy-Erfassung: Datei für die Android-App erstellen und ihr
+          // Ergebnis einlesen — von den Einstellungen aus verlinkt.
+          GoRoute(
+            path: '/handy',
+            name: 'handy',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: HandyErfassungScreen(),
             ),
           ),
           // Daten-Screen (Excel-Import/-Export, Backup, Restore) — von den

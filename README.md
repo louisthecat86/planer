@@ -487,6 +487,38 @@ in der App hinterlegt. Die eingebaute Beispielvorlage enthält keine
 Firmenangaben. Auch Formblattnummer, Namen und Stand für Kopf und Fuß des
 Projektberichts trägt jeder selbst ein.
 
+## Handy-Erfassung
+
+Die Android-App **Planer Erfassung** (`erfassung_app/`) ersetzt das Papier an
+der Anlage: Produktionen und Maschineneinstellungen werden dort erfasst, wo
+sie anfallen. Der Weg zwischen PC und Handy ist eine Datei wie beim Backup —
+kein Server, kein Netz; die App hat nicht einmal die Berechtigung fürs
+Internet.
+
+1. **Planer → Einstellungen → Handy-Erfassung → „Datei erstellen":** Das Paket
+   (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
+   der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
+   Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
+   und die Notiz, samt ihren Grenzen. Rezepturen und die Produktentwicklung
+   stehen nicht darin.
+2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
+   Planer Erfassung") oder in der App „Paket öffnen".
+3. **Erfassen:** je geplanter Produktion Rohware, davon Fleisch, Fertigware,
+   Start und Ende („Jetzt"), Charge, Bemerkung und Kürzel — auch ohne Plan.
+   Bei den Maschineneinstellungen je Schritt eintragen, was an der Anlage
+   eingestellt ist; harte Grenzen blockieren, weiche warnen, wie am PC. Jede
+   Eingabe ist sofort auf dem Handy gespeichert.
+4. **„Ergebnis speichern"** und die Datei zurück an den PC. Unter
+   „Ergebnis-Datei wählen" zeigt der Planer, was sich ändern würde, und
+   übernimmt nur, was angehakt ist: Produktionen landen in der
+   Produktionserfassung (mit denselben Kennzahlen), Maschineneinstellungen am
+   Schritt des Artikels. Hat sich ein Wert am PC inzwischen geändert, steht
+   er als Konflikt da und ist nicht vorgewählt; dasselbe Ergebnis zweimal
+   einzulesen ändert nichts.
+
+Das Austauschformat liegt als eigenes Paket in `packages/erfassung_format/`
+und wird von Planer und App benutzt — so passen beide zusammen.
+
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
@@ -553,6 +585,22 @@ flutter test
 Die CI (`.github/workflows/desktop_build.yml`) läuft bei jedem Push und Pull
 Request auf `main`: Codegen, Analyse und Tests mit Flutter 3.41.6, danach
 Release-Builds für Linux, Windows und macOS als herunterladbare ZIPs.
+
+Die Android-App ist ein eigenes Flutter-Projekt:
+
+```bash
+cd erfassung_app
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --release
+```
+
+`.github/workflows/erfassung_apk.yml` baut die APK bei Änderungen an der App
+oder am Austauschformat (und auf Knopfdruck) und hängt sie als Artefakt
+`planer-erfassung-apk` an den Lauf. Sind die vier `ANDROID_…`-Secrets
+hinterlegt (siehe Kopf der Datei), signiert immer derselbe Schlüssel — nur
+dann lässt sich eine neue APK über die alte installieren.
 
 ## Grundsätze
 

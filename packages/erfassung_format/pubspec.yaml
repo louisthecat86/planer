@@ -1,0 +1,10 @@
+name: erfassung_format
+description: >-
+  Das Austauschformat zwischen dem Produktions Planer am PC und der
+  Android-App „Planer Erfassung": das Paket, das der Planer fürs Handy
+  schreibt, und das Ergebnis, das vom Handy zurückkommt.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.5.0

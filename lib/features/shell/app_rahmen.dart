@@ -221,7 +221,7 @@ const _Ziel _einstellungen = _Ziel(
   'settings',
   'Einstellungen',
   Icons.settings_outlined,
-  ['/settings', '/data', '/backup'],
+  ['/settings', '/data', '/backup', '/handy'],
 );
 
 /// Der Rahmen um jede Seite der App.

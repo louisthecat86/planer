@@ -63,6 +63,13 @@ class SettingsScreen extends ConsumerWidget {
                       onTap: () => context.pushNamed('data'),
                     ),
                     _EinstellungsZeile(
+                      icon: Icons.phone_android,
+                      titel: 'Handy-Erfassung',
+                      text: 'Datei für die App „Planer Erfassung" erstellen '
+                          'und ihr Ergebnis einlesen',
+                      onTap: () => context.pushNamed('handy'),
+                    ),
+                    _EinstellungsZeile(
                       icon: Icons.schedule_rounded,
                       titel: 'Abteilungskapazität',
                       text: 'Tagesstunden je Abteilung festlegen und '

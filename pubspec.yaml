@@ -39,6 +39,10 @@ dependencies:
   # Passwort der Produktentwicklung (PBKDF2) und die Verschlüsselung ihrer
   # Daten im Backup — geprüfte Verfahren statt Eigenbau (core/utils/krypto).
   pointycastle: ^4.0.0
+  # Das Austauschformat mit der Android-App „Planer Erfassung" — dasselbe
+  # Paket nutzt die App (erfassung_app/), so passen beide immer zusammen.
+  erfassung_format:
+    path: packages/erfassung_format
 dev_dependencies:
   flutter_test:
     sdk: flutter
