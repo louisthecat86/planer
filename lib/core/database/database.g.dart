@@ -16250,6 +16250,698 @@ class TagesaufgabenCompanion extends UpdateCompanion<Tagesaufgabe> {
   }
 }
 
+class $ArtikelFotosTable extends ArtikelFotos
+    with TableInfo<$ArtikelFotosTable, ArtikelFoto> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ArtikelFotosTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+      'id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _productIdMeta =
+      const VerificationMeta('productId');
+  @override
+  late final GeneratedColumn<String> productId = GeneratedColumn<String>(
+      'product_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _aufgenommenAmMeta =
+      const VerificationMeta('aufgenommenAm');
+  @override
+  late final GeneratedColumn<DateTime> aufgenommenAm =
+      GeneratedColumn<DateTime>('aufgenommen_am', aliasedName, false,
+          type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  static const VerificationMeta _bezeichnungMeta =
+      const VerificationMeta('bezeichnung');
+  @override
+  late final GeneratedColumn<String> bezeichnung = GeneratedColumn<String>(
+      'bezeichnung', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _kuerzelMeta =
+      const VerificationMeta('kuerzel');
+  @override
+  late final GeneratedColumn<String> kuerzel = GeneratedColumn<String>(
+      'kuerzel', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _istReferenzMeta =
+      const VerificationMeta('istReferenz');
+  @override
+  late final GeneratedColumn<bool> istReferenz = GeneratedColumn<bool>(
+      'ist_referenz', aliasedName, false,
+      type: DriftSqlType.bool,
+      requiredDuringInsert: false,
+      defaultConstraints: GeneratedColumn.constraintIsAlways(
+          'CHECK ("ist_referenz" IN (0, 1))'),
+      defaultValue: const Constant(false));
+  static const VerificationMeta _groesseMeta =
+      const VerificationMeta('groesse');
+  @override
+  late final GeneratedColumn<int> groesse = GeneratedColumn<int>(
+      'groesse', aliasedName, false,
+      type: DriftSqlType.int,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(0));
+  static const VerificationMeta _pruefsummeMeta =
+      const VerificationMeta('pruefsumme');
+  @override
+  late final GeneratedColumn<String> pruefsumme = GeneratedColumn<String>(
+      'pruefsumme', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _createdAtMeta =
+      const VerificationMeta('createdAt');
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+      'created_at', aliasedName, false,
+      type: DriftSqlType.dateTime,
+      requiredDuringInsert: false,
+      defaultValue: currentDateAndTime);
+  @override
+  List<GeneratedColumn> get $columns => [
+        id,
+        productId,
+        aufgenommenAm,
+        bezeichnung,
+        kuerzel,
+        istReferenz,
+        groesse,
+        pruefsumme,
+        createdAt
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'artikel_fotos';
+  @override
+  VerificationContext validateIntegrity(Insertable<ArtikelFoto> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('product_id')) {
+      context.handle(_productIdMeta,
+          productId.isAcceptableOrUnknown(data['product_id']!, _productIdMeta));
+    } else if (isInserting) {
+      context.missing(_productIdMeta);
+    }
+    if (data.containsKey('aufgenommen_am')) {
+      context.handle(
+          _aufgenommenAmMeta,
+          aufgenommenAm.isAcceptableOrUnknown(
+              data['aufgenommen_am']!, _aufgenommenAmMeta));
+    } else if (isInserting) {
+      context.missing(_aufgenommenAmMeta);
+    }
+    if (data.containsKey('bezeichnung')) {
+      context.handle(
+          _bezeichnungMeta,
+          bezeichnung.isAcceptableOrUnknown(
+              data['bezeichnung']!, _bezeichnungMeta));
+    }
+    if (data.containsKey('kuerzel')) {
+      context.handle(_kuerzelMeta,
+          kuerzel.isAcceptableOrUnknown(data['kuerzel']!, _kuerzelMeta));
+    }
+    if (data.containsKey('ist_referenz')) {
+      context.handle(
+          _istReferenzMeta,
+          istReferenz.isAcceptableOrUnknown(
+              data['ist_referenz']!, _istReferenzMeta));
+    }
+    if (data.containsKey('groesse')) {
+      context.handle(_groesseMeta,
+          groesse.isAcceptableOrUnknown(data['groesse']!, _groesseMeta));
+    }
+    if (data.containsKey('pruefsumme')) {
+      context.handle(
+          _pruefsummeMeta,
+          pruefsumme.isAcceptableOrUnknown(
+              data['pruefsumme']!, _pruefsummeMeta));
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(_createdAtMeta,
+          createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ArtikelFoto map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ArtikelFoto(
+      id: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}id'])!,
+      productId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}product_id'])!,
+      aufgenommenAm: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}aufgenommen_am'])!,
+      bezeichnung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}bezeichnung']),
+      kuerzel: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}kuerzel']),
+      istReferenz: attachedDatabase.typeMapping
+          .read(DriftSqlType.bool, data['${effectivePrefix}ist_referenz'])!,
+      groesse: attachedDatabase.typeMapping
+          .read(DriftSqlType.int, data['${effectivePrefix}groesse'])!,
+      pruefsumme: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}pruefsumme']),
+      createdAt: attachedDatabase.typeMapping
+          .read(DriftSqlType.dateTime, data['${effectivePrefix}created_at'])!,
+    );
+  }
+
+  @override
+  $ArtikelFotosTable createAlias(String alias) {
+    return $ArtikelFotosTable(attachedDatabase, alias);
+  }
+}
+
+class ArtikelFoto extends DataClass implements Insertable<ArtikelFoto> {
+  /// UUID — bei Fotos vom Handy die ID aus der Ergebnis-Datei: Wird
+  /// dieselbe Datei zweimal eingelesen, kommt kein Foto doppelt.
+  final String id;
+
+  /// Der Artikel (`products.id`).
+  final String productId;
+
+  /// Wann das Foto aufgenommen wurde.
+  final DateTime aufgenommenAm;
+
+  /// Freiwillige Bemerkung zum Foto.
+  final String? bezeichnung;
+
+  /// Wer es aufgenommen hat.
+  final String? kuerzel;
+
+  /// Das Referenzbild des Artikels: So soll das Produkt aussehen. Je
+  /// Artikel höchstens eins.
+  final bool istReferenz;
+
+  /// Größe des Bilds in Bytes.
+  final int groesse;
+
+  /// SHA-256 des Bilds — unter diesem Namen liegt es in der Ablage neben
+  /// den Backups, statt in jedem Auto-Backup ganz.
+  final String? pruefsumme;
+  final DateTime createdAt;
+  const ArtikelFoto(
+      {required this.id,
+      required this.productId,
+      required this.aufgenommenAm,
+      this.bezeichnung,
+      this.kuerzel,
+      required this.istReferenz,
+      required this.groesse,
+      this.pruefsumme,
+      required this.createdAt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['product_id'] = Variable<String>(productId);
+    map['aufgenommen_am'] = Variable<DateTime>(aufgenommenAm);
+    if (!nullToAbsent || bezeichnung != null) {
+      map['bezeichnung'] = Variable<String>(bezeichnung);
+    }
+    if (!nullToAbsent || kuerzel != null) {
+      map['kuerzel'] = Variable<String>(kuerzel);
+    }
+    map['ist_referenz'] = Variable<bool>(istReferenz);
+    map['groesse'] = Variable<int>(groesse);
+    if (!nullToAbsent || pruefsumme != null) {
+      map['pruefsumme'] = Variable<String>(pruefsumme);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ArtikelFotosCompanion toCompanion(bool nullToAbsent) {
+    return ArtikelFotosCompanion(
+      id: Value(id),
+      productId: Value(productId),
+      aufgenommenAm: Value(aufgenommenAm),
+      bezeichnung: bezeichnung == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bezeichnung),
+      kuerzel: kuerzel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(kuerzel),
+      istReferenz: Value(istReferenz),
+      groesse: Value(groesse),
+      pruefsumme: pruefsumme == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pruefsumme),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ArtikelFoto.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ArtikelFoto(
+      id: serializer.fromJson<String>(json['id']),
+      productId: serializer.fromJson<String>(json['productId']),
+      aufgenommenAm: serializer.fromJson<DateTime>(json['aufgenommenAm']),
+      bezeichnung: serializer.fromJson<String?>(json['bezeichnung']),
+      kuerzel: serializer.fromJson<String?>(json['kuerzel']),
+      istReferenz: serializer.fromJson<bool>(json['istReferenz']),
+      groesse: serializer.fromJson<int>(json['groesse']),
+      pruefsumme: serializer.fromJson<String?>(json['pruefsumme']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'productId': serializer.toJson<String>(productId),
+      'aufgenommenAm': serializer.toJson<DateTime>(aufgenommenAm),
+      'bezeichnung': serializer.toJson<String?>(bezeichnung),
+      'kuerzel': serializer.toJson<String?>(kuerzel),
+      'istReferenz': serializer.toJson<bool>(istReferenz),
+      'groesse': serializer.toJson<int>(groesse),
+      'pruefsumme': serializer.toJson<String?>(pruefsumme),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ArtikelFoto copyWith(
+          {String? id,
+          String? productId,
+          DateTime? aufgenommenAm,
+          Value<String?> bezeichnung = const Value.absent(),
+          Value<String?> kuerzel = const Value.absent(),
+          bool? istReferenz,
+          int? groesse,
+          Value<String?> pruefsumme = const Value.absent(),
+          DateTime? createdAt}) =>
+      ArtikelFoto(
+        id: id ?? this.id,
+        productId: productId ?? this.productId,
+        aufgenommenAm: aufgenommenAm ?? this.aufgenommenAm,
+        bezeichnung: bezeichnung.present ? bezeichnung.value : this.bezeichnung,
+        kuerzel: kuerzel.present ? kuerzel.value : this.kuerzel,
+        istReferenz: istReferenz ?? this.istReferenz,
+        groesse: groesse ?? this.groesse,
+        pruefsumme: pruefsumme.present ? pruefsumme.value : this.pruefsumme,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  ArtikelFoto copyWithCompanion(ArtikelFotosCompanion data) {
+    return ArtikelFoto(
+      id: data.id.present ? data.id.value : this.id,
+      productId: data.productId.present ? data.productId.value : this.productId,
+      aufgenommenAm: data.aufgenommenAm.present
+          ? data.aufgenommenAm.value
+          : this.aufgenommenAm,
+      bezeichnung:
+          data.bezeichnung.present ? data.bezeichnung.value : this.bezeichnung,
+      kuerzel: data.kuerzel.present ? data.kuerzel.value : this.kuerzel,
+      istReferenz:
+          data.istReferenz.present ? data.istReferenz.value : this.istReferenz,
+      groesse: data.groesse.present ? data.groesse.value : this.groesse,
+      pruefsumme:
+          data.pruefsumme.present ? data.pruefsumme.value : this.pruefsumme,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtikelFoto(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('aufgenommenAm: $aufgenommenAm, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('kuerzel: $kuerzel, ')
+          ..write('istReferenz: $istReferenz, ')
+          ..write('groesse: $groesse, ')
+          ..write('pruefsumme: $pruefsumme, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, productId, aufgenommenAm, bezeichnung,
+      kuerzel, istReferenz, groesse, pruefsumme, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ArtikelFoto &&
+          other.id == this.id &&
+          other.productId == this.productId &&
+          other.aufgenommenAm == this.aufgenommenAm &&
+          other.bezeichnung == this.bezeichnung &&
+          other.kuerzel == this.kuerzel &&
+          other.istReferenz == this.istReferenz &&
+          other.groesse == this.groesse &&
+          other.pruefsumme == this.pruefsumme &&
+          other.createdAt == this.createdAt);
+}
+
+class ArtikelFotosCompanion extends UpdateCompanion<ArtikelFoto> {
+  final Value<String> id;
+  final Value<String> productId;
+  final Value<DateTime> aufgenommenAm;
+  final Value<String?> bezeichnung;
+  final Value<String?> kuerzel;
+  final Value<bool> istReferenz;
+  final Value<int> groesse;
+  final Value<String?> pruefsumme;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ArtikelFotosCompanion({
+    this.id = const Value.absent(),
+    this.productId = const Value.absent(),
+    this.aufgenommenAm = const Value.absent(),
+    this.bezeichnung = const Value.absent(),
+    this.kuerzel = const Value.absent(),
+    this.istReferenz = const Value.absent(),
+    this.groesse = const Value.absent(),
+    this.pruefsumme = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ArtikelFotosCompanion.insert({
+    required String id,
+    required String productId,
+    required DateTime aufgenommenAm,
+    this.bezeichnung = const Value.absent(),
+    this.kuerzel = const Value.absent(),
+    this.istReferenz = const Value.absent(),
+    this.groesse = const Value.absent(),
+    this.pruefsumme = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  })  : id = Value(id),
+        productId = Value(productId),
+        aufgenommenAm = Value(aufgenommenAm);
+  static Insertable<ArtikelFoto> custom({
+    Expression<String>? id,
+    Expression<String>? productId,
+    Expression<DateTime>? aufgenommenAm,
+    Expression<String>? bezeichnung,
+    Expression<String>? kuerzel,
+    Expression<bool>? istReferenz,
+    Expression<int>? groesse,
+    Expression<String>? pruefsumme,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (productId != null) 'product_id': productId,
+      if (aufgenommenAm != null) 'aufgenommen_am': aufgenommenAm,
+      if (bezeichnung != null) 'bezeichnung': bezeichnung,
+      if (kuerzel != null) 'kuerzel': kuerzel,
+      if (istReferenz != null) 'ist_referenz': istReferenz,
+      if (groesse != null) 'groesse': groesse,
+      if (pruefsumme != null) 'pruefsumme': pruefsumme,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ArtikelFotosCompanion copyWith(
+      {Value<String>? id,
+      Value<String>? productId,
+      Value<DateTime>? aufgenommenAm,
+      Value<String?>? bezeichnung,
+      Value<String?>? kuerzel,
+      Value<bool>? istReferenz,
+      Value<int>? groesse,
+      Value<String?>? pruefsumme,
+      Value<DateTime>? createdAt,
+      Value<int>? rowid}) {
+    return ArtikelFotosCompanion(
+      id: id ?? this.id,
+      productId: productId ?? this.productId,
+      aufgenommenAm: aufgenommenAm ?? this.aufgenommenAm,
+      bezeichnung: bezeichnung ?? this.bezeichnung,
+      kuerzel: kuerzel ?? this.kuerzel,
+      istReferenz: istReferenz ?? this.istReferenz,
+      groesse: groesse ?? this.groesse,
+      pruefsumme: pruefsumme ?? this.pruefsumme,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (productId.present) {
+      map['product_id'] = Variable<String>(productId.value);
+    }
+    if (aufgenommenAm.present) {
+      map['aufgenommen_am'] = Variable<DateTime>(aufgenommenAm.value);
+    }
+    if (bezeichnung.present) {
+      map['bezeichnung'] = Variable<String>(bezeichnung.value);
+    }
+    if (kuerzel.present) {
+      map['kuerzel'] = Variable<String>(kuerzel.value);
+    }
+    if (istReferenz.present) {
+      map['ist_referenz'] = Variable<bool>(istReferenz.value);
+    }
+    if (groesse.present) {
+      map['groesse'] = Variable<int>(groesse.value);
+    }
+    if (pruefsumme.present) {
+      map['pruefsumme'] = Variable<String>(pruefsumme.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtikelFotosCompanion(')
+          ..write('id: $id, ')
+          ..write('productId: $productId, ')
+          ..write('aufgenommenAm: $aufgenommenAm, ')
+          ..write('bezeichnung: $bezeichnung, ')
+          ..write('kuerzel: $kuerzel, ')
+          ..write('istReferenz: $istReferenz, ')
+          ..write('groesse: $groesse, ')
+          ..write('pruefsumme: $pruefsumme, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ArtikelFotoInhalteTable extends ArtikelFotoInhalte
+    with TableInfo<$ArtikelFotoInhalteTable, ArtikelFotoInhalt> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ArtikelFotoInhalteTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _fotoIdMeta = const VerificationMeta('fotoId');
+  @override
+  late final GeneratedColumn<String> fotoId = GeneratedColumn<String>(
+      'foto_id', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _inhaltMeta = const VerificationMeta('inhalt');
+  @override
+  late final GeneratedColumn<Uint8List> inhalt = GeneratedColumn<Uint8List>(
+      'inhalt', aliasedName, false,
+      type: DriftSqlType.blob, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [fotoId, inhalt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'artikel_foto_inhalte';
+  @override
+  VerificationContext validateIntegrity(Insertable<ArtikelFotoInhalt> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('foto_id')) {
+      context.handle(_fotoIdMeta,
+          fotoId.isAcceptableOrUnknown(data['foto_id']!, _fotoIdMeta));
+    } else if (isInserting) {
+      context.missing(_fotoIdMeta);
+    }
+    if (data.containsKey('inhalt')) {
+      context.handle(_inhaltMeta,
+          inhalt.isAcceptableOrUnknown(data['inhalt']!, _inhaltMeta));
+    } else if (isInserting) {
+      context.missing(_inhaltMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {fotoId};
+  @override
+  ArtikelFotoInhalt map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ArtikelFotoInhalt(
+      fotoId: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}foto_id'])!,
+      inhalt: attachedDatabase.typeMapping
+          .read(DriftSqlType.blob, data['${effectivePrefix}inhalt'])!,
+    );
+  }
+
+  @override
+  $ArtikelFotoInhalteTable createAlias(String alias) {
+    return $ArtikelFotoInhalteTable(attachedDatabase, alias);
+  }
+}
+
+class ArtikelFotoInhalt extends DataClass
+    implements Insertable<ArtikelFotoInhalt> {
+  final String fotoId;
+  final Uint8List inhalt;
+  const ArtikelFotoInhalt({required this.fotoId, required this.inhalt});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['foto_id'] = Variable<String>(fotoId);
+    map['inhalt'] = Variable<Uint8List>(inhalt);
+    return map;
+  }
+
+  ArtikelFotoInhalteCompanion toCompanion(bool nullToAbsent) {
+    return ArtikelFotoInhalteCompanion(
+      fotoId: Value(fotoId),
+      inhalt: Value(inhalt),
+    );
+  }
+
+  factory ArtikelFotoInhalt.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ArtikelFotoInhalt(
+      fotoId: serializer.fromJson<String>(json['fotoId']),
+      inhalt: serializer.fromJson<Uint8List>(json['inhalt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'fotoId': serializer.toJson<String>(fotoId),
+      'inhalt': serializer.toJson<Uint8List>(inhalt),
+    };
+  }
+
+  ArtikelFotoInhalt copyWith({String? fotoId, Uint8List? inhalt}) =>
+      ArtikelFotoInhalt(
+        fotoId: fotoId ?? this.fotoId,
+        inhalt: inhalt ?? this.inhalt,
+      );
+  ArtikelFotoInhalt copyWithCompanion(ArtikelFotoInhalteCompanion data) {
+    return ArtikelFotoInhalt(
+      fotoId: data.fotoId.present ? data.fotoId.value : this.fotoId,
+      inhalt: data.inhalt.present ? data.inhalt.value : this.inhalt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtikelFotoInhalt(')
+          ..write('fotoId: $fotoId, ')
+          ..write('inhalt: $inhalt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(fotoId, $driftBlobEquality.hash(inhalt));
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ArtikelFotoInhalt &&
+          other.fotoId == this.fotoId &&
+          $driftBlobEquality.equals(other.inhalt, this.inhalt));
+}
+
+class ArtikelFotoInhalteCompanion extends UpdateCompanion<ArtikelFotoInhalt> {
+  final Value<String> fotoId;
+  final Value<Uint8List> inhalt;
+  final Value<int> rowid;
+  const ArtikelFotoInhalteCompanion({
+    this.fotoId = const Value.absent(),
+    this.inhalt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ArtikelFotoInhalteCompanion.insert({
+    required String fotoId,
+    required Uint8List inhalt,
+    this.rowid = const Value.absent(),
+  })  : fotoId = Value(fotoId),
+        inhalt = Value(inhalt);
+  static Insertable<ArtikelFotoInhalt> custom({
+    Expression<String>? fotoId,
+    Expression<Uint8List>? inhalt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (fotoId != null) 'foto_id': fotoId,
+      if (inhalt != null) 'inhalt': inhalt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ArtikelFotoInhalteCompanion copyWith(
+      {Value<String>? fotoId, Value<Uint8List>? inhalt, Value<int>? rowid}) {
+    return ArtikelFotoInhalteCompanion(
+      fotoId: fotoId ?? this.fotoId,
+      inhalt: inhalt ?? this.inhalt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (fotoId.present) {
+      map['foto_id'] = Variable<String>(fotoId.value);
+    }
+    if (inhalt.present) {
+      map['inhalt'] = Variable<Uint8List>(inhalt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtikelFotoInhalteCompanion(')
+          ..write('fotoId: $fotoId, ')
+          ..write('inhalt: $inhalt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $EntwicklungZutatenTable extends EntwicklungZutaten
     with TableInfo<$EntwicklungZutatenTable, Zutat> {
   @override
@@ -22958,6 +23650,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       auftragsbestandPositionenVorher =
       $AuftragsbestandPositionenVorherTable(this);
   late final $TagesaufgabenTable tagesaufgaben = $TagesaufgabenTable(this);
+  late final $ArtikelFotosTable artikelFotos = $ArtikelFotosTable(this);
+  late final $ArtikelFotoInhalteTable artikelFotoInhalte =
+      $ArtikelFotoInhalteTable(this);
   late final $EntwicklungZutatenTable entwicklungZutaten =
       $EntwicklungZutatenTable(this);
   late final $EntwicklungRezepturenTable entwicklungRezepturen =
@@ -23006,6 +23701,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         auftragsbestandArtikelVorher,
         auftragsbestandPositionenVorher,
         tagesaufgaben,
+        artikelFotos,
+        artikelFotoInhalte,
         entwicklungZutaten,
         entwicklungRezepturen,
         entwicklungRezepturVersionen,
@@ -32273,6 +32970,370 @@ typedef $$TagesaufgabenTableProcessedTableManager = ProcessedTableManager<
     ),
     Tagesaufgabe,
     PrefetchHooks Function()>;
+typedef $$ArtikelFotosTableCreateCompanionBuilder = ArtikelFotosCompanion
+    Function({
+  required String id,
+  required String productId,
+  required DateTime aufgenommenAm,
+  Value<String?> bezeichnung,
+  Value<String?> kuerzel,
+  Value<bool> istReferenz,
+  Value<int> groesse,
+  Value<String?> pruefsumme,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+typedef $$ArtikelFotosTableUpdateCompanionBuilder = ArtikelFotosCompanion
+    Function({
+  Value<String> id,
+  Value<String> productId,
+  Value<DateTime> aufgenommenAm,
+  Value<String?> bezeichnung,
+  Value<String?> kuerzel,
+  Value<bool> istReferenz,
+  Value<int> groesse,
+  Value<String?> pruefsumme,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+class $$ArtikelFotosTableFilterComposer
+    extends Composer<_$AppDatabase, $ArtikelFotosTable> {
+  $$ArtikelFotosTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get aufgenommenAm => $composableBuilder(
+      column: $table.aufgenommenAm, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get kuerzel => $composableBuilder(
+      column: $table.kuerzel, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<bool> get istReferenz => $composableBuilder(
+      column: $table.istReferenz, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<int> get groesse => $composableBuilder(
+      column: $table.groesse, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ArtikelFotosTableOrderingComposer
+    extends Composer<_$AppDatabase, $ArtikelFotosTable> {
+  $$ArtikelFotosTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+      column: $table.id, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get productId => $composableBuilder(
+      column: $table.productId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get aufgenommenAm => $composableBuilder(
+      column: $table.aufgenommenAm,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get kuerzel => $composableBuilder(
+      column: $table.kuerzel, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<bool> get istReferenz => $composableBuilder(
+      column: $table.istReferenz, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<int> get groesse => $composableBuilder(
+      column: $table.groesse, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+      column: $table.createdAt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ArtikelFotosTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ArtikelFotosTable> {
+  $$ArtikelFotosTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get productId =>
+      $composableBuilder(column: $table.productId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get aufgenommenAm => $composableBuilder(
+      column: $table.aufgenommenAm, builder: (column) => column);
+
+  GeneratedColumn<String> get bezeichnung => $composableBuilder(
+      column: $table.bezeichnung, builder: (column) => column);
+
+  GeneratedColumn<String> get kuerzel =>
+      $composableBuilder(column: $table.kuerzel, builder: (column) => column);
+
+  GeneratedColumn<bool> get istReferenz => $composableBuilder(
+      column: $table.istReferenz, builder: (column) => column);
+
+  GeneratedColumn<int> get groesse =>
+      $composableBuilder(column: $table.groesse, builder: (column) => column);
+
+  GeneratedColumn<String> get pruefsumme => $composableBuilder(
+      column: $table.pruefsumme, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ArtikelFotosTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ArtikelFotosTable,
+    ArtikelFoto,
+    $$ArtikelFotosTableFilterComposer,
+    $$ArtikelFotosTableOrderingComposer,
+    $$ArtikelFotosTableAnnotationComposer,
+    $$ArtikelFotosTableCreateCompanionBuilder,
+    $$ArtikelFotosTableUpdateCompanionBuilder,
+    (
+      ArtikelFoto,
+      BaseReferences<_$AppDatabase, $ArtikelFotosTable, ArtikelFoto>
+    ),
+    ArtikelFoto,
+    PrefetchHooks Function()> {
+  $$ArtikelFotosTableTableManager(_$AppDatabase db, $ArtikelFotosTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ArtikelFotosTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ArtikelFotosTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ArtikelFotosTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> id = const Value.absent(),
+            Value<String> productId = const Value.absent(),
+            Value<DateTime> aufgenommenAm = const Value.absent(),
+            Value<String?> bezeichnung = const Value.absent(),
+            Value<String?> kuerzel = const Value.absent(),
+            Value<bool> istReferenz = const Value.absent(),
+            Value<int> groesse = const Value.absent(),
+            Value<String?> pruefsumme = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ArtikelFotosCompanion(
+            id: id,
+            productId: productId,
+            aufgenommenAm: aufgenommenAm,
+            bezeichnung: bezeichnung,
+            kuerzel: kuerzel,
+            istReferenz: istReferenz,
+            groesse: groesse,
+            pruefsumme: pruefsumme,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String id,
+            required String productId,
+            required DateTime aufgenommenAm,
+            Value<String?> bezeichnung = const Value.absent(),
+            Value<String?> kuerzel = const Value.absent(),
+            Value<bool> istReferenz = const Value.absent(),
+            Value<int> groesse = const Value.absent(),
+            Value<String?> pruefsumme = const Value.absent(),
+            Value<DateTime> createdAt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ArtikelFotosCompanion.insert(
+            id: id,
+            productId: productId,
+            aufgenommenAm: aufgenommenAm,
+            bezeichnung: bezeichnung,
+            kuerzel: kuerzel,
+            istReferenz: istReferenz,
+            groesse: groesse,
+            pruefsumme: pruefsumme,
+            createdAt: createdAt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ArtikelFotosTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ArtikelFotosTable,
+    ArtikelFoto,
+    $$ArtikelFotosTableFilterComposer,
+    $$ArtikelFotosTableOrderingComposer,
+    $$ArtikelFotosTableAnnotationComposer,
+    $$ArtikelFotosTableCreateCompanionBuilder,
+    $$ArtikelFotosTableUpdateCompanionBuilder,
+    (
+      ArtikelFoto,
+      BaseReferences<_$AppDatabase, $ArtikelFotosTable, ArtikelFoto>
+    ),
+    ArtikelFoto,
+    PrefetchHooks Function()>;
+typedef $$ArtikelFotoInhalteTableCreateCompanionBuilder
+    = ArtikelFotoInhalteCompanion Function({
+  required String fotoId,
+  required Uint8List inhalt,
+  Value<int> rowid,
+});
+typedef $$ArtikelFotoInhalteTableUpdateCompanionBuilder
+    = ArtikelFotoInhalteCompanion Function({
+  Value<String> fotoId,
+  Value<Uint8List> inhalt,
+  Value<int> rowid,
+});
+
+class $$ArtikelFotoInhalteTableFilterComposer
+    extends Composer<_$AppDatabase, $ArtikelFotoInhalteTable> {
+  $$ArtikelFotoInhalteTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get fotoId => $composableBuilder(
+      column: $table.fotoId, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<Uint8List> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnFilters(column));
+}
+
+class $$ArtikelFotoInhalteTableOrderingComposer
+    extends Composer<_$AppDatabase, $ArtikelFotoInhalteTable> {
+  $$ArtikelFotoInhalteTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get fotoId => $composableBuilder(
+      column: $table.fotoId, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<Uint8List> get inhalt => $composableBuilder(
+      column: $table.inhalt, builder: (column) => ColumnOrderings(column));
+}
+
+class $$ArtikelFotoInhalteTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ArtikelFotoInhalteTable> {
+  $$ArtikelFotoInhalteTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get fotoId =>
+      $composableBuilder(column: $table.fotoId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get inhalt =>
+      $composableBuilder(column: $table.inhalt, builder: (column) => column);
+}
+
+class $$ArtikelFotoInhalteTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $ArtikelFotoInhalteTable,
+    ArtikelFotoInhalt,
+    $$ArtikelFotoInhalteTableFilterComposer,
+    $$ArtikelFotoInhalteTableOrderingComposer,
+    $$ArtikelFotoInhalteTableAnnotationComposer,
+    $$ArtikelFotoInhalteTableCreateCompanionBuilder,
+    $$ArtikelFotoInhalteTableUpdateCompanionBuilder,
+    (
+      ArtikelFotoInhalt,
+      BaseReferences<_$AppDatabase, $ArtikelFotoInhalteTable, ArtikelFotoInhalt>
+    ),
+    ArtikelFotoInhalt,
+    PrefetchHooks Function()> {
+  $$ArtikelFotoInhalteTableTableManager(
+      _$AppDatabase db, $ArtikelFotoInhalteTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ArtikelFotoInhalteTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ArtikelFotoInhalteTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ArtikelFotoInhalteTableAnnotationComposer(
+                  $db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> fotoId = const Value.absent(),
+            Value<Uint8List> inhalt = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ArtikelFotoInhalteCompanion(
+            fotoId: fotoId,
+            inhalt: inhalt,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String fotoId,
+            required Uint8List inhalt,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              ArtikelFotoInhalteCompanion.insert(
+            fotoId: fotoId,
+            inhalt: inhalt,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$ArtikelFotoInhalteTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $ArtikelFotoInhalteTable,
+    ArtikelFotoInhalt,
+    $$ArtikelFotoInhalteTableFilterComposer,
+    $$ArtikelFotoInhalteTableOrderingComposer,
+    $$ArtikelFotoInhalteTableAnnotationComposer,
+    $$ArtikelFotoInhalteTableCreateCompanionBuilder,
+    $$ArtikelFotoInhalteTableUpdateCompanionBuilder,
+    (
+      ArtikelFotoInhalt,
+      BaseReferences<_$AppDatabase, $ArtikelFotoInhalteTable, ArtikelFotoInhalt>
+    ),
+    ArtikelFotoInhalt,
+    PrefetchHooks Function()>;
 typedef $$EntwicklungZutatenTableCreateCompanionBuilder
     = EntwicklungZutatenCompanion Function({
   required String id,
@@ -35367,6 +36428,10 @@ class $AppDatabaseManager {
               _db, _db.auftragsbestandPositionenVorher);
   $$TagesaufgabenTableTableManager get tagesaufgaben =>
       $$TagesaufgabenTableTableManager(_db, _db.tagesaufgaben);
+  $$ArtikelFotosTableTableManager get artikelFotos =>
+      $$ArtikelFotosTableTableManager(_db, _db.artikelFotos);
+  $$ArtikelFotoInhalteTableTableManager get artikelFotoInhalte =>
+      $$ArtikelFotoInhalteTableTableManager(_db, _db.artikelFotoInhalte);
   $$EntwicklungZutatenTableTableManager get entwicklungZutaten =>
       $$EntwicklungZutatenTableTableManager(_db, _db.entwicklungZutaten);
   $$EntwicklungRezepturenTableTableManager get entwicklungRezepturen =>

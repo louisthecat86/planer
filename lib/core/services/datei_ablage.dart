@@ -6,14 +6,17 @@ import 'package:drift/drift.dart';
 import '../database/database.dart';
 import '../utils/krypto.dart';
 
-// Die Ablage der angehängten Dateien der Produktentwicklung neben den
-// Backups: Jede Datei liegt dort einmal, benannt nach der Prüfsumme ihres
-// Inhalts. Ein Auto-Backup nennt nur noch die Prüfsummen — eine PDF von
-// 5 MB steht nicht mehr in jedem Backup, sondern einmal hier.
+// Die Ablage der angehängten Dateien der Produktentwicklung und der Fotos
+// der Artikel neben den Backups: Jede Datei liegt dort einmal, benannt
+// nach der Prüfsumme ihres Inhalts. Ein Auto-Backup nennt nur noch die
+// Prüfsummen — eine PDF von 5 MB steht nicht mehr in jedem Backup, sondern
+// einmal hier.
 //
-// Abgelegt wird der Inhalt so, wie er in der Datenbank steht: mit dem
-// Datenschlüssel verschlüsselt. Ohne das Passwort der Produktentwicklung
-// lässt sich hier so wenig lesen wie im Backup selbst.
+// Abgelegt wird der Inhalt so, wie er in der Datenbank steht: Die Dateien
+// der Produktentwicklung mit dem Datenschlüssel verschlüsselt — ohne ihr
+// Passwort lässt sich hier so wenig lesen wie im Backup selbst. Die Fotos
+// der Artikel (FotoSicherung) liegen offen da, wie die übrigen
+// Produktionsdaten im Backup.
 
 /// Ab dieser Größe wird die Prüfsumme auf einem eigenen Isolate berechnet.
 const int _imHintergrundAb = 256 * 1024;

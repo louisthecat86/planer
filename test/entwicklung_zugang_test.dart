@@ -14,6 +14,7 @@ import 'package:produktion_planer/features/entwicklung/daten/entwicklung_reposit
 import 'package:produktion_planer/features/entwicklung/entwicklung_auto_sperre.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_screen.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/foto_eingang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/uebersicht/angeheftet.dart';
 import 'package:produktion_planer/features/entwicklung/uebersicht/uebersicht_ansicht.dart';
@@ -272,6 +273,7 @@ void main() {
                 .overrideWith((ref) => Stream.value(const [])),
             zeilenAenderungenProvider
                 .overrideWith((ref) => Stream.value(const {})),
+            fotoEingangProvider.overrideWith((ref) => Stream.value(const [])),
             // Ohne Datenbank: Angeheftetes wird nicht gespeichert.
             angehefteteProjekteProvider
                 .overrideWith((ref) => AngeheftetNotifier(null)),

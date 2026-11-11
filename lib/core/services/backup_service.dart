@@ -15,6 +15,7 @@ import '../utils/fehler_text.dart';
 import '../utils/format.dart';
 import 'datei_ablage.dart';
 import 'entwicklung_sicherung.dart';
+import 'artikel_fotos.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
@@ -23,12 +24,12 @@ import 'entwicklung_sicherung.dart';
 ///
 /// Zwei Arten:
 /// - **Auto-Backup** (nach Änderungen, beim Beenden, Schnell-Backup, vor
-///   einem Restore): die Daten gepackt, die angehängten Dateien der
-///   Produktentwicklung nur als Prüfsumme. Ihr Inhalt liegt einmal in der
-///   Ablage `planer_dateien` neben den Backups ([DateiAblage]) — statt in
-///   jedem Backup ganz.
+///   einem Restore): die Daten gepackt, die Fotos der Artikel und die
+///   angehängten Dateien der Produktentwicklung nur als Prüfsumme. Ihr
+///   Inhalt liegt einmal in der Ablage `planer_dateien` neben den Backups
+///   ([DateiAblage]) — statt in jedem Backup ganz.
 /// - **Komplett-Backup** (von Hand gespeichert): alles in einer Datei, auch
-///   die Dateien — zum Umziehen auf einen anderen Rechner.
+///   Fotos und Dateien — zum Umziehen auf einen anderen Rechner.
 ///
 /// Geschrieben wird erst in eine Zwischendatei, dann umbenannt: Bricht das
 /// Schreiben ab, bleibt keine halbe Sicherung unter dem richtigen Namen.
@@ -56,7 +57,9 @@ class BackupService {
   /// 1.5 → inkl. `tagesaufgaben`
   /// 1.6 → gepackt (gzip); im Auto-Backup die Dateien der
   ///       Produktentwicklung nur als Verweis auf die Ablage daneben
-  static const String _currentVersion = '1.6';
+  /// 1.7 → inkl. der Fotos zum Artikel (`artikel_fotos`) — im Auto-Backup
+  ///       als Verweis auf die Ablage
+  static const String _currentVersion = '1.7';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -69,6 +72,7 @@ class BackupService {
     '1.4',
     '1.5',
     '1.6',
+    '1.7',
   };
 
   /// Nur für Tests: dieser Ordner statt des eingestellten — die Tests
@@ -439,6 +443,7 @@ class BackupService {
     final now = DateTime.now();
     final entwicklung =
         await EntwicklungSicherung.exportieren(database, ablage: ablage);
+    final fotos = await FotoSicherung.exportieren(database, ablage: ablage);
     return {
       'version': _currentVersion,
       'timestamp': now.toIso8601String(),
@@ -473,6 +478,10 @@ class BackupService {
         'week_snapshots': await _exportWeekSnapshots(database),
         // ── ab Backup-Version 1.5 ────────────────────────────────────
         'tagesaufgaben': await _exportTagesaufgaben(database),
+        // ── ab Backup-Version 1.7 ────────────────────────────────────
+        // Die Fotos zum Artikel — nur, wenn es welche gibt. Mit Ablage
+        // stehen die Bilder dort (FotoSicherung).
+        ...fotos,
         // ── Produktentwicklung ───────────────────────────────────────
         // Ein eigener, verschlüsselter Teil — nur, wenn auf diesem
         // Rechner etwas dafür eingerichtet ist. Ältere App-Stände
@@ -497,6 +506,7 @@ class BackupService {
     // ── Schritt 1: Datei lesen und prüfen (noch nichts angefasst) ─────
     final Map<String, dynamic> data;
     final EntwicklungsTeil entwicklung;
+    final FotoTeil fotos;
     try {
       final file = File(filepath);
       if (!await file.exists()) {
@@ -544,6 +554,18 @@ class BackupService {
         throw Exception(
           'Der Teil der Produktentwicklung ist beschädigt (${e.message}).',
         );
+      }
+
+      // Die Fotos der Artikel: Die Bilder eines Auto-Backups kommen aus
+      // der Ablage zurück. Fehlt eins, bricht das Einspielen hier ab.
+      try {
+        fotos = await FotoSicherung.vorbereiten(
+          data,
+          ablagen: await _ablagenZu(file),
+          db: database,
+        );
+      } on FormatException catch (e) {
+        throw Exception(e.message);
       }
     } catch (e) {
       throw Exception('Backup-Import fehlgeschlagen: ${fehlerText(e)}');
@@ -605,6 +627,11 @@ class BackupService {
         await _importProductionHistory(database, data);
         await _importWeekSnapshots(database, data);
         await _importTagesaufgaben(database, data);
+        await FotoSicherung.einspielen(
+          database,
+          fotos,
+          ersetzen: clearExisting,
+        );
         await _importAppSettings(database, data);
         await EntwicklungSicherung.einspielen(
           database,
@@ -637,15 +664,9 @@ class BackupService {
       for (final MapEntry(:key, :value) in roh.entries)
         if (value is String) key: value,
     };
-    final ordner = <String>{backupDatei.absolute.parent.path};
-    try {
-      ordner.add((await _getBackupDir()).absolute.path);
-    } catch (_) {
-      // Ohne eingestellten Ordner bleibt die Ablage neben der Datei.
-    }
     final aufgeloest = await DateiAblage.aufloesen(
       verweise,
-      ablagen: [for (final o in ordner) DateiAblage.neben(Directory(o))],
+      ablagen: await _ablagenZu(backupDatei),
       db: db,
     );
     final fehlen = aufgeloest.fehlen.length;
@@ -667,6 +688,18 @@ class BackupService {
           key: base64Encode(value),
       },
     };
+  }
+
+  /// Wo die Inhalte zu [backupDatei] liegen können: in der Ablage neben
+  /// ihr, dann in der neben dem eingestellten Backup-Ordner.
+  static Future<List<DateiAblage>> _ablagenZu(File backupDatei) async {
+    final ordner = <String>{backupDatei.absolute.parent.path};
+    try {
+      ordner.add((await _getBackupDir()).absolute.path);
+    } catch (_) {
+      // Ohne eingestellten Ordner bleibt die Ablage neben der Datei.
+    }
+    return [for (final o in ordner) DateiAblage.neben(Directory(o))];
   }
 
   /// Listet alle verfügbaren Backup-Dateien auf, sortiert mit dem
@@ -942,13 +975,15 @@ class BackupService {
   static Set<String> _verweiseIn(Uint8List bytes) {
     final json = _entpacke(bytes);
     final daten = json['data'];
-    final teil = daten is Map<String, dynamic> ? daten['entwicklung'] : null;
+    if (daten is! Map<String, dynamic>) return const {};
+    final teil = daten['entwicklung'];
     final verweise =
         teil is Map<String, dynamic> ? teil['dateiVerweise'] : null;
-    if (verweise is! Map<String, dynamic>) return const {};
     return {
-      for (final v in verweise.values)
-        if (v is String) v,
+      ...FotoSicherung.verweiseIn(daten),
+      if (verweise is Map<String, dynamic>)
+        for (final v in verweise.values)
+          if (v is String) v,
     };
   }
 
@@ -1466,6 +1501,8 @@ class BackupService {
     // Wochen-Snapshots und Tagesaufgaben (eigenständig, keine FK).
     await db.delete(db.weekSnapshots).go();
     await db.delete(db.tagesaufgaben).go();
+    // Die Fotos der Artikel leert FotoSicherung.einspielen — dort bleiben
+    // die Bilder stehen, die das Backup genau so wieder mitbringt.
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
     await db.delete(db.appSettings).go();
   }

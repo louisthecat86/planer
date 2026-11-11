@@ -204,7 +204,10 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   stehen immer vorn, auch ruhende (gemerkt nur auf diesem Rechner). Dazu
   die Kunden mit Projekten in Arbeit und **Was ansteht**: überfällige und
   in den nächsten 14 Tagen fällige Einträge, dazu Projekte, an denen sich
-  seit 30 Tagen nichts getan hat.
+  seit 30 Tagen nichts getan hat. Warten Musterfotos vom Handy, steht ganz
+  oben der **Foto-Eingang** (siehe Handy-Erfassung): je Foto „Zuordnen …"
+  zu einem Muster oder Gesamtprojekt — danach ist es eine Datei des
+  Projekts.
 - **Kunden:** je Kunde ein Ordner zum Aufklappen mit seinen
   Gesamtprojekten (samt Mustern) und Projekten — die in Arbeit zuerst, dann
   die in Produktion, zuletzt die ruhenden; Projekte ohne Kunden in einem
@@ -490,10 +493,10 @@ Projektberichts trägt jeder selbst ein.
 ## Handy-Erfassung
 
 Die Android-App **Planer Erfassung** (`erfassung_app/`) ersetzt das Papier an
-der Anlage: Produktionen und Maschineneinstellungen werden dort erfasst, wo
-sie anfallen. Der Weg zwischen PC und Handy ist eine Datei wie beim Backup —
-kein Server, kein Netz; die App hat nicht einmal die Berechtigung fürs
-Internet.
+der Anlage: Produktionen, Maschineneinstellungen und Fotos werden dort
+erfasst, wo sie anfallen. Der Weg zwischen PC und Handy ist eine Datei wie
+beim Backup — kein Server, kein Netz; die App hat nicht einmal die
+Berechtigung fürs Internet.
 
 1. **Planer → Einstellungen → Handy-Erfassung → „Datei erstellen":** Das Paket
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
@@ -510,21 +513,40 @@ Internet.
    und Kombiofen in einer Zeile in Laufrichtung (Platte 1 rechts); harte
    Grenzen blockieren, weiche warnen, wie am PC. Jede Eingabe ist sofort
    auf dem Handy gespeichert.
-4. **„Ergebnis speichern"** und die Datei zurück an den PC. Unter
-   „Ergebnis-Datei wählen" zeigt der Planer, was sich ändern würde, und
-   übernimmt nur, was angehakt ist: Produktionen landen in der
-   Produktionserfassung (mit denselben Kennzahlen), Maschineneinstellungen am
-   Schritt des Artikels. Hat sich ein Wert am PC inzwischen geändert, steht
-   er als Konflikt da und ist nicht vorgewählt; dasselbe Ergebnis zweimal
-   einzulesen ändert nichts.
+4. **Fotos:** Beim Erfassen einer Produktion und bei den
+   Maschineneinstellungen eines Artikels nimmt „Foto aufnehmen" ein **Foto
+   aus der Produktion** auf — es gehört zum Artikel. „Musterfoto aufnehmen"
+   auf der Startseite fragt nur nach einer Bezeichnung; Projekte und Kunden
+   stehen nicht auf dem Handy. Aufgenommen wird mit der Kamera-App des
+   Handys (die App braucht dafür keine Kamera-Berechtigung); das Bild kommt
+   verkleinert zurück — längere Kante 1600 px, JPEG, rund 300 KB — und liegt
+   im Ordner der App. Unter „Fotos" stehen alle zum Ansehen und Löschen.
+5. **„Ergebnis speichern"** und die Datei zurück an den PC — die Fotos
+   stehen mit darin. Unter „Ergebnis-Datei wählen" zeigt der Planer, was sich
+   ändern würde, und übernimmt nur, was angehakt ist: Produktionen landen in
+   der Produktionserfassung (mit denselben Kennzahlen),
+   Maschineneinstellungen am Schritt des Artikels. Hat sich ein Wert am PC
+   inzwischen geändert, steht er als Konflikt da und ist nicht vorgewählt.
+   Fotos aus der Produktion kommen zum Artikel (Reiter „Infos" → **Fotos**:
+   das Referenzbild vorn, dahinter die neuesten; antippen zeigt ein Foto
+   groß, dort wird es zum Referenzbild, bekommt eine Bemerkung oder wird
+   gelöscht — „Foto hinzufügen" nimmt auch Bilder vom PC). Musterfotos
+   kommen verschlüsselt in den **Foto-Eingang** auf der Übersicht der
+   Produktentwicklung und werden dort einem Projekt zugeordnet, auf Wunsch
+   gleich als Produktfoto; ist die Produktentwicklung auf dem Rechner nicht
+   eingerichtet, bleiben sie in der Datei. Beim Übernehmen verlieren Fotos
+   Aufnahmeort und Kameradaten. Dasselbe Ergebnis zweimal einzulesen ändert
+   nichts.
 
 Das Austauschformat liegt als eigenes Paket in `packages/erfassung_format/`
-und wird von Planer und App benutzt — so passen beide zusammen.
+und wird von Planer und App benutzt — so passen beide zusammen. Ein Ergebnis
+mit Fotos trägt die Fassung 2; ein Planer auf älterem Stand sagt dann, dass
+er die Datei nicht liest, statt die Fotos wegzulassen.
 
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 39.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 40.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit
@@ -535,13 +557,15 @@ und wird von Planer und App benutzt — so passen beide zusammen.
   den aktuellen Stand weg. Ältere Backup-Versionen (ab 1.0) lassen sich weiter
   einspielen.
 - **Angehängte Dateien** der Produktentwicklung (PDFs, Mails,
-  Spezifikationen) stehen nicht in jedem Auto-Backup, sondern einmal im Ordner
-  `planer_dateien` neben den Backups, benannt nach der Prüfsumme ihres
-  verschlüsselten Inhalts; das Backup nennt nur die Prüfsummen. Was kein
-  Backup mehr nennt, räumt die App einmal am Tag weg. Zum Umziehen auf einen
-  anderen Rechner das **Komplett-Backup** nehmen (Daten → Komplett-Backup):
-  eine Datei mit allem, auch den Dateien. Fehlen einem Auto-Backup beim
-  Wiederherstellen Dateien, spielt die App nichts ein.
+  Spezifikationen) und die **Fotos der Artikel** stehen nicht in jedem
+  Auto-Backup, sondern einmal im Ordner `planer_dateien` neben den Backups,
+  benannt nach der Prüfsumme ihres Inhalts (die Dateien der
+  Produktentwicklung verschlüsselt); das Backup nennt nur die Prüfsummen. Was
+  kein Backup mehr nennt, räumt die App einmal am Tag weg. Zum Umziehen auf
+  einen anderen Rechner das **Komplett-Backup** nehmen (Daten →
+  Komplett-Backup): eine Datei mit allem, auch den Dateien und Fotos. Fehlen
+  einem Auto-Backup beim Wiederherstellen Dateien oder Fotos, spielt die App
+  nichts ein.
 - **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
   lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
   Auf demselben Rechner eingespielt, bleibt das aktuelle Passwort; ein Backup
@@ -558,7 +582,7 @@ und wird von Planer und App benutzt — so passen beide zusammen.
 
 | Bereich            | Tabellen                                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Stammdaten         | `products`, `product_steps`, `product_step_parameters`, `machines`, `machine_parameter_defs`, `parameter_grenzen`, `zusatzzeiten`, `raw_materials`, `product_raw_materials`, `raw_material_batches` |
+| Stammdaten         | `products`, `product_steps`, `product_step_parameters`, `machines`, `machine_parameter_defs`, `parameter_grenzen`, `zusatzzeiten`, `raw_materials`, `product_raw_materials`, `raw_material_batches`, `artikel_fotos`, `artikel_foto_inhalte` |
 | Planung            | `production_tasks`, `task_dependencies`, `demands`, `tagesaufgaben`, `auftragsbestand_artikel`, `auftragsbestand_positionen` (dazu je `…_vorher` für den Vergleich) |
 | Ist und Archiv     | `production_runs`, `production_history`, `week_snapshots`                                                    |
 | Sonstiges          | `app_settings`, `order_list_items`                                                                           |

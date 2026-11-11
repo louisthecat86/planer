@@ -1,9 +1,10 @@
 import 'datei.dart';
+import 'foto.dart';
 import 'paket.dart';
 import 'werte.dart';
 
-/// Was vom Handy zurückkommt: die erfassten Produktionen und die an der
-/// Anlage geänderten Maschineneinstellungen.
+/// Was vom Handy zurückkommt: die erfassten Produktionen, die an der
+/// Anlage geänderten Maschineneinstellungen und die Fotos.
 class ErfassungsErgebnis {
   const ErfassungsErgebnis({
     required this.paketId,
@@ -11,6 +12,7 @@ class ErfassungsErgebnis {
     this.paketErstellt,
     this.produktionen = const [],
     this.werte = const [],
+    this.fotos = const [],
   });
 
   /// Das Paket, auf dem die Erfassung beruht.
@@ -21,7 +23,10 @@ class ErfassungsErgebnis {
   final List<ErfassteProduktion> produktionen;
   final List<GeaenderterWert> werte;
 
-  bool get leer => produktionen.isEmpty && werte.isEmpty;
+  /// Die Fotos samt Bild.
+  final List<ErfasstesFoto> fotos;
+
+  bool get leer => produktionen.isEmpty && werte.isEmpty && fotos.isEmpty;
 
   /// „Planer-Erfassung-Ergebnis_2026-11-09_1810_AB.json".
   String dateiname({String? kuerzel}) {
@@ -32,13 +37,20 @@ class ErfassungsErgebnis {
   }
 
   JsonObjekt toJson() => {
-        ...dateiKopf(DateiArt.ergebnis),
+        // Mit Fotos die neue Fassung: Ein Planer auf älterem Stand sagt
+        // dann, dass er die Datei nicht liest — statt die Fotos
+        // stillschweigend wegzulassen.
+        ...dateiKopf(
+          DateiArt.ergebnis,
+          version: fotos.isEmpty ? kFormatVersionOhneFotos : kFormatVersion,
+        ),
         'paket': paketId,
         if (paketErstellt != null)
           'paketErstellt': paketErstellt!.toIso8601String(),
         'erstellt': erstellt.toIso8601String(),
         'produktionen': [for (final p in produktionen) p.toJson()],
         'werte': [for (final w in werte) w.toJson()],
+        if (fotos.isNotEmpty) 'fotos': [for (final f in fotos) f.toJson()],
       };
 
   /// Die Datei als Text.
@@ -62,6 +74,9 @@ class ErfassungsErgebnis {
       ],
       werte: [
         for (final w in jsonListe(j, 'werte', wo)) GeaenderterWert.ausJson(w),
+      ],
+      fotos: [
+        for (final f in jsonListe(j, 'fotos', wo)) ErfasstesFoto.ausJson(f),
       ],
     );
   }

@@ -1,15 +1,23 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:erfassung_format/erfassung_format.dart';
 
 // Der Stand der Erfassung auf dem Handy: das geöffnete Paket, die
-// erfassten Produktionen, die geänderten Maschineneinstellungen und das
-// Kürzel. Ohne Flutter — die Oberfläche hängt über [ErfassungsModell]
-// (modell.dart) daran, gespeichert wird als eine JSON-Datei im Ordner der
-// App.
+// erfassten Produktionen, die geänderten Maschineneinstellungen, die Fotos
+// und das Kürzel. Ohne Flutter — die Oberfläche hängt über
+// [ErfassungsModell] (modell.dart) daran, gespeichert wird als eine
+// JSON-Datei im Ordner der App. Von den Fotos stehen hier nur die Angaben;
+// jedes Bild liegt als eigene Datei daneben.
 
 /// Der Schlüssel eines geänderten Werts: Schritt und Feld.
 String wertSchluessel(String schrittId, String feld) => '$schrittId|$feld';
+
+/// Eine ID für ein neues Foto — eindeutig auch über mehrere Handys:
+/// der Augenblick und eine Zufallszahl.
+String neueFotoId(DateTime jetzt, int zufall) =>
+    'f-${jetzt.microsecondsSinceEpoch.toRadixString(36)}-'
+    '${zufall.toRadixString(36)}';
 
 String? _leerZuNull(String? s) {
   final t = s?.trim();
@@ -22,9 +30,12 @@ class Erfassungsstand {
     this.kuerzel = '',
     Map<String, ErfassteProduktion>? produktionen,
     Map<String, GeaenderterWert>? werte,
+    Map<String, ErfasstesFoto>? fotos,
+    this.fotoWartend,
     this.gespeichertAm,
   })  : produktionen = produktionen ?? {},
-        werte = werte ?? {};
+        werte = werte ?? {},
+        fotos = fotos ?? {};
 
   /// Das geöffnete Paket — null: noch keins.
   ErfassungsPaket? paket;
@@ -39,12 +50,21 @@ class Erfassungsstand {
   /// Die geänderten Werte nach [wertSchluessel].
   final Map<String, GeaenderterWert> werte;
 
+  /// Die Fotos nach ihrer ID — nur die Angaben, ohne Bild.
+  final Map<String, ErfasstesFoto> fotos;
+
+  /// Das Foto, für das gerade die Kamera offen ist. Android darf die App
+  /// schließen, solange die Kamera vorn ist — beim nächsten Start weiß die
+  /// App damit noch, wozu das Bild gehört.
+  ErfasstesFoto? fotoWartend;
+
   /// Wann das Ergebnis zuletzt als Datei gespeichert wurde — null: seit
   /// der letzten Änderung noch nicht.
   DateTime? gespeichertAm;
 
   /// Ob etwas erfasst ist.
-  bool get hatErfasstes => produktionen.isNotEmpty || werte.isNotEmpty;
+  bool get hatErfasstes =>
+      produktionen.isNotEmpty || werte.isNotEmpty || fotos.isNotEmpty;
 
   /// Ob es Erfasstes gibt, das noch in keiner Ergebnis-Datei steht.
   bool get ungesichert => hatErfasstes && gespeichertAm == null;
@@ -74,9 +94,73 @@ class Erfassungsstand {
     paket = neu;
     produktionen.clear();
     werte.clear();
+    fotos.clear();
+    fotoWartend = null;
     gespeichertAm = null;
     return true;
   }
+
+  // ── Fotos ───────────────────────────────────────────────────────────
+
+  /// Die Angaben eines neuen Fotos — noch ohne Bild. Mit [artikelId] ist
+  /// es ein Foto aus der Produktion dieses Artikels, ohne ein Musterfoto.
+  ErfasstesFoto fotoAnlegen({
+    required String id,
+    required DateTime jetzt,
+    String? artikelId,
+    String? artikel,
+    String? produktionId,
+    String? bezeichnung,
+  }) =>
+      ErfasstesFoto(
+        id: id,
+        art: artikelId == null ? FotoArt.muster : FotoArt.produktion,
+        aufgenommenAm: jetzt,
+        artikelId: artikelId,
+        artikel: artikelId == null ? null : _leerZuNull(artikel),
+        produktionId: artikelId == null ? null : produktionId,
+        bezeichnung: _leerZuNull(bezeichnung),
+        kuerzel: _leerZuNull(kuerzel),
+      );
+
+  /// Nimmt ein Foto auf, dessen Bild [groesse] Bytes hat.
+  void fotoHinzu(ErfasstesFoto foto, {required int groesse}) {
+    fotos[foto.id] = ErfasstesFoto(
+      id: foto.id,
+      art: foto.art,
+      aufgenommenAm: foto.aufgenommenAm,
+      artikelId: foto.artikelId,
+      artikel: foto.artikel,
+      produktionId: foto.produktionId,
+      bezeichnung: foto.bezeichnung,
+      kuerzel: foto.kuerzel,
+      groesse: groesse,
+    );
+    gespeichertAm = null;
+  }
+
+  void fotoLoeschen(String id) {
+    if (fotos.remove(id) != null) gespeichertAm = null;
+  }
+
+  /// Alle Fotos, das neueste zuerst.
+  List<ErfasstesFoto> get fotoListe => fotos.values.toList()
+    ..sort((a, b) => b.aufgenommenAm.compareTo(a.aufgenommenAm));
+
+  /// Die Fotos zu einem Artikel, das neueste zuerst.
+  List<ErfasstesFoto> fotosVon(String artikelId) => [
+        for (final f in fotoListe)
+          if (f.art == FotoArt.produktion && f.artikelId == artikelId) f,
+      ];
+
+  /// Die Musterfotos, das neueste zuerst.
+  List<ErfasstesFoto> get musterfotos => [
+        for (final f in fotoListe)
+          if (f.art == FotoArt.muster) f,
+      ];
+
+  /// Wie viele Bytes die Bilder zusammen haben.
+  int get fotoBytes => fotos.values.fold(0, (s, f) => s + f.groesse);
 
   /// Hält eine Produktion fest (oder ersetzt ihre Erfassung).
   void produktionErfassen(ErfassteProduktion e) {
@@ -132,8 +216,12 @@ class Erfassungsstand {
     gespeichertAm = null;
   }
 
-  /// Das Ergebnis für den Planer — null ohne Paket.
-  ErfassungsErgebnis? ergebnis(DateTime jetzt) {
+  /// Das Ergebnis für den Planer — null ohne Paket. Die Fotos gehen mit,
+  /// soweit ihr Bild in [bilder] steht (ID → JPEG).
+  ErfassungsErgebnis? ergebnis(
+    DateTime jetzt, {
+    Map<String, Uint8List> bilder = const {},
+  }) {
     final p = paket;
     if (p == null) return null;
     final liste = produktionen.values.toList()
@@ -147,6 +235,10 @@ class Erfassungsstand {
       erstellt: jetzt,
       produktionen: liste,
       werte: werte.values.toList(),
+      fotos: [
+        for (final f in fotoListe.reversed)
+          if (bilder[f.id] case final bild?) f.mit(bild),
+      ],
     );
   }
 
@@ -157,6 +249,9 @@ class Erfassungsstand {
         if (paket != null) 'paket': paket!.toJson(),
         'produktionen': [for (final e in produktionen.values) e.toJson()],
         'werte': [for (final w in werte.values) w.toJson()],
+        if (fotos.isNotEmpty)
+          'fotos': [for (final f in fotos.values) f.toJson()],
+        if (fotoWartend != null) 'fotoWartend': fotoWartend!.toJson(),
         if (gespeichertAm != null)
           'gespeichertAm': gespeichertAm!.toIso8601String(),
       });
@@ -178,6 +273,11 @@ class Erfassungsstand {
         for (final w in jsonListe(j, 'werte', 'dem Stand'))
           GeaenderterWert.ausJson(w),
       ];
+      final fotos = [
+        for (final f in jsonListe(j, 'fotos', 'dem Stand'))
+          ErfasstesFoto.ausJson(f),
+      ];
+      final wartend = jsonObjektOder(j, 'fotoWartend');
       return Erfassungsstand(
         paket: paket == null ? null : ErfassungsPaket.ausJson(paket),
         kuerzel: jsonTextOder(j, 'kuerzel') ?? '',
@@ -185,6 +285,8 @@ class Erfassungsstand {
         werte: {
           for (final w in werte) wertSchluessel(w.schrittId, w.schluessel): w,
         },
+        fotos: {for (final f in fotos) f.id: f},
+        fotoWartend: wartend == null ? null : ErfasstesFoto.ausJson(wartend),
         gespeichertAm:
             gespeichert == null ? null : DateTime.tryParse(gespeichert),
       );

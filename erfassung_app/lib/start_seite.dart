@@ -1,18 +1,17 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import 'artikel_seite.dart';
 import 'bausteine.dart';
+import 'fotos.dart';
 import 'modell.dart';
 import 'produktionen_seite.dart';
 import 'stil.dart';
 
-/// Die Startseite: das geöffnete Paket, die beiden Bereiche als große
-/// Kacheln, das Ergebnis und das Kürzel.
+/// Die Startseite: das geöffnete Paket, die Bereiche als große Kacheln —
+/// Produktionen, Maschineneinstellungen, Fotos —, das Ergebnis und das
+/// Kürzel.
 class StartSeite extends StatefulWidget {
   const StartSeite({super.key, required this.modell});
 
@@ -30,9 +29,16 @@ class _StartSeiteState extends State<StartSeite> {
     super.initState();
     // Über „Öffnen mit" gestartet — oder bei laufender App geöffnet.
     GeoeffneteDatei.lauschen(_geoeffneteDateiHolen);
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _geoeffneteDateiHolen(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _geoeffneteDateiHolen();
+      // Etwa: ein Foto, während dessen Aufnahme Android die App
+      // geschlossen hatte.
+      final meldung = _modell.meldung;
+      if (meldung != null && mounted) {
+        _modell.meldung = null;
+        melde(context, meldung);
+      }
+    });
   }
 
   Future<void> _geoeffneteDateiHolen() async {
@@ -91,8 +97,8 @@ class _StartSeiteState extends State<StartSeite> {
             ? 'Es gibt Erfasstes, das noch in keiner Ergebnis-Datei steht. '
                 'Mit dem neuen Paket geht es verloren — besser erst das '
                 'Ergebnis speichern.'
-            : 'Das Erfasste zum alten Paket wird vom Handy gelöscht. Das '
-                'Ergebnis ist als Datei gespeichert.',
+            : 'Das Erfasste zum alten Paket wird vom Handy gelöscht — '
+                'auch die Fotos. Das Ergebnis ist als Datei gespeichert.',
         ja: 'Neues Paket öffnen',
         gefaehrlich: stand.ungesichert,
       );
@@ -111,30 +117,44 @@ class _StartSeiteState extends State<StartSeite> {
 
   Future<void> _ergebnisSpeichern() async {
     final jetzt = DateTime.now();
-    final ergebnis = _modell.stand.ergebnis(jetzt);
-    if (ergebnis == null) return;
-    if (ergebnis.leer) {
-      melde(context, 'Es ist noch nichts erfasst.');
-      return;
-    }
     try {
+      // Mit den Bildern der Fotos — die liegen als Dateien im Ordner der
+      // App.
+      final datei = await _modell.ergebnisDatei(jetzt);
+      if (datei == null || !mounted) return;
+      final ergebnis = datei.ergebnis;
+      if (ergebnis.leer) {
+        melde(context, 'Es ist noch nichts erfasst.');
+        return;
+      }
       final ziel = await FilePicker.saveFile(
         dialogTitle: 'Ergebnis speichern',
         fileName: ergebnis.dateiname(kuerzel: _modell.stand.kuerzel),
-        bytes: Uint8List.fromList(utf8.encode(ergebnis.alsText())),
+        bytes: datei.bytes,
       );
       if (ziel == null || !mounted) return;
       await _modell.ergebnisGespeichert(jetzt);
       if (!mounted) return;
+      final fotos = ergebnis.fotos.length;
+      final fehlen = datei.fotosFehlen;
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Ergebnis gespeichert'),
-          content: const Text(
-            'Jetzt die Datei an den PC bringen und im Planer unter '
-            'Einstellungen → Handy-Erfassung einlesen.\n\n'
-            'Das Erfasste bleibt auf dem Handy, bis du ein neues Paket '
-            'öffnest.',
+          content: Text(
+            [
+              'Jetzt die Datei an den PC bringen und im Planer unter '
+                  'Einstellungen → Handy-Erfassung einlesen.',
+              if (fotos > 0)
+                '${fotos == 1 ? 'Das Foto steht' : 'Die $fotos Fotos '
+                        'stehen'} mit in der Datei '
+                    '(${groesseText(datei.bytes.length)}).',
+              if (fehlen > 0)
+                '${fehlen == 1 ? 'Ein Foto fehlt' : '$fehlen Fotos '
+                    'fehlen'} — das Bild liegt nicht mehr auf dem Handy.',
+              'Das Erfasste bleibt auf dem Handy, bis du ein neues Paket '
+                  'öffnest.',
+            ].join('\n\n'),
           ),
           actions: [
             TextButton(
@@ -287,6 +307,24 @@ class _StartSeiteState extends State<StartSeite> {
                         : '${stand.werte.length} geändert',
                     onTap: () => _oeffne(ArtikelSeite(modell: _modell)),
                   ),
+                  const SizedBox(height: 12),
+                  _Kachel(
+                    key: const ValueKey('kachel-fotos'),
+                    icon: Icons.photo_library_outlined,
+                    titel: 'Fotos',
+                    text: 'Musterfotos und Fotos aus der Produktion',
+                    marke: stand.fotos.isEmpty
+                        ? null
+                        : fotoAnzahlText(stand.fotos.length, stand.fotoBytes),
+                    onTap: () => _oeffne(FotosSeite(modell: _modell)),
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    key: const ValueKey('start-musterfoto'),
+                    onPressed: () => musterfotoAufnehmen(context, _modell),
+                    icon: const Icon(Icons.photo_camera_outlined),
+                    label: const Text('Musterfoto aufnehmen'),
+                  ),
                   const Abschnitt('Zurück an den PC'),
                   if (stand.ungesichert) ...[
                     Hinweis(
@@ -369,6 +407,7 @@ class _OhnePaket extends StatelessWidget {
 /// Eine große Kachel der Startseite.
 class _Kachel extends StatelessWidget {
   const _Kachel({
+    super.key,
     required this.icon,
     required this.titel,
     required this.text,

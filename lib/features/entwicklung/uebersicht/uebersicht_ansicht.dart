@@ -12,6 +12,7 @@ import '../daten/entwicklung_repository.dart';
 import '../entwicklung_bereiche.dart';
 import '../kunden/kunden_ansicht.dart';
 import '../kunden/kunden_modell.dart';
+import '../projekte/foto_eingang.dart';
 import '../projekte/gesamtprojekt_screen.dart' show oeffneGesamtprojekt;
 import '../projekte/projekt_checkliste.dart';
 import '../projekte/projekt_modell.dart';
@@ -207,6 +208,8 @@ class _EntwicklungUebersichtState extends ConsumerState<EntwicklungUebersicht> {
                   heute: heute,
                 )
               else ...[
+                // Musterfotos vom Handy — nur, wenn welche warten.
+                const FotoEingang(),
                 _Kacheln(
                   zahlen: uebersichtZahlen(
                     projekte: p,

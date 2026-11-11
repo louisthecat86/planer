@@ -3,9 +3,12 @@ import 'package:erfassung_format/erfassung_format.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/constants/abteilungen.dart';
+import '../../core/constants/entwicklung.dart';
 import '../../core/constants/parameter_namen.dart';
 import '../../core/database/database.dart';
+import '../../core/services/artikel_fotos.dart';
 import '../../core/services/produktion_erfassen_service.dart';
+import '../entwicklung/daten/dateien.dart';
 import '../erfassung/geplante_produktion.dart';
 
 // Die Handy-Erfassung im Planer: das Paket fürs Handy schreiben und das
@@ -16,6 +19,10 @@ import '../erfassung/geplante_produktion.dart';
 // Steckbrief-Werte landen in der Gruppe, die der Schritt für Maschinenwerte
 // benutzt, Plattentemperaturen in der Gruppe ihres Rasters, die Notiz in
 // MASCHINENEINSTELLUNGEN — und harte Grenzen blockieren.
+//
+// Fotos kommen mit dem Ergebnis: Ein Foto aus der Produktion gehört zum
+// Artikel (ArtikelFotoDienst), ein Musterfoto in den Foto-Eingang der
+// Produktentwicklung — verschlüsselt wie ihre übrigen Dateien.
 
 /// Schlüssel der Felder eines Schritts im Paket.
 String steckbriefSchluessel(String parameterName) =>
@@ -118,21 +125,64 @@ class WertVorschau {
   bool get vorgewaehlt => stand == WertStand.neu;
 }
 
+/// Was mit einem Foto beim Einlesen geschieht.
+enum FotoStand {
+  /// Wird übernommen.
+  neu,
+
+  /// Das Foto ist schon im Planer — die Datei wurde schon eingelesen.
+  schonDa,
+
+  /// Den Artikel gibt es nicht mehr.
+  artikelFehlt,
+
+  /// In der Datei steht kein lesbares Bild.
+  unlesbar,
+
+  /// Ein Musterfoto — aber die Produktentwicklung ist auf diesem Rechner
+  /// nicht eingerichtet.
+  entwicklungFehlt,
+}
+
+/// Ein Foto in der Vorschau.
+class FotoVorschau {
+  const FotoVorschau({
+    required this.foto,
+    required this.stand,
+    required this.ziel,
+    this.hinweis,
+  });
+
+  final ErfasstesFoto foto;
+  final FotoStand stand;
+
+  /// Wohin es kommt: „4711 · Grillwurst" oder „Foto-Eingang der
+  /// Produktentwicklung".
+  final String ziel;
+  final String? hinweis;
+
+  bool get moeglich => stand == FotoStand.neu;
+
+  bool get vorgewaehlt => moeglich;
+}
+
 /// Was ein Ergebnis vom Handy im Planer bewirken würde.
 class ErgebnisVorschau {
   const ErgebnisVorschau({
     required this.ergebnis,
     required this.produktionen,
     required this.werte,
+    this.fotos = const [],
   });
 
   final ErfassungsErgebnis ergebnis;
   final List<ProduktionVorschau> produktionen;
   final List<WertVorschau> werte;
+  final List<FotoVorschau> fotos;
 }
 
 /// Was übernommen wurde.
-typedef UebernahmeBericht = ({int produktionen, int werte});
+typedef UebernahmeBericht = ({int produktionen, int werte, int fotos});
 
 /// Was der Planer zu einem Feld gerade weiß.
 class _FeldStand {
@@ -570,92 +620,201 @@ class HandyErfassungDienst {
       ergebnis: ergebnis,
       produktionen: produktionen,
       werte: werte,
+      fotos: await _fotoVorschau(ergebnis.fotos, artikelText, produkte.keys),
     );
   }
 
-  /// Trägt ein, was in [produktionen] und [werte] angehakt ist — alles
-  /// oder nichts. Was sich nicht übernehmen lässt, wird übergangen.
+  /// Ob die Produktentwicklung auf diesem Rechner Dateien ablegen kann —
+  /// das kann sie, sobald sie einmal entsperrt war.
+  Future<bool> _entwicklungBereit() async {
+    final zeile = await (_db.select(_db.appSettings)
+          ..where((s) => s.key.equals(kEntwicklungDatenschluessel)))
+        .getSingleOrNull();
+    return zeile?.value != null;
+  }
+
+  Future<List<FotoVorschau>> _fotoVorschau(
+    List<ErfasstesFoto> fotos,
+    String Function(String id, String ersatz) artikelText,
+    Iterable<String> artikelIds,
+  ) async {
+    if (fotos.isEmpty) return const [];
+    final artikel = artikelIds.toSet();
+    final ids = [for (final f in fotos) f.id];
+    final schonArtikel = await ArtikelFotoDienst(_db).vorhandene(ids);
+    final t = _db.entwicklungDateien;
+    final schonMuster = (await (_db.selectOnly(t)
+              ..addColumns([t.id])
+              ..where(t.id.isIn(ids)))
+            .map((z) => z.read(t.id)!)
+            .get())
+        .toSet();
+    final bereit = await _entwicklungBereit();
+    const eingang = 'Foto-Eingang der Produktentwicklung';
+    return [
+      for (final f in fotos)
+        switch (f.art) {
+          FotoArt.produktion => FotoVorschau(
+              foto: f,
+              ziel: artikelText(f.artikelId ?? '', f.artikel ?? ''),
+              stand: !artikel.contains(f.artikelId)
+                  ? FotoStand.artikelFehlt
+                  : !istJpeg(f.daten)
+                      ? FotoStand.unlesbar
+                      : schonArtikel.contains(f.id)
+                          ? FotoStand.schonDa
+                          : FotoStand.neu,
+              hinweis: !artikel.contains(f.artikelId)
+                  ? 'Den Artikel gibt es im Planer nicht mehr.'
+                  : !istJpeg(f.daten)
+                      ? 'In der Datei steht dazu kein lesbares Bild.'
+                      : schonArtikel.contains(f.id)
+                          ? 'Ist schon beim Artikel.'
+                          : null,
+            ),
+          FotoArt.muster => FotoVorschau(
+              foto: f,
+              ziel: eingang,
+              stand: !istJpeg(f.daten)
+                  ? FotoStand.unlesbar
+                  : !bereit
+                      ? FotoStand.entwicklungFehlt
+                      : schonMuster.contains(f.id)
+                          ? FotoStand.schonDa
+                          : FotoStand.neu,
+              hinweis: !istJpeg(f.daten)
+                  ? 'In der Datei steht dazu kein lesbares Bild.'
+                  : !bereit
+                      ? 'Die Produktentwicklung ist auf diesem Rechner noch '
+                          'nicht eingerichtet — das Musterfoto bleibt in '
+                          'der Datei.'
+                      : schonMuster.contains(f.id)
+                          ? 'Ist schon in der Produktentwicklung.'
+                          : null,
+            ),
+        },
+    ];
+  }
+
+  /// Trägt ein, was in [produktionen], [werte] und [fotos] angehakt ist —
+  /// alles oder nichts. Was sich nicht übernehmen lässt, wird übergangen.
   Future<UebernahmeBericht> uebernehmen({
     required Iterable<ProduktionVorschau> produktionen,
     required Iterable<WertVorschau> werte,
-  }) =>
-      _db.transaction(() async {
-        var p = 0;
-        for (final x in produktionen) {
-          if (!x.moeglich) continue;
-          final e = x.erfasst;
-          await ProduktionErfassenService.speichere(
-            db: _db,
-            productId: e.artikelId,
-            datum: e.datum,
-            kgRohware: e.rohKg,
-            kgFleischeinwaage: e.fleischKg,
-            kgFertigware: e.fertigKg,
-            startzeit: e.start,
-            endzeit: e.ende,
-            notizen: e.notiz,
-          );
-          p++;
+    Iterable<FotoVorschau> fotos = const [],
+  }) async {
+    // Die Bilder vorab: ohne Aufnahmeort und Kamera, notfalls verkleinert.
+    // Das rechnet — also nicht erst in der Transaktion.
+    final bilder = <FotoVorschau, Uint8List>{};
+    for (final x in fotos) {
+      final daten = x.foto.daten;
+      if (!x.moeglich || daten == null) continue;
+      final bild = await fotoAufbereiten(daten, vomHandy: true);
+      if (bild != null) bilder[x] = bild;
+    }
+    return _db.transaction(() async {
+      var f = 0;
+      for (final MapEntry(key: x, value: bild) in bilder.entries) {
+        final foto = x.foto;
+        switch (foto.art) {
+          case FotoArt.produktion:
+            await ArtikelFotoDienst(_db).speichern(
+              id: foto.id,
+              productId: foto.artikelId!,
+              bild: bild,
+              aufgenommenAm: foto.aufgenommenAm,
+              bezeichnung: foto.bezeichnung,
+              kuerzel: foto.kuerzel,
+            );
+          case FotoArt.muster:
+            await EntwicklungDateienDienst(_db).speichern(
+              id: foto.id,
+              name: foto.dateiname,
+              inhalt: bild,
+              projektId: kEntwicklungFotoEingang,
+              mimeTyp: 'image/jpeg',
+            );
         }
+        f++;
+      }
 
-        var w = 0;
-        final liste = [
-          for (final x in werte)
-            if (x.moeglich) x,
-        ];
-        if (liste.isNotEmpty) {
-          final schritte = await (_db.select(_db.productSteps)
-                ..where((s) => s.deletedAt.isNull())
-                ..where(
-                  (s) => s.id.isIn({for (final x in liste) x.wert.schrittId}),
-                ))
-              .get();
-          final staende = await _feldStaende(schritte);
-          for (final x in liste) {
-            _FeldStand? feld;
-            for (final f
-                in staende[x.wert.schrittId]?.felder ?? const <_FeldStand>[]) {
-              if (f.feld.schluessel == x.wert.schluessel) {
-                feld = f;
-                break;
-              }
+      var p = 0;
+      for (final x in produktionen) {
+        if (!x.moeglich) continue;
+        final e = x.erfasst;
+        await ProduktionErfassenService.speichere(
+          db: _db,
+          productId: e.artikelId,
+          datum: e.datum,
+          kgRohware: e.rohKg,
+          kgFleischeinwaage: e.fleischKg,
+          kgFertigware: e.fertigKg,
+          startzeit: e.start,
+          endzeit: e.ende,
+          notizen: e.notiz,
+        );
+        p++;
+      }
+
+      var w = 0;
+      final liste = [
+        for (final x in werte)
+          if (x.moeglich) x,
+      ];
+      if (liste.isNotEmpty) {
+        final schritte = await (_db.select(_db.productSteps)
+              ..where((s) => s.deletedAt.isNull())
+              ..where(
+                (s) => s.id.isIn({for (final x in liste) x.wert.schrittId}),
+              ))
+            .get();
+        final staende = await _feldStaende(schritte);
+        for (final x in liste) {
+          _FeldStand? feld;
+          for (final f
+              in staende[x.wert.schrittId]?.felder ?? const <_FeldStand>[]) {
+            if (f.feld.schluessel == x.wert.schluessel) {
+              feld = f;
+              break;
             }
-            if (feld == null) continue;
-            final neu = _leerZuNull(x.wert.neu);
-            if (feld.feld.grenze?.pruefe(neu).status == GrenzStatus.blockiert) {
-              continue;
-            }
-            final zeile = feld.parameter;
-            if (zeile != null) {
-              await (_db.update(_db.productStepParameters)
-                    ..where((t) => t.id.equals(zeile.id)))
-                  .write(
-                ProductStepParametersCompanion(
-                  wert: Value(neu),
-                  updatedAt: Value(DateTime.now()),
-                ),
-              );
-            } else {
-              if (neu == null) continue;
-              await _db.into(_db.productStepParameters).insert(
-                    ProductStepParametersCompanion(
-                      id: Value(const Uuid().v4()),
-                      stepId: Value(x.wert.schrittId),
-                      parameterGruppe: Value(feld.gruppe!),
-                      parameterName: Value(
-                        feld.feld.art == FeldArt.notiz
-                            ? kMaschinenNotizParam
-                            : feld.feld.name,
-                      ),
-                      wert: Value(neu),
-                      reihenfolge: Value(feld.reihenfolge),
-                      istCustom: const Value(false),
-                    ),
-                  );
-            }
-            w++;
           }
+          if (feld == null) continue;
+          final neu = _leerZuNull(x.wert.neu);
+          if (feld.feld.grenze?.pruefe(neu).status == GrenzStatus.blockiert) {
+            continue;
+          }
+          final zeile = feld.parameter;
+          if (zeile != null) {
+            await (_db.update(_db.productStepParameters)
+                  ..where((t) => t.id.equals(zeile.id)))
+                .write(
+              ProductStepParametersCompanion(
+                wert: Value(neu),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+          } else {
+            if (neu == null) continue;
+            await _db.into(_db.productStepParameters).insert(
+                  ProductStepParametersCompanion(
+                    id: Value(const Uuid().v4()),
+                    stepId: Value(x.wert.schrittId),
+                    parameterGruppe: Value(feld.gruppe!),
+                    parameterName: Value(
+                      feld.feld.art == FeldArt.notiz
+                          ? kMaschinenNotizParam
+                          : feld.feld.name,
+                    ),
+                    wert: Value(neu),
+                    reihenfolge: Value(feld.reihenfolge),
+                    istCustom: const Value(false),
+                  ),
+                );
+          }
+          w++;
         }
-        return (produktionen: p, werte: w);
-      });
+      }
+      return (produktionen: p, werte: w, fotos: f);
+    });
+  }
 }

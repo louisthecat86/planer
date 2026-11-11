@@ -46,6 +46,11 @@ const Set<String> kEntwicklungNurLokal = {
 bool istEntwicklungsSchluessel(String schluessel) =>
     schluessel.startsWith(kEntwicklungPraefix);
 
+/// Der Foto-Eingang: Unter dieser „Projekt"-ID liegen die Musterfotos vom
+/// Handy, bis sie einem Projekt zugeordnet sind. Kein Projekt heißt so —
+/// deren IDs sind UUIDs.
+const String kEntwicklungFotoEingang = '@foto-eingang';
+
 /// Präfix der Tabellen der Produktentwicklung.
 const String kEntwicklungTabellenPraefix = 'entwicklung_';
 

@@ -1,12 +1,15 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:erfassung/stand.dart';
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'beispiel.dart';
 
-/// Der Stand der Erfassung ohne Oberfläche: Paket öffnen, Produktionen
-/// und Werte erfassen, das Ergebnis — und dass alles ein Schließen der
-/// App übersteht. Alles erfunden.
+/// Der Stand der Erfassung ohne Oberfläche: Paket öffnen, Produktionen,
+/// Werte und Fotos erfassen, das Ergebnis — und dass alles ein Schließen
+/// der App übersteht. Alles erfunden.
 void main() {
   final jetzt = DateTime(2026, 11, 10, 9);
 
@@ -119,5 +122,93 @@ void main() {
     expect(Erfassungsstand.ausText('kaputt').paket, isNull);
     expect(Erfassungsstand.ausText('{"paket": {"id": 3}}').paket, isNull);
     expect(Erfassungsstand.ausText(null).hatErfasstes, isFalse);
+  });
+
+  test('Fotos: aus der Produktion und als Muster, im Ergebnis mit Bild', () {
+    final s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+    final a = s.fotoAnlegen(
+      id: neueFotoId(jetzt, 7),
+      jetzt: jetzt,
+      artikelId: 'a1',
+      artikel: 'Grillwurst',
+      produktionId: 't1',
+    );
+    expect(a.art, FotoArt.produktion);
+    expect(a.kuerzel, 'AB');
+    final m = s.fotoAnlegen(
+      id: neueFotoId(jetzt.add(const Duration(minutes: 5)), 7),
+      jetzt: jetzt.add(const Duration(minutes: 5)),
+      // Ohne Artikel ein Musterfoto — eine Produktion gehört dann nicht
+      // dazu.
+      produktionId: 't1',
+      bezeichnung: '  Pfeffer grob ',
+    );
+    expect(m.art, FotoArt.muster);
+    expect(m.bezeichnung, 'Pfeffer grob');
+    expect(m.produktionId, isNull);
+    expect(a.id, isNot(m.id));
+
+    // Noch ist nichts aufgenommen — nur gemerkt, wozu die Kamera offen ist.
+    s.fotoWartend = a;
+    expect(s.hatErfasstes, isFalse);
+
+    s
+      ..fotoHinzu(a, groesse: 300)
+      ..fotoHinzu(m, groesse: 200)
+      ..fotoWartend = null;
+    expect(s.hatErfasstes, isTrue);
+    expect(s.ungesichert, isTrue);
+    expect([for (final f in s.fotoListe) f.id], [m.id, a.id]);
+    expect([for (final f in s.fotosVon('a1')) f.id], [a.id]);
+    expect(s.fotosVon('a2'), isEmpty);
+    expect([for (final f in s.musterfotos) f.id], [m.id]);
+    expect(s.fotoBytes, 500);
+
+    // Im Ergebnis stehen die Fotos, deren Bild es gibt — das älteste
+    // zuerst.
+    final bild = Uint8List.fromList([0xFF, 0xD8, 0xFF, 1, 2, 3]);
+    final nurEins = s.ergebnis(jetzt, bilder: {a.id: bild})!;
+    expect([for (final f in nurEins.fotos) f.id], [a.id]);
+    expect(nurEins.fotos.single.daten, bild);
+    expect(nurEins.fotos.single.groesse, bild.length);
+    expect((jsonDecode(nurEins.alsText()) as Map)['version'], 2);
+    final beide = s.ergebnis(jetzt, bilder: {a.id: bild, m.id: bild})!;
+    expect([for (final f in beide.fotos) f.id], [a.id, m.id]);
+    // Ohne Bilder ein Ergebnis wie bisher.
+    final ohne = s.ergebnis(jetzt)!;
+    expect(ohne.fotos, isEmpty);
+    expect((jsonDecode(ohne.alsText()) as Map)['version'], 1);
+
+    s.gespeichertAm = jetzt;
+    s.fotoLoeschen(m.id);
+    expect(s.ungesichert, isTrue);
+    expect(s.fotos.keys, [a.id]);
+  });
+
+  test('Fotos überstehen das Schließen — auch die offene Aufnahme', () {
+    final s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+    final a = s.fotoAnlegen(
+      id: 'f-1',
+      jetzt: jetzt,
+      artikelId: 'a1',
+      artikel: 'Grillwurst',
+    );
+    final wartend = s.fotoAnlegen(id: 'f-2', jetzt: jetzt, bezeichnung: 'M');
+    s
+      ..fotoHinzu(a, groesse: 300)
+      ..fotoWartend = wartend;
+
+    final wieder = Erfassungsstand.ausText(s.alsText());
+    expect(wieder.alsText(), s.alsText());
+    expect(wieder.fotos.keys, ['f-1']);
+    expect(wieder.fotos['f-1']!.groesse, 300);
+    expect(wieder.fotos['f-1']!.daten, isNull);
+    expect(wieder.fotoWartend!.id, 'f-2');
+    expect(wieder.fotoWartend!.art, FotoArt.muster);
+
+    // Ein anderes Paket verwirft auch die Fotos.
+    wieder.paketOeffnen(beispielPaket(id: 'paket-2'));
+    expect(wieder.fotos, isEmpty);
+    expect(wieder.fotoWartend, isNull);
   });
 }

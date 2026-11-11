@@ -4,12 +4,15 @@ import 'package:flutter/services.dart';
 
 import 'artikel_seite.dart';
 import 'bausteine.dart';
+import 'fotos.dart';
 import 'modell.dart';
 import 'stil.dart';
 
 /// Eine Produktion erfassen: Rohware, davon Fleisch, Fertigware, Start und
 /// Ende und Bemerkung — dieselben Angaben wie in der
-/// Produktionserfassung des Planers.
+/// Produktionserfassung des Planers. Dazu Fotos aus der Produktion: Sie
+/// gehören zum Artikel und bleiben auch, wenn die Erfassung nicht
+/// gespeichert wird.
 ///
 /// [geplant] ist die Produktion aus dem Paket; ohne Plan steht der
 /// [artikel] fest. [vorhanden] ist eine frühere Erfassung zum Ändern.
@@ -317,6 +320,16 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
               maxLength: 12,
               textCapitalization: TextCapitalization.characters,
             ),
+            if (_artikelId.isNotEmpty) ...[
+              const Abschnitt('Fotos aus der Produktion'),
+              FotoStreifen(
+                modell: widget.modell,
+                artikelId: _artikelId,
+                artikel: _artikelName,
+                produktionId: _plan?.id ?? _alt?.produktionId,
+              ),
+              const SizedBox(height: 16),
+            ],
             if (_fehler case final fehler?) ...[
               Hinweis(fehler, farbe: f.error, icon: Icons.error_outline),
               const SizedBox(height: 12),

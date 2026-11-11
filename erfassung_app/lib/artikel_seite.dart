@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'bausteine.dart';
+import 'fotos.dart';
 import 'modell.dart';
 import 'stil.dart';
 
@@ -189,7 +190,26 @@ class SchritteSeite extends StatelessWidget {
         final f = theme.colorScheme;
         final stand = modell.stand;
         return Scaffold(
-          appBar: AppBar(title: Text(artikel.name)),
+          appBar: AppBar(
+            title: Text(artikel.name),
+            actions: [
+              IconButton(
+                key: const ValueKey('schritte-foto'),
+                tooltip: 'Foto aus der Produktion',
+                onPressed: () => produktionsfotoAufnehmen(
+                  context,
+                  modell,
+                  artikelId: artikel.id,
+                  artikel: artikel.name,
+                ),
+                icon: Badge(
+                  isLabelVisible: stand.fotosVon(artikel.id).isNotEmpty,
+                  label: Text('${stand.fotosVon(artikel.id).length}'),
+                  child: const Icon(Icons.photo_camera_outlined),
+                ),
+              ),
+            ],
+          ),
           body: SafeArea(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),

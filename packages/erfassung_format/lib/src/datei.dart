@@ -3,9 +3,18 @@ import 'dart:convert';
 /// Woran eine Datei des Austauschs zu erkennen ist.
 const String kFormatName = 'planer-erfassung';
 
-/// Die Fassung des Formats. Steigt sie, liest eine ältere App oder ein
-/// älterer Planer die Datei nicht — und sagt das, statt halb zu lesen.
-const int kFormatVersion = 1;
+/// Die höchste Fassung des Formats, die diese App und dieser Planer lesen.
+/// Eine Datei aus einer neueren Fassung lesen sie nicht — und sagen das,
+/// statt halb zu lesen.
+///
+/// 1 → Produktionen und Maschineneinstellungen
+/// 2 → ein Ergebnis kann Fotos enthalten
+const int kFormatVersion = 2;
+
+/// Die Fassung ohne Fotos. So schreibt weiter, wer keine Fotos mitgibt:
+/// Ein Planer oder eine App auf älterem Stand liest die Datei dann wie
+/// bisher.
+const int kFormatVersionOhneFotos = 1;
 
 /// Was in einer Datei steht.
 enum DateiArt {
@@ -85,10 +94,14 @@ DateiArt? dateiArtVon(String text) {
 }
 
 /// Der Kopf jeder Datei.
-JsonObjekt dateiKopf(DateiArt art) => {
+JsonObjekt dateiKopf(
+  DateiArt art, {
+  int version = kFormatVersionOhneFotos,
+}) =>
+    {
       'format': kFormatName,
       'art': art.schluessel,
-      'version': kFormatVersion,
+      'version': version,
     };
 
 // ── Lesen einzelner Werte ─────────────────────────────────────────────

@@ -1,5 +1,6 @@
 import 'package:erfassung/artikel_seite.dart';
 import 'package:erfassung/erfassen_seite.dart';
+import 'package:erfassung/fotos.dart';
 import 'package:erfassung/modell.dart';
 import 'package:erfassung/produktionen_seite.dart';
 import 'package:erfassung/stand.dart';
@@ -11,7 +12,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'beispiel.dart';
 
 /// Die Seiten der App auf einem kleinen Handy, hell und dunkel: Nichts
-/// läuft über, und eine Produktion lässt sich erfassen.
+/// läuft über, eine Produktion lässt sich erfassen, und die Fotos stehen,
+/// wo man sie sucht. (Die Kamera selbst und die Bilddateien prüft
+/// modell_test.dart — hier hat das Modell weder Kamera noch Ordner.)
 ///
 /// Ein Überlauf (gelb-schwarzer Streifen) meldet Flutter als Fehler; der
 /// Test schlägt dann von selbst fehl.
@@ -20,6 +23,32 @@ void main() {
         stand: Erfassungsstand(kuerzel: 'AB')
           ..paket = mitPaket ? beispielPaket() : null,
       );
+
+  /// Ein Modell mit einem Foto aus der Produktion und einem Musterfoto.
+  ErfassungsModell mitFotos() {
+    final m = modell();
+    final s = m.stand;
+    s
+      ..fotoHinzu(
+        s.fotoAnlegen(
+          id: 'f-1',
+          jetzt: DateTime(2026, 11, 10, 9, 30),
+          artikelId: 'a1',
+          artikel: 'Grillwurst fein mit einem recht langen Namen 5 x 100 g',
+          produktionId: 't1',
+        ),
+        groesse: 300 * 1024,
+      )
+      ..fotoHinzu(
+        s.fotoAnlegen(
+          id: 'f-2',
+          jetzt: DateTime(2026, 11, 10, 11, 5),
+          bezeichnung: 'Pfeffer grob, zweiter Versuch mit langem Namen',
+        ),
+        groesse: 212 * 1024,
+      );
+    return m;
+  }
 
   Future<void> zeige(
     WidgetTester tester,
@@ -55,6 +84,49 @@ void main() {
       expect(find.text('Produktionen'), findsOneWidget);
       expect(find.text('Maschineneinstellungen'), findsOneWidget);
       expect(find.text('2 geplante sind noch offen'), findsOneWidget);
+      expect(find.text('Fotos'), findsOneWidget);
+      expect(find.text('Musterfoto aufnehmen'), findsOneWidget);
+    });
+
+    testWidgets('Fotos: Kachel, Liste und großes Bild ($art)', (tester) async {
+      final m = mitFotos();
+      await zeige(
+        tester,
+        StartSeite(modell: m),
+        dunkel: dunkel,
+        groesse: const Size(360, 1400),
+      );
+      expect(find.text('2 Fotos · 512 KB'), findsOneWidget);
+      // Fotos zählen als Erfasstes — das Ergebnis lässt sich speichern.
+      expect(
+        find.textContaining('noch in keiner Ergebnis-Datei'),
+        findsOneWidget,
+      );
+
+      await zeige(tester, FotosSeite(modell: m), dunkel: dunkel);
+      expect(find.text('Musterfoto aufnehmen'), findsOneWidget);
+      expect(
+        find.text('Musterfoto · Pfeffer grob, zweiter Versuch mit langem '
+            'Namen'),
+        findsOneWidget,
+      );
+      expect(find.text('MUSTERFOTOS'), findsOneWidget);
+      expect(find.text('AUS DER PRODUKTION'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('fotozeile-f-1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('foto-loeschen')), findsOneWidget);
+      expect(find.textContaining('10.11.2026, 09:30 Uhr'), findsOneWidget);
+
+      // Löschen fragt nach — und nimmt das Foto dann aus dem Stand.
+      await tester.tap(find.byKey(const ValueKey('foto-loeschen')));
+      await tester.pumpAndSettle();
+      expect(find.text('Foto löschen?'), findsOneWidget);
+      await tester.tap(find.text('Löschen'));
+      await tester.pumpAndSettle();
+      expect(m.stand.fotos.keys, ['f-2']);
+      expect(find.byKey(const ValueKey('fotozeile-f-1')), findsNothing);
+      expect(find.byKey(const ValueKey('fotozeile-f-2')), findsOneWidget);
     });
 
     testWidgets('Produktionen, Artikel und Schritte ($art)', (tester) async {
@@ -131,5 +203,60 @@ void main() {
     );
     expect(e.kuerzel, 'AB');
     expect(m.stand.offen.single.id, 't2');
+  });
+
+  testWidgets('beim Erfassen: die Fotos des Artikels und der Knopf dafür',
+      (tester) async {
+    final m = mitFotos();
+    final plan = m.stand.paket!.produktionen.first;
+    await zeige(
+      tester,
+      ErfassenSeite(modell: m, geplant: plan),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.text('FOTOS AUS DER PRODUKTION'), findsOneWidget);
+    // Nur das Foto dieses Artikels — nicht das Musterfoto.
+    expect(find.byKey(const ValueKey('foto-f-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('foto-f-2')), findsNothing);
+    expect(find.text('Weiteres Foto aufnehmen'), findsOneWidget);
+
+    // Bei einem Artikel ohne Fotos heißt der Knopf anders. (Mit eigenem
+    // Schlüssel — sonst behielte die Seite den Artikel von eben.)
+    await zeige(
+      tester,
+      ErfassenSeite(
+        key: const ValueKey('zweite'),
+        modell: m,
+        geplant: m.stand.paket!.produktionen.last,
+      ),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.text('Foto aufnehmen'), findsOneWidget);
+
+    // Ohne Kamera sagt die App, woran es liegt, statt zu schweigen.
+    await tester.tap(find.byKey(const ValueKey('foto-produktion')));
+    await tester.pump();
+    await tester.pump();
+    expect(find.textContaining('nicht erreichbar'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    expect(m.stand.fotos, hasLength(2));
+  });
+
+  testWidgets('Musterfoto: erst die Bezeichnung, dann die Kamera',
+      (tester) async {
+    final m = modell();
+    await zeige(tester, StartSeite(modell: m), groesse: const Size(360, 1200));
+    await tester.tap(find.byKey(const ValueKey('start-musterfoto')));
+    await tester.pumpAndSettle();
+    expect(find.text('Musterfoto'), findsOneWidget);
+    expect(find.byKey(const ValueKey('muster-bezeichnung')), findsOneWidget);
+
+    // Abbrechen: nichts geschieht.
+    await tester.tap(find.text('Abbrechen'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('muster-bezeichnung')), findsNothing);
+    expect(m.stand.fotos, isEmpty);
+    expect(m.stand.fotoWartend, isNull);
   });
 }

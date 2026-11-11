@@ -6,6 +6,8 @@ import 'package:produktion_planer/core/theme/app_theme.dart';
 import 'package:produktion_planer/core/ui/bausteine.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/kunden/kunden_ansicht.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/datei_aktionen.dart';
+import 'package:produktion_planer/features/entwicklung/projekte/foto_eingang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/uebersicht/angeheftet.dart';
@@ -13,8 +15,8 @@ import 'package:produktion_planer/features/entwicklung/uebersicht/uebersicht_ans
 
 /// Die Übersicht und die Kundenordner der Produktentwicklung mit
 /// erfundenen Projekten: Kacheln, Karten mit dem, was fehlt, Anheften,
-/// Suche, Ordner auf- und zuklappen — und schmal und dunkel läuft nichts
-/// über.
+/// Suche, Ordner auf- und zuklappen, der Foto-Eingang — und schmal und
+/// dunkel läuft nichts über.
 ///
 /// Ein Überlauf (gelb-schwarzer Streifen) meldet Flutter als Fehler; der
 /// Test schlägt dann von selbst fehl.
@@ -115,6 +117,7 @@ void main() {
     Widget seite, {
     Size groesse = const Size(1400, 2000),
     ThemeData? theme,
+    List<EntwicklungsDatei> eingang = const [],
   }) async {
     tester.view.physicalSize = groesse;
     tester.view.devicePixelRatio = 1;
@@ -131,6 +134,9 @@ void main() {
           alleVersionenProvider.overrideWith((ref) => Stream.value(const [])),
           zeilenAenderungenProvider
               .overrideWith((ref) => Stream.value(const {})),
+          // Der Foto-Eingang — ohne Datenbank auch ohne Bilder.
+          fotoEingangProvider.overrideWith((ref) => Stream.value(eingang)),
+          dateiInhaltProvider.overrideWith((ref, id) => null),
           // Ohne Datenbank: Angeheftetes wird nicht gespeichert.
           angehefteteProjekteProvider
               .overrideWith((ref) => AngeheftetNotifier(null)),
@@ -274,6 +280,60 @@ void main() {
     expect(schluessel('kunde-beispiel feinkost'), findsNothing);
     expect(schluessel('projektzeile-p2'), findsOneWidget);
     expect(schluessel('projektzeile-alt'), findsNothing);
+  });
+
+  testWidgets(
+      'Foto-Eingang: nur zu sehen, wenn ein Musterfoto wartet — Zuordnen '
+      'zeigt die Projekte', (tester) async {
+    await zeige(tester, EntwicklungUebersicht(heute: heute));
+    expect(schluessel('foto-eingang'), findsNothing);
+
+    final eingang = [
+      EntwicklungsDatei(
+        id: 'f1',
+        projektId: '@foto-eingang',
+        name: 'Musterfoto Pfeffer grob 2026-11-08_1105.jpg',
+        mimeTyp: 'image/jpeg',
+        groesse: 312 * 1024,
+        createdAt: DateTime(2026, 11, 9),
+      ),
+    ];
+    // Von vorn — sonst behielte die Seite den leeren Eingang von eben.
+    await tester.pumpWidget(const SizedBox());
+    // Auch schmal läuft die Zeile nicht über.
+    await zeige(
+      tester,
+      EntwicklungUebersicht(heute: heute),
+      groesse: const Size(800, 2400),
+      eingang: eingang,
+    );
+    expect(schluessel('foto-eingang'), findsOneWidget);
+    expect(bereich('Foto-Eingang'), findsOneWidget);
+    expect(
+      find.text('Musterfoto Pfeffer grob 2026-11-08_1105'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('eingelesen am 09.11.2026 · 312 KB'),
+      findsOneWidget,
+    );
+
+    await tester.tap(schluessel('foto-zuordnen-f1'));
+    await tester.pumpAndSettle();
+    expect(schluessel('foto-ziel-p1'), findsOneWidget);
+    expect(schluessel('foto-ziel-m1'), findsOneWidget);
+    expect(schluessel('foto-ziel-produktfoto'), findsOneWidget);
+
+    await tester.enterText(schluessel('foto-ziel-suche'), 'leberk');
+    await tester.pumpAndSettle();
+    expect(schluessel('foto-ziel-p4'), findsOneWidget);
+    expect(schluessel('foto-ziel-p1'), findsNothing);
+    expect(schluessel('foto-ziel-g'), findsNothing);
+
+    await tester.tap(find.text('Abbrechen'));
+    await tester.pumpAndSettle();
+    expect(schluessel('foto-ziel-suche'), findsNothing);
+    expect(schluessel('foto-eingang'), findsOneWidget);
   });
 
   testWidgets('schmal und dunkel: kein Überlauf', (tester) async {

@@ -508,7 +508,7 @@ void main() {
         produktionen: v.produktionen.where((p) => p.vorgewaehlt),
         werte: v.werte.where((w) => w.vorgewaehlt),
       );
-      expect(bericht, (produktionen: 1, werte: 5));
+      expect(bericht, (produktionen: 1, werte: 5, fotos: 0));
 
       final h = (await db.select(db.productionHistory).get()).single;
       expect(
@@ -597,7 +597,7 @@ void main() {
         produktionen: v.produktionen,
         werte: v.werte,
       );
-      expect(bericht, (produktionen: 0, werte: 0));
+      expect(bericht, (produktionen: 0, werte: 0, fotos: 0));
       expect(await db.select(db.productionHistory).get(), isEmpty);
     });
   });

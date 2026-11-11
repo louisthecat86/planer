@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,18 +10,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/ui/foto_kachel.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../articles/article_detail_providers.dart'
     show productionHistoryProvider, stepParametersProvider;
+import '../entwicklung/daten/datei_typen.dart' show groesseText;
 import '../erfassung/produktion_erfassung_screen.dart'
     show erfassungWocheDatenProvider;
 import 'handy_erfassung_dienst.dart';
 
 // Einstellungen → Handy-Erfassung: die Datei fürs Handy erstellen und das
-// Ergebnis vom Handy einlesen. Der Weg ist eine Datei wie beim Backup —
-// per Kabel, Freigabe oder wie es passt.
+// Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
+// aufgenommen wurden. Der Weg ist eine Datei wie beim Backup — per Kabel,
+// Freigabe oder wie es passt.
+
+/// Ab dieser Größe wird das Ergebnis auf einem eigenen Isolate gelesen —
+/// mit Fotos ist die Datei schnell einige Megabyte groß.
+const int _imHintergrundAb = 512 * 1024;
 
 /// Wie weit das Paket nach vorn reicht.
 enum _Zeitraum {
@@ -55,6 +63,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   ErgebnisVorschau? _vorschau;
   final _produktionen = <ProduktionVorschau>{};
   final _werte = <WertVorschau>{};
+  final _fotos = <FotoVorschau>{};
 
   static DateTime get _montag {
     final heute = tagOhneZeit(DateTime.now());
@@ -144,9 +153,15 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         _melde('Die Datei ließ sich nicht lesen.', fehler: true);
         return;
       }
-      final ergebnis = ErfassungsErgebnis.ausText(
-        utf8.decode(bytes, allowMalformed: true),
-      );
+      final ergebnis = bytes.length < _imHintergrundAb
+          ? ErfassungsErgebnis.ausText(
+              utf8.decode(bytes, allowMalformed: true),
+            )
+          : await Isolate.run(
+              () => ErfassungsErgebnis.ausText(
+                utf8.decode(bytes, allowMalformed: true),
+              ),
+            );
       final vorschau = await HandyErfassungDienst(ref.read(databaseProvider))
           .vorschau(ergebnis);
       if (!mounted) return;
@@ -159,6 +174,9 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         _werte
           ..clear()
           ..addAll(vorschau.werte.where((w) => w.vorgewaehlt));
+        _fotos
+          ..clear()
+          ..addAll(vorschau.fotos.where((f) => f.vorgewaehlt));
       });
     } on FormatFehler catch (e) {
       _melde(e.meldung, fehler: true);
@@ -175,8 +193,12 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     if (vorschau == null) return;
     setState(() => _arbeitet = true);
     try {
-      final bericht = await HandyErfassungDienst(ref.read(databaseProvider))
-          .uebernehmen(produktionen: _produktionen, werte: _werte);
+      final bericht =
+          await HandyErfassungDienst(ref.read(databaseProvider)).uebernehmen(
+        produktionen: _produktionen,
+        werte: _werte,
+        fotos: _fotos,
+      );
       ref.read(autoBackupTriggerProvider).fireDebounced(
             reason: 'Handy-Erfassung eingelesen',
           );
@@ -185,12 +207,24 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         ..invalidate(stepParametersProvider)
         ..invalidate(erfassungWocheDatenProvider);
       if (!mounted) return;
+      final muster = _fotos
+          .where((f) => f.moeglich && f.foto.art == FotoArt.muster)
+          .length;
       setState(() => _vorschau = null);
       final p = bericht.produktionen;
       final w = bericht.werte;
+      final f = bericht.fotos;
       _melde(
-        'Übernommen: ${p == 1 ? '1 Produktion' : '$p Produktionen'} und '
-        '${w == 1 ? '1 Maschineneinstellung' : '$w Maschineneinstellungen'}.',
+        [
+          'Übernommen: ${p == 1 ? '1 Produktion' : '$p Produktionen'}, '
+              '${w == 1 ? '1 Maschineneinstellung' : '$w '
+                  'Maschineneinstellungen'}'
+              ' und ${f == 1 ? '1 Foto' : '$f Fotos'}.',
+          if (f > 0 && muster > 0)
+            '${muster == 1 ? 'Das Musterfoto liegt' : 'Die Musterfotos '
+                    'liegen'} im Foto-Eingang der Produktentwicklung — dort '
+                'einem Projekt zuordnen.',
+        ].join('\n'),
       );
     } catch (e) {
       _melde(
@@ -316,7 +350,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   Widget _vorschauBereich(BuildContext context, ErgebnisVorschau v) {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
-    final anzahl = _produktionen.length + _werte.length;
+    final anzahl = _produktionen.length + _werte.length + _fotos.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -421,6 +455,68 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
                           ),
                         ),
                       ),
+                    if (v.fotos.isNotEmpty)
+                      _Zwischentitel('FOTOS (${v.fotos.length})'),
+                    for (final f in v.fotos)
+                      CheckboxListTile(
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: _fotos.contains(f),
+                        onChanged: !f.moeglich || _arbeitet
+                            ? null
+                            : (an) => setState(
+                                  () => an ?? false
+                                      ? _fotos.add(f)
+                                      : _fotos.remove(f),
+                                ),
+                        title: Text(
+                          [
+                            f.foto.art == FotoArt.muster
+                                ? 'Musterfoto'
+                                : 'Foto aus der Produktion',
+                            if ((f.foto.bezeichnung ?? '').isNotEmpty)
+                              f.foto.bezeichnung!,
+                          ].join(' · '),
+                        ),
+                        subtitle: Text(
+                          [
+                            [
+                              if (f.ziel.isNotEmpty) f.ziel,
+                              '${Format.datum(f.foto.aufgenommenAm)}, '
+                                  '${Format.uhrzeit(f.foto.aufgenommenAm)} '
+                                  'Uhr',
+                              if ((f.foto.kuerzel ?? '').isNotEmpty)
+                                'von ${f.foto.kuerzel}',
+                              groesseText(f.foto.groesse),
+                            ].join(' · '),
+                            if (f.hinweis != null) f.hinweis!,
+                          ].join('\n'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: f.stand == FotoStand.neu ||
+                                    f.stand == FotoStand.schonDa
+                                ? grau
+                                : theme.colorScheme.error,
+                          ),
+                        ),
+                        // Nicht höher als die Zeile — sonst staucht sie
+                        // das Bild.
+                        secondary: FotoKachel(
+                          breite: 64,
+                          hoehe: 48,
+                          bild: f.foto.daten,
+                          fehlt: !istJpeg(f.foto.daten),
+                          onTap: !istJpeg(f.foto.daten)
+                              ? null
+                              : () => fotoGrossZeigen(
+                                    context,
+                                    bild: f.foto.daten!,
+                                    titel: f.foto.art == FotoArt.muster
+                                        ? 'Musterfoto'
+                                        : 'Foto aus der Produktion',
+                                    untertitel: f.ziel,
+                                  ),
+                        ),
+                      ),
                   ],
                 ),
         ),
@@ -477,8 +573,8 @@ class _Anleitung extends StatelessWidget {
           'es passt.',
       'Auf dem Handy die Datei antippen und mit „Planer Erfassung" öffnen '
           '(oder in der App „Paket öffnen").',
-      'An der Anlage erfassen: Produktionen und Maschineneinstellungen — '
-          'ohne Netz, alles bleibt auf dem Handy.',
+      'An der Anlage erfassen: Produktionen, Maschineneinstellungen und '
+          'Fotos — ohne Netz, alles bleibt auf dem Handy.',
       'In der App „Ergebnis speichern", die Datei zurück an den PC und hier '
           'einlesen.',
     ];

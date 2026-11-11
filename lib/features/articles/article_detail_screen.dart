@@ -27,6 +27,7 @@ import '../whiteboard/whiteboard_provider.dart'
 import 'article_detail_providers.dart';
 import 'article_info_editor_dialog.dart';
 import 'article_print_service.dart';
+import 'artikel_fotoleiste.dart';
 import 'bratstrasse_schema.dart';
 import 'custom_parameter_editor_dialog.dart';
 import 'production_entry_dialog.dart';
@@ -349,6 +350,10 @@ class _InfoTab extends ConsumerWidget {
 
             // Besonderheiten — eigener Bereich, damit sie auffallen.
             _BesonderheitenKarte(text: besonderheiten, onEdit: bearbeiten),
+            const SizedBox(height: 12),
+
+            // Fotos aus der Produktion — das Referenzbild vorn.
+            ArtikelFotoleiste(productId: productId),
           ],
         );
       },

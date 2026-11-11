@@ -15,6 +15,7 @@ import 'tables/production_runs.dart';
 import 'tables/demands.dart';
 import 'tables/entwicklung.dart';
 import 'tables/production_tasks.dart';
+import 'tables/artikel_fotos.dart';
 import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
@@ -58,6 +59,8 @@ part 'database.g.dart';
     AuftragsbestandArtikelVorher,
     AuftragsbestandPositionenVorher,
     Tagesaufgaben,
+    ArtikelFotos,
+    ArtikelFotoInhalte,
     // Produktentwicklung — hinter eigenem Passwort, im Backup verschlüsselt.
     EntwicklungZutaten,
     EntwicklungRezepturen,
@@ -86,7 +89,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 39;
+  int get schemaVersion => 40;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -612,6 +615,15 @@ class AppDatabase extends _$AppDatabase {
               'etikett_ausschnitt',
               'TEXT',
             );
+          }
+
+          // --- v39 → v40: Fotos zum Artikel ----------------------------
+          // An der Anlage mit der App aufgenommen oder am PC hinzugefügt:
+          // die Angaben und, getrennt davon, das Bild. createTable
+          // arbeitet mit IF NOT EXISTS.
+          if (from < 40) {
+            await m.createTable(artikelFotos);
+            await m.createTable(artikelFotoInhalte);
           }
         },
         beforeOpen: (details) async {
