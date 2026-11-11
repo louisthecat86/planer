@@ -8,7 +8,7 @@ import 'modell.dart';
 import 'stil.dart';
 
 /// Eine Produktion erfassen: Rohware, davon Fleisch, Fertigware, Start und
-/// Ende, Charge und Bemerkung — dieselben Angaben wie in der
+/// Ende und Bemerkung — dieselben Angaben wie in der
 /// Produktionserfassung des Planers.
 ///
 /// [geplant] ist die Produktion aus dem Paket; ohne Plan steht der
@@ -42,7 +42,6 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
   late final _fertig = TextEditingController(text: _zahl(_alt?.fertigKg));
   late final _start = TextEditingController(text: _alt?.start ?? '');
   late final _ende = TextEditingController(text: _alt?.ende ?? '');
-  late final _charge = TextEditingController(text: _alt?.charge ?? '');
   late final _bemerkung = TextEditingController(text: _alt?.bemerkung ?? '');
   late final _kuerzel = TextEditingController(
     text: _alt?.kuerzel ?? widget.modell.stand.kuerzel,
@@ -75,7 +74,6 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
       _fertig,
       _start,
       _ende,
-      _charge,
       _bemerkung,
       _kuerzel,
     ]) {
@@ -141,7 +139,6 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
         fertigKg: fertig,
         start: start,
         ende: ende,
-        charge: _leerZuNull(_charge.text),
         kuerzel: kuerzel,
         bemerkung: _leerZuNull(_bemerkung.text),
         erfasstAm: jetzt,
@@ -307,12 +304,6 @@ class _ErfassenSeiteState extends State<ErfassenSeite> {
               ),
             ],
             const Abschnitt('Dazu'),
-            TextField(
-              controller: _charge,
-              decoration: const InputDecoration(labelText: 'Charge'),
-              textInputAction: TextInputAction.next,
-            ),
-            const SizedBox(height: 10),
             TextField(
               controller: _bemerkung,
               decoration: const InputDecoration(labelText: 'Bemerkung'),

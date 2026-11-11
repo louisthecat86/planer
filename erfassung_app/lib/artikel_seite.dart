@@ -418,8 +418,9 @@ class _FeldZeile extends StatelessWidget {
   }
 }
 
-/// Die Plattentemperaturen als Raster: je Reihe (Oben, Unten) die Platten
-/// nebeneinander.
+/// Die Plattentemperaturen als Raster — angeordnet wie im Planer und an
+/// der Anlage: oben, darunter das Band, dann unten; Platte 1 (Einlauf)
+/// steht rechts, die Laufrichtung geht nach links.
 class _Platten extends StatelessWidget {
   const _Platten({
     required this.felder,
@@ -433,40 +434,126 @@ class _Platten extends StatelessWidget {
   final bool Function(PaketFeld) istGeaendert;
   final void Function(PaketFeld) onFeld;
 
+  /// Die Nummer der Platte aus „Platte Oben 3".
+  static int _nummer(PaketFeld f) => int.tryParse(f.name.split(' ').last) ?? 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    final grau = f.onSurfaceVariant;
+    List<PaketFeld> reihe(String wort) => [
+          for (final x in felder)
+            if (x.name.contains(wort)) x,
+        ]..sort((a, b) => _nummer(a).compareTo(_nummer(b)));
+    final oben = reihe('Oben');
+    final unten = reihe('Unten');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Plattentemperaturen (°C)',
+                style: theme.textTheme.bodyMedium?.copyWith(color: grau),
+              ),
+            ),
+            Icon(Icons.arrow_back, size: 14, color: grau),
+            const SizedBox(width: 4),
+            Text(
+              'Laufrichtung',
+              style: theme.textTheme.bodySmall?.copyWith(color: grau),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (oben.isNotEmpty) ...[
+          _PlattenReihe(
+            label: 'oben',
+            felder: oben,
+            wertVon: wertVon,
+            istGeaendert: istGeaendert,
+            onFeld: onFeld,
+          ),
+          const SizedBox(height: 6),
+          // Das Band zwischen den Platten oben und unten.
+          Container(
+            height: 6,
+            decoration: BoxDecoration(
+              color: f.outline,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+          const SizedBox(height: 6),
+        ],
+        _PlattenReihe(
+          label: 'unten',
+          felder: unten,
+          wertVon: wertVon,
+          istGeaendert: istGeaendert,
+          onFeld: onFeld,
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+}
+
+/// Eine Reihe Platten von rechts nach links. Auf dem Handy bricht sie in
+/// zwei Zeilen um — wie im Planer bei schmalem Fenster: Die erste Zeile
+/// beginnt rechts mit Platte 1.
+class _PlattenReihe extends StatelessWidget {
+  const _PlattenReihe({
+    required this.label,
+    required this.felder,
+    required this.wertVon,
+    required this.istGeaendert,
+    required this.onFeld,
+  });
+
+  final String label;
+  final List<PaketFeld> felder;
+  final String? Function(PaketFeld) wertVon;
+  final bool Function(PaketFeld) istGeaendert;
+  final void Function(PaketFeld) onFeld;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
     final farben = Farben.von(context);
-    final reihen = <String, List<PaketFeld>>{};
-    for (final x in felder) {
-      final reihe = x.name.contains('Oben') ? 'Oben' : 'Unten';
-      (reihen[reihe] ??= []).add(x);
-    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final MapEntry(key: reihe, value: liste) in reihen.entries) ...[
-          Padding(
-            padding: const EdgeInsets.fromLTRB(2, 2, 2, 6),
-            child: Text(
-              'Platten ${reihe.toLowerCase()} (°C)',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: f.onSurfaceVariant,
-              ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(2, 0, 2, 4),
+          child: Text(
+            label,
+            textAlign: TextAlign.right,
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: f.onSurfaceVariant,
             ),
           ),
-          LayoutBuilder(
-            builder: (context, c) {
-              const luecke = 6.0;
-              const spalten = 5;
-              final breite = ((c.maxWidth - (spalten - 1) * luecke) / spalten)
-                  .floorToDouble();
-              return Wrap(
+        ),
+        LayoutBuilder(
+          builder: (context, c) {
+            const luecke = 6.0;
+            // Breit genug: alle nebeneinander — sonst zwei Zeilen.
+            final alle = felder.length;
+            final spalten = alle <= 6 || c.maxWidth >= alle * 52.0
+                ? alle
+                : (alle / 2).ceil();
+            final breite = ((c.maxWidth - (spalten - 1) * luecke) / spalten)
+                .floorToDouble();
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: Wrap(
                 spacing: luecke,
                 runSpacing: luecke,
                 children: [
-                  for (final x in liste)
+                  for (final x in felder)
                     SizedBox(
                       width: breite,
                       height: Masse.tippHoehe,
@@ -482,12 +569,14 @@ class _Platten extends StatelessWidget {
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: InkWell(
+                          key: ValueKey('platte-${x.name}'),
                           onTap: () => onFeld(x),
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 x.name.split(' ').last,
+                                textDirection: TextDirection.ltr,
                                 style: theme.textTheme.labelSmall?.copyWith(
                                   color: f.onSurfaceVariant,
                                 ),
@@ -496,6 +585,7 @@ class _Platten extends StatelessWidget {
                                 fit: BoxFit.scaleDown,
                                 child: Text(
                                   wertVon(x) ?? '—',
+                                  textDirection: TextDirection.ltr,
                                   style: theme.textTheme.titleMedium?.copyWith(
                                     fontWeight: FontWeight.w700,
                                   ),
@@ -507,11 +597,10 @@ class _Platten extends StatelessWidget {
                       ),
                     ),
                 ],
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
+              ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -562,6 +651,9 @@ class _WertBlattState extends State<_WertBlatt> {
     final farben = Farben.von(context);
     final feld = widget.feld;
     final notiz = feld.art == FeldArt.notiz;
+    // Nur Plattentemperaturen sind immer Zahlen. Alles andere bekommt die
+    // volle Tastatur — dort stehen auch Programme, Stufen oder „2 x 30".
+    final zahl = feld.art == FeldArt.platte;
     final pruefung =
         feld.grenze?.pruefe(_eingabe.text) ?? GrenzPruefung.inOrdnung;
     final blockiert = pruefung.status == GrenzStatus.blockiert;
@@ -596,16 +688,13 @@ class _WertBlattState extends State<_WertBlatt> {
           TextField(
             controller: _eingabe,
             autofocus: true,
-            keyboardType: feld.istZahl
-                ? const TextInputType.numberWithOptions(
-                    decimal: true,
-                    signed: true,
-                  )
+            keyboardType: zahl
+                ? const TextInputType.numberWithOptions(decimal: true)
                 : notiz
                     ? TextInputType.multiline
                     : TextInputType.text,
-            inputFormatters: feld.istZahl
-                ? [FilteringTextInputFormatter.allow(RegExp('[0-9.,-]'))]
+            inputFormatters: zahl
+                ? [FilteringTextInputFormatter.allow(RegExp('[0-9.,]'))]
                 : null,
             minLines: notiz ? 3 : 1,
             maxLines: notiz ? 8 : 1,
