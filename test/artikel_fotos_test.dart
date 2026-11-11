@@ -53,6 +53,17 @@ void main() {
       expect((bild.width, bild.height), (320, 200));
     });
 
+    test('ein freigestelltes Bild kommt auf Weiß — nicht auf Schwarz', () {
+      // Durchsichtig bis auf einen roten Punkt in der Mitte.
+      final bild = img.Image(width: 40, height: 40, numChannels: 4);
+      bild.setPixelRgba(20, 20, 255, 0, 0, 255);
+      final foto = img.decodeJpg(fotoNeuRechnen(img.encodePng(bild))!)!;
+      final ecke = foto.getPixel(2, 2);
+      expect(ecke.r, greaterThan(240));
+      expect(ecke.g, greaterThan(240));
+      expect(ecke.b, greaterThan(240));
+    });
+
     test('was kein Bild ist, wird abgelehnt', () {
       expect(
         fotoNeuRechnen(Uint8List.fromList(utf8.encode('kein Bild'))),

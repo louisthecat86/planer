@@ -9,7 +9,9 @@ import '../../../core/ui/foto_kachel.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/dateien.dart';
+import '../freigabe/produktfoto_artikel.dart';
 import 'datei_aktionen.dart';
+import 'produkt_foto.dart' show produktfotoZumArtikel;
 import 'projekt_repository.dart';
 
 // Der Foto-Eingang der Produktentwicklung: die Musterfotos, die mit der
@@ -80,11 +82,15 @@ class _FotoZeile extends ConsumerWidget {
     if (ziel == null || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final repo = ref.read(projektRepositoryProvider);
+    final uebernahme = ref.read(produktfotoUebernahmeProvider);
     try {
       await repo.dateiVerschieben(foto.id, ziel.id);
+      String? dazu;
       if (ziel.alsProduktfoto && !ziel.gesamtprojekt) {
-        // Ein früheres Produktfoto bleibt als Datei beim Projekt.
+        // Ein früheres Produktfoto bleibt als Datei beim Projekt. Ist das
+        // Muster schon freigegeben, kommt das Foto auch zum Artikel.
         await repo.produktfotoSetzen(ziel.id, foto.id);
+        dazu = await produktfotoZumArtikel(uebernahme, ziel.id);
       }
       ref
           .read(autoBackupTriggerProvider)
@@ -93,9 +99,13 @@ class _FotoZeile extends ConsumerWidget {
         SnackBar(
           content: Text(
             ziel.alsProduktfoto && !ziel.gesamtprojekt
-                ? 'Das Foto ist jetzt das Produktfoto von „${ziel.name}".'
+                ? [
+                    'Das Foto ist jetzt das Produktfoto von „${ziel.name}".',
+                    if (dazu != null) dazu,
+                  ].join(' ')
                 : 'Das Foto liegt jetzt bei den Dateien von '
-                    '„${ziel.name}".',
+                    '„${ziel.name}" — dort lässt es sich auch als '
+                    'Produktfoto nehmen.',
           ),
         ),
       );

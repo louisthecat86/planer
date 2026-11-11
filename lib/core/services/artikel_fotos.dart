@@ -27,7 +27,8 @@ import 'datei_ablage.dart';
 const int kFotoHoechstens = 900 * 1024;
 
 /// Rechnet ein Bild zum Foto um: aufrecht gedreht, längere Kante höchstens
-/// [kante], ohne Aufnahmedaten, als JPEG. null, wenn es kein Bild ist.
+/// [kante], ohne Aufnahmedaten, als JPEG (Durchsichtiges auf Weiß). null,
+/// wenn es kein Bild ist.
 Uint8List? fotoNeuRechnen(Uint8List bytes, {int kante = kFotoKante}) {
   img.Image? roh;
   try {
@@ -54,6 +55,13 @@ Uint8List? fotoNeuRechnen(Uint8List bytes, {int kante = kFotoKante}) {
             height: kante,
             interpolation: img.Interpolation.average,
           );
+  }
+  // JPEG kennt kein Durchsichtig — ein freigestelltes Bild käme sonst mit
+  // schwarzem Grund an.
+  if (bild.numChannels == 4) {
+    final weiss = img.Image(width: bild.width, height: bild.height)
+      ..clear(img.ColorRgb8(255, 255, 255));
+    bild = img.compositeImage(weiss, bild);
   }
   // Ohne EXIF: kein Aufnahmeort, keine Kamera — und gedreht ist es schon.
   bild.exif = img.ExifData();

@@ -413,7 +413,16 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   das Projekt nicht mehr hat, entfällt nur mit Haken — das Fenster nennt
   es und zeigt alle Änderungen am Artikel. Weicht der Prozess von der
   zuletzt festgehaltenen Version ab, wird er dabei als neue Version
-  festgehalten.
+  festgehalten. Das **Produktfoto** des Projekts wandert mit in die
+  Artikelkarte: Es liegt bei den Fotos des Artikels und ist dort das
+  Referenzbild (ein in der Produktion von Hand gewähltes bleibt). Bekommt
+  ein freigegebenes Projekt später ein anderes Produktfoto, kommt auch das
+  zum Artikel. Dort liegt eine eigene Kopie, als Foto aufbereitet und —
+  wie alles am Artikel — unverschlüsselt.
+- **Produktfoto wählen:** „Foto wählen…" zeigt zuerst die Bilder, die schon
+  beim Projekt liegen — etwa Musterfotos vom Handy —, sonst geht es gleich
+  zum Bild vom Rechner. Im Reiter „Dateien" macht der Knopf „Als
+  Produktfoto" jedes Bild des Projekts dazu.
 - **Spezifikation** (Excel) auf Deutsch oder Englisch (Texte auf Wunsch
   über DeepL) — ein Fenster für alles, oben unter „Erstellen" oder im
   Reiter „Produkt": Das eigene Formblatt wird in der App
@@ -533,7 +542,9 @@ Berechtigung fürs Internet.
    gelöscht — „Foto hinzufügen" nimmt auch Bilder vom PC). Musterfotos
    kommen verschlüsselt in den **Foto-Eingang** auf der Übersicht der
    Produktentwicklung und werden dort einem Projekt zugeordnet, auf Wunsch
-   gleich als Produktfoto; ist die Produktentwicklung auf dem Rechner nicht
+   gleich als Produktfoto (später geht das im Projekt unter „Dateien" oder
+   über „Foto wählen…"; mit der Freigabe wandert das Produktfoto in die
+   Artikelkarte); ist die Produktentwicklung auf dem Rechner nicht
    eingerichtet, bleiben sie in der Datei. Beim Übernehmen verlieren Fotos
    Aufnahmeort und Kameradaten. Dasselbe Ergebnis zweimal einzulesen ändert
    nichts.

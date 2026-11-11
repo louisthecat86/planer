@@ -21,6 +21,7 @@ import '../rechenkern/rechenkern.dart';
 import '../spezifikation/spez_angaben.dart'
     show SpezAngaben, haltbarkeitInTagen;
 import 'kette_uebernahme.dart';
+import 'produktfoto_artikel.dart';
 
 // Freigabe: Ein Projekt wird zum Artikel des Planers. Aus dem
 // abgeschlossenen Rezepturstand kommen die Allergene, aus dem Projekt
@@ -35,6 +36,9 @@ import 'kette_uebernahme.dart';
 // entfällt auf Wunsch (kette_uebernahme.dart). Es zählt der jetzige Stand;
 // weicht er von der zuletzt festgehaltenen Version ab, wird er vorher als
 // neue Version festgehalten (F36).
+//
+// Das Produktfoto des Projekts kommt dabei zu den Fotos des Artikels und
+// wird sein Referenzbild (produktfoto_artikel.dart).
 //
 // Danach vergleicht der Abgleich den Verlust der erfassten Produktionen
 // mit dem der Rezeptur — weicht er ab, stimmt auch der Fleischanteil auf
@@ -263,11 +267,13 @@ class FreigabeUebersicht {
 class FreigabeDienst {
   FreigabeDienst(this._db)
       : _rezepte = EntwicklungRepository(_db),
-        _projekte = ProjektRepository(_db);
+        _projekte = ProjektRepository(_db),
+        _produktfoto = ProduktfotoUebernahme(_db);
 
   final AppDatabase _db;
   final EntwicklungRepository _rezepte;
   final ProjektRepository _projekte;
+  final ProduktfotoUebernahme _produktfoto;
   static const Uuid _uuid = Uuid();
 
   /// Abgeschlossene Stände der Rezepturen eines Projekts, neueste zuerst.
@@ -352,7 +358,8 @@ class FreigabeDienst {
   /// Gibt den Stand [versionId] als Artikel frei: legt ihn an oder schreibt
   /// [felder] in den vorhandenen. Mit [prozessUebernehmen] wird die Kette
   /// des Projekts die des Artikels — mit [prozessEntfernen] entfällt dabei,
-  /// was das Projekt nicht mehr hat. Gibt die ID des Artikels zurück.
+  /// was das Projekt nicht mehr hat. Das Produktfoto des Projekts kommt zu
+  /// den Fotos des Artikels. Gibt die ID des Artikels zurück.
   Future<String> freigeben({
     required EntwicklungsProjekt projekt,
     required String versionId,
@@ -368,6 +375,13 @@ class FreigabeDienst {
     final jetzt = DateTime.now();
     late final String artikelId;
     final geschrieben = <String>[];
+    // Das Produktfoto vorab lesen und aufbereiten — das rechnet, also
+    // nicht erst in der Transaktion. Gelingt es nicht, geht die Freigabe
+    // ohne Foto weiter.
+    final gelesen = await _projekte.projekt(projekt.id);
+    final foto = await _produktfoto.vorbereiten(
+      (gelesen ?? projekt).bildDateiId,
+    );
     await _db.transaction(() async {
       final vorhanden = await artikelZuNummer(nummer);
       // Ein neuer Artikel bekommt alles, was da ist; ein vorhandener nur
@@ -449,6 +463,8 @@ class FreigabeDienst {
             )
           : null;
       final festgehalten = kette?.festgehalten;
+      final fotoNeu =
+          foto != null && await _produktfoto.ablegen(artikelId, foto);
       await _projekte.projektAendern(
         projekt.id,
         EntwicklungProjekteCompanion(
@@ -500,7 +516,9 @@ class FreigabeDienst {
         aenderungen: [
           if (geschrieben.isNotEmpty) 'Geschrieben: ${geschrieben.join(', ')}',
           if (kette != null) kette.text,
-          if (geschrieben.isEmpty && kette == null) 'Nichts geändert',
+          if (fotoNeu) 'Produktfoto zu den Fotos des Artikels gelegt',
+          if (geschrieben.isEmpty && kette == null && !fotoNeu)
+            'Nichts geändert',
         ],
         wert: vorher == ProjektStatus.produktion
             ? null

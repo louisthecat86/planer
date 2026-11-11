@@ -12,6 +12,7 @@ import '../mail/mail_ablage.dart';
 import 'datei_aktionen.dart';
 import 'gesamtprojekt_dialoge.dart';
 import 'gesamtprojekt_modell.dart';
+import 'produkt_foto.dart' show produktfotoAusDatei;
 import 'projekt_repository.dart';
 
 /// Wählt eine Datei und legt sie als Eintrag „Datei" in den Verlauf.
@@ -128,7 +129,8 @@ Future<void> dateiLoeschen(
   ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Datei gelöscht');
 }
 
-/// Eine Datei als Zeile mit Öffnen, Speichern, Verschieben und Löschen.
+/// Eine Datei als Zeile mit Öffnen, Speichern, Verschieben und Löschen —
+/// ein Bild eines Projekts lässt sich dazu als Produktfoto nehmen.
 class DateiZeile extends ConsumerWidget {
   const DateiZeile({
     super.key,
@@ -136,6 +138,7 @@ class DateiZeile extends ConsumerWidget {
     this.zusatz,
     this.loeschbar = true,
     this.onVerschieben,
+    this.onProduktfoto,
   });
 
   final EntwicklungsDatei datei;
@@ -147,6 +150,10 @@ class DateiZeile extends ConsumerWidget {
 
   /// Verschieben ins Gesamtprojekt oder zu einem Muster — null: geht nicht.
   final VoidCallback? onVerschieben;
+
+  /// Als Produktfoto nehmen — null: geht nicht (kein Bild, schon das
+  /// Produktfoto oder kein Projekt).
+  final VoidCallback? onProduktfoto;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -185,6 +192,13 @@ class DateiZeile extends ConsumerWidget {
               ],
             ),
           ),
+          if (onProduktfoto != null)
+            IconButton(
+              key: ValueKey('datei-produktfoto-${datei.id}'),
+              tooltip: 'Als Produktfoto',
+              icon: const Icon(Icons.photo_camera_back_outlined, size: 18),
+              onPressed: onProduktfoto,
+            ),
           IconButton(
             tooltip: 'Öffnen',
             icon: const Icon(Icons.open_in_new, size: 18),
@@ -223,6 +237,7 @@ class ProjektDateien extends StatelessWidget {
   @override
   Widget build(BuildContext context) => DateienListe(
         zielId: projekt.id,
+        produktfotoMoeglich: true,
         bildDateiId: projekt.bildDateiId,
         etikettDateiId: projekt.etikettDateiId,
         gesamtprojektId: projekt.gesamtprojektId,
@@ -258,12 +273,17 @@ class DateienListe extends ConsumerWidget {
   const DateienListe({
     super.key,
     required this.zielId,
+    this.produktfotoMoeglich = false,
     this.bildDateiId,
     this.etikettDateiId,
     this.gesamtprojektId,
   });
 
   final String zielId;
+
+  /// [zielId] ist ein Projekt (Muster) — seine Bilder lassen sich als
+  /// Produktfoto nehmen. Ein Gesamtprojekt hat keins.
+  final bool produktfotoMoeglich;
 
   /// Das Produktfoto — es ist in der Liste gekennzeichnet.
   final String? bildDateiId;
@@ -390,6 +410,12 @@ class DateienListe extends ConsumerWidget {
                                 ? null
                                 : 'Verlauf: ${eigeneEintraege[d.id]!.titel}',
                     onVerschieben: verschieben(d, eigeneEintraege),
+                    onProduktfoto: produktfotoMoeglich &&
+                            istBild(d) &&
+                            d.id != bildDateiId &&
+                            d.id != etikettDateiId
+                        ? () => produktfotoAusDatei(context, ref, zielId, d)
+                        : null,
                   ),
               ]),
             if (ausGesamt.isNotEmpty) ...[

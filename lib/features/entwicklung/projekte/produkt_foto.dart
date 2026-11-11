@@ -7,6 +7,7 @@ import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../daten/dateien.dart';
+import '../freigabe/produktfoto_artikel.dart';
 import 'datei_aktionen.dart';
 import 'projekt_modell.dart';
 import 'projekt_repository.dart';
@@ -19,6 +20,10 @@ import 'projekt_screen.dart' show ProjektReiter, projektReiterZeigen;
 // Es ist ein Punkt der Checkliste. Solange es keins gibt, lässt er sich mit
 // „Später" zurückstellen (F37): Er bleibt offen, „Als Nächstes" geht aber
 // weiter, und der Projektkopf zeigt dezent „Produktfoto fehlt noch".
+//
+// Liegen beim Projekt schon Bilder — etwa Musterfotos vom Handy —, stehen
+// sie beim Wählen zur Wahl. Ist das Projekt als Artikel freigegeben, kommt
+// das Produktfoto auch zu den Fotos des Artikels (produktfoto_artikel.dart).
 
 /// Der Punkt der Checkliste, um den es geht.
 const String kProduktfotoPunkt = 'produktfotoHinterlegt';
@@ -28,19 +33,101 @@ bool produktfotoZurueckgestellt(EntwicklungsProjekt projekt) =>
     projekt.bildDateiId == null &&
     checklisteZurueckgestellt(projekt.checkliste).contains(kProduktfotoPunkt);
 
-/// Lässt ein Bild wählen und nimmt es als Produktfoto; ein früheres wird
-/// gelöscht.
+/// Ist das Projekt [projektId] schon als Artikel freigegeben, kommt sein
+/// Produktfoto auch zu den Fotos des Artikels. Gibt den Satz dazu zurück —
+/// null, wenn dort nichts dazugekommen ist.
+Future<String?> produktfotoZumArtikel(
+  ProduktfotoUebernahme uebernahme,
+  String projektId,
+) async {
+  try {
+    final artikel = await uebernahme.uebernehmen(projektId);
+    return artikel == null
+        ? null
+        : 'Es liegt jetzt auch bei den Fotos des Artikels '
+            '${artikel.artikelnummer}.';
+  } catch (_) {
+    // Das Produktfoto im Projekt steht — der Artikel bekommt es mit der
+    // nächsten Freigabe.
+    return null;
+  }
+}
+
+/// Nimmt die Datei [datei] des Projekts als Produktfoto. Ein früheres
+/// bleibt als Datei beim Projekt.
+Future<void> produktfotoAusDatei(
+  BuildContext context,
+  WidgetRef ref,
+  String projektId,
+  EntwicklungsDatei datei,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final repo = ref.read(projektRepositoryProvider);
+  final sicherung = ref.read(autoBackupTriggerProvider);
+  final uebernahme = ref.read(produktfotoUebernahmeProvider);
+  try {
+    await repo.produktfotoSetzen(projektId, datei.id);
+    final dazu = await produktfotoZumArtikel(uebernahme, projektId);
+    sicherung.fireDebounced(reason: 'Produktfoto');
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          ['„${datei.name}" ist jetzt das Produktfoto.', if (dazu != null) dazu]
+              .join(' '),
+        ),
+      ),
+    );
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('Das ließ sich nicht speichern: ${fehlerText(e)}'),
+      ),
+    );
+  }
+}
+
+/// Lässt ein Bild wählen und nimmt es als Produktfoto. Liegen beim Projekt
+/// schon Bilder, stehen sie zuerst zur Wahl — sonst geht es gleich zum
+/// Bild vom Rechner; dabei wird ein früheres Produktfoto gelöscht.
 Future<void> produktfotoWaehlen(
   BuildContext context,
   WidgetRef ref,
   EntwicklungsProjekt projekt,
 ) async {
-  final datei = await dateiWaehlen(context, nurBilder: true);
-  if (datei == null || !context.mounted) return;
   final messenger = ScaffoldMessenger.of(context);
   final dateien = ref.read(entwicklungDateienProvider);
   final repo = ref.read(projektRepositoryProvider);
   final sicherung = ref.read(autoBackupTriggerProvider);
+  final uebernahme = ref.read(produktfotoUebernahmeProvider);
+
+  var bilder = const <EntwicklungsDatei>[];
+  try {
+    bilder = [
+      for (final d in await repo.dateienBeobachten(projekt.id).first)
+        if (istBild(d) &&
+            d.id != projekt.bildDateiId &&
+            d.id != projekt.etikettDateiId)
+          d,
+    ];
+  } catch (_) {
+    // Dann eben nur vom Rechner.
+  }
+  if (!context.mounted) return;
+  if (bilder.isNotEmpty) {
+    final wahl = await showDialog<_FotoWahl>(
+      context: context,
+      builder: (_) => _FotoWahlDialog(bilder: bilder),
+    );
+    if (wahl == null || !context.mounted) return;
+    final vorhanden = wahl.datei;
+    if (vorhanden != null) {
+      await produktfotoAusDatei(context, ref, projekt.id, vorhanden);
+      return;
+    }
+  }
+
+  final datei = await dateiWaehlen(context, nurBilder: true);
+  if (datei == null) return;
   try {
     final alt = projekt.bildDateiId;
     final id = await dateien.speichern(
@@ -51,12 +138,108 @@ Future<void> produktfotoWaehlen(
     );
     await repo.produktfotoSetzen(projekt.id, id);
     if (alt != null) await dateien.loeschen(alt);
+    final dazu = await produktfotoZumArtikel(uebernahme, projekt.id);
     sicherung.fireDebounced(reason: 'Produktfoto');
+    if (dazu != null) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Das Produktfoto ist gesetzt. $dazu')),
+      );
+    }
   } catch (e) {
     messenger.showSnackBar(
       SnackBar(
         content: Text('Das Foto ließ sich nicht ablegen: ${fehlerText(e)}'),
       ),
+    );
+  }
+}
+
+/// Was im Dialog gewählt wurde: ein Bild des Projekts — oder, ohne
+/// [datei], eins vom Rechner.
+typedef _FotoWahl = ({EntwicklungsDatei? datei});
+
+/// Die Bilder, die schon beim Projekt liegen, zur Wahl als Produktfoto —
+/// und der Weg zu einem Bild vom Rechner.
+class _FotoWahlDialog extends StatelessWidget {
+  const _FotoWahlDialog({required this.bilder});
+
+  final List<EntwicklungsDatei> bilder;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    return AlertDialog(
+      title: const Text('Produktfoto wählen'),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Bilder, die schon bei diesem Projekt liegen:',
+                style: theme.textTheme.bodySmall?.copyWith(color: grau),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  for (final d in bilder)
+                    SizedBox(
+                      width: 128,
+                      child: InkWell(
+                        key: ValueKey('fotowahl-${d.id}'),
+                        borderRadius: AppMasse.ecken,
+                        onTap: () =>
+                            Navigator.of(context).pop<_FotoWahl>((datei: d)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              height: 96,
+                              decoration: BoxDecoration(
+                                color: theme.colorScheme.surfaceContainerLow,
+                                borderRadius: AppMasse.ecken,
+                                border: Border.all(
+                                  color: theme.colorScheme.outlineVariant,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: FotoAnsicht(dateiId: d.id, klein: true),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              d.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton.tonalIcon(
+          key: const ValueKey('fotowahl-rechner'),
+          onPressed: () => Navigator.of(context).pop<_FotoWahl>((datei: null)),
+          icon: const Icon(Icons.folder_open, size: 18),
+          label: const Text('Vom Rechner wählen …'),
+        ),
+      ],
     );
   }
 }
