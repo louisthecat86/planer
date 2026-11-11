@@ -88,7 +88,9 @@ Future<void> produktfotoAusDatei(
 
 /// Lässt ein Bild wählen und nimmt es als Produktfoto. Liegen beim Projekt
 /// schon Bilder, stehen sie zuerst zur Wahl — sonst geht es gleich zum
-/// Bild vom Rechner; dabei wird ein früheres Produktfoto gelöscht.
+/// Bild vom Rechner. Ein früheres Produktfoto bleibt als Datei beim
+/// Projekt; gelöscht wird es nur ausdrücklich, unter „Dateien" oder mit
+/// „Foto entfernen".
 Future<void> produktfotoWaehlen(
   BuildContext context,
   WidgetRef ref,
@@ -129,7 +131,6 @@ Future<void> produktfotoWaehlen(
   final datei = await dateiWaehlen(context, nurBilder: true);
   if (datei == null) return;
   try {
-    final alt = projekt.bildDateiId;
     final id = await dateien.speichern(
       name: datei.name,
       inhalt: datei.inhalt,
@@ -137,7 +138,6 @@ Future<void> produktfotoWaehlen(
       mimeTyp: mimeTypAus(datei.name),
     );
     await repo.produktfotoSetzen(projekt.id, id);
-    if (alt != null) await dateien.loeschen(alt);
     final dazu = await produktfotoZumArtikel(uebernahme, projekt.id);
     sicherung.fireDebounced(reason: 'Produktfoto');
     if (dazu != null) {

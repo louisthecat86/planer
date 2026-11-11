@@ -422,7 +422,8 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
 - **Produktfoto wählen:** „Foto wählen…" zeigt zuerst die Bilder, die schon
   beim Projekt liegen — etwa Musterfotos vom Handy —, sonst geht es gleich
   zum Bild vom Rechner. Im Reiter „Dateien" macht der Knopf „Als
-  Produktfoto" jedes Bild des Projekts dazu.
+  Produktfoto" jedes Bild des Projekts dazu. Ein früheres Produktfoto
+  bleibt dabei immer als Datei beim Projekt.
 - **Spezifikation** (Excel) auf Deutsch oder Englisch (Texte auf Wunsch
   über DeepL) — ein Fenster für alles, oben unter „Erstellen" oder im
   Reiter „Produkt": Das eigene Formblatt wird in der App
