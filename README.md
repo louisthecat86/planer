@@ -507,9 +507,9 @@ Internet.
    Start und Ende („Jetzt"), Bemerkung und Kürzel — auch ohne Plan.
    Bei den Maschineneinstellungen je Schritt eintragen, was an der Anlage
    eingestellt ist — mit der vollen Tastatur, die Platten von Bratstraße
-   und Kombiofen in Laufrichtung (Platte 1 rechts); harte Grenzen
-   blockieren, weiche warnen, wie am PC. Jede Eingabe ist sofort auf dem
-   Handy gespeichert.
+   und Kombiofen in einer Zeile in Laufrichtung (Platte 1 rechts); harte
+   Grenzen blockieren, weiche warnen, wie am PC. Jede Eingabe ist sofort
+   auf dem Handy gespeichert.
 4. **„Ergebnis speichern"** und die Datei zurück an den PC. Unter
    „Ergebnis-Datei wählen" zeigt der Planer, was sich ändern würde, und
    übernimmt nur, was angehakt ist: Produktionen landen in der

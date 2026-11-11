@@ -310,7 +310,7 @@ class _SchrittKarte extends StatelessWidget {
           ),
           if (platten.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+              padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
               child: _Platten(
                 felder: platten,
                 wertVon: wertVon,
@@ -500,9 +500,8 @@ class _Platten extends StatelessWidget {
   }
 }
 
-/// Eine Reihe Platten von rechts nach links. Auf dem Handy bricht sie in
-/// zwei Zeilen um — wie im Planer bei schmalem Fenster: Die erste Zeile
-/// beginnt rechts mit Platte 1.
+/// Eine Reihe Platten in einer Zeile, von rechts nach links: Platte 1
+/// steht rechts.
 class _PlattenReihe extends StatelessWidget {
   const _PlattenReihe({
     required this.label,
@@ -537,69 +536,63 @@ class _PlattenReihe extends StatelessWidget {
             ),
           ),
         ),
-        LayoutBuilder(
-          builder: (context, c) {
-            const luecke = 6.0;
-            // Breit genug: alle nebeneinander — sonst zwei Zeilen.
-            final alle = felder.length;
-            final spalten = alle <= 6 || c.maxWidth >= alle * 52.0
-                ? alle
-                : (alle / 2).ceil();
-            final breite = ((c.maxWidth - (spalten - 1) * luecke) / spalten)
-                .floorToDouble();
-            return Directionality(
-              textDirection: TextDirection.rtl,
-              child: Wrap(
-                spacing: luecke,
-                runSpacing: luecke,
-                children: [
-                  for (final x in felder)
-                    SizedBox(
-                      width: breite,
-                      height: Masse.tippHoehe,
-                      child: Material(
-                        color: istGeaendert(x)
-                            ? farben.ok.withValues(alpha: 0.14)
-                            : f.surfaceContainerHighest,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: Masse.ecken,
-                          side: BorderSide(
-                            color: istGeaendert(x) ? farben.ok : f.outline,
-                          ),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: InkWell(
-                          key: ValueKey('platte-${x.name}'),
-                          onTap: () => onFeld(x),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                x.name.split(' ').last,
-                                textDirection: TextDirection.ltr,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                  color: f.onSurfaceVariant,
-                                ),
-                              ),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                child: Text(
-                                  wertVon(x) ?? '—',
-                                  textDirection: TextDirection.ltr,
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+        // Immer eine Zeile, damit die Straße auf einen Blick zu lesen ist —
+        // die Platten teilen sich die Breite.
+        Row(
+          textDirection: TextDirection.rtl,
+          children: [
+            for (final (i, x) in felder.indexed) ...[
+              if (i > 0) const SizedBox(width: 2),
+              Expanded(
+                child: SizedBox(
+                  height: Masse.tippHoehe,
+                  child: Material(
+                    color: istGeaendert(x)
+                        ? farben.ok.withValues(alpha: 0.14)
+                        : f.surfaceContainerHighest,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: Masse.ecken,
+                      side: BorderSide(
+                        color: istGeaendert(x) ? farben.ok : f.outline,
                       ),
                     ),
-                ],
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      key: ValueKey('platte-${x.name}'),
+                      onTap: () => onFeld(x),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            x.name.split(' ').last,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: f.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 1),
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                wertVon(x) ?? '—',
+                                maxLines: 1,
+                                style: theme.textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
-            );
-          },
+            ],
+          ],
         ),
       ],
     );

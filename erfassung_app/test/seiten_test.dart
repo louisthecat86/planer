@@ -75,17 +75,17 @@ void main() {
       expect(find.text('Füller Test'), findsOneWidget);
       expect(find.text('Bratstraße Test'), findsOneWidget);
       expect(find.text('120 g'), findsOneWidget);
-      // Wie an der Anlage: Platte 1 rechts, oben über unten, und die
-      // zweite Zeile (ab Platte 6) unter der ersten.
+      // Wie an der Anlage: alle Platten einer Reihe in einer Zeile,
+      // Platte 1 rechts, oben über unten.
       Offset platte(String name) =>
           tester.getCenter(find.byKey(ValueKey('platte-$name')));
       final oben1 = platte('Platte Oben 1');
-      final oben6 = platte('Platte Oben 6');
+      final oben10 = platte('Platte Oben 10');
       expect(oben1.dx, greaterThan(platte('Platte Oben 2').dx));
-      expect(oben1.dy, platte('Platte Oben 5').dy);
-      expect(oben6.dy, greaterThan(oben1.dy));
-      expect(oben6.dx, oben1.dx);
-      expect(platte('Platte Unten 1').dy, greaterThan(oben6.dy));
+      expect(platte('Platte Oben 2').dx, greaterThan(oben10.dx));
+      expect(oben10.dy, oben1.dy);
+      expect(platte('Platte Unten 1').dy, greaterThan(oben1.dy));
+      expect(platte('Platte Unten 1').dx, oben1.dx);
     });
   }
 
