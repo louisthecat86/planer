@@ -16,6 +16,7 @@ import 'tables/demands.dart';
 import 'tables/entwicklung.dart';
 import 'tables/production_tasks.dart';
 import 'tables/artikel_fotos.dart';
+import 'tables/navision_artikel.dart';
 import 'tables/products.dart';
 import 'tables/raw_material_batches.dart';
 import 'tables/raw_materials.dart';
@@ -61,6 +62,8 @@ part 'database.g.dart';
     Tagesaufgaben,
     ArtikelFotos,
     ArtikelFotoInhalte,
+    // Der Stand der Navision-Artikelübersicht — für Muster und Zutaten.
+    NavisionArtikel,
     // Produktentwicklung — hinter eigenem Passwort, im Backup verschlüsselt.
     EntwicklungZutaten,
     EntwicklungRezepturen,
@@ -89,7 +92,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 40;
+  int get schemaVersion => 41;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -624,6 +627,11 @@ class AppDatabase extends _$AppDatabase {
           if (from < 40) {
             await m.createTable(artikelFotos);
             await m.createTable(artikelFotoInhalte);
+          }
+          if (from < 41) {
+            // Der Stand der Navision-Artikelübersicht: daran erkennt die
+            // App Muster („Nummer 2") und, was Rohware oder Zutat ist.
+            await m.createTable(navisionArtikel);
           }
         },
         beforeOpen: (details) async {

@@ -16942,6 +16942,587 @@ class ArtikelFotoInhalteCompanion extends UpdateCompanion<ArtikelFotoInhalt> {
   }
 }
 
+class $NavisionArtikelTable extends NavisionArtikel
+    with TableInfo<$NavisionArtikelTable, NavisionArtikelZeile> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NavisionArtikelTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _artikelnummerMeta =
+      const VerificationMeta('artikelnummer');
+  @override
+  late final GeneratedColumn<String> artikelnummer = GeneratedColumn<String>(
+      'artikelnummer', aliasedName, false,
+      type: DriftSqlType.string, requiredDuringInsert: true);
+  static const VerificationMeta _nummer2Meta =
+      const VerificationMeta('nummer2');
+  @override
+  late final GeneratedColumn<String> nummer2 = GeneratedColumn<String>(
+      'nummer2', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _beschreibungMeta =
+      const VerificationMeta('beschreibung');
+  @override
+  late final GeneratedColumn<String> beschreibung = GeneratedColumn<String>(
+      'beschreibung', aliasedName, false,
+      type: DriftSqlType.string,
+      requiredDuringInsert: false,
+      defaultValue: const Constant(''));
+  static const VerificationMeta _beschreibung2Meta =
+      const VerificationMeta('beschreibung2');
+  @override
+  late final GeneratedColumn<String> beschreibung2 = GeneratedColumn<String>(
+      'beschreibung2', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _suchbegriffMeta =
+      const VerificationMeta('suchbegriff');
+  @override
+  late final GeneratedColumn<String> suchbegriff = GeneratedColumn<String>(
+      'suchbegriff', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _basiseinheitMeta =
+      const VerificationMeta('basiseinheit');
+  @override
+  late final GeneratedColumn<String> basiseinheit = GeneratedColumn<String>(
+      'basiseinheit', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _produktbuchungsgruppeMeta =
+      const VerificationMeta('produktbuchungsgruppe');
+  @override
+  late final GeneratedColumn<String> produktbuchungsgruppe =
+      GeneratedColumn<String>('produktbuchungsgruppe', aliasedName, true,
+          type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _artikelkategorieMeta =
+      const VerificationMeta('artikelkategorie');
+  @override
+  late final GeneratedColumn<String> artikelkategorie = GeneratedColumn<String>(
+      'artikelkategorie', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _produktgruppeMeta =
+      const VerificationMeta('produktgruppe');
+  @override
+  late final GeneratedColumn<String> produktgruppe = GeneratedColumn<String>(
+      'produktgruppe', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _eingelesenAmMeta =
+      const VerificationMeta('eingelesenAm');
+  @override
+  late final GeneratedColumn<DateTime> eingelesenAm = GeneratedColumn<DateTime>(
+      'eingelesen_am', aliasedName, false,
+      type: DriftSqlType.dateTime, requiredDuringInsert: true);
+  @override
+  List<GeneratedColumn> get $columns => [
+        artikelnummer,
+        nummer2,
+        beschreibung,
+        beschreibung2,
+        suchbegriff,
+        basiseinheit,
+        produktbuchungsgruppe,
+        artikelkategorie,
+        produktgruppe,
+        eingelesenAm
+      ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'navision_artikel';
+  @override
+  VerificationContext validateIntegrity(
+      Insertable<NavisionArtikelZeile> instance,
+      {bool isInserting = false}) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('artikelnummer')) {
+      context.handle(
+          _artikelnummerMeta,
+          artikelnummer.isAcceptableOrUnknown(
+              data['artikelnummer']!, _artikelnummerMeta));
+    } else if (isInserting) {
+      context.missing(_artikelnummerMeta);
+    }
+    if (data.containsKey('nummer2')) {
+      context.handle(_nummer2Meta,
+          nummer2.isAcceptableOrUnknown(data['nummer2']!, _nummer2Meta));
+    }
+    if (data.containsKey('beschreibung')) {
+      context.handle(
+          _beschreibungMeta,
+          beschreibung.isAcceptableOrUnknown(
+              data['beschreibung']!, _beschreibungMeta));
+    }
+    if (data.containsKey('beschreibung2')) {
+      context.handle(
+          _beschreibung2Meta,
+          beschreibung2.isAcceptableOrUnknown(
+              data['beschreibung2']!, _beschreibung2Meta));
+    }
+    if (data.containsKey('suchbegriff')) {
+      context.handle(
+          _suchbegriffMeta,
+          suchbegriff.isAcceptableOrUnknown(
+              data['suchbegriff']!, _suchbegriffMeta));
+    }
+    if (data.containsKey('basiseinheit')) {
+      context.handle(
+          _basiseinheitMeta,
+          basiseinheit.isAcceptableOrUnknown(
+              data['basiseinheit']!, _basiseinheitMeta));
+    }
+    if (data.containsKey('produktbuchungsgruppe')) {
+      context.handle(
+          _produktbuchungsgruppeMeta,
+          produktbuchungsgruppe.isAcceptableOrUnknown(
+              data['produktbuchungsgruppe']!, _produktbuchungsgruppeMeta));
+    }
+    if (data.containsKey('artikelkategorie')) {
+      context.handle(
+          _artikelkategorieMeta,
+          artikelkategorie.isAcceptableOrUnknown(
+              data['artikelkategorie']!, _artikelkategorieMeta));
+    }
+    if (data.containsKey('produktgruppe')) {
+      context.handle(
+          _produktgruppeMeta,
+          produktgruppe.isAcceptableOrUnknown(
+              data['produktgruppe']!, _produktgruppeMeta));
+    }
+    if (data.containsKey('eingelesen_am')) {
+      context.handle(
+          _eingelesenAmMeta,
+          eingelesenAm.isAcceptableOrUnknown(
+              data['eingelesen_am']!, _eingelesenAmMeta));
+    } else if (isInserting) {
+      context.missing(_eingelesenAmMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {artikelnummer};
+  @override
+  NavisionArtikelZeile map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NavisionArtikelZeile(
+      artikelnummer: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}artikelnummer'])!,
+      nummer2: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}nummer2']),
+      beschreibung: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}beschreibung'])!,
+      beschreibung2: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}beschreibung2']),
+      suchbegriff: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}suchbegriff']),
+      basiseinheit: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}basiseinheit']),
+      produktbuchungsgruppe: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}produktbuchungsgruppe']),
+      artikelkategorie: attachedDatabase.typeMapping.read(
+          DriftSqlType.string, data['${effectivePrefix}artikelkategorie']),
+      produktgruppe: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}produktgruppe']),
+      eingelesenAm: attachedDatabase.typeMapping.read(
+          DriftSqlType.dateTime, data['${effectivePrefix}eingelesen_am'])!,
+    );
+  }
+
+  @override
+  $NavisionArtikelTable createAlias(String alias) {
+    return $NavisionArtikelTable(attachedDatabase, alias);
+  }
+}
+
+class NavisionArtikelZeile extends DataClass
+    implements Insertable<NavisionArtikelZeile> {
+  /// Artikelnummer (Spalte „Nr.") — dieselbe wie in der App.
+  final String artikelnummer;
+
+  /// Spalte „Nummer 2". Steht dort „MUSTER", ist der Artikel noch kein
+  /// Bestandsartikel.
+  final String? nummer2;
+  final String beschreibung;
+  final String? beschreibung2;
+
+  /// Trägt u.a. die Allergen-Hinweise.
+  final String? suchbegriff;
+  final String? basiseinheit;
+
+  /// Woran sich Rohwaren und Zutaten von Fertigware unterscheiden lassen.
+  final String? produktbuchungsgruppe;
+  final String? artikelkategorie;
+  final String? produktgruppe;
+
+  /// Wann diese Zeile zuletzt aus einer Übersicht kam.
+  final DateTime eingelesenAm;
+  const NavisionArtikelZeile(
+      {required this.artikelnummer,
+      this.nummer2,
+      required this.beschreibung,
+      this.beschreibung2,
+      this.suchbegriff,
+      this.basiseinheit,
+      this.produktbuchungsgruppe,
+      this.artikelkategorie,
+      this.produktgruppe,
+      required this.eingelesenAm});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['artikelnummer'] = Variable<String>(artikelnummer);
+    if (!nullToAbsent || nummer2 != null) {
+      map['nummer2'] = Variable<String>(nummer2);
+    }
+    map['beschreibung'] = Variable<String>(beschreibung);
+    if (!nullToAbsent || beschreibung2 != null) {
+      map['beschreibung2'] = Variable<String>(beschreibung2);
+    }
+    if (!nullToAbsent || suchbegriff != null) {
+      map['suchbegriff'] = Variable<String>(suchbegriff);
+    }
+    if (!nullToAbsent || basiseinheit != null) {
+      map['basiseinheit'] = Variable<String>(basiseinheit);
+    }
+    if (!nullToAbsent || produktbuchungsgruppe != null) {
+      map['produktbuchungsgruppe'] = Variable<String>(produktbuchungsgruppe);
+    }
+    if (!nullToAbsent || artikelkategorie != null) {
+      map['artikelkategorie'] = Variable<String>(artikelkategorie);
+    }
+    if (!nullToAbsent || produktgruppe != null) {
+      map['produktgruppe'] = Variable<String>(produktgruppe);
+    }
+    map['eingelesen_am'] = Variable<DateTime>(eingelesenAm);
+    return map;
+  }
+
+  NavisionArtikelCompanion toCompanion(bool nullToAbsent) {
+    return NavisionArtikelCompanion(
+      artikelnummer: Value(artikelnummer),
+      nummer2: nummer2 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(nummer2),
+      beschreibung: Value(beschreibung),
+      beschreibung2: beschreibung2 == null && nullToAbsent
+          ? const Value.absent()
+          : Value(beschreibung2),
+      suchbegriff: suchbegriff == null && nullToAbsent
+          ? const Value.absent()
+          : Value(suchbegriff),
+      basiseinheit: basiseinheit == null && nullToAbsent
+          ? const Value.absent()
+          : Value(basiseinheit),
+      produktbuchungsgruppe: produktbuchungsgruppe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(produktbuchungsgruppe),
+      artikelkategorie: artikelkategorie == null && nullToAbsent
+          ? const Value.absent()
+          : Value(artikelkategorie),
+      produktgruppe: produktgruppe == null && nullToAbsent
+          ? const Value.absent()
+          : Value(produktgruppe),
+      eingelesenAm: Value(eingelesenAm),
+    );
+  }
+
+  factory NavisionArtikelZeile.fromJson(Map<String, dynamic> json,
+      {ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NavisionArtikelZeile(
+      artikelnummer: serializer.fromJson<String>(json['artikelnummer']),
+      nummer2: serializer.fromJson<String?>(json['nummer2']),
+      beschreibung: serializer.fromJson<String>(json['beschreibung']),
+      beschreibung2: serializer.fromJson<String?>(json['beschreibung2']),
+      suchbegriff: serializer.fromJson<String?>(json['suchbegriff']),
+      basiseinheit: serializer.fromJson<String?>(json['basiseinheit']),
+      produktbuchungsgruppe:
+          serializer.fromJson<String?>(json['produktbuchungsgruppe']),
+      artikelkategorie: serializer.fromJson<String?>(json['artikelkategorie']),
+      produktgruppe: serializer.fromJson<String?>(json['produktgruppe']),
+      eingelesenAm: serializer.fromJson<DateTime>(json['eingelesenAm']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'artikelnummer': serializer.toJson<String>(artikelnummer),
+      'nummer2': serializer.toJson<String?>(nummer2),
+      'beschreibung': serializer.toJson<String>(beschreibung),
+      'beschreibung2': serializer.toJson<String?>(beschreibung2),
+      'suchbegriff': serializer.toJson<String?>(suchbegriff),
+      'basiseinheit': serializer.toJson<String?>(basiseinheit),
+      'produktbuchungsgruppe':
+          serializer.toJson<String?>(produktbuchungsgruppe),
+      'artikelkategorie': serializer.toJson<String?>(artikelkategorie),
+      'produktgruppe': serializer.toJson<String?>(produktgruppe),
+      'eingelesenAm': serializer.toJson<DateTime>(eingelesenAm),
+    };
+  }
+
+  NavisionArtikelZeile copyWith(
+          {String? artikelnummer,
+          Value<String?> nummer2 = const Value.absent(),
+          String? beschreibung,
+          Value<String?> beschreibung2 = const Value.absent(),
+          Value<String?> suchbegriff = const Value.absent(),
+          Value<String?> basiseinheit = const Value.absent(),
+          Value<String?> produktbuchungsgruppe = const Value.absent(),
+          Value<String?> artikelkategorie = const Value.absent(),
+          Value<String?> produktgruppe = const Value.absent(),
+          DateTime? eingelesenAm}) =>
+      NavisionArtikelZeile(
+        artikelnummer: artikelnummer ?? this.artikelnummer,
+        nummer2: nummer2.present ? nummer2.value : this.nummer2,
+        beschreibung: beschreibung ?? this.beschreibung,
+        beschreibung2:
+            beschreibung2.present ? beschreibung2.value : this.beschreibung2,
+        suchbegriff: suchbegriff.present ? suchbegriff.value : this.suchbegriff,
+        basiseinheit:
+            basiseinheit.present ? basiseinheit.value : this.basiseinheit,
+        produktbuchungsgruppe: produktbuchungsgruppe.present
+            ? produktbuchungsgruppe.value
+            : this.produktbuchungsgruppe,
+        artikelkategorie: artikelkategorie.present
+            ? artikelkategorie.value
+            : this.artikelkategorie,
+        produktgruppe:
+            produktgruppe.present ? produktgruppe.value : this.produktgruppe,
+        eingelesenAm: eingelesenAm ?? this.eingelesenAm,
+      );
+  NavisionArtikelZeile copyWithCompanion(NavisionArtikelCompanion data) {
+    return NavisionArtikelZeile(
+      artikelnummer: data.artikelnummer.present
+          ? data.artikelnummer.value
+          : this.artikelnummer,
+      nummer2: data.nummer2.present ? data.nummer2.value : this.nummer2,
+      beschreibung: data.beschreibung.present
+          ? data.beschreibung.value
+          : this.beschreibung,
+      beschreibung2: data.beschreibung2.present
+          ? data.beschreibung2.value
+          : this.beschreibung2,
+      suchbegriff:
+          data.suchbegriff.present ? data.suchbegriff.value : this.suchbegriff,
+      basiseinheit: data.basiseinheit.present
+          ? data.basiseinheit.value
+          : this.basiseinheit,
+      produktbuchungsgruppe: data.produktbuchungsgruppe.present
+          ? data.produktbuchungsgruppe.value
+          : this.produktbuchungsgruppe,
+      artikelkategorie: data.artikelkategorie.present
+          ? data.artikelkategorie.value
+          : this.artikelkategorie,
+      produktgruppe: data.produktgruppe.present
+          ? data.produktgruppe.value
+          : this.produktgruppe,
+      eingelesenAm: data.eingelesenAm.present
+          ? data.eingelesenAm.value
+          : this.eingelesenAm,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NavisionArtikelZeile(')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('nummer2: $nummer2, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('beschreibung2: $beschreibung2, ')
+          ..write('suchbegriff: $suchbegriff, ')
+          ..write('basiseinheit: $basiseinheit, ')
+          ..write('produktbuchungsgruppe: $produktbuchungsgruppe, ')
+          ..write('artikelkategorie: $artikelkategorie, ')
+          ..write('produktgruppe: $produktgruppe, ')
+          ..write('eingelesenAm: $eingelesenAm')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+      artikelnummer,
+      nummer2,
+      beschreibung,
+      beschreibung2,
+      suchbegriff,
+      basiseinheit,
+      produktbuchungsgruppe,
+      artikelkategorie,
+      produktgruppe,
+      eingelesenAm);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NavisionArtikelZeile &&
+          other.artikelnummer == this.artikelnummer &&
+          other.nummer2 == this.nummer2 &&
+          other.beschreibung == this.beschreibung &&
+          other.beschreibung2 == this.beschreibung2 &&
+          other.suchbegriff == this.suchbegriff &&
+          other.basiseinheit == this.basiseinheit &&
+          other.produktbuchungsgruppe == this.produktbuchungsgruppe &&
+          other.artikelkategorie == this.artikelkategorie &&
+          other.produktgruppe == this.produktgruppe &&
+          other.eingelesenAm == this.eingelesenAm);
+}
+
+class NavisionArtikelCompanion extends UpdateCompanion<NavisionArtikelZeile> {
+  final Value<String> artikelnummer;
+  final Value<String?> nummer2;
+  final Value<String> beschreibung;
+  final Value<String?> beschreibung2;
+  final Value<String?> suchbegriff;
+  final Value<String?> basiseinheit;
+  final Value<String?> produktbuchungsgruppe;
+  final Value<String?> artikelkategorie;
+  final Value<String?> produktgruppe;
+  final Value<DateTime> eingelesenAm;
+  final Value<int> rowid;
+  const NavisionArtikelCompanion({
+    this.artikelnummer = const Value.absent(),
+    this.nummer2 = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.beschreibung2 = const Value.absent(),
+    this.suchbegriff = const Value.absent(),
+    this.basiseinheit = const Value.absent(),
+    this.produktbuchungsgruppe = const Value.absent(),
+    this.artikelkategorie = const Value.absent(),
+    this.produktgruppe = const Value.absent(),
+    this.eingelesenAm = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NavisionArtikelCompanion.insert({
+    required String artikelnummer,
+    this.nummer2 = const Value.absent(),
+    this.beschreibung = const Value.absent(),
+    this.beschreibung2 = const Value.absent(),
+    this.suchbegriff = const Value.absent(),
+    this.basiseinheit = const Value.absent(),
+    this.produktbuchungsgruppe = const Value.absent(),
+    this.artikelkategorie = const Value.absent(),
+    this.produktgruppe = const Value.absent(),
+    required DateTime eingelesenAm,
+    this.rowid = const Value.absent(),
+  })  : artikelnummer = Value(artikelnummer),
+        eingelesenAm = Value(eingelesenAm);
+  static Insertable<NavisionArtikelZeile> custom({
+    Expression<String>? artikelnummer,
+    Expression<String>? nummer2,
+    Expression<String>? beschreibung,
+    Expression<String>? beschreibung2,
+    Expression<String>? suchbegriff,
+    Expression<String>? basiseinheit,
+    Expression<String>? produktbuchungsgruppe,
+    Expression<String>? artikelkategorie,
+    Expression<String>? produktgruppe,
+    Expression<DateTime>? eingelesenAm,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (artikelnummer != null) 'artikelnummer': artikelnummer,
+      if (nummer2 != null) 'nummer2': nummer2,
+      if (beschreibung != null) 'beschreibung': beschreibung,
+      if (beschreibung2 != null) 'beschreibung2': beschreibung2,
+      if (suchbegriff != null) 'suchbegriff': suchbegriff,
+      if (basiseinheit != null) 'basiseinheit': basiseinheit,
+      if (produktbuchungsgruppe != null)
+        'produktbuchungsgruppe': produktbuchungsgruppe,
+      if (artikelkategorie != null) 'artikelkategorie': artikelkategorie,
+      if (produktgruppe != null) 'produktgruppe': produktgruppe,
+      if (eingelesenAm != null) 'eingelesen_am': eingelesenAm,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NavisionArtikelCompanion copyWith(
+      {Value<String>? artikelnummer,
+      Value<String?>? nummer2,
+      Value<String>? beschreibung,
+      Value<String?>? beschreibung2,
+      Value<String?>? suchbegriff,
+      Value<String?>? basiseinheit,
+      Value<String?>? produktbuchungsgruppe,
+      Value<String?>? artikelkategorie,
+      Value<String?>? produktgruppe,
+      Value<DateTime>? eingelesenAm,
+      Value<int>? rowid}) {
+    return NavisionArtikelCompanion(
+      artikelnummer: artikelnummer ?? this.artikelnummer,
+      nummer2: nummer2 ?? this.nummer2,
+      beschreibung: beschreibung ?? this.beschreibung,
+      beschreibung2: beschreibung2 ?? this.beschreibung2,
+      suchbegriff: suchbegriff ?? this.suchbegriff,
+      basiseinheit: basiseinheit ?? this.basiseinheit,
+      produktbuchungsgruppe:
+          produktbuchungsgruppe ?? this.produktbuchungsgruppe,
+      artikelkategorie: artikelkategorie ?? this.artikelkategorie,
+      produktgruppe: produktgruppe ?? this.produktgruppe,
+      eingelesenAm: eingelesenAm ?? this.eingelesenAm,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (artikelnummer.present) {
+      map['artikelnummer'] = Variable<String>(artikelnummer.value);
+    }
+    if (nummer2.present) {
+      map['nummer2'] = Variable<String>(nummer2.value);
+    }
+    if (beschreibung.present) {
+      map['beschreibung'] = Variable<String>(beschreibung.value);
+    }
+    if (beschreibung2.present) {
+      map['beschreibung2'] = Variable<String>(beschreibung2.value);
+    }
+    if (suchbegriff.present) {
+      map['suchbegriff'] = Variable<String>(suchbegriff.value);
+    }
+    if (basiseinheit.present) {
+      map['basiseinheit'] = Variable<String>(basiseinheit.value);
+    }
+    if (produktbuchungsgruppe.present) {
+      map['produktbuchungsgruppe'] =
+          Variable<String>(produktbuchungsgruppe.value);
+    }
+    if (artikelkategorie.present) {
+      map['artikelkategorie'] = Variable<String>(artikelkategorie.value);
+    }
+    if (produktgruppe.present) {
+      map['produktgruppe'] = Variable<String>(produktgruppe.value);
+    }
+    if (eingelesenAm.present) {
+      map['eingelesen_am'] = Variable<DateTime>(eingelesenAm.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NavisionArtikelCompanion(')
+          ..write('artikelnummer: $artikelnummer, ')
+          ..write('nummer2: $nummer2, ')
+          ..write('beschreibung: $beschreibung, ')
+          ..write('beschreibung2: $beschreibung2, ')
+          ..write('suchbegriff: $suchbegriff, ')
+          ..write('basiseinheit: $basiseinheit, ')
+          ..write('produktbuchungsgruppe: $produktbuchungsgruppe, ')
+          ..write('artikelkategorie: $artikelkategorie, ')
+          ..write('produktgruppe: $produktgruppe, ')
+          ..write('eingelesenAm: $eingelesenAm, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $EntwicklungZutatenTable extends EntwicklungZutaten
     with TableInfo<$EntwicklungZutatenTable, Zutat> {
   @override
@@ -23653,6 +24234,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ArtikelFotosTable artikelFotos = $ArtikelFotosTable(this);
   late final $ArtikelFotoInhalteTable artikelFotoInhalte =
       $ArtikelFotoInhalteTable(this);
+  late final $NavisionArtikelTable navisionArtikel =
+      $NavisionArtikelTable(this);
   late final $EntwicklungZutatenTable entwicklungZutaten =
       $EntwicklungZutatenTable(this);
   late final $EntwicklungRezepturenTable entwicklungRezepturen =
@@ -23703,6 +24286,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         tagesaufgaben,
         artikelFotos,
         artikelFotoInhalte,
+        navisionArtikel,
         entwicklungZutaten,
         entwicklungRezepturen,
         entwicklungRezepturVersionen,
@@ -33334,6 +33918,265 @@ typedef $$ArtikelFotoInhalteTableProcessedTableManager = ProcessedTableManager<
     ),
     ArtikelFotoInhalt,
     PrefetchHooks Function()>;
+typedef $$NavisionArtikelTableCreateCompanionBuilder = NavisionArtikelCompanion
+    Function({
+  required String artikelnummer,
+  Value<String?> nummer2,
+  Value<String> beschreibung,
+  Value<String?> beschreibung2,
+  Value<String?> suchbegriff,
+  Value<String?> basiseinheit,
+  Value<String?> produktbuchungsgruppe,
+  Value<String?> artikelkategorie,
+  Value<String?> produktgruppe,
+  required DateTime eingelesenAm,
+  Value<int> rowid,
+});
+typedef $$NavisionArtikelTableUpdateCompanionBuilder = NavisionArtikelCompanion
+    Function({
+  Value<String> artikelnummer,
+  Value<String?> nummer2,
+  Value<String> beschreibung,
+  Value<String?> beschreibung2,
+  Value<String?> suchbegriff,
+  Value<String?> basiseinheit,
+  Value<String?> produktbuchungsgruppe,
+  Value<String?> artikelkategorie,
+  Value<String?> produktgruppe,
+  Value<DateTime> eingelesenAm,
+  Value<int> rowid,
+});
+
+class $$NavisionArtikelTableFilterComposer
+    extends Composer<_$AppDatabase, $NavisionArtikelTable> {
+  $$NavisionArtikelTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get nummer2 => $composableBuilder(
+      column: $table.nummer2, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get beschreibung2 => $composableBuilder(
+      column: $table.beschreibung2, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get suchbegriff => $composableBuilder(
+      column: $table.suchbegriff, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get basiseinheit => $composableBuilder(
+      column: $table.basiseinheit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get produktbuchungsgruppe => $composableBuilder(
+      column: $table.produktbuchungsgruppe,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get artikelkategorie => $composableBuilder(
+      column: $table.artikelkategorie,
+      builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<DateTime> get eingelesenAm => $composableBuilder(
+      column: $table.eingelesenAm, builder: (column) => ColumnFilters(column));
+}
+
+class $$NavisionArtikelTableOrderingComposer
+    extends Composer<_$AppDatabase, $NavisionArtikelTable> {
+  $$NavisionArtikelTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get nummer2 => $composableBuilder(
+      column: $table.nummer2, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get beschreibung2 => $composableBuilder(
+      column: $table.beschreibung2,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get suchbegriff => $composableBuilder(
+      column: $table.suchbegriff, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get basiseinheit => $composableBuilder(
+      column: $table.basiseinheit,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get produktbuchungsgruppe => $composableBuilder(
+      column: $table.produktbuchungsgruppe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get artikelkategorie => $composableBuilder(
+      column: $table.artikelkategorie,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe,
+      builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<DateTime> get eingelesenAm => $composableBuilder(
+      column: $table.eingelesenAm,
+      builder: (column) => ColumnOrderings(column));
+}
+
+class $$NavisionArtikelTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NavisionArtikelTable> {
+  $$NavisionArtikelTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get artikelnummer => $composableBuilder(
+      column: $table.artikelnummer, builder: (column) => column);
+
+  GeneratedColumn<String> get nummer2 =>
+      $composableBuilder(column: $table.nummer2, builder: (column) => column);
+
+  GeneratedColumn<String> get beschreibung => $composableBuilder(
+      column: $table.beschreibung, builder: (column) => column);
+
+  GeneratedColumn<String> get beschreibung2 => $composableBuilder(
+      column: $table.beschreibung2, builder: (column) => column);
+
+  GeneratedColumn<String> get suchbegriff => $composableBuilder(
+      column: $table.suchbegriff, builder: (column) => column);
+
+  GeneratedColumn<String> get basiseinheit => $composableBuilder(
+      column: $table.basiseinheit, builder: (column) => column);
+
+  GeneratedColumn<String> get produktbuchungsgruppe => $composableBuilder(
+      column: $table.produktbuchungsgruppe, builder: (column) => column);
+
+  GeneratedColumn<String> get artikelkategorie => $composableBuilder(
+      column: $table.artikelkategorie, builder: (column) => column);
+
+  GeneratedColumn<String> get produktgruppe => $composableBuilder(
+      column: $table.produktgruppe, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get eingelesenAm => $composableBuilder(
+      column: $table.eingelesenAm, builder: (column) => column);
+}
+
+class $$NavisionArtikelTableTableManager extends RootTableManager<
+    _$AppDatabase,
+    $NavisionArtikelTable,
+    NavisionArtikelZeile,
+    $$NavisionArtikelTableFilterComposer,
+    $$NavisionArtikelTableOrderingComposer,
+    $$NavisionArtikelTableAnnotationComposer,
+    $$NavisionArtikelTableCreateCompanionBuilder,
+    $$NavisionArtikelTableUpdateCompanionBuilder,
+    (
+      NavisionArtikelZeile,
+      BaseReferences<_$AppDatabase, $NavisionArtikelTable, NavisionArtikelZeile>
+    ),
+    NavisionArtikelZeile,
+    PrefetchHooks Function()> {
+  $$NavisionArtikelTableTableManager(
+      _$AppDatabase db, $NavisionArtikelTable table)
+      : super(TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NavisionArtikelTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NavisionArtikelTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NavisionArtikelTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> artikelnummer = const Value.absent(),
+            Value<String?> nummer2 = const Value.absent(),
+            Value<String> beschreibung = const Value.absent(),
+            Value<String?> beschreibung2 = const Value.absent(),
+            Value<String?> suchbegriff = const Value.absent(),
+            Value<String?> basiseinheit = const Value.absent(),
+            Value<String?> produktbuchungsgruppe = const Value.absent(),
+            Value<String?> artikelkategorie = const Value.absent(),
+            Value<String?> produktgruppe = const Value.absent(),
+            Value<DateTime> eingelesenAm = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              NavisionArtikelCompanion(
+            artikelnummer: artikelnummer,
+            nummer2: nummer2,
+            beschreibung: beschreibung,
+            beschreibung2: beschreibung2,
+            suchbegriff: suchbegriff,
+            basiseinheit: basiseinheit,
+            produktbuchungsgruppe: produktbuchungsgruppe,
+            artikelkategorie: artikelkategorie,
+            produktgruppe: produktgruppe,
+            eingelesenAm: eingelesenAm,
+            rowid: rowid,
+          ),
+          createCompanionCallback: ({
+            required String artikelnummer,
+            Value<String?> nummer2 = const Value.absent(),
+            Value<String> beschreibung = const Value.absent(),
+            Value<String?> beschreibung2 = const Value.absent(),
+            Value<String?> suchbegriff = const Value.absent(),
+            Value<String?> basiseinheit = const Value.absent(),
+            Value<String?> produktbuchungsgruppe = const Value.absent(),
+            Value<String?> artikelkategorie = const Value.absent(),
+            Value<String?> produktgruppe = const Value.absent(),
+            required DateTime eingelesenAm,
+            Value<int> rowid = const Value.absent(),
+          }) =>
+              NavisionArtikelCompanion.insert(
+            artikelnummer: artikelnummer,
+            nummer2: nummer2,
+            beschreibung: beschreibung,
+            beschreibung2: beschreibung2,
+            suchbegriff: suchbegriff,
+            basiseinheit: basiseinheit,
+            produktbuchungsgruppe: produktbuchungsgruppe,
+            artikelkategorie: artikelkategorie,
+            produktgruppe: produktgruppe,
+            eingelesenAm: eingelesenAm,
+            rowid: rowid,
+          ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ));
+}
+
+typedef $$NavisionArtikelTableProcessedTableManager = ProcessedTableManager<
+    _$AppDatabase,
+    $NavisionArtikelTable,
+    NavisionArtikelZeile,
+    $$NavisionArtikelTableFilterComposer,
+    $$NavisionArtikelTableOrderingComposer,
+    $$NavisionArtikelTableAnnotationComposer,
+    $$NavisionArtikelTableCreateCompanionBuilder,
+    $$NavisionArtikelTableUpdateCompanionBuilder,
+    (
+      NavisionArtikelZeile,
+      BaseReferences<_$AppDatabase, $NavisionArtikelTable, NavisionArtikelZeile>
+    ),
+    NavisionArtikelZeile,
+    PrefetchHooks Function()>;
 typedef $$EntwicklungZutatenTableCreateCompanionBuilder
     = EntwicklungZutatenCompanion Function({
   required String id,
@@ -36432,6 +37275,8 @@ class $AppDatabaseManager {
       $$ArtikelFotosTableTableManager(_db, _db.artikelFotos);
   $$ArtikelFotoInhalteTableTableManager get artikelFotoInhalte =>
       $$ArtikelFotoInhalteTableTableManager(_db, _db.artikelFotoInhalte);
+  $$NavisionArtikelTableTableManager get navisionArtikel =>
+      $$NavisionArtikelTableTableManager(_db, _db.navisionArtikel);
   $$EntwicklungZutatenTableTableManager get entwicklungZutaten =>
       $$EntwicklungZutatenTableTableManager(_db, _db.entwicklungZutaten);
   $$EntwicklungRezepturenTableTableManager get entwicklungRezepturen =>

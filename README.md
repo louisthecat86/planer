@@ -48,6 +48,16 @@ Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
 ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
 Aufgaben" für alles, was nicht aus einem Artikel kommt.
 
+**Muster:** Beim Einlesen der Artikelübersicht merkt sich die App je
+Artikelnummer, was Navision dazu sagt (Tabelle `navision_artikel`,
+`lib/core/services/navision_katalog.dart`). Steht in der Spalte „Nummer 2"
+das Wort „Muster", führt die App den Artikel als Muster: mit eigener Marke
+und eigenem Filter in der Artikelliste, und ohne dass er als „nicht
+eingepflegt" oder mit anderen Lücken zählt — gepflegt wird er erst als
+Bestandsartikel. Verschwindet die Kennung in Navision, ist er beim nächsten
+Einlesen ein normaler Artikel. Eine Übersicht mit weniger Artikeln oder
+ohne die Spalte ändert an den übrigen nichts.
+
 **Einlesen:** Den Navision-Bericht „Auftragsbestand", die Artikelübersicht
 aus Navision und das Ergebnis vom Handy kann man auf der jeweiligen Seite
 über den Knopf wählen oder aus dem Explorer aufs Fenster ziehen. Der
@@ -577,7 +587,7 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 40.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 41.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit
@@ -602,6 +612,9 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
   Navision-Bericht und der Stand davor für „Änderungen" — nach dem
   Wiederherstellen passt er zu Board und Bedarf. Ein älteres Backup kennt
   ihn nicht und lässt den Auftragsbestand des Rechners, wie er ist.
+- **Stand der Navision-Artikelübersicht im Backup** (ab Backup-Version 1.9):
+  Tabelle `navision_artikel`. Ein älteres Backup kennt ihn nicht und lässt
+  den des Rechners stehen.
 - **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
   lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
   Auf demselben Rechner eingespielt, bleibt das aktuelle Passwort; ein Backup

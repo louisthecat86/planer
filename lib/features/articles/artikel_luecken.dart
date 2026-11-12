@@ -83,11 +83,18 @@ Map<String, ProduktionsGrundlage> produktionsGrundlagen(
 
 /// Die Lücken des Artikels [produkt] mit seinen (nicht gelöschten)
 /// [schritte]n und der [grundlage] aus seinen Produktionen.
+///
+/// Ein Muster ([istMuster] — so führt Navision den Artikel noch), dessen
+/// Artikelmaske nicht ausgefüllt ist, hat keine Lücken: Gepflegt wird es
+/// erst, wenn daraus ein Bestandsartikel wird. Ist es doch schon
+/// eingepflegt, zählt es wie jeder andere Artikel.
 Set<ArtikelLuecke> artikelLuecken(
   Product produkt,
   List<ProductStep> schritte,
-  ProduktionsGrundlage? grundlage,
-) {
+  ProduktionsGrundlage? grundlage, {
+  bool istMuster = false,
+}) {
+  if (istMuster && !produkt.istEingepflegt) return const {};
   final g = grundlage ?? const ProduktionsGrundlage();
   return {
     if (!produkt.istEingepflegt) ArtikelLuecke.nichtEingepflegt,

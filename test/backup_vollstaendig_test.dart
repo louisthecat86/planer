@@ -215,4 +215,39 @@ void main() {
     // Alles andere ist wieder so leer wie im Backup.
     expect(await zeilen(db, 'products'), isEmpty);
   });
+
+  test(
+      'ein älteres Backup kennt den Stand der Navision-Artikelübersicht '
+      'nicht — der des Rechners bleibt', () async {
+    final db = testDatenbank();
+    addTearDown(db.close);
+    // Ein Backup, wie es die App bis Version 1.8 schrieb.
+    final inhalt = await BackupService.backupInhalt(db);
+    inhalt['version'] = '1.8';
+    (inhalt['data'] as Map<String, dynamic>).remove('navision_artikel');
+    final datei = File('${ordner.path}/alt18.planerbackup')
+      ..writeAsBytesSync(gzip.encode(utf8.encode(jsonEncode(inhalt))));
+    await fuellen(db);
+
+    await BackupService.importBackup(
+      datei.path,
+      db,
+      sicherungAnlegen: false,
+    );
+
+    expect(await zeilen(db, 'navision_artikel'), hasLength(1));
+    expect(await zeilen(db, 'products'), isEmpty);
+  });
+
+  test('ein Backup ab 1.9 bringt seinen Stand mit — auch einen leeren',
+      () async {
+    final db = testDatenbank();
+    addTearDown(db.close);
+    final pfad = await BackupService.createAutoBackup(db);
+    await fuellen(db);
+
+    await BackupService.importBackup(pfad, db, sicherungAnlegen: false);
+
+    expect(await zeilen(db, 'navision_artikel'), isEmpty);
+  });
 }

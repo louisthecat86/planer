@@ -12,6 +12,7 @@ import '../../core/services/artikel_anlage_service.dart';
 import '../../core/services/artikelstamm_abgleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_import_service.dart';
+import '../../core/services/navision_katalog.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/ablage.dart';
 import '../../core/ui/bausteine.dart';
@@ -127,6 +128,13 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           if (mounted) setState(() => _fortschritt = stand);
         },
       );
+      // Was Navision über die Artikel weiß, merkt sich die App gleich —
+      // daran hängt, was als Muster gilt. Das Übernehmen unten betrifft
+      // nur neue Artikel und Allergene.
+      await NavisionKatalogSpeicher.merken(db, katalog);
+      ref
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Navision-Artikelübersicht eingelesen');
       final abgleich = await _gleicheAb(db, katalog);
       if (!mounted) return;
       setState(() {
@@ -1092,6 +1100,8 @@ class _NeuZeile extends StatelessWidget {
                           text: 'im Auftragsbestand',
                           art: StatusArt.info,
                         ),
+                      if (istMusterKennung(artikel.zeile.nummer2))
+                        const _Marke(text: 'Muster'),
                       if (artikel.geloescht)
                         const _Marke(
                           text: 'früher gelöscht — wird wieder aktiviert',

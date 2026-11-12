@@ -293,6 +293,7 @@ void main() {
             'Beschreibung 2',
             'Basiseinheitencode',
             'Produktgruppencode',
+            'Nummer 2',
           ]),
           texte([
             'EI LAKTOSE',
@@ -301,6 +302,7 @@ void main() {
             'gekocht, am Stück',
             'KG',
             'SCHINKEN',
+            'MUSTER',
           ]),
           [
             TextCellValue('SENFSAAT'),
@@ -325,6 +327,10 @@ void main() {
       expect(schinken.basiseinheit, 'KG');
       expect(schinken.produktgruppe, 'SCHINKEN');
       expect(katalog.zeilen.last.suchbegriff, 'SENFSAAT');
+      // „Nummer 2" ist nicht die Artikelnummer.
+      expect(katalog.mitNummer2, isTrue);
+      expect(schinken.nummer2, 'MUSTER');
+      expect(katalog.zeilen.last.nummer2, isNull);
     });
 
     test('ohne Suchbegriff-Spalte gibt es einen Hinweis', () async {
@@ -337,7 +343,32 @@ void main() {
 
       expect(katalog.zeilen, hasLength(1));
       expect(katalog.zeilen.single.suchbegriff, isNull);
-      expect(katalog.warnungen.single, contains('Suchbegriff'));
+      expect(katalog.warnungen, contains(contains('Suchbegriff')));
+    });
+
+    test('ohne die Spalte „Nummer 2" gibt es einen Hinweis', () async {
+      final katalog = await NavisionImportService.lese(
+        mappe([
+          texte(['Nr.', 'Beschreibung', 'Suchbegriff']),
+          texte(['900010', 'Testschinken', 'EI']),
+        ]),
+      );
+
+      expect(katalog.mitNummer2, isFalse);
+      expect(katalog.zeilen.single.nummer2, isNull);
+      expect(katalog.warnungen.single, contains('Nummer 2'));
+    });
+
+    test('„Nr. 2" heißt die Spalte in mancher Ansicht', () async {
+      final katalog = await NavisionImportService.lese(
+        mappe([
+          texte(['Nr. 2', 'Nr.', 'Beschreibung', 'Suchbegriff']),
+          texte(['Muster neu', '900010', 'Testschinken', 'EI']),
+        ]),
+      );
+
+      expect(katalog.zeilen.single.nummer, '900010');
+      expect(katalog.zeilen.single.nummer2, 'Muster neu');
     });
 
     test('keine Excel-Datei: klare Meldung', () async {

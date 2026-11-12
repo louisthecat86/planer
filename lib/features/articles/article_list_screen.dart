@@ -11,6 +11,7 @@ import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/navision_katalog.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
@@ -55,15 +56,21 @@ final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
     byProduct.putIfAbsent(s.productId, () => []).add(s);
   }
 
+  // Was Navision noch als Muster führt — lädt neu, sobald eine
+  // Artikelübersicht eingelesen wird.
+  final muster = await ref.watch(musterNummernProvider.future);
+
   return [
     for (final p in products)
       _ArticleInfo(
         product: p,
         steps: byProduct[p.id] ?? const [],
+        istMuster: muster.contains(p.artikelnummer),
         luecken: artikelLuecken(
           p,
           byProduct[p.id] ?? const [],
           grundlagen[p.id],
+          istMuster: muster.contains(p.artikelnummer),
         ),
       ),
   ];
@@ -74,9 +81,13 @@ class _ArticleInfo {
     required this.product,
     required this.steps,
     required this.luecken,
+    this.istMuster = false,
   });
   final Product product;
   final List<ProductStep> steps;
+
+  /// Navision führt den Artikel noch als Muster (Spalte „Nummer 2").
+  final bool istMuster;
 
   /// Was dem Artikel für die Planung fehlt — siehe [ArtikelLuecke].
   final Set<ArtikelLuecke> luecken;
@@ -109,6 +120,10 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   /// Nur Artikel mit dieser Lücke — null: alle.
   late ArtikelLuecke? _luecke = widget.luecke;
 
+  /// Nur Muster. Schließt sich mit [_luecke] aus: Der Filter kennt eine
+  /// Auswahl.
+  bool _nurMuster = false;
+
   @override
   void dispose() {
     _suche.dispose();
@@ -138,6 +153,7 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
     if (luecke != null) {
       list = list.where((a) => a.luecken.contains(luecke)).toList();
     }
+    if (_nurMuster) list = list.where((a) => a.istMuster).toList();
 
     return _sortiert([...list], bedarfKg);
   }
@@ -184,11 +200,13 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   }
 
   /// Ob die Liste gefiltert ist — durch die Suche oder eine Lücke.
-  bool get _gefiltert => _search.trim().isNotEmpty || _luecke != null;
+  bool get _gefiltert =>
+      _search.trim().isNotEmpty || _luecke != null || _nurMuster;
 
   /// „Ohne Ausbeute · Suche „wurst"" — leer ohne Filter.
   String get _filterText => [
         if (_luecke case final l?) l.titel,
+        if (_nurMuster) 'Muster',
         if (_search.trim().isNotEmpty) 'Suche „${_search.trim()}“',
       ].join(' · ');
 
@@ -501,7 +519,16 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
         for (final l in ArtikelLuecke.values)
           l: all.where((a) => a.luecken.contains(l)).length,
       },
-      onWahl: (l) => setState(() => _luecke = l),
+      muster: _nurMuster,
+      musterAnzahl: all.where((a) => a.istMuster).length,
+      onWahl: (l) => setState(() {
+        _luecke = l;
+        _nurMuster = false;
+      }),
+      onMuster: () => setState(() {
+        _luecke = null;
+        _nurMuster = true;
+      }),
     );
     final anzahl = Text(
       '${filtered.length} von ${all.length} Artikel',
@@ -712,24 +739,38 @@ class _LueckenFilter extends StatelessWidget {
     required this.auswahl,
     required this.anzahl,
     required this.onWahl,
+    this.muster = false,
+    this.musterAnzahl = 0,
+    this.onMuster,
   });
 
   final ArtikelLuecke? auswahl;
   final Map<ArtikelLuecke, int> anzahl;
   final ValueChanged<ArtikelLuecke?> onWahl;
 
+  /// Ob gerade nur die Muster gezeigt werden — keine Lücke, aber dieselbe
+  /// Auswahl: Wer Muster sehen will, sucht sie hier.
+  final bool muster;
+  final int musterAnzahl;
+  final VoidCallback? onMuster;
+
+  /// Wert des Menü-Eintrags „Muster" — kein Name einer [ArtikelLuecke].
+  static const String _musterWert = '@muster';
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final farben = theme.colorScheme;
     final gewaehlt = auswahl;
-    final aktiv = gewaehlt != null;
+    final aktiv = gewaehlt != null || muster;
     return PopupMenuButton<String>(
       tooltip: 'Nach Lücken in den Stammdaten filtern',
       position: PopupMenuPosition.under,
       // Ein leerer Wert steht für „alle Artikel": null kann ein Eintrag
       // nicht liefern — das hieße „Menü ohne Wahl geschlossen".
-      onSelected: (wert) => onWahl(ArtikelLuecke.values.asNameMap()[wert]),
+      onSelected: (wert) => wert == _musterWert
+          ? onMuster?.call()
+          : onWahl(ArtikelLuecke.values.asNameMap()[wert]),
       itemBuilder: (_) => [
         PopupMenuItem<String>(
           value: '',
@@ -748,6 +789,20 @@ class _LueckenFilter extends StatelessWidget {
               ),
             ),
           ),
+        // Muster gibt es nur, wenn eine Artikelübersicht aus Navision
+        // eingelesen ist.
+        if (musterAnzahl > 0 || muster) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<String>(
+            value: _musterWert,
+            child: Tooltip(
+              message: 'In Navision noch als Muster geführt — zählt nicht '
+                  'als „nicht eingepflegt".',
+              waitDuration: const Duration(milliseconds: 500),
+              child: _eintrag('Muster ($musterAnzahl)', gewaehlt: muster),
+            ),
+          ),
+        ],
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -768,7 +823,7 @@ class _LueckenFilter extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              gewaehlt?.titel ?? 'Alle Artikel',
+              gewaehlt?.titel ?? (muster ? 'Muster' : 'Alle Artikel'),
               style: theme.textTheme.bodyMedium?.copyWith(
                 fontWeight: FontWeight.w600,
                 color: aktiv ? farben.onPrimaryContainer : null,
@@ -931,7 +986,13 @@ class _ArtikelZeile extends StatelessWidget {
 
     final stil = theme.textTheme.bodyMedium;
     final zahlen = stil?.copyWith(fontFeatures: _ziffern);
-    const status = StatusMarke('nicht eingepflegt', art: StatusArt.warnung);
+    // Ein Muster ist kein Versäumnis: Die Marke sagt nur, was es ist —
+    // „nicht eingepflegt" steht bei ihm nicht.
+    final StatusMarke? status = info.istMuster
+        ? const StatusMarke('Muster', art: StatusArt.info)
+        : p.istEingepflegt
+            ? null
+            : const StatusMarke('nicht eingepflegt', art: StatusArt.warnung);
 
     final nummer = SizedBox(
       width: _Spalten.nummer,
@@ -994,9 +1055,9 @@ class _ArtikelZeile extends StatelessWidget {
           const SizedBox(width: _Spalten.luecke + 4),
           SizedBox(
             width: _Spalten.status,
-            child: p.istEingepflegt
+            child: status == null
                 ? null
-                : const Align(
+                : Align(
                     alignment: Alignment.centerLeft,
                     heightFactor: 1,
                     child: status,
@@ -1027,7 +1088,7 @@ class _ArtikelZeile extends StatelessWidget {
                       steps.length == 1 ? '1 Schritt' : '${steps.length} Schritte',
                       style: theme.textTheme.bodySmall?.copyWith(color: grau),
                     ),
-                    if (!p.istEingepflegt) status,
+                    if (status != null) status,
                   ],
                 ),
               ],

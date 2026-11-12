@@ -17,6 +17,7 @@ import 'datei_ablage.dart';
 import 'entwicklung_sicherung.dart';
 import 'artikel_fotos.dart';
 import 'auftragsbestand_sicherung.dart';
+import 'navision_katalog.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
@@ -62,7 +63,9 @@ class BackupService {
   ///       als Verweis auf die Ablage
   /// 1.8 → inkl. Auftragsbestand (`auftragsbestand_…`, auch der Stand
   ///       davor); ältere Backups lassen den des Rechners unberührt
-  static const String _currentVersion = '1.8';
+  /// 1.9 → inkl. Stand der Navision-Artikelübersicht (`navision_artikel`);
+  ///       ältere Backups lassen den des Rechners unberührt
+  static const String _currentVersion = '1.9';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -77,6 +80,7 @@ class BackupService {
     '1.6',
     '1.7',
     '1.8',
+    '1.9',
   };
 
   /// Nur für Tests: dieser Ordner statt des eingestellten — die Tests
@@ -490,6 +494,10 @@ class BackupService {
         // Der eingelesene Auftragsbestand samt dem Stand davor — damit er
         // nach dem Wiederherstellen zu Board und Bedarf passt.
         ...await AuftragsbestandSicherung.exportieren(database),
+        // ── ab Backup-Version 1.9 ────────────────────────────────────
+        // Was Navision über die Artikel weiß — daran hängt, was als
+        // Muster gilt.
+        ...await NavisionKatalogSpeicher.exportieren(database),
         // ── Produktentwicklung ───────────────────────────────────────
         // Ein eigener, verschlüsselter Teil — nur, wenn auf diesem
         // Rechner etwas dafür eingerichtet ist. Ältere App-Stände
@@ -641,6 +649,11 @@ class BackupService {
           ersetzen: clearExisting,
         );
         await AuftragsbestandSicherung.einspielen(
+          database,
+          data,
+          ersetzen: clearExisting,
+        );
+        await NavisionKatalogSpeicher.einspielen(
           database,
           data,
           ersetzen: clearExisting,
@@ -1518,6 +1531,9 @@ class BackupService {
     // die Bilder stehen, die das Backup genau so wieder mitbringt.
     // Den Auftragsbestand leert AuftragsbestandSicherung.einspielen — aber
     // nur, wenn das Backup ihn enthält (ab 1.8).
+    // Den Stand der Navision-Artikelübersicht leert
+    // NavisionKatalogSpeicher.einspielen — ebenso nur, wenn das Backup
+    // ihn enthält (ab 1.9).
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
     await db.delete(db.appSettings).go();
   }

@@ -48,6 +48,7 @@ class NavisionFortschritt {
 class NavisionZeile {
   const NavisionZeile({
     required this.nummer,
+    this.nummer2,
     this.beschreibung = '',
     this.beschreibung2,
     this.suchbegriff,
@@ -59,6 +60,10 @@ class NavisionZeile {
 
   /// Artikelnummer (Spalte „Nr.") — dieselbe wie in der App.
   final String nummer;
+
+  /// Spalte „Nummer 2" — steht dort „MUSTER", ist der Artikel noch kein
+  /// Bestandsartikel.
+  final String? nummer2;
   final String beschreibung;
   final String? beschreibung2;
 
@@ -76,6 +81,7 @@ class NavisionKatalog {
     required this.zeilen,
     required this.warnungen,
     required this.gelesen,
+    this.mitNummer2 = true,
   });
 
   final List<NavisionZeile> zeilen;
@@ -83,6 +89,11 @@ class NavisionKatalog {
 
   /// Datenzeilen mit Artikelnummer.
   final int gelesen;
+
+  /// Ob die Übersicht die Spalte „Nummer 2" hatte. Ohne sie sagt ein
+  /// leeres [NavisionZeile.nummer2] nichts — die Muster-Kennzeichnung
+  /// bleibt dann, wie sie war.
+  final bool mitNummer2;
 }
 
 /// Liest die Navision-Artikelübersicht (Excel-Export aus NAV) ein.
@@ -109,6 +120,7 @@ class NavisionImportService {
   /// damit „Nr.", „Nr" und „Artikelnr." alle passen.
   static const Map<String, List<String>> _spaltenAliase = {
     'nummer': ['nr', 'nummer', 'artikelnr', 'artikelnummer', 'artikel'],
+    'nummer2': ['nummer2', 'nr2', 'artikelnr2', 'artikelnummer2'],
     'beschreibung': [
       'beschreibung',
       'beschreibung1',
@@ -226,6 +238,7 @@ class NavisionImportService {
       zeilen.add(
         NavisionZeile(
           nummer: nummer,
+          nummer2: z['nummer2'] as String?,
           beschreibung: (z['beschreibung'] as String?) ?? '',
           beschreibung2: z['beschreibung2'] as String?,
           suchbegriff: z['suchbegriff'] as String?,
@@ -250,6 +263,7 @@ class NavisionImportService {
       zeilen: zeilen,
       warnungen: warnungen,
       gelesen: roh['gelesen']! as int,
+      mitNummer2: roh['mitNummer2'] == true,
     );
   }
 
@@ -354,6 +368,13 @@ class NavisionImportService {
       );
     }
 
+    if (!spalteVon.containsKey('nummer2')) {
+      warnungen.add(
+        'Spalte „Nummer 2" fehlt — ohne sie lassen sich Muster nicht '
+        'erkennen. Die bisherige Kennzeichnung bleibt stehen.',
+      );
+    }
+
     String? feld(List<Data?> zeile, String name) {
       final c = spalteVon[name];
       if (c == null || c >= zeile.length) return null;
@@ -384,6 +405,7 @@ class NavisionImportService {
 
       zeilen.add(<String, Object?>{
         'nummer': nummer,
+        'nummer2': feld(zeile, 'nummer2'),
         'beschreibung': feld(zeile, 'beschreibung') ?? '',
         'beschreibung2': feld(zeile, 'beschreibung2'),
         'suchbegriff': feld(zeile, 'suchbegriff'),
@@ -399,6 +421,7 @@ class NavisionImportService {
       'zeilen': zeilen,
       'warnungen': warnungen,
       'gelesen': gelesen,
+      'mitNummer2': spalteVon.containsKey('nummer2'),
     };
   }
 }

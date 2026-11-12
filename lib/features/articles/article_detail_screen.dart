@@ -12,6 +12,7 @@ import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/navision_katalog.dart';
 import '../../core/services/prozesskette_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
@@ -207,6 +208,10 @@ class _InfoTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       data: (p) {
+        // Führt Navision den Artikel noch als Muster?
+        final istMuster = p != null &&
+            (ref.watch(musterNummernProvider).valueOrNull ?? const {})
+                .contains(p.artikelnummer);
         if (p == null) {
           return const Center(
             child: LeerHinweis(
@@ -288,7 +293,16 @@ class _InfoTab extends ConsumerWidget {
           aktionen: [
             // Noch ein Stub aus Navision: Erst mit Produktgruppe gilt der
             // Artikel als eingepflegt.
-            if (!p.istEingepflegt) ...[
+            // Ein Muster ist kein Versäumnis — bei ihm steht nur, was
+            // es ist.
+            if (istMuster) ...[
+              const StatusMarke(
+                'Muster',
+                art: StatusArt.info,
+                hinweis: 'In Navision noch als Muster geführt (Nummer 2).',
+              ),
+              const SizedBox(width: 6),
+            ] else if (!p.istEingepflegt) ...[
               const StatusMarke(
                 'nicht eingepflegt',
                 art: StatusArt.warnung,

@@ -6,6 +6,7 @@ import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/erledigt_service.dart' show Erledigt;
+import '../../core/services/navision_katalog.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
@@ -1526,6 +1527,8 @@ Future<StatistikDaten> ladeStatistik(
         ..where((h) => h.deletedAt.isNull()))
       .get();
   final grundlagen = produktionsGrundlagen(historie);
+  // Muster zählen nicht als Lücke — wie in der Artikelliste.
+  final muster = await NavisionKatalogSpeicher.musterNummern(db);
 
   final schritteJeArtikel = <String, List<ProductStep>>{};
   for (final s in schritte) {
@@ -1540,7 +1543,12 @@ Future<StatistikDaten> ladeStatistik(
       bezeichnung: p.artikelbezeichnung,
       produktgruppe: p.produktgruppe,
       abteilungen: {for (final s in eigene) s.abteilung},
-      luecken: artikelLuecken(p, eigene, grundlagen[p.id]),
+      luecken: artikelLuecken(
+        p,
+        eigene,
+        grundlagen[p.id],
+        istMuster: muster.contains(p.artikelnummer),
+      ),
       // Gemessen wird die Zeit an der Bratstraße — verglichen wird mit
       // ihren Leistungsdaten.
       leistungKgH: leistungsdatenVon([
