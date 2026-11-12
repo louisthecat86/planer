@@ -1,6 +1,6 @@
-import 'dart:io';
+import 'dart:async';
+import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,7 +13,9 @@ import '../../core/services/artikelstamm_abgleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_import_service.dart';
 import '../../core/theme/app_stil.dart';
+import '../../core/ui/ablage.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/datei_wahl.dart';
 import '../../core/utils/fehler_text.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
 import '../auftragsbestand/auftragsbestand_screen.dart'
@@ -80,32 +82,40 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
 
   // ── Einlesen ─────────────────────────────────────────────────────────
 
+  /// Die Endungen, die sich hier einlesen lassen.
+  static const List<String> _endungen = ['xlsx'];
+
+  /// Über den Dateidialog — er öffnet dort, wo die Datei zuletzt lag.
   Future<void> _einlesen() async {
-    final db = ref.read(databaseProvider);
-    final gewaehlt = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-      withData: true,
+    final datei = await dateiWaehlen(
+      art: EinleseArt.navisionArtikel,
+      endungen: _endungen,
+      titel: 'Artikelübersicht aus Navision wählen',
     );
-    if (gewaehlt == null || !mounted) return;
-    final datei = gewaehlt.files.isNotEmpty ? gewaehlt.files.first : null;
-    var bytes = datei?.bytes;
-    final pfad = datei?.path;
-    // Füllt eine Plattform die Bytes trotz withData nicht, liefert aber
-    // einen Pfad, wird die Datei selbst gelesen.
-    if (bytes == null && pfad != null) {
-      try {
-        bytes = await File(pfad).readAsBytes();
-      } catch (_) {
-        bytes = null;
-      }
-      if (!mounted) return;
-    }
+    if (datei == null || !mounted) return;
+    final bytes = datei.inhalt;
     if (bytes == null) {
       setState(() => _fehler = 'Die gewählte Datei ließ sich nicht lesen.');
       return;
     }
+    await _lese(datei.name, bytes);
+  }
 
+  /// Aufs Fenster gezogen: derselbe Weg wie über den Dateidialog.
+  Future<void> _abgelegt(List<AbgelegteDatei> dateien) async {
+    if (!mounted || _beschaeftigt) return;
+    final datei = ersteMitEndung(dateien, _endungen);
+    if (datei == null) {
+      setState(() => _fehler = falscheDateiText(_endungen));
+      return;
+    }
+    await _lese(datei.name, datei.inhalt);
+  }
+
+  /// Liest die Artikelübersicht aus [bytes] und gleicht sie mit den
+  /// Artikeln der App ab.
+  Future<void> _lese(String dateiname, Uint8List bytes) async {
+    final db = ref.read(databaseProvider);
     setState(() {
       _fehler = null;
       _fortschritt = const NavisionFortschritt(phase: NavisionPhase.datei);
@@ -122,7 +132,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
       setState(() {
         _katalog = katalog;
         _abgleich = abgleich;
-        _dateiname = datei?.name;
+        _dateiname = dateiname;
         _durchlauf++;
         // Vorausgewählt: was im Auftragsbestand steht und damit gebraucht
         // wird. Allergene nur auf ausdrücklichen Klick.
@@ -355,17 +365,25 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
           ],
         ],
       ),
-      body: Stack(
-        children: [
-          if (abgleich == null)
-            _Einstieg(
-              fehler: _fehler,
-              onEinlesen: _beschaeftigt ? null : _einlesen,
-            )
-          else
-            _inhalt(context, abgleich),
-          if (fortschritt != null) _Fortschritt(stand: fortschritt),
-        ],
+      // Die Datei kann man auch aufs Fenster ziehen. Das Einlesen läuft
+      // dann unter der eigenen Fortschrittsanzeige der Seite weiter — die
+      // Zone wartet nicht darauf.
+      body: AblageZone(
+        hinweis: 'Datei loslassen — Navision-Artikel einlesen',
+        aktiv: !_beschaeftigt,
+        onAbgelegt: (dateien) async => unawaited(_abgelegt(dateien)),
+        child: Stack(
+          children: [
+            if (abgleich == null)
+              _Einstieg(
+                fehler: _fehler,
+                onEinlesen: _beschaeftigt ? null : _einlesen,
+              )
+            else
+              _inhalt(context, abgleich),
+            if (fortschritt != null) _Fortschritt(stand: fortschritt),
+          ],
+        ),
       ),
     );
   }
@@ -824,6 +842,13 @@ class _Einstieg extends StatelessWidget {
                   onPressed: onEinlesen,
                   icon: const Icon(Icons.upload_file, size: 18),
                   label: const Text('Artikelübersicht einlesen …'),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Oder die Datei aufs Fenster ziehen.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),

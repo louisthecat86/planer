@@ -1,7 +1,7 @@
-import 'dart:io';
+import 'dart:async';
 import 'dart:math' show max;
+import 'dart:typed_data';
 
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,7 +18,9 @@ import '../../core/services/auftragsbestand_import_service.dart';
 import '../../core/services/auftragsbestand_vergleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
+import '../../core/ui/ablage.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/utils/datei_wahl.dart';
 import '../articles/article_list_screen.dart' show articlesProvider;
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../../core/utils/fehler_text.dart';
@@ -195,29 +197,38 @@ class _AuftragsbestandScreenState
 
   // ── Einlesen ─────────────────────────────────────────────────────────
 
+  /// Die Endungen, die sich hier einlesen lassen.
+  static const List<String> _endungen = ['xlsx'];
+
+  /// Über den Dateidialog — er öffnet dort, wo der Bericht zuletzt lag.
   Future<void> _einlesen() async {
-    final gewaehlt = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['xlsx'],
-      withData: true,
+    final datei = await dateiWaehlen(
+      art: EinleseArt.auftragsbestand,
+      endungen: _endungen,
+      titel: 'Auftragsbestand wählen',
     );
-    if (gewaehlt == null || !mounted) return;
-    final datei = gewaehlt.files.isNotEmpty ? gewaehlt.files.first : null;
-    var bytes = datei?.bytes;
-    final pfad = datei?.path;
-    if (bytes == null && pfad != null) {
-      try {
-        bytes = await File(pfad).readAsBytes();
-      } catch (_) {
-        bytes = null;
-      }
-      if (!mounted) return;
-    }
+    if (datei == null || !mounted) return;
+    final bytes = datei.inhalt;
     if (bytes == null) {
       setState(() => _fehler = 'Die gewählte Datei ließ sich nicht lesen.');
       return;
     }
+    await _lese(bytes);
+  }
 
+  /// Aufs Fenster gezogen: derselbe Weg wie über den Dateidialog.
+  Future<void> _abgelegt(List<AbgelegteDatei> dateien) async {
+    if (!mounted || _liest) return;
+    final datei = ersteMitEndung(dateien, _endungen);
+    if (datei == null) {
+      setState(() => _fehler = falscheDateiText(_endungen));
+      return;
+    }
+    await _lese(datei.inhalt);
+  }
+
+  /// Liest den Bericht aus [bytes] und ersetzt damit den bisherigen.
+  Future<void> _lese(Uint8List bytes) async {
     // Vor der nächsten Wartestelle geholt: Container, Router und Messenger
     // überleben auch, wenn jemand den Bildschirm währenddessen schließt.
     final container = ProviderScope.containerOf(context, listen: false);
@@ -780,53 +791,60 @@ class _AuftragsbestandScreenState
           const SizedBox(width: 12),
         ],
       ),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              if (_fehler != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                  child: HinweisBox(
-                    _fehler!,
-                    art: StatusArt.fehler,
-                    auswaehlbar: true,
-                    onSchliessen: () => setState(() => _fehler = null),
+      // Den Bericht kann man auch aufs Fenster ziehen. Das Einlesen läuft
+      // dann unter dem eigenen Schleier der Seite weiter — die Zone wartet
+      // nicht darauf.
+      body: AblageZone(
+        hinweis: 'Bericht loslassen — Auftragsbestand einlesen',
+        aktiv: !_liest,
+        onAbgelegt: (dateien) async => unawaited(_abgelegt(dateien)),
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                if (_fehler != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    child: HinweisBox(
+                      _fehler!,
+                      art: StatusArt.fehler,
+                      auswaehlbar: true,
+                      onSchliessen: () => setState(() => _fehler = null),
+                    ),
+                  ),
+                if (_hinweise.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                    child: HinweisBox(
+                      [
+                        ..._hinweise.take(3),
+                        if (_hinweise.length > 3)
+                          '… und ${_hinweise.length - 3} weitere',
+                      ].join('\n'),
+                      art: StatusArt.warnung,
+                      auswaehlbar: true,
+                      onSchliessen: () => setState(() => _hinweise = const []),
+                    ),
+                  ),
+                Expanded(
+                  child: ansicht.when(
+                    // Beim Neuladen bleibt der Stand stehen.
+                    skipLoadingOnReload: true,
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Center(
+                      child: Text('Fehler: ${fehlerText(e)}'),
+                    ),
+                    data: (a) => a.leer
+                        ? const _LeerHinweis()
+                        : _inhalt(context, a, appNummern, abteilungen, heute),
                   ),
                 ),
-              if (_hinweise.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                  child: HinweisBox(
-                    [
-                      ..._hinweise.take(3),
-                      if (_hinweise.length > 3)
-                        '… und ${_hinweise.length - 3} weitere',
-                    ].join('\n'),
-                    art: StatusArt.warnung,
-                    auswaehlbar: true,
-                    onSchliessen: () =>
-                        setState(() => _hinweise = const []),
-                  ),
-                ),
-              Expanded(
-                child: ansicht.when(
-                  // Beim Neuladen bleibt der Stand stehen.
-                  skipLoadingOnReload: true,
-                  loading: () =>
-                      const Center(child: CircularProgressIndicator()),
-                  error: (e, _) => Center(
-                    child: Text('Fehler: ${fehlerText(e)}'),
-                  ),
-                  data: (a) => a.leer
-                      ? const _LeerHinweis()
-                      : _inhalt(context, a, appNummern, abteilungen, heute),
-                ),
-              ),
-            ],
-          ),
-          if (_liest) const _LeseSchleier(),
-        ],
+              ],
+            ),
+            if (_liest) const _LeseSchleier(),
+          ],
+        ),
       ),
     );
   }
@@ -3258,7 +3276,8 @@ class _LeerHinweis extends StatelessWidget {
               Text(
                 'In Navision den Bericht „Auftragsbestand" mit dem '
                 'gewünschten Zeitraum aufrufen, in der Vorschau „Speichern '
-                'unter → Excel" wählen und die Datei hier einlesen.\n\n'
+                'unter → Excel" wählen und die Datei hier einlesen — oben '
+                'rechts oder einfach aufs Fenster ziehen.\n\n'
                 'Tipp: Immer mit demselben Grundfilter aufrufen — alle '
                 'Kunden, alle Artikel, nur den Zeitraum anpassen — und ihn '
                 'ein paar Tage vor heute beginnen lassen. Dann sind auch '

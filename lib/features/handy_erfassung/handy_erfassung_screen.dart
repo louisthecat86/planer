@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,8 +11,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/ui/ablage.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/ui/foto_kachel.dart';
+import '../../core/utils/datei_wahl.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
@@ -131,28 +135,58 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     }
   }
 
+  /// Die Endungen, die sich hier einlesen lassen.
+  static const List<String> _endungen = ['json'];
+
+  /// Über den Dateidialog — er öffnet dort, wo das Ergebnis zuletzt lag.
   Future<void> _ergebnisWaehlen() async {
     setState(() {
       _arbeitet = true;
       _meldung = null;
     });
     try {
-      final gewaehlt = await FilePicker.pickFiles(
-        dialogTitle: 'Ergebnis vom Handy wählen',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
+      final datei = await dateiWaehlen(
+        art: EinleseArt.handyErgebnis,
+        endungen: _endungen,
+        titel: 'Ergebnis vom Handy wählen',
       );
-      final datei = gewaehlt?.files.firstOrNull;
       if (datei == null) {
         if (mounted) setState(() => _arbeitet = false);
         return;
       }
-      final bytes = datei.bytes ??
-          (datei.path == null ? null : await File(datei.path!).readAsBytes());
+      final bytes = datei.inhalt;
       if (bytes == null) {
         _melde('Die Datei ließ sich nicht lesen.', fehler: true);
         return;
       }
+      await _ergebnisLesen(bytes);
+    } catch (e) {
+      _melde(
+        'Das Ergebnis ließ sich nicht einlesen: ${fehlerText(e)}',
+        fehler: true,
+      );
+    }
+  }
+
+  /// Aufs Fenster gezogen: derselbe Weg wie über den Dateidialog.
+  Future<void> _abgelegt(List<AbgelegteDatei> dateien) async {
+    if (!mounted || _arbeitet || _vorschau != null) return;
+    final datei = ersteMitEndung(dateien, _endungen);
+    if (datei == null) {
+      _melde(falscheDateiText(_endungen), fehler: true);
+      return;
+    }
+    setState(() {
+      _arbeitet = true;
+      _meldung = null;
+    });
+    await _ergebnisLesen(datei.inhalt);
+  }
+
+  /// Liest das Ergebnis aus [bytes] und zeigt, was sich ändern würde.
+  /// Meldet selbst, wenn das nicht geht.
+  Future<void> _ergebnisLesen(Uint8List bytes) async {
+    try {
       final ergebnis = bytes.length < _imHintergrundAb
           ? ErfassungsErgebnis.ausText(
               utf8.decode(bytes, allowMalformed: true),
@@ -240,51 +274,59 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     final vorschau = _vorschau;
     return Scaffold(
       appBar: AppBar(title: const Text('Handy-Erfassung')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (_meldung case final m?) ...[
-                    HinweisBox(
-                      m,
-                      art: _fehler ? StatusArt.fehler : StatusArt.ok,
-                      auswaehlbar: true,
-                      onSchliessen: () => setState(() => _meldung = null),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                  if (vorschau == null) ...[
-                    _paketBereich(context),
-                    const SizedBox(height: 12),
-                    Bereich(
-                      titel: '2 · Ergebnis vom Handy einlesen',
-                      icon: Icons.download_outlined,
-                      untertitel: 'vor dem Übernehmen siehst du, was sich '
-                          'ändert',
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: FilledButton.tonalIcon(
-                          key: const ValueKey('handy-ergebnis'),
-                          onPressed: _arbeitet ? null : _ergebnisWaehlen,
-                          icon: const Icon(Icons.folder_open, size: 18),
-                          label: const Text('Ergebnis-Datei wählen …'),
+      // Das Ergebnis kann man auch aufs Fenster ziehen — solange noch
+      // keines zum Übernehmen offen ist. Die Zone wartet nicht auf das
+      // Einlesen; die Seite zeigt selbst, dass sie arbeitet.
+      body: AblageZone(
+        hinweis: 'Ergebnis loslassen — vom Handy einlesen',
+        aktiv: !_arbeitet && vorschau == null,
+        onAbgelegt: (dateien) async => unawaited(_abgelegt(dateien)),
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 900),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_meldung case final m?) ...[
+                      HinweisBox(
+                        m,
+                        art: _fehler ? StatusArt.fehler : StatusArt.ok,
+                        auswaehlbar: true,
+                        onSchliessen: () => setState(() => _meldung = null),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (vorschau == null) ...[
+                      _paketBereich(context),
+                      const SizedBox(height: 12),
+                      Bereich(
+                        titel: '2 · Ergebnis vom Handy einlesen',
+                        icon: Icons.download_outlined,
+                        untertitel: 'wählen oder aufs Fenster ziehen — vor dem '
+                            'Übernehmen siehst du, was sich ändert',
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: FilledButton.tonalIcon(
+                            key: const ValueKey('handy-ergebnis'),
+                            onPressed: _arbeitet ? null : _ergebnisWaehlen,
+                            icon: const Icon(Icons.folder_open, size: 18),
+                            label: const Text('Ergebnis-Datei wählen …'),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    const _Anleitung(),
-                  ] else
-                    _vorschauBereich(context, vorschau),
-                ],
+                      const SizedBox(height: 12),
+                      const _Anleitung(),
+                    ] else
+                      _vorschauBereich(context, vorschau),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -48,6 +48,13 @@ Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
 ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
 Aufgaben" für alles, was nicht aus einem Artikel kommt.
 
+**Einlesen:** Den Navision-Bericht „Auftragsbestand", die Artikelübersicht
+aus Navision und das Ergebnis vom Handy kann man auf der jeweiligen Seite
+über den Knopf wählen oder aus dem Explorer aufs Fenster ziehen. Der
+Dateidialog öffnet je Art von Datei in dem Ordner, aus dem zuletzt eine
+solche Datei kam (`lib/core/utils/datei_wahl.dart`; gemerkt je Rechner, nicht
+im Backup).
+
 **Löschen ohne Rückfrage:** Ein Bedarf, ein Auftrag im Board und eine
 erfasste Produktion sind mit einem Klick gelöscht; unten steht danach acht
 Sekunden lang „Rückgängig". Das geht, weil diese Daten beim Löschen nur als
