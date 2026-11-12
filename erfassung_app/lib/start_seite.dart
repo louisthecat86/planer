@@ -89,18 +89,27 @@ class _StartSeiteState extends State<StartSeite> {
       return;
     }
     final stand = _modell.stand;
-    if (stand.hatErfasstes) {
+    final begonnen = stand.entwuerfe.isNotEmpty;
+    if (stand.hatErfasstes || begonnen) {
+      // Begonnene Erfassungen stehen in keinem Ergebnis — sie gingen mit
+      // dem neuen Paket auf jeden Fall verloren.
+      const begonnenText = ' Begonnene, zwischengespeicherte Erfassungen '
+          'gehen dabei verloren — sie stehen in keinem Ergebnis.';
       final ok = await nachfragen(
         context,
         titel: 'Neues Paket öffnen?',
         text: stand.ungesichert
             ? 'Es gibt Erfasstes, das noch in keiner Ergebnis-Datei steht. '
                 'Mit dem neuen Paket geht es verloren — besser erst das '
-                'Ergebnis speichern.'
-            : 'Das Erfasste zum alten Paket wird vom Handy gelöscht — '
-                'auch die Fotos. Das Ergebnis ist als Datei gespeichert.',
+                'Ergebnis speichern.${begonnen ? begonnenText : ''}'
+            : stand.hatErfasstes
+                ? 'Das Erfasste zum alten Paket wird vom Handy gelöscht — '
+                    'auch die Fotos. Das Ergebnis ist als Datei '
+                    'gespeichert.${begonnen ? begonnenText : ''}'
+                : 'Es gibt begonnene, zwischengespeicherte Erfassungen. '
+                    'Mit dem neuen Paket gehen sie verloren.',
         ja: 'Neues Paket öffnen',
-        gefaehrlich: stand.ungesichert,
+        gefaehrlich: stand.ungesichert || begonnen,
       );
       if (!ok || !mounted) return;
     }
@@ -291,9 +300,12 @@ class _StartSeiteState extends State<StartSeite> {
                         : stand.offen.length == 1
                             ? '1 geplante ist noch offen'
                             : '${stand.offen.length} geplante sind noch offen',
-                    marke: stand.produktionen.isEmpty
-                        ? null
-                        : '${stand.produktionen.length} erfasst',
+                    marke: [
+                      if (stand.entwuerfe.isNotEmpty)
+                        '${stand.entwuerfe.length} begonnen',
+                      if (stand.produktionen.isNotEmpty)
+                        '${stand.produktionen.length} erfasst',
+                    ].join(' · ').nullWennLeer,
                     onTap: () => _oeffne(ProduktionenSeite(modell: _modell)),
                   ),
                   const SizedBox(height: 12),
@@ -471,4 +483,9 @@ class _Kachel extends StatelessWidget {
       ),
     );
   }
+}
+
+extension on String {
+  /// null statt eines leeren Texts.
+  String? get nullWennLeer => isEmpty ? null : this;
 }

@@ -28,6 +28,7 @@ import '../whiteboard/whiteboard_provider.dart'
 import 'article_detail_providers.dart';
 import 'article_info_editor_dialog.dart';
 import 'article_print_service.dart';
+import 'produktgruppen.dart';
 import 'artikel_fotoleiste.dart';
 import 'bratstrasse_schema.dart';
 import 'custom_parameter_editor_dialog.dart';
@@ -208,6 +209,9 @@ class _InfoTab extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
       data: (p) {
+        // Die Namen der Produktgruppen — neu aufbauen, wenn sie sich
+        // ändern.
+        ref.watch(produktgruppenProvider);
         // Führt Navision den Artikel noch als Muster?
         final istMuster = p != null &&
             (ref.watch(musterNummernProvider).valueOrNull ?? const {})
@@ -233,7 +237,7 @@ class _InfoTab extends ConsumerWidget {
         if (p.produktgruppe != null && p.produktgruppe!.isNotEmpty) {
           eintraege.add((
             label: 'Produktgruppe',
-            wert: produktgruppeLabels[p.produktgruppe] ?? p.produktgruppe!,
+            wert: produktgruppeLabel(p.produktgruppe),
             fehlt: false,
           ),);
         }

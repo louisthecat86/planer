@@ -24,16 +24,106 @@ String? _leerZuNull(String? s) {
   return t == null || t.isEmpty ? null : t;
 }
 
+/// Eine begonnene Erfassung: was zu einer Produktion schon eingetragen
+/// ist, ohne dass sie erfasst wäre — etwa Rohware und Startzeit, während
+/// die Produktion noch läuft.
+///
+/// Die Felder stehen so da, wie sie getippt wurden: Ein Entwurf darf
+/// unvollständig und sogar falsch sein, geprüft wird erst beim Erfassen.
+/// Ins Ergebnis für den Planer geht er nicht.
+class ProduktionsEntwurf {
+  const ProduktionsEntwurf({
+    required this.produktionId,
+    required this.artikelId,
+    required this.artikel,
+    required this.datum,
+    required this.geaendertAm,
+    this.roh = '',
+    this.fleisch = '',
+    this.fertig = '',
+    this.start = '',
+    this.ende = '',
+    this.bemerkung = '',
+  });
+
+  /// Die ID der Produktion im Paket — ohne Plan eine eigene („frei-…").
+  final String produktionId;
+  final String artikelId;
+  final String artikel;
+  final DateTime datum;
+
+  /// Wann zuletzt zwischengespeichert wurde.
+  final DateTime geaendertAm;
+
+  final String roh;
+  final String fleisch;
+  final String fertig;
+  final String start;
+  final String ende;
+  final String bemerkung;
+
+  /// Ob gar nichts eingetragen ist — so ein Entwurf wird nicht gemerkt.
+  bool get leer => [roh, fleisch, fertig, start, ende, bemerkung]
+      .every((t) => t.trim().isEmpty);
+
+  /// Ob [anderer] dieselben Eingaben trägt — der Zeitpunkt zählt nicht.
+  bool gleicheEingaben(ProduktionsEntwurf anderer) =>
+      datum == anderer.datum &&
+      roh == anderer.roh &&
+      fleisch == anderer.fleisch &&
+      fertig == anderer.fertig &&
+      start == anderer.start &&
+      ende == anderer.ende &&
+      bemerkung == anderer.bemerkung;
+
+  JsonObjekt toJson() => {
+        'produktionId': produktionId,
+        'artikelId': artikelId,
+        'artikel': artikel,
+        'datum': datum.toIso8601String(),
+        'geaendertAm': geaendertAm.toIso8601String(),
+        if (roh.isNotEmpty) 'roh': roh,
+        if (fleisch.isNotEmpty) 'fleisch': fleisch,
+        if (fertig.isNotEmpty) 'fertig': fertig,
+        if (start.isNotEmpty) 'start': start,
+        if (ende.isNotEmpty) 'ende': ende,
+        if (bemerkung.isNotEmpty) 'bemerkung': bemerkung,
+      };
+
+  /// Liest einen Entwurf — null, wenn ihm ID oder Tag fehlen.
+  static ProduktionsEntwurf? ausJson(JsonObjekt j) {
+    final id = jsonTextOder(j, 'produktionId');
+    final datum = DateTime.tryParse(jsonTextOder(j, 'datum') ?? '');
+    if (id == null || id.isEmpty || datum == null) return null;
+    return ProduktionsEntwurf(
+      produktionId: id,
+      artikelId: jsonTextOder(j, 'artikelId') ?? '',
+      artikel: jsonTextOder(j, 'artikel') ?? '',
+      datum: datum,
+      geaendertAm:
+          DateTime.tryParse(jsonTextOder(j, 'geaendertAm') ?? '') ?? datum,
+      roh: jsonTextOder(j, 'roh') ?? '',
+      fleisch: jsonTextOder(j, 'fleisch') ?? '',
+      fertig: jsonTextOder(j, 'fertig') ?? '',
+      start: jsonTextOder(j, 'start') ?? '',
+      ende: jsonTextOder(j, 'ende') ?? '',
+      bemerkung: jsonTextOder(j, 'bemerkung') ?? '',
+    );
+  }
+}
+
 class Erfassungsstand {
   Erfassungsstand({
     this.paket,
     this.kuerzel = '',
     Map<String, ErfassteProduktion>? produktionen,
+    Map<String, ProduktionsEntwurf>? entwuerfe,
     Map<String, GeaenderterWert>? werte,
     Map<String, ErfasstesFoto>? fotos,
     this.fotoWartend,
     this.gespeichertAm,
   })  : produktionen = produktionen ?? {},
+        entwuerfe = entwuerfe ?? {},
         werte = werte ?? {},
         fotos = fotos ?? {};
 
@@ -46,6 +136,10 @@ class Erfassungsstand {
   /// Die erfassten Produktionen nach ihrer ID im Paket (frei erfasste:
   /// eine eigene).
   final Map<String, ErfassteProduktion> produktionen;
+
+  /// Die begonnenen Erfassungen nach derselben ID — zwischengespeichert,
+  /// aber noch nicht erfasst. Sie stehen in keinem Ergebnis.
+  final Map<String, ProduktionsEntwurf> entwuerfe;
 
   /// Die geänderten Werte nach [wertSchluessel].
   final Map<String, GeaenderterWert> werte;
@@ -75,6 +169,17 @@ class Erfassungsstand {
           if (!produktionen.containsKey(p.id)) p,
       ];
 
+  /// Die begonnenen Erfassungen ohne Plan im Paket, die neueste zuerst.
+  List<ProduktionsEntwurf> get freiBegonnen {
+    final geplant = {
+      for (final p in paket?.produktionen ?? const <PaketProduktion>[]) p.id,
+    };
+    return [
+      for (final e in entwuerfe.values)
+        if (!geplant.contains(e.produktionId)) e,
+    ]..sort((a, b) => b.geaendertAm.compareTo(a.geaendertAm));
+  }
+
   /// Die frei erfassten Produktionen — ohne Plan im Paket.
   List<ErfassteProduktion> get frei {
     final geplant = {
@@ -93,6 +198,7 @@ class Erfassungsstand {
     if (paket?.id == neu.id) return false;
     paket = neu;
     produktionen.clear();
+    entwuerfe.clear();
     werte.clear();
     fotos.clear();
     fotoWartend = null;
@@ -162,11 +268,27 @@ class Erfassungsstand {
   /// Wie viele Bytes die Bilder zusammen haben.
   int get fotoBytes => fotos.values.fold(0, (s, f) => s + f.groesse);
 
-  /// Hält eine Produktion fest (oder ersetzt ihre Erfassung).
+  /// Hält eine Produktion fest (oder ersetzt ihre Erfassung). Was zu ihr
+  /// zwischengespeichert war, ist damit erledigt.
   void produktionErfassen(ErfassteProduktion e) {
     produktionen[e.produktionId] = e;
+    entwuerfe.remove(e.produktionId);
     gespeichertAm = null;
   }
+
+  /// Merkt eine begonnene Erfassung — ein leerer Entwurf entfernt sie.
+  /// Am Ergebnis ändert das nichts: [gespeichertAm] bleibt. Gibt zurück,
+  /// ob sich etwas geändert hat.
+  bool entwurfMerken(ProduktionsEntwurf e) {
+    if (e.leer) return entwuerfe.remove(e.produktionId) != null;
+    final alt = entwuerfe[e.produktionId];
+    if (alt != null && alt.gleicheEingaben(e)) return false;
+    entwuerfe[e.produktionId] = e;
+    return true;
+  }
+
+  bool entwurfLoeschen(String produktionId) =>
+      entwuerfe.remove(produktionId) != null;
 
   void produktionLoeschen(String produktionId) {
     if (produktionen.remove(produktionId) != null) gespeichertAm = null;
@@ -248,6 +370,8 @@ class Erfassungsstand {
         'kuerzel': kuerzel,
         if (paket != null) 'paket': paket!.toJson(),
         'produktionen': [for (final e in produktionen.values) e.toJson()],
+        if (entwuerfe.isNotEmpty)
+          'entwuerfe': [for (final e in entwuerfe.values) e.toJson()],
         'werte': [for (final w in werte.values) w.toJson()],
         if (fotos.isNotEmpty)
           'fotos': [for (final f in fotos.values) f.toJson()],
@@ -277,11 +401,17 @@ class Erfassungsstand {
         for (final f in jsonListe(j, 'fotos', 'dem Stand'))
           ErfasstesFoto.ausJson(f),
       ];
+      // Fehlt in älteren Ständen — dann gibt es keine.
+      final entwuerfe = [
+        for (final e in jsonListe(j, 'entwuerfe', 'dem Stand'))
+          if (ProduktionsEntwurf.ausJson(e) case final entwurf?) entwurf,
+      ];
       final wartend = jsonObjektOder(j, 'fotoWartend');
       return Erfassungsstand(
         paket: paket == null ? null : ErfassungsPaket.ausJson(paket),
         kuerzel: jsonTextOder(j, 'kuerzel') ?? '',
         produktionen: {for (final e in produktionen) e.produktionId: e},
+        entwuerfe: {for (final e in entwuerfe) e.produktionId: e},
         werte: {
           for (final w in werte) wertSchluessel(w.schrittId, w.schluessel): w,
         },

@@ -5,6 +5,7 @@ import 'artikel_seite.dart';
 import 'bausteine.dart';
 import 'erfassen_seite.dart';
 import 'modell.dart';
+import 'stand.dart';
 import 'stil.dart';
 
 /// Die geplanten Produktionen des Pakets, je Tag — offen oder erfasst —
@@ -19,6 +20,7 @@ class ProduktionenSeite extends StatelessWidget {
     PaketProduktion? geplant,
     PaketArtikel? artikel,
     ErfassteProduktion? vorhanden,
+    ProduktionsEntwurf? begonnen,
   }) =>
       Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -27,6 +29,7 @@ class ProduktionenSeite extends StatelessWidget {
             geplant: geplant,
             artikel: artikel,
             vorhanden: vorhanden,
+            begonnen: begonnen,
           ),
         ),
       );
@@ -58,6 +61,7 @@ class ProduktionenSeite extends StatelessWidget {
         }
         final tage = jeTag.keys.toList()..sort();
         final frei = stand.frei;
+        final freiBegonnen = stand.freiBegonnen;
         return Scaffold(
           appBar: AppBar(title: const Text('Produktionen')),
           body: SafeArea(
@@ -92,13 +96,40 @@ class ProduktionenSeite extends StatelessWidget {
                         streifen: p.abteilungFarbe == null
                             ? null
                             : Color(p.abteilungFarbe!),
+                        // Zwischengespeichert ist noch nicht erfasst.
                         rechts: stand.produktionen.containsKey(p.id)
                             ? Marke('erfasst', farbe: farben.ok)
-                            : null,
+                            : stand.entwuerfe.containsKey(p.id)
+                                ? Marke('begonnen', farbe: f.primary)
+                                : null,
                         onTap: () => _erfassen(
                           context,
                           geplant: p,
                           vorhanden: stand.produktionen[p.id],
+                        ),
+                      ),
+                    ),
+                ],
+                if (freiBegonnen.isNotEmpty) ...[
+                  Abschnitt(
+                    'Ohne Plan begonnen',
+                    zusatz: '${freiBegonnen.length}',
+                  ),
+                  for (final e in freiBegonnen)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: TippZeile(
+                        titel: e.artikel,
+                        unter: [
+                          tagKurz(e.datum),
+                          if (e.roh.isNotEmpty) 'Rohware ${e.roh} kg',
+                          if (e.start.isNotEmpty) 'ab ${e.start}',
+                        ].join(' · '),
+                        rechts: Marke('begonnen', farbe: f.primary),
+                        onTap: () => _erfassen(
+                          context,
+                          artikel: paket?.artikelMit(e.artikelId),
+                          begonnen: e,
                         ),
                       ),
                     ),

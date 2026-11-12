@@ -76,6 +76,10 @@ bool zutatTrifft(Zutat z, String q) {
 bool zutatMitNaehrwerten(Zutat z) =>
     z.istWasser || rechenZutatAus(z).naehrwerte.bekannt;
 
+/// Ob [z] gepflegt ist: Eine Zutat ohne Nährwerte ist erst eine Hülle —
+/// so kommen sie aus Navision. Wasser braucht keine.
+bool zutatGepflegt(Zutat z) => zutatMitNaehrwerten(z);
+
 /// Ob [z] zum [umfang] gehört.
 bool zutatImUmfang(Zutat z, ZutatenUmfang umfang) => switch (umfang) {
       ZutatenUmfang.alle => true,

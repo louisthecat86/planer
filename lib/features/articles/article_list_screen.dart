@@ -16,9 +16,9 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import '../bedarf/bedarf_screen.dart';
-import 'article_info_editor_dialog.dart';
 import 'artikel_luecken.dart';
 import 'artikelliste_druck.dart';
+import 'produktgruppen.dart';
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -424,6 +424,8 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
   @override
   Widget build(BuildContext context) {
     final articlesAsync = ref.watch(articlesProvider);
+    // Neu zeichnen, wenn sich die Namen der Produktgruppen ändern.
+    ref.watch(produktgruppenProvider);
     // Offene Bedarfsmengen je Artikelnummer — Grundlage der Sortierung
     // „Offener Bedarf". Fehlt der Bedarf, wird mit 0 sortiert.
     final bedarfe = ref.watch(bedarfProvider).valueOrNull;
@@ -1289,16 +1291,10 @@ class _NeuerArtikelDialogState extends State<_NeuerArtikelDialog> {
               onSubmitted: (_) => _ok(),
             ),
             const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: _gruppe,
-              decoration: const InputDecoration(
-                labelText: 'Produktgruppe (optional)',
-              ),
-              items: [
-                for (final g in kProduktgruppen)
-                  DropdownMenuItem(value: g.dbValue, child: Text(g.label)),
-              ],
-              onChanged: (v) => setState(() => _gruppe = v),
+            ProduktgruppeWahl(
+              wert: _gruppe,
+              label: 'Produktgruppe (optional)',
+              onWahl: (v) => setState(() => _gruppe = v),
             ),
           ],
         ),

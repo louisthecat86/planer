@@ -178,7 +178,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Ohne Rohware geht es nicht.
-    await tester.tap(find.text('Speichern'));
+    await tester.tap(find.text('Produktion erfassen'));
     await tester.pump();
     expect(find.text('Bitte die Rohware (kg) eintragen.'), findsOneWidget);
     expect(m.stand.produktionen, isEmpty);
@@ -190,7 +190,7 @@ void main() {
     await tester.enterText(felder.at(4), '13:30');
     await tester.pump();
     expect(find.textContaining('Verlust 20'), findsOneWidget);
-    await tester.tap(find.text('Speichern'));
+    await tester.tap(find.text('Produktion erfassen'));
     // Die Meldung am unteren Rand ablaufen lassen.
     await tester.pump();
     await tester.pump(const Duration(seconds: 6));
@@ -203,6 +203,100 @@ void main() {
     );
     expect(e.kuerzel, 'AB');
     expect(m.stand.offen.single.id, 't2');
+  });
+
+  testWidgets('zwischenspeichern, später weitermachen und erfassen',
+      (tester) async {
+    final m = modell();
+    final plan = m.stand.paket!.produktionen.first;
+    await zeige(
+      tester,
+      const Scaffold(body: SizedBox()),
+      groesse: const Size(360, 2000),
+    );
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator));
+    void oeffnen() => navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => ErfassenSeite(modell: m, geplant: plan),
+          ),
+        );
+
+    // Vor der Produktion: Rohware und Start.
+    oeffnen();
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), '1260,5');
+    await tester.enterText(find.byType(TextField).at(3), '0610');
+    await tester.pump();
+    await tester.tap(find.text('Zwischenspeichern'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+
+    // Nichts erfasst — aber alles festgehalten, so wie getippt.
+    expect(m.stand.produktionen, isEmpty);
+    expect(m.stand.offen, hasLength(2));
+    final entwurf = m.stand.entwuerfe['t1']!;
+    expect(
+      (entwurf.roh, entwurf.start, entwurf.fertig),
+      ('1260,5', '0610', ''),
+    );
+
+    // Nach der Produktion: Die Eingaben stehen wieder da.
+    oeffnen();
+    await tester.pumpAndSettle();
+    expect(find.text('1260,5'), findsOneWidget);
+    expect(find.text('0610'), findsOneWidget);
+    expect(find.textContaining('Begonnen'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).at(2), '1008,4');
+    await tester.enterText(find.byType(TextField).at(4), '13:30');
+    await tester.pump();
+    await tester.tap(find.text('Produktion erfassen'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+
+    final e = m.stand.produktionen['t1']!;
+    expect(
+      (e.rohKg, e.fertigKg, e.start, e.ende),
+      (1260.5, 1008.4, '06:10', '13:30'),
+    );
+    expect(m.stand.entwuerfe, isEmpty);
+  });
+
+  testWidgets('zurück hält fest, was eingetragen ist', (tester) async {
+    final m = modell();
+    final plan = m.stand.paket!.produktionen.first;
+    await zeige(
+      tester,
+      const Scaffold(body: SizedBox()),
+      groesse: const Size(360, 2000),
+    );
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator))
+      ..push(
+        MaterialPageRoute<void>(
+          builder: (_) => ErfassenSeite(modell: m, geplant: plan),
+        ),
+      );
+    await tester.pumpAndSettle();
+
+    // Ohne Eingaben bleibt nichts zurück.
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(m.stand.entwuerfe, isEmpty);
+
+    navigator.push(
+      MaterialPageRoute<void>(
+        builder: (_) => ErfassenSeite(modell: m, geplant: plan),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(3), '6:05');
+    await tester.pump();
+    navigator.pop();
+    await tester.pumpAndSettle();
+
+    expect(m.stand.entwuerfe['t1']!.start, '6:05');
+    expect(m.stand.produktionen, isEmpty);
   });
 
   testWidgets('beim Erfassen: die Fotos des Artikels und der Knopf dafür',

@@ -59,6 +59,9 @@ void main() {
     expect(find.text('Produktentwicklung'), findsOneWidget);
     expect(gewicht(tester, 'Planungsboard'), FontWeight.w600);
     expect(gewicht(tester, 'Bedarf'), FontWeight.w400);
+    // Ganz oben die Schnellsuche mit ihrem Tastenkürzel.
+    expect(find.text('Suchen'), findsOneWidget);
+    expect(find.text('Strg+K'), findsOneWidget);
   });
 
   testWidgets('Unterseiten heben ihren Bereich hervor', (tester) async {

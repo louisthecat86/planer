@@ -8,21 +8,7 @@ import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
-
-const kProduktgruppen = <({String dbValue, String label})>[
-  (dbValue: 'bruehwurst', label: 'Brühwurst'),
-  (dbValue: 'rohwurst', label: 'Rohwurst'),
-  (dbValue: 'kochpoekelware', label: 'Kochpökelware'),
-  (dbValue: 'rohpoekelware', label: 'Rohpökelware'),
-  (dbValue: 'aufschnitt', label: 'Aufschnitt'),
-  (dbValue: 'bratstrasse_natur', label: 'Bratstraßenartikel Natur'),
-  (dbValue: 'bratstrasse_paniert', label: 'Bratstraßenartikel paniert'),
-  (dbValue: 'hackprodukt_gegart', label: 'Hackprodukte gegart'),
-  (dbValue: 'hackprodukt_roh', label: 'Hackprodukte roh'),
-  (dbValue: 'braten', label: 'Braten'),
-  (dbValue: 'sous_vide', label: 'Sous Vide gegarte Produkte'),
-  (dbValue: 'angebratene_bruehwurst', label: 'Angebratene Brühwürste'),
-];
+import 'produktgruppen.dart';
 
 /// Fenster zum Bearbeiten der Artikel-Stammdaten (Bezeichnung,
 /// Produktgruppe, Beschreibung, Merkmale, Notizen). Die Artikelnummer ist
@@ -79,8 +65,10 @@ class _ArticleInfoEditorDialogState
     _beschreibung = TextEditingController(text: p.beschreibung ?? '');
     _notizen = TextEditingController(text: p.notizen ?? '');
     // Nur gültige Gruppen vorbelegen (sonst zeigt der Dropdown nichts an).
-    final gruppe = p.produktgruppe;
-    if (gruppe != null && kProduktgruppen.any((g) => g.dbValue == gruppe)) {
+    // Auch eine Gruppe, die nicht mehr zur Wahl steht, bleibt stehen —
+    // sonst wäre sie mit dem nächsten Speichern weg.
+    final gruppe = p.produktgruppe?.trim() ?? '';
+    if (gruppe.isNotEmpty) {
       _produktgruppe = gruppe;
     }
 
@@ -250,23 +238,9 @@ class _ArticleInfoEditorDialogState
               const SizedBox(height: 14),
 
               // Produktgruppe
-              DropdownButtonFormField<String?>(
-                initialValue: _produktgruppe,
-                isExpanded: true,
-                decoration: const InputDecoration(
-                  labelText: 'Produktgruppe',
-                ),
-                items: [
-                  const DropdownMenuItem<String?>(
-                    child: Text('— keine —'),
-                  ),
-                  for (final g in kProduktgruppen)
-                    DropdownMenuItem<String?>(
-                      value: g.dbValue,
-                      child: Text(g.label),
-                    ),
-                ],
-                onChanged: (v) => setState(() => _produktgruppe = v),
+              ProduktgruppeWahl(
+                wert: _produktgruppe,
+                onWahl: (v) => setState(() => _produktgruppe = v),
               ),
               const SizedBox(height: 14),
 

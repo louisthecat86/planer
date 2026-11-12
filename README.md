@@ -48,6 +48,30 @@ Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
 ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
 Aufgaben" für alles, was nicht aus einem Artikel kommt.
 
+**Tastenkürzel:** `Strg+K` öffnet die Schnellsuche — ein Feld, das zu jedem
+Bereich und zu jedem Artikel führt (Name oder Nummer tippen, mit ↑ ↓ wählen,
+Enter). `Strg+1` bis `Strg+9` springen zu den ersten neun Bereichen der
+Leiste, in ihrer Reihenfolge; die Schnellsuche zeigt die Kürzel an. `F11`
+schaltet das Vollbild. Die Kürzel gelten, solange eine Seite vorn ist, nicht
+in Dialogen (`lib/features/shell/schnellsuche.dart`).
+
+**Produktgruppen:** Als Produktgruppe eines Artikels wählt man sein
+Fließdiagramm — dieselbe Liste wie in der Produktentwicklung, gepflegt dort
+und nicht im Code (`lib/features/articles/produktgruppen.dart`). Gespeichert
+wird die Kennung in `products.produktgruppe`. Die früheren festen Gruppen
+(Brühwurst, Rohwurst …) gibt es nur noch für das, was schon da ist: Ein
+Artikel, der eine davon trägt, zeigt sie weiter, bis er ein Fließdiagramm
+bekommt; und solange gar keine Fließdiagramme hinterlegt sind, stehen sie
+weiter zur Wahl.
+
+**Zutaten aus Navision:** Im Zutatenkatalog der Produktentwicklung gleicht
+„Zutaten aus Navision abgleichen" den Katalog mit dem eingelesenen Stand der
+Artikelübersicht ab: Man hakt an, welche Produktbuchungsgruppen Rohwaren und
+Zutaten sind, und die App legt jede Zutat an, deren Artikelnummer es noch
+nicht gibt — mit Nummer und Name, als „nicht gepflegt" (ohne Nährwerte).
+Zugeordnet wird allein über die Artikelnummer; bestehende Zutaten bleiben,
+wie sie sind (`lib/features/entwicklung/zutaten/zutaten_navision.dart`).
+
 **Muster:** Beim Einlesen der Artikelübersicht merkt sich die App je
 Artikelnummer, was Navision dazu sagt (Tabelle `navision_artikel`,
 `lib/core/services/navision_katalog.dart`). Steht in der Spalte „Nummer 2"
@@ -545,6 +569,11 @@ Berechtigung fürs Internet.
    Planer Erfassung") oder in der App „Paket öffnen".
 3. **Erfassen:** je geplanter Produktion Rohware, davon Fleisch, Fertigware,
    Start und Ende („Jetzt"), Bemerkung und Kürzel — auch ohne Plan.
+   **Zwischenspeichern:** Rohware und Startzeit lassen sich schon eintragen,
+   solange die Produktion läuft. Über „Zwischenspeichern", beim Zurückgehen
+   und wenn die App in den Hintergrund geht, bleibt alles stehen; die
+   Produktion heißt dann „begonnen" und ist erst mit „Produktion erfassen"
+   erfasst. Begonnenes steht in keiner Ergebnis-Datei.
    Bei den Maschineneinstellungen je Schritt eintragen, was an der Anlage
    eingestellt ist — mit der vollen Tastatur, die Platten von Bratstraße
    und Kombiofen in einer Zeile in Laufrichtung (Platte 1 rechts); harte

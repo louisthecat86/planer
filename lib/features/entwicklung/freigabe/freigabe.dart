@@ -119,12 +119,8 @@ class FreigabeWerte {
       };
 }
 
-String _gruppe(String? dbValue) {
-  for (final g in ProductGroup.values) {
-    if (g.dbValue == dbValue) return g.label;
-  }
-  return dbValue ?? '—';
-}
+String _gruppe(String? dbValue) =>
+    dbValue == null ? '—' : produktgruppeLabel(dbValue);
 
 String _allergene(String? text) {
   if (text == null || text.trim().isEmpty) return 'nicht gepflegt';

@@ -5,6 +5,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../../core/constants/abteilungen.dart';
 import '../../core/constants/parameter_namen.dart';
+import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/druck/druck_optionen.dart';
 import '../../core/druck/druck_satz.dart';
@@ -342,7 +343,7 @@ String _schritteText(int n) => n == 1 ? '1 Schritt' : '$n Schritte';
 // ── Kopf ──────────────────────────────────────────────────────────────
 
 pw.Widget _kopf(Product p, String datum) {
-  final gruppe = p.produktgruppe?.trim() ?? '';
+  final gruppe = produktgruppeLabel(p.produktgruppe).trim();
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
     children: [

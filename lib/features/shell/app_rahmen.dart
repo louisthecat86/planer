@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,6 +10,7 @@ import '../../core/services/backup_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/utils/vollbild.dart';
 import '../entwicklung/entwicklung_bereiche.dart';
+import 'schnellsuche.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Rahmen der App: Navigationsleiste links, die Seite rechts
@@ -226,6 +228,40 @@ const _Ziel _einstellungen = _Ziel(
   ['/settings', '/data', '/handy'],
 );
 
+/// Die Ziffern für Strg+1 … Strg+9.
+const List<LogicalKeyboardKey> _ziffern = [
+  LogicalKeyboardKey.digit1,
+  LogicalKeyboardKey.digit2,
+  LogicalKeyboardKey.digit3,
+  LogicalKeyboardKey.digit4,
+  LogicalKeyboardKey.digit5,
+  LogicalKeyboardKey.digit6,
+  LogicalKeyboardKey.digit7,
+  LogicalKeyboardKey.digit8,
+  LogicalKeyboardKey.digit9,
+];
+
+/// Die Bereiche der Leiste als Ziele der Schnellsuche, in ihrer
+/// Reihenfolge — die ersten neun mit Strg+1 … Strg+9. In der
+/// Produktentwicklung deren Bereiche, sonst die des Planers.
+List<SchnellZiel> schnellZiele({required bool entwicklung}) {
+  final ziele = [
+    for (final (_, gruppe) in entwicklung ? _entwicklungsGruppen : _gruppen)
+      ...gruppe,
+    if (entwicklung) _zumPlaner,
+    _einstellungen,
+  ];
+  return [
+    for (final (i, z) in ziele.indexed)
+      SchnellZiel(
+        titel: z.titel,
+        icon: z.icon,
+        route: z.name,
+        kuerzel: i < _ziffern.length ? 'Strg+${i + 1}' : null,
+      ),
+  ];
+}
+
 /// Der Rahmen um jede Seite der App.
 class AppRahmen extends ConsumerWidget {
   const AppRahmen({super.key, required this.ort, required this.child});
@@ -246,18 +282,31 @@ class AppRahmen extends ConsumerWidget {
     return LayoutBuilder(
       builder: (context, c) {
         final schmal = c.maxWidth < _schmalUnter;
-        return Material(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _Navigationsleiste(
-                ort: ort,
-                eingeklappt: gewaehlt || schmal,
-                umschaltbar: !schmal,
-              ),
-              Expanded(child: child),
-            ],
+        final ziele = schnellZiele(entwicklung: istEntwicklungsOrt(ort));
+        // Tastenkürzel, solange eine Seite vorn ist — nicht in Dialogen:
+        // Strg+K sucht, Strg+1 … Strg+9 springen zu den Bereichen.
+        return CallbackShortcuts(
+          bindings: {
+            const SingleActivator(LogicalKeyboardKey.keyK, control: true): () =>
+                schnellsucheOeffnen(context, ziele),
+            for (final (i, z) in ziele.take(_ziffern.length).indexed)
+              SingleActivator(_ziffern[i], control: true): () =>
+                  GoRouter.maybeOf(context)?.goNamed(z.route!),
+          },
+          child: Material(
+            color: Theme.of(context).scaffoldBackgroundColor,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _Navigationsleiste(
+                  ort: ort,
+                  eingeklappt: gewaehlt || schmal,
+                  umschaltbar: !schmal,
+                  onSuchen: () => schnellsucheOeffnen(context, ziele),
+                ),
+                Expanded(child: child),
+              ],
+            ),
           ),
         );
       },
@@ -270,10 +319,14 @@ class _Navigationsleiste extends StatelessWidget {
     required this.ort,
     required this.eingeklappt,
     required this.umschaltbar,
+    required this.onSuchen,
   });
 
   final String ort;
   final bool eingeklappt;
+
+  /// Öffnet die Schnellsuche.
+  final VoidCallback onSuchen;
 
   /// false, wenn das Fenster zu schmal für die offene Leiste ist.
   final bool umschaltbar;
@@ -300,6 +353,7 @@ class _Navigationsleiste extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
+                _SuchEintrag(eingeklappt: eingeklappt, onTap: onSuchen),
                 for (final (titel, ziele) in gruppen) ...[
                   if (titel != null)
                     _Gruppentitel(titel: titel, eingeklappt: eingeklappt),
@@ -523,6 +577,72 @@ class _Eintrag extends StatelessWidget {
             child: zeile,
           )
         : zeile;
+  }
+}
+
+/// „Suchen" ganz oben in der Leiste — öffnet die Schnellsuche und zeigt
+/// ihr Tastenkürzel.
+class _SuchEintrag extends StatelessWidget {
+  const _SuchEintrag({required this.eingeklappt, required this.onTap});
+
+  final bool eingeklappt;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final farben = theme.colorScheme;
+    final symbol = Icon(Icons.search, size: 19, color: farben.onSurfaceVariant);
+    final grau = TextStyle(fontSize: 12, color: farben.onSurfaceVariant);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        eingeklappt ? 7 : 9,
+        1,
+        eingeklappt ? 7 : 9,
+        5,
+      ),
+      child: Tooltip(
+        message: 'Bereich oder Artikel suchen (Strg+K)',
+        waitDuration: const Duration(milliseconds: 300),
+        child: Material(
+          color: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppMasse.ecken,
+            side: BorderSide(color: farben.outline),
+          ),
+          child: InkWell(
+            key: const ValueKey('leiste-suchen'),
+            onTap: onTap,
+            borderRadius: AppMasse.ecken,
+            child: SizedBox(
+              height: 34,
+              child: eingeklappt
+                  ? Center(child: symbol)
+                  : Row(
+                      children: [
+                        const SizedBox(width: 10),
+                        symbol,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Suchen',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: farben.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                        Text('Strg+K', style: grau),
+                        const SizedBox(width: 10),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

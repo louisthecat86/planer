@@ -47,6 +47,158 @@ void main() {
     expect(s.ungesichert, isTrue);
   });
 
+  group('Zwischenspeichern', () {
+    ProduktionsEntwurf entwurf(
+      String id, {
+      String roh = '1250',
+      String start = '06:10',
+      String fertig = '',
+      DateTime? am,
+    }) =>
+        ProduktionsEntwurf(
+          produktionId: id,
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          datum: DateTime(2026, 11, 10),
+          geaendertAm: am ?? jetzt,
+          roh: roh,
+          start: start,
+          fertig: fertig,
+        );
+
+    test('begonnen ist nicht erfasst — und steht in keinem Ergebnis', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+
+      expect(s.entwurfMerken(entwurf('t1')), isTrue);
+
+      expect(s.entwuerfe.keys, ['t1']);
+      // Die Produktion bleibt offen, und am Ergebnis ändert sich nichts.
+      expect([for (final p in s.offen) p.id], ['t1', 't2']);
+      expect(s.hatErfasstes, isFalse);
+      expect(s.ungesichert, isFalse);
+      expect(s.ergebnis(jetzt)!.produktionen, isEmpty);
+    });
+
+    test('ein gespeichertes Ergebnis bleibt gespeichert', () {
+      final s = Erfassungsstand()
+        ..paketOeffnen(beispielPaket())
+        ..produktionErfassen(erfasst('t2'))
+        ..gespeichertAm = jetzt;
+
+      s.entwurfMerken(entwurf('t1'));
+
+      expect(s.ungesichert, isFalse);
+    });
+
+    test('dieselben Eingaben noch einmal ändern nichts', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+      s.entwurfMerken(entwurf('t1'));
+
+      final spaeter = jetzt.add(const Duration(minutes: 5));
+      expect(s.entwurfMerken(entwurf('t1', am: spaeter)), isFalse);
+      expect(s.entwuerfe['t1']!.geaendertAm, jetzt);
+
+      expect(
+        s.entwurfMerken(entwurf('t1', fertig: '1000', am: spaeter)),
+        isTrue,
+      );
+      expect(s.entwuerfe['t1']!.fertig, '1000');
+      expect(s.entwuerfe['t1']!.geaendertAm, spaeter);
+    });
+
+    test('ohne Eingaben wird nichts gemerkt — und Gemerktes entfernt', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+
+      expect(s.entwurfMerken(entwurf('t1', roh: '', start: ' ')), isFalse);
+      expect(s.entwuerfe, isEmpty);
+
+      s.entwurfMerken(entwurf('t1'));
+      expect(s.entwurfMerken(entwurf('t1', roh: '', start: '')), isTrue);
+      expect(s.entwuerfe, isEmpty);
+    });
+
+    test('mit dem Erfassen ist das Zwischengespeicherte erledigt', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+      s
+        ..entwurfMerken(entwurf('t1'))
+        ..entwurfMerken(entwurf('t2'))
+        ..produktionErfassen(erfasst('t1'));
+
+      expect(s.entwuerfe.keys, ['t2']);
+      expect(s.entwurfLoeschen('t2'), isTrue);
+      expect(s.entwurfLoeschen('t2'), isFalse);
+      expect(s.entwuerfe, isEmpty);
+    });
+
+    test('ohne Plan begonnen: eigene Liste, das Neueste zuerst', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+      s
+        ..entwurfMerken(entwurf('t1'))
+        ..entwurfMerken(entwurf('frei-1'))
+        ..entwurfMerken(
+          entwurf('frei-2', am: jetzt.add(const Duration(hours: 1))),
+        );
+
+      expect(
+        [for (final e in s.freiBegonnen) e.produktionId],
+        ['frei-2', 'frei-1'],
+      );
+    });
+
+    test('übersteht das Schließen der App — so wie getippt', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+      s.entwurfMerken(
+        ProduktionsEntwurf(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          datum: DateTime(2026, 11, 10),
+          geaendertAm: jetzt,
+          roh: '1250,5',
+          fleisch: '1000',
+          start: '0610',
+          bemerkung: 'Charge 2',
+        ),
+      );
+
+      final wieder = Erfassungsstand.ausText(s.alsText());
+
+      final e = wieder.entwuerfe['t1']!;
+      expect(e.artikelId, 'a1');
+      expect(e.artikel, 'Grillwurst');
+      expect(e.datum, DateTime(2026, 11, 10));
+      expect(e.geaendertAm, jetzt);
+      expect(e.roh, '1250,5');
+      expect(e.fleisch, '1000');
+      expect(e.fertig, '');
+      expect(e.start, '0610');
+      expect(e.ende, '');
+      expect(e.bemerkung, 'Charge 2');
+    });
+
+    test('ein Stand von früher kennt keine Entwürfe', () {
+      final s = Erfassungsstand()
+        ..paketOeffnen(beispielPaket())
+        ..produktionErfassen(erfasst('t1'));
+      final alt = (jsonDecode(s.alsText()) as Map<String, Object?>)
+        ..remove('entwuerfe');
+
+      final wieder = Erfassungsstand.ausText(jsonEncode(alt));
+
+      expect(wieder.entwuerfe, isEmpty);
+      expect(wieder.produktionen.keys, ['t1']);
+    });
+
+    test('ein neues Paket verwirft sie', () {
+      final s = Erfassungsstand()..paketOeffnen(beispielPaket());
+      s.entwurfMerken(entwurf('t1'));
+
+      s.paketOeffnen(beispielPaket(id: 'paket-2'));
+
+      expect(s.entwuerfe, isEmpty);
+    });
+  });
+
   test('Werte: ändern, zurück auf den Stand vom PC, löschen', () {
     final s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
     final artikel = s.paket!.artikelMit('a1')!;

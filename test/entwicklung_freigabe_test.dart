@@ -9,6 +9,7 @@ import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/services/auto_backup_trigger.dart';
 import 'package:produktion_planer/core/services/entwicklung_vorgabe.dart';
 import 'package:produktion_planer/core/theme/app_theme.dart';
+import 'package:produktion_planer/features/articles/produktgruppen.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe.dart';
 import 'package:produktion_planer/features/entwicklung/freigabe/freigabe_ansicht.dart';
@@ -950,6 +951,11 @@ void main() {
           overrides: [
             freigabeDienstProvider.overrideWithValue(dienst),
             autoBackupTriggerProvider.overrideWithValue(_OhneSicherung()),
+            // Ohne Datenbank: keine Fließdiagramme — zur Wahl stehen die
+            // früheren festen Gruppen.
+            produktgruppenProvider.overrideWith(
+              (ref) => Stream.value(produktgruppenAus(const [])),
+            ),
           ],
           child: MaterialApp(
             theme: AppTheme.light(),

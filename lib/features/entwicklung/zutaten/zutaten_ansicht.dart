@@ -12,6 +12,7 @@ import '../daten/entwicklung_repository.dart';
 import '../rechenkern/rechen_modell.dart';
 import 'zutat_dialog.dart';
 import 'zutaten_excel_dialog.dart';
+import 'zutaten_navision_dialog.dart';
 import 'zutatenkatalog_druck.dart';
 
 /// Der Zutaten-Katalog: Rohstoffe mit Nährwerten, Allergenen und den
@@ -27,6 +28,10 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
   final _suche = TextEditingController();
   String _text = '';
 
+  /// Nur Zutaten, deren Angaben noch fehlen — etwa die aus Navision
+  /// angelegten.
+  bool _nurUngepflegt = false;
+
   @override
   void dispose() {
     _suche.dispose();
@@ -41,7 +46,8 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
     );
   }
 
-  bool _passt(Zutat z) => zutatTrifft(z, _text);
+  bool _passt(Zutat z) =>
+      zutatTrifft(z, _text) && (!_nurUngepflegt || !zutatGepflegt(z));
 
   /// Öffnet das Druckfenster — mit der Suche, wenn die Liste gerade sucht.
   Future<void> _drucken(List<Zutat> alle) async {
@@ -80,6 +86,7 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
       ),
       data: (alle) {
         final treffer = alle.where(_passt).toList();
+        final ungepflegt = alle.where((z) => !zutatGepflegt(z)).length;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -125,7 +132,7 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                   const SizedBox(width: 12),
                   MenueKnopf(
                     key: const ValueKey('zutaten-excel'),
-                    label: 'Excel',
+                    label: 'Einlesen',
                     icon: Icons.table_view_outlined,
                     eintraege: [
                       MenueEintrag(
@@ -141,6 +148,12 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                         key: const ValueKey('zutaten-excel-import'),
                         icon: Icons.file_download_outlined,
                         aktion: () => zutatenImportStarten(context),
+                      ),
+                      MenueEintrag(
+                        'Aus Navision abgleichen…',
+                        key: const ValueKey('zutaten-navision'),
+                        icon: Icons.sync_alt,
+                        aktion: () => zutatenNavisionStarten(context),
                       ),
                     ],
                   ),
@@ -160,6 +173,23 @@ class _ZutatenAnsichtState extends ConsumerState<ZutatenAnsicht> {
                 ],
               ),
             ),
+            // Eigene Zeile: In der Kopfzeile wäre bei schmalem Fenster kein
+            // Platz dafür.
+            if (ungepflegt > 0 || _nurUngepflegt)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilterChip(
+                    key: const ValueKey('zutaten-nicht-gepflegt'),
+                    label: Text('Nicht gepflegt ($ungepflegt)'),
+                    tooltip: 'Zutaten ohne Nährwerte — etwa frisch aus '
+                        'Navision angelegt',
+                    selected: _nurUngepflegt,
+                    onSelected: (an) => setState(() => _nurUngepflegt = an),
+                  ),
+                ),
+              ),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -303,7 +333,7 @@ class _Zeile extends StatelessWidget {
             ? (tierart == null ? 'Fleisch' : 'Fleisch · ${tierart.label}')
             : '—';
     final allergene = merkmaleLabel(z.allergene, kAllergene);
-    final naehrwerteDa = rechenZutatAus(z).naehrwerte.bekannt || z.istWasser;
+    final naehrwerteDa = zutatMitNaehrwerten(z);
     final etikett = z.etikettName?.trim();
 
     return Material(
@@ -325,11 +355,24 @@ class _Zeile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      z.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: stil?.copyWith(fontWeight: FontWeight.w600),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            z.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: stil?.copyWith(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        if (!zutatGepflegt(z)) ...[
+                          const SizedBox(width: 8),
+                          const StatusMarke(
+                            'nicht gepflegt',
+                            art: StatusArt.warnung,
+                          ),
+                        ],
+                      ],
                     ),
                     if (etikett != null && etikett.isNotEmpty)
                       Text(

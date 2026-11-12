@@ -109,6 +109,16 @@ class ErfassungsModell extends ChangeNotifier {
     await _geaendert();
   }
 
+  /// Speichert eine begonnene Erfassung zwischen — siehe
+  /// [ProduktionsEntwurf].
+  Future<void> entwurfMerken(ProduktionsEntwurf e) async {
+    if (_stand.entwurfMerken(e)) await _geaendert();
+  }
+
+  Future<void> entwurfLoeschen(String produktionId) async {
+    if (_stand.entwurfLoeschen(produktionId)) await _geaendert();
+  }
+
   Future<void> produktionLoeschen(String produktionId) async {
     _stand.produktionLoeschen(produktionId);
     await _geaendert();

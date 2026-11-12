@@ -131,7 +131,26 @@ final Map<String, String> produktgruppeLabels = {
   for (final g in ProductGroup.values) g.dbValue: g.label,
 };
 
-/// Anzeigename einer Produktgruppe. Fällt auf den dbValue zurück, damit im
+/// Die eigenen Produktgruppen des Betriebs: Wert → Anzeigename.
+///
+/// Als Produktgruppe wählt man das Fließdiagramm des Artikels — die Liste
+/// pflegt jeder Betrieb selbst (in der Produktentwicklung), sie steht in
+/// der Datenbank und nicht im Code. Hier liegt nur ihr aktueller Stand,
+/// damit [produktgruppeLabel] überall dasselbe sagt: auf dem Schirm, im
+/// Druck, in der Statistik. Aktuell hält ihn `produktgruppenProvider`
+/// (lib/features/articles/produktgruppen.dart).
+Map<String, String> _eigeneProduktgruppen = const {};
+
+/// Setzt die eigenen Produktgruppen des Betriebs — siehe oben.
+void eigeneProduktgruppenSetzen(Map<String, String> namen) =>
+    _eigeneProduktgruppen = Map.unmodifiable(namen);
+
+/// Anzeigename einer Produktgruppe: erst die eigenen Gruppen des Betriebs,
+/// dann die früheren festen ([ProductGroup]) — Artikel, die noch eine
+/// davon tragen, zeigen sie weiter. Fällt auf den Wert zurück, damit im
 /// Zweifel etwas Lesbares dasteht statt einer leeren Zelle.
-String produktgruppeLabel(String? dbValue) =>
-    dbValue == null ? '' : (produktgruppeLabels[dbValue] ?? dbValue);
+String produktgruppeLabel(String? dbValue) => dbValue == null
+    ? ''
+    : (_eigeneProduktgruppen[dbValue] ??
+        produktgruppeLabels[dbValue] ??
+        dbValue);

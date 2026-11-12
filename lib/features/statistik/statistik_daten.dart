@@ -11,6 +11,7 @@ import '../../core/utils/datum.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../articles/artikel_luecken.dart';
+import '../articles/produktgruppen.dart';
 import '../board/board_providers.dart'
     show
         BoardSpur,
@@ -1527,6 +1528,8 @@ Future<StatistikDaten> ladeStatistik(
         ..where((h) => h.deletedAt.isNull()))
       .get();
   final grundlagen = produktionsGrundlagen(historie);
+  // Die Namen der Produktgruppen für den Produktmix.
+  await produktgruppenNamenLaden(db);
   // Muster zählen nicht als Lücke — wie in der Artikelliste.
   final muster = await NavisionKatalogSpeicher.musterNummern(db);
 

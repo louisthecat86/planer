@@ -14,6 +14,7 @@ import 'core/utils/vollbild.dart';
 import 'features/articles/article_detail_screen.dart';
 import 'features/articles/article_list_screen.dart';
 import 'features/articles/artikel_luecken.dart';
+import 'features/articles/produktgruppen.dart';
 import 'features/auftragsbestand/aenderungen_screen.dart';
 import 'features/auftragsbestand/auftragsbestand_screen.dart';
 import 'features/bedarf/bedarf_screen.dart';
@@ -386,6 +387,9 @@ class _ProduktionPlanerAppState extends ConsumerState<ProduktionPlanerApp> {
     final router = ref.watch(routerProvider);
     // Anzeigemodus kommt jetzt aus den Einstellungen (dauerhaft gespeichert).
     final themeMode = ref.watch(themeModeProvider);
+    // Hält die Namen der Produktgruppen (die Fließdiagramme) im ganzen
+    // Programm aktuell — auch für Druck und Statistik.
+    ref.watch(produktgruppenProvider);
     return MaterialApp.router(
       title: 'Produktions Planer',
       theme: AppTheme.light(),

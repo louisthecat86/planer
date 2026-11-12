@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/constants/product_groups.dart';
 import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
+import '../../articles/produktgruppen.dart';
 import '../entwicklung_format.dart';
 import '../haccp/prozess_ansicht.dart' show ParameterVergleichDialog;
 import '../haccp/prozess_kette.dart' show prozessKurztext;
@@ -618,23 +618,10 @@ class _FreigabeDialogState extends ConsumerState<FreigabeDialog> {
                     Row(
                       children: [
                         Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _gruppe,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              labelText: 'Produktgruppe',
-                            ),
-                            items: [
-                              for (final g in ProductGroup.values)
-                                DropdownMenuItem(
-                                  value: g.dbValue,
-                                  child: Text(
-                                    g.label,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                            ],
-                            onChanged: (g) => setState(() => _gruppe = g),
+                          child: ProduktgruppeWahl(
+                            wert: _gruppe,
+                            mitKeine: false,
+                            onWahl: (g) => setState(() => _gruppe = g),
                           ),
                         ),
                         const SizedBox(width: 12),
