@@ -194,19 +194,8 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final db = ref.read(databaseProvider);
 
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => _BestaetigenDialog(
-        neue: neue.length,
-        wiederAktiviert: neue.where((n) => n.geloescht).length,
-        neueMitAllergenen: mitAllergenen
-            ? neue.where((n) => n.allergene.isNotEmpty).length
-            : 0,
-        allergene: vorschlaege.length,
-      ),
-    );
-    if (ok != true || !mounted) return;
-
+    // Ohne Rückfrage: Gewählt wurde mit den Haken, die Leiste unten nennt
+    // die Zahlen, und die Meldung danach sagt, was geschehen ist.
     setState(() => _speichert = true);
     try {
       final ergebnis = await ArtikelAnlageService(db).legeAn(
@@ -590,7 +579,7 @@ class _NavisionImportScreenState extends ConsumerState<NavisionImportScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.done_all_rounded, size: 18),
-                label: const Text('Übernehmen …'),
+                label: const Text('Übernehmen'),
               ),
             ],
           ),
@@ -1219,72 +1208,6 @@ class _AllergenZeile extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-/// Rückfrage vor dem Schreiben.
-class _BestaetigenDialog extends StatelessWidget {
-  const _BestaetigenDialog({
-    required this.neue,
-    required this.wiederAktiviert,
-    required this.neueMitAllergenen,
-    required this.allergene,
-  });
-
-  final int neue;
-  final int wiederAktiviert;
-  final int neueMitAllergenen;
-  final int allergene;
-
-  @override
-  Widget build(BuildContext context) {
-    final davonAktiviert = wiederAktiviert > 0
-        ? ' (davon $wiederAktiviert früher gelöschte wieder aktivieren)'
-        : '';
-    final mitAllergenen = neueMitAllergenen > 0
-        ? ', $neueMitAllergenen mit Allergenen aus dem Suchbegriff'
-        : '';
-    final bestehende = allergene == 1 ? 'Artikel' : 'Artikeln';
-    final punkte = [
-      if (neue > 0) '$neue Artikel anlegen$davonAktiviert$mitAllergenen.',
-      if (allergene > 0)
-        'Bei $allergene bestehenden $bestehende die Allergene aus Navision '
-            'übernehmen.',
-    ];
-    return AlertDialog(
-      title: const Text('Übernehmen?'),
-      content: SizedBox(
-        width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final p in punkte)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text('• $p'),
-              ),
-            if (neue > 0)
-              Text(
-                'Neue Artikel sind danach als „nicht eingepflegt" markiert. '
-                'Prozessschritte und Stammdaten in der Artikelliste '
-                'nachtragen, dann lassen sie sich einplanen.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Übernehmen'),
-        ),
-      ],
     );
   }
 }

@@ -8,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
-import '../../core/providers/backup_provider.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
@@ -65,7 +64,11 @@ class _DataManagementScreenState
   List<BackupInfo> _backups = [];
   bool _backupsGeladen = false;
 
-  /// Liste der Backups aufgeklappt — im Alltag zugeklappt.
+  /// So viele Backups zeigt die Liste gleich — die neuesten. Das reicht
+  /// für „das von eben wiederherstellen"; der Rest klappt auf.
+  static const int _backupsGleich = 5;
+
+  /// Alle Backups zeigen statt nur der neuesten.
   bool _backupsOffen = false;
 
   @override
@@ -116,16 +119,6 @@ class _DataManagementScreenState
   /// Lädt alle Daten-Provider neu, deren Inhalt sich durch Import oder
   /// Backup-Restore geändert haben kann — siehe [invalidiereDatenNachImport].
   void _invalidiereDatenProvider() => invalidiereDatenNachImport(ref);
-
-  /// Öffnet die Backup-Verwaltung und liest danach die Liste hier neu ein:
-  /// Dort lassen sich Backups anlegen und löschen.
-  Future<void> _backupVerwaltungOeffnen() async {
-    // Die Liste dort frisch laden — der Provider merkt sich sonst den Stand
-    // vom letzten Öffnen, auch wenn hier inzwischen Backups dazukamen.
-    ref.invalidate(refreshableBackupListProvider);
-    await context.pushNamed('backup');
-    if (mounted) await _ladeUebersicht();
-  }
 
   // ----------------------------------------------------------------------
   // EXCEL-IMPORT
@@ -705,12 +698,7 @@ class _DataManagementScreenState
                 titel: 'Vorhandene Backups',
                 untertitel: _backupsGeladen ? '${_backups.length}' : null,
                 aktionen: [
-                  TextButton.icon(
-                    onPressed: _busy ? null : _backupVerwaltungOeffnen,
-                    icon: const Icon(Icons.open_in_new, size: 18),
-                    label: const Text('Backup-Verwaltung …'),
-                  ),
-                  if (_backups.isNotEmpty)
+                  if (_backups.length > _backupsGleich)
                     TextButton.icon(
                       onPressed: () =>
                           setState(() => _backupsOffen = !_backupsOffen),
@@ -718,7 +706,9 @@ class _DataManagementScreenState
                         _backupsOffen ? Icons.expand_less : Icons.expand_more,
                         size: 18,
                       ),
-                      label: Text(_backupsOffen ? 'Ausblenden' : 'Anzeigen'),
+                      label: Text(
+                        _backupsOffen ? 'Nur die neuesten' : 'Alle anzeigen',
+                      ),
                     ),
                 ],
                 innenAbstand: EdgeInsets.zero,
@@ -812,10 +802,9 @@ class _DataManagementScreenState
     );
   }
 
-  /// Inhalt des Bereichs „Vorhandene Backups": zugeklappt nur das neueste,
+  /// Inhalt des Bereichs „Vorhandene Backups": die neuesten gleich,
   /// aufgeklappt alle als Tabelle.
   Widget _backupInhalt(BuildContext context) {
-    final theme = Theme.of(context);
     if (!_backupsGeladen) {
       return const Padding(
         padding: EdgeInsets.all(16),
@@ -828,27 +817,15 @@ class _DataManagementScreenState
         icon: Icons.backup_outlined,
       );
     }
-    if (!_backupsOffen) {
-      // Zugeklappt: Die Liste ist im Alltag Beiwerk und soll die Übersicht
-      // nicht füllen — nur das neueste Backup als Zeile.
-      final neuestes = _backups.first;
-      return Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-        child: Text(
-          'Neuestes Backup: ${neuestes.formattedTimestamp} '
-          '(${neuestes.isAuto ? 'automatisch' : 'von Hand'}) — zum '
-          'Wiederherstellen oder Löschen „Anzeigen".',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      );
-    }
-    final letztes = _backups.last;
+    // Die neuesten stehen gleich da — ohne Klick. Die ganze Liste, im
+    // Alltag Beiwerk, klappt mit „Alle anzeigen" auf.
+    final sichtbar =
+        _backupsOffen ? _backups : _backups.take(_backupsGleich).toList();
+    final letztes = sichtbar.last;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final b in _backups)
+        for (final b in sichtbar)
           _BackupListenEintrag(
             info: b,
             letzte: identical(b, letztes),
@@ -1259,7 +1236,7 @@ class _BackupListenEintrag extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '$relativeZeit · ${info.formattedSize} · '
+                  '$relativeZeit · ${info.sizeFormatted} · '
                   '${info.isAuto ? "Auto" : "Manuell"} · '
                   'Version ${info.version}',
                   style: theme.textTheme.bodySmall?.copyWith(
@@ -1326,9 +1303,6 @@ class _BackupListenEintrag extends StatelessWidget {
 /// Lädt alle Daten-Provider neu, deren Inhalt sich durch einen Import oder
 /// ein Wiederherstellen geändert haben kann. Ohne dies zeigen Artikelkarte,
 /// Schritte und Historie weiterhin den alten (gemerkten) Stand.
-///
-/// Öffentlich, weil auch die Backup-Verwaltung wiederherstellt — beide Wege
-/// laden danach dieselben Daten neu.
 void invalidiereDatenNachImport(WidgetRef ref) {
   ref.invalidate(articlesProvider);
   ref.invalidate(productProvider);

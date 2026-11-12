@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
@@ -31,6 +33,8 @@ final erfassungWocheProvider = StateProvider<DateTime>((ref) {
 final erfassungWocheDatenProvider = FutureProvider<
     Map<DateTime, List<GeplanteProduktion>>>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   final montag = ref.watch(erfassungWocheProvider);
   return geplanteProduktionenLaden(db, montag, tagPlus(montag, 5));
 });
@@ -82,11 +86,20 @@ class _ProduktionErfassungScreenState
             tooltip: 'Erfassungsliste drucken',
             onPressed: () => _drucken(montag),
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Aktualisieren',
-            onPressed: () => ref.invalidate(erfassungWocheDatenProvider),
-          ),
+          // Was an der Anlage mit der App „Planer Erfassung" erfasst wurde,
+          // kommt hier herein — derselbe Weg wie über die Einstellungen.
+          if (MediaQuery.sizeOf(context).width < 720)
+            IconButton(
+              icon: const Icon(Icons.phone_android),
+              tooltip: 'Vom Handy einlesen',
+              onPressed: () => context.pushNamed('handy'),
+            )
+          else
+            TextButton.icon(
+              onPressed: () => context.pushNamed('handy'),
+              icon: const Icon(Icons.phone_android, size: 18),
+              label: const Text('Vom Handy einlesen'),
+            ),
           const SizedBox(width: 8),
         ],
         // Die Woche als eigene Leiste unter dem Titel: links und rechts
@@ -133,6 +146,8 @@ class _ProduktionErfassungScreenState
         ),
       ),
       body: async.when(
+        // Beim Neuladen bleibt der Stand stehen.
+        skipLoadingOnReload: true,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => ListView(
           padding: const EdgeInsets.all(14),

@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auftragsbestand_deckung.dart'
     show
         AuftragsBezug,
@@ -15,8 +16,10 @@ import '../../core/services/auftragsbestand_deckung.dart'
         kQuelleAuftragsbestand,
         ladeBedarfsPlanung;
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/loeschen_mit_rueckweg.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/ui/rueckgaengig.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../datenblatt/datenblatt.dart';
@@ -63,6 +66,8 @@ final heuteProvider = Provider<DateTime>((ref) {
 /// Priorität.
 final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   // Um Mitternacht erneuert sich der Tag — und damit diese Liste.
   final heuteNorm = ref.watch(heuteProvider);
 
@@ -176,6 +181,8 @@ class BedarfScreen extends ConsumerWidget {
         ],
       ),
       body: async.when(
+        // Beim Neuladen bleibt der Stand stehen.
+        skipLoadingOnReload: true,
         data: (liste) {
           if (liste.isEmpty) {
             return Center(
@@ -394,43 +401,46 @@ class BedarfScreen extends ConsumerWidget {
     ref.invalidate(bedarfProvider);
   }
 
+  /// Löscht ohne Rückfrage — der Bedarf wird nur als gelöscht markiert,
+  /// und unten steht für ein paar Sekunden „Rückgängig".
   Future<void> _loeschen(
     BuildContext context,
     WidgetRef ref,
     BedarfInfo info,
   ) async {
-    // Ein Planungsauftrag hält Zeilen im Auftragsbestand fest — die werden
-    // mit dem Löschen wieder frei.
-    final zusatz = info.bedarf.quelle == kQuelleAuftragsbestand
-        ? ' Was davon noch nicht eingeplant ist, ist im Auftragsbestand '
-            'danach wieder offen.'
-        : '';
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Bedarf löschen?'),
-        content: Text(
-          '${info.artikelName}\n${info.bedarf.mengeKgFertig.round()} kg\n\n'
-          'Bereits geplante Aufträge bleiben bestehen.$zusatz',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Abbrechen'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Löschen'),
-          ),
-        ],
-      ),
+    // Vorher holen: Das Rückgängig soll auch noch gehen, wenn inzwischen
+    // eine andere Seite offen ist.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final db = container.read(databaseProvider);
+    final id = info.bedarf.id;
+    if (!await LoeschenMitRueckweg.bedarf(db, id)) return;
+    container
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Bedarf gelöscht');
+    container.invalidate(bedarfProvider);
+
+    // Was die Rückfrage früher dazu sagte, steht jetzt in der Meldung.
+    final teile = <String>[
+      'Bedarf gelöscht: ${info.artikelName}, '
+          '${info.bedarf.mengeKgFertig.round()} kg.',
+      if (info.geplantKg >= 0.5) 'Geplante Aufträge bleiben im Board.',
+      // Ein Planungsauftrag hält Zeilen im Auftragsbestand fest — die
+      // sind mit dem Löschen wieder frei.
+      if (info.bedarf.quelle == kQuelleAuftragsbestand)
+        'Was nicht eingeplant ist, ist im Auftragsbestand wieder offen.',
+    ];
+    geloeschtMelden(
+      messenger,
+      text: teile.join(' '),
+      zurueck: () async {
+        await LoeschenMitRueckweg.bedarfZurueck(db, id);
+        container
+            .read(autoBackupTriggerProvider)
+            .fireDebounced(reason: 'Bedarf wiederhergestellt');
+        container.invalidate(bedarfProvider);
+      },
     );
-    if (ok != true) return;
-    final db = ref.read(databaseProvider);
-    await (db.update(db.demands)..where((b) => b.id.equals(info.bedarf.id)))
-        .write(DemandsCompanion(deletedAt: Value(DateTime.now())));
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf gelöscht');
-    ref.invalidate(bedarfProvider);
   }
 
   Future<void> _bearbeiten(

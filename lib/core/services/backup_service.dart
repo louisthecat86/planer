@@ -16,6 +16,7 @@ import '../utils/format.dart';
 import 'datei_ablage.dart';
 import 'entwicklung_sicherung.dart';
 import 'artikel_fotos.dart';
+import 'auftragsbestand_sicherung.dart';
 
 /// Backup-Service für Export/Import der Datenbankdaten als JSON.
 ///
@@ -59,7 +60,9 @@ class BackupService {
   ///       Produktentwicklung nur als Verweis auf die Ablage daneben
   /// 1.7 → inkl. der Fotos zum Artikel (`artikel_fotos`) — im Auto-Backup
   ///       als Verweis auf die Ablage
-  static const String _currentVersion = '1.7';
+  /// 1.8 → inkl. Auftragsbestand (`auftragsbestand_…`, auch der Stand
+  ///       davor); ältere Backups lassen den des Rechners unberührt
+  static const String _currentVersion = '1.8';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -73,6 +76,7 @@ class BackupService {
     '1.5',
     '1.6',
     '1.7',
+    '1.8',
   };
 
   /// Nur für Tests: dieser Ordner statt des eingestellten — die Tests
@@ -482,6 +486,10 @@ class BackupService {
         // Die Fotos zum Artikel — nur, wenn es welche gibt. Mit Ablage
         // stehen die Bilder dort (FotoSicherung).
         ...fotos,
+        // ── ab Backup-Version 1.8 ────────────────────────────────────
+        // Der eingelesene Auftragsbestand samt dem Stand davor — damit er
+        // nach dem Wiederherstellen zu Board und Bedarf passt.
+        ...await AuftragsbestandSicherung.exportieren(database),
         // ── Produktentwicklung ───────────────────────────────────────
         // Ein eigener, verschlüsselter Teil — nur, wenn auf diesem
         // Rechner etwas dafür eingerichtet ist. Ältere App-Stände
@@ -630,6 +638,11 @@ class BackupService {
         await FotoSicherung.einspielen(
           database,
           fotos,
+          ersetzen: clearExisting,
+        );
+        await AuftragsbestandSicherung.einspielen(
+          database,
+          data,
           ersetzen: clearExisting,
         );
         await _importAppSettings(database, data);
@@ -1503,6 +1516,8 @@ class BackupService {
     await db.delete(db.tagesaufgaben).go();
     // Die Fotos der Artikel leert FotoSicherung.einspielen — dort bleiben
     // die Bilder stehen, die das Backup genau so wieder mitbringt.
+    // Den Auftragsbestand leert AuftragsbestandSicherung.einspielen — aber
+    // nur, wenn das Backup ihn enthält (ab 1.8).
     // App-Settings (importierte Excel-Datei wird mit-restauriert)
     await db.delete(db.appSettings).go();
   }
@@ -1564,10 +1579,6 @@ class BackupInfo {
     }
     return '${Format.zahl(sizeBytes / (1024 * 1024), nachkomma: 1)} MB';
   }
-
-  /// Alias zu [sizeFormatted] — der bestehende BackupManagementScreen
-  /// verwendet diesen Namen.
-  String get formattedSize => sizeFormatted;
 
   /// Zeitstempel im deutschen Format.
   String get formattedTimestamp =>

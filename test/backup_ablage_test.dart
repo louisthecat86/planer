@@ -81,7 +81,7 @@ void main() {
       final bytes = File(pfad).readAsBytesSync();
       expect(bytes.take(2), [0x1f, 0x8b], reason: 'gepackt');
       final backup = lies(pfad);
-      expect(backup['version'], '1.7');
+      expect(backup['version'], '1.8');
       expect(backup['type'], 'auto');
 
       final teil = teilIn(backup);
@@ -111,7 +111,7 @@ void main() {
 
       // Die Liste liest die Version aus dem gepackten Kopf.
       final liste = await BackupService.listBackups();
-      expect(liste.first.version, '1.7');
+      expect(liste.first.version, '1.8');
       expect(liste.first.isAuto, isTrue);
       expect(liste.first.istAeltereVersion, isFalse);
     });

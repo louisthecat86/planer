@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auftragsbestand_vergleich.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
@@ -36,6 +37,8 @@ class AenderungsAnsicht {
 final auftragsbestandAenderungenProvider =
     FutureProvider.autoDispose<AenderungsAnsicht>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   // Um Mitternacht neu: Was gestern noch kam, ist heute vorbei.
   final heute = ref.watch(heuteProvider);
   final neu = await ladeBestand(db);
@@ -95,8 +98,9 @@ class _AenderungenState
 
   // ── Anpassen ─────────────────────────────────────────────────────────
 
-  /// Übernimmt die Vorschläge zu [konflikte] — mehrere erst nach
-  /// Rückfrage.
+  /// Übernimmt die Vorschläge zu [konflikte]. Ohne Rückfrage: Der Knopf
+  /// nennt, wie viele es sind, jede Zeile zeigt ihren Vorschlag — und die
+  /// Meldung danach sagt, was im Einzelnen geschehen ist.
   Future<void> _uebernehme(List<PlanungsKonflikt> konflikte) async {
     if (konflikte.isEmpty) return;
     // Vor der ersten Wartestelle geholt: Container und Messenger überleben
@@ -106,13 +110,7 @@ class _AenderungenState
     final db = ref.read(databaseProvider);
     final heute = ref.read(heuteProvider);
 
-    if (konflikte.length > 1) {
-      final ok = await showDialog<bool>(
-        context: context,
-        builder: (_) => _SammelDialog(konflikte: konflikte),
-      );
-      if (ok != true || !mounted) return;
-    }
+    final was = _wasGeschieht(konflikte);
 
     setState(() => _passtAn = true);
     try {
@@ -129,13 +127,13 @@ class _AenderungenState
       }
       messenger.showSnackBar(
         SnackBar(
-          duration: const Duration(seconds: 5),
+          duration: Duration(seconds: n > 1 ? 9 : 5),
           content: Text(
             n == 0
                 ? 'Nichts geändert — die Planung war schon angepasst.'
                 : n == 1
                     ? 'Planung angepasst.'
-                    : '$n Planungen angepasst.',
+                    : '$n Planungen angepasst: $was',
           ),
         ),
       );
@@ -192,19 +190,12 @@ class _AenderungenState
     return Scaffold(
       appBar: AppBar(
         title: const Text('Änderungen im Auftragsbestand'),
-        actions: [
-          IconButton(
-            onPressed: () =>
-                ref.invalidate(auftragsbestandAenderungenProvider),
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Neu prüfen — etwa nach Änderungen im Board',
-          ),
-          const SizedBox(width: 8),
-        ],
       ),
       body: Stack(
         children: [
           ansicht.when(
+            // Beim Neuladen bleibt der Stand stehen.
+            skipLoadingOnReload: true,
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
             data: (a) => a.ohneBericht
@@ -799,54 +790,28 @@ class _KonfliktEintrag extends StatelessWidget {
   }
 }
 
-/// Rückfrage vor der Sammelaktion.
-class _SammelDialog extends StatelessWidget {
-  const _SammelDialog({required this.konflikte});
-
-  final List<PlanungsKonflikt> konflikte;
-
-  @override
-  Widget build(BuildContext context) {
-    int anzahl(bool Function(PlanungsKonflikt k) passt) =>
-        konflikte.where(passt).length;
-    final umhaengen = anzahl((k) => k.art == PruefArt.verschoben);
-    final verringern = anzahl((k) => k.art == PruefArt.weniger);
-    final heraus = anzahl(
-      (k) => k.art == PruefArt.entfallen || k.art == PruefArt.ausgeliefert,
-    );
-    final produktionen = anzahl((k) => k.mitProduktion);
-
-    return AlertDialog(
-      title: Text('${konflikte.length} Vorschläge übernehmen?'),
-      content: SizedBox(
-        width: 480,
-        child: Text(
-          [
-            if (umhaengen > 0) '• $umhaengen × an den neuen Versandtag hängen',
-            if (verringern > 0) '• $verringern × verringern',
-            if (heraus > 0) '• $heraus × aus der Planung nehmen',
-            '',
-            'Planungsaufträge werden angepasst — bleibt von einem nichts '
-                'übrig, wird er gelöscht.',
-            if (produktionen > 0)
-              'Bei Produktionen im Board ändert sich nur die Zuordnung zu '
-                  'den Aufträgen, Menge und Tag bleiben. Ob sie noch so '
-                  'gebraucht werden, im Board entscheiden.',
-          ].join('\n'),
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Übernehmen'),
-        ),
-      ],
-    );
-  }
+/// Was das Übernehmen der Vorschläge zu [konflikte] bewirkt — für die
+/// Meldung nach einer Sammelaktion.
+String _wasGeschieht(List<PlanungsKonflikt> konflikte) {
+  int anzahl(bool Function(PlanungsKonflikt k) passt) =>
+      konflikte.where(passt).length;
+  final umhaengen = anzahl((k) => k.art == PruefArt.verschoben);
+  final verringern = anzahl((k) => k.art == PruefArt.weniger);
+  final heraus = anzahl(
+    (k) => k.art == PruefArt.entfallen || k.art == PruefArt.ausgeliefert,
+  );
+  final produktionen = anzahl((k) => k.mitProduktion);
+  final teile = [
+    if (umhaengen > 0) '$umhaengen × an den neuen Versandtag gehängt',
+    if (verringern > 0) '$verringern × verringert',
+    if (heraus > 0) '$heraus × aus der Planung genommen',
+  ];
+  return [
+    '${teile.join(', ')}.',
+    if (produktionen > 0)
+      'Produktionen im Board behalten Menge und Tag — ob sie noch so '
+          'gebraucht werden, dort entscheiden.',
+  ].join(' ');
 }
 
 /// Was an der Zeile nicht mehr passt.

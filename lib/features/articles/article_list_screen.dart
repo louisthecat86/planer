@@ -9,6 +9,7 @@ import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
@@ -29,6 +30,8 @@ import 'artikelliste_druck.dart';
 /// ~60 Artikeln macht das den Aufbau der Liste spürbar flüssiger.
 final articlesProvider = FutureProvider<List<_ArticleInfo>>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
 
   final products = await (db.select(db.products)
         ..where((p) => p.deletedAt.isNull())
@@ -431,11 +434,6 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
               _ => null,
             },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => ref.invalidate(articlesProvider),
-            tooltip: 'Aktualisieren',
-          ),
           const SizedBox(width: 8),
           // Die Hauptaktion der Seite steht oben rechts in der Kopfleiste —
           // wie „Artikel planen" im Board. Ein schwebender Knopf verdeckte
@@ -456,6 +454,8 @@ class _ArticleListScreenState extends ConsumerState<ArticleListScreen> {
         ],
       ),
       body: articlesAsync.when(
+        // Beim Neuladen bleibt der Stand stehen.
+        skipLoadingOnReload: true,
         data: (articles) => articles.isEmpty
             ? const Center(
                 child: LeerHinweis(

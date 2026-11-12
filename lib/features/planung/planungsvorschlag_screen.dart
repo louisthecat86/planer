@@ -21,7 +21,7 @@ import 'planungsvorschlag_service.dart';
 
 /// Vorschlagsansicht: fragt zuerst, welche offenen Bedarfe hinein sollen,
 /// zeigt dann, wie die nächsten Tage aussehen könnten, und überträgt
-/// einzelne Tage ins Board.
+/// einzelne Tage ins Board — oder alle auf einmal.
 ///
 /// Die Auswahl ist der Handlungsspielraum des Planers: Was noch nicht
 /// dran ist oder wegen der Haltbarkeit nicht mit anderem gebündelt werden
@@ -81,6 +81,15 @@ class _PlanungsvorschlagScreenState
   final Set<String> _manuell = <String>{};
 
   bool _geaendert = false;
+
+  /// „Alle Tage übernehmen" läuft gerade.
+  bool _uebernimmt = false;
+
+  /// Die Tage mit Aufträgen, die noch nicht im Board stehen.
+  List<VorschlagTag> get _offeneTage => [
+        for (final t in _tage)
+          if (t.posten.isNotEmpty && !_uebernommen.contains(_key(t.tag))) t,
+      ];
 
   @override
   void initState() {
@@ -268,6 +277,7 @@ class _PlanungsvorschlagScreenState
   }
 
   Future<void> _uebernehmen(int tagIndex) async {
+    if (_uebernimmt) return;
     final t = _tage[tagIndex];
     // Vor der ersten Wartestelle geholt: Der Container überlebt auch, wenn
     // jemand die Ansicht währenddessen schließt — Bedarfsliste und Board
@@ -302,6 +312,56 @@ class _PlanungsvorschlagScreenState
         ),
       );
     }
+  }
+
+  /// Übernimmt alle Tage, die noch nicht im Board stehen, auf einmal —
+  /// dasselbe wie „Tag ins Board übernehmen" an jedem einzelnen. Geht bei
+  /// einem Tag etwas schief, bleiben die davor übernommen und die danach
+  /// offen.
+  Future<void> _alleUebernehmen() async {
+    final offen = _offeneTage;
+    if (offen.isEmpty || _uebernimmt) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final db = ref.read(databaseProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final fehlerFarbe = AppFarben.von(context).fehler;
+    setState(() => _uebernimmt = true);
+    var auftraege = 0;
+    var tage = 0;
+    Object? fehler;
+    try {
+      final dienst = PlanungsvorschlagService(db);
+      for (final t in offen) {
+        auftraege += await dienst.uebernehmeTag(t);
+        tage++;
+        if (mounted) setState(() => _uebernommen.add(_key(t.tag)));
+      }
+    } catch (e) {
+      fehler = e;
+    }
+    if (tage > 0) {
+      container
+        ..invalidate(bedarfProvider)
+        ..invalidate(dailyTasksProvider);
+      container
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Planungsvorschlag übernommen');
+    }
+    if (!mounted) return;
+    setState(() => _uebernimmt = false);
+    final was = '$auftraege ${auftraege == 1 ? 'Auftrag' : 'Aufträge'} an '
+        '$tage ${tage == 1 ? 'Tag' : 'Tagen'} ins Board übernommen.';
+    messenger.showSnackBar(
+      fehler == null
+          ? SnackBar(content: Text(was))
+          : SnackBar(
+              content: Text(
+                '${tage == 0 ? '' : '$was '}Dann ging etwas schief: '
+                '${fehlerText(fehler)}',
+              ),
+              backgroundColor: fehlerFarbe,
+            ),
+    );
   }
 
   // ── Datenblatt ───────────────────────────────────────────────────────
@@ -500,6 +560,8 @@ class _PlanungsvorschlagScreenState
                         tage: _tage,
                         einstellungen: _berechnetMit ?? _einstellungen,
                         geaendert: _geaendert,
+                        offeneTage: _offeneTage.length,
+                        onAlle: _uebernimmt ? null : _alleUebernehmen,
                       ),
                       const SizedBox(height: 14),
                       if (_tage.every((t) => t.posten.isEmpty))
@@ -1055,11 +1117,19 @@ class _Kopfzeile extends StatelessWidget {
     required this.tage,
     required this.einstellungen,
     required this.geaendert,
+    this.offeneTage = 0,
+    this.onAlle,
   });
 
   final List<VorschlagTag> tage;
   final VorschlagEinstellungen einstellungen;
   final bool geaendert;
+
+  /// Wie viele Tage mit Aufträgen noch nicht im Board stehen.
+  final int offeneTage;
+
+  /// Alle offenen Tage auf einmal übernehmen — null: läuft gerade.
+  final VoidCallback? onAlle;
 
   @override
   Widget build(BuildContext context) {
@@ -1113,6 +1183,16 @@ class _Kopfzeile extends StatelessWidget {
                   hinweis: 'Von Hand geändert. Ins Board kommt erst etwas '
                       'mit „Tag ins Board übernehmen".',
                 ),
+              // Ab zwei offenen Tagen: alle auf einmal statt Tag für Tag.
+              if (offeneTage > 1) ...[
+                const SizedBox(width: 8),
+                FilledButton.icon(
+                  key: const ValueKey('vorschlag-alle-uebernehmen'),
+                  onPressed: onAlle,
+                  icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                  label: Text('Alle $offeneTage Tage ins Board übernehmen'),
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 6),

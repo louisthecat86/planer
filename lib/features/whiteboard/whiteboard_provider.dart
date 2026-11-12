@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auftragsbestand_deckung.dart' show AuftragsBezug;
 import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/utils/datum.dart';
@@ -61,6 +62,8 @@ class WhiteboardTask {
 /// Alle nicht-stornierten Tasks des gewählten Tages mit Produktinfos.
 final dailyTasksProvider = FutureProvider<List<WhiteboardTask>>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   final date = ref.watch(selectedDateProvider);
   final nextDay = tagPlus(date, 1);
 

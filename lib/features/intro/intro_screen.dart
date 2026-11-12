@@ -23,8 +23,10 @@ class IntroScreen extends StatefulWidget {
 
 class _IntroScreenState extends State<IntroScreen>
     with SingleTickerProviderStateMixin {
-  static const Duration _gesamtDauer = Duration(milliseconds: 2400);
-  static const Duration _haltzeitAmEnde = Duration(milliseconds: 450);
+  // Kurz: Wer die App mehrmals am Tag öffnet, will arbeiten, nicht
+  // zusehen. Zusammen unter einer Sekunde (vorher knapp drei).
+  static const Duration _gesamtDauer = Duration(milliseconds: 700);
+  static const Duration _haltzeitAmEnde = Duration(milliseconds: 150);
 
   late final AnimationController _controller;
   late final Animation<double> _blur;

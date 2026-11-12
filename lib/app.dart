@@ -16,7 +16,6 @@ import 'features/articles/article_list_screen.dart';
 import 'features/articles/artikel_luecken.dart';
 import 'features/auftragsbestand/aenderungen_screen.dart';
 import 'features/auftragsbestand/auftragsbestand_screen.dart';
-import 'features/backup/backup_management_screen.dart';
 import 'features/bedarf/bedarf_screen.dart';
 import 'features/navision/navision_import_screen.dart';
 import 'features/erfassung/produktion_erfassung_screen.dart';
@@ -52,7 +51,6 @@ import 'features/statistik/statistik_screen.dart';
 /// gemeinsamen Rahmen mit der Navigationsleiste ([AppRahmen]).
 /// Stammdaten/Excel/Backup und die Kapazität sitzen unter `/settings`.
 final routerProvider = Provider<GoRouter>((ref) {
-  final db = ref.watch(databaseProvider);
   final router = GoRouter(
     initialLocation: '/intro',
     routes: [
@@ -311,14 +309,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'data',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: DataManagementScreen(),
-            ),
-          ),
-          // Einzel-Screens, erreichbar aus dem Daten-Screen heraus.
-          GoRoute(
-            path: '/backup',
-            name: 'backup',
-            pageBuilder: (context, state) => NoTransitionPage(
-              child: BackupManagementScreen(database: db),
             ),
           ),
         ],

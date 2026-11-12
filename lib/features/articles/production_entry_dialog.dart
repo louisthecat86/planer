@@ -1,4 +1,3 @@
-import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,13 +5,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/loeschen_mit_rueckweg.dart';
 import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/ui/rueckgaengig.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/zeit.dart';
+import 'article_detail_providers.dart' show productionHistoryProvider;
 
 /// Das EINE Formular, mit dem Produktionen erfasst werden — aus dem
 /// Artikel heraus genauso wie aus der Produktionserfassung der Woche.
@@ -241,52 +243,34 @@ class _ProductionEntryDialogState
     }
   }
 
+  /// Löscht ohne Rückfrage — die Produktion wird nur als gelöscht
+  /// markiert, und unten steht für ein paar Sekunden „Rückgängig".
   Future<void> _loeschen() async {
-    final bestaetigt = await showDialog<bool>(
-      context: context,
-      builder: (ctx) {
-        final farben = Theme.of(ctx).colorScheme;
-        return AlertDialog(
-          title: const Text('Produktion löschen?'),
-          content: const Text(
-            'Diese historische Produktion wird entfernt. Beim nächsten '
-            'Excel-Export ist sie nicht mehr enthalten.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Abbrechen'),
-            ),
-            FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: farben.error,
-                foregroundColor: farben.onError,
-              ),
-              onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Löschen'),
-            ),
-          ],
-        );
-      },
-    );
-    if (bestaetigt != true) return;
+    // Vorher holen: Dieses Fenster ist zu, wenn das Rückgängig kommt.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final db = container.read(databaseProvider);
+    final id = widget.existing!.id;
+    final artikel = widget.productId;
 
     setState(() => _saving = true);
     try {
-      final db = ref.read(databaseProvider);
-      final jetzt = DateTime.now();
-      await (db.update(db.productionHistory)
-            ..where((t) => t.id.equals(widget.existing!.id)))
-          .write(
-        ProductionHistoryCompanion(
-          deletedAt: Value(jetzt),
-          updatedAt: Value(jetzt),
-        ),
-      );
-      ref
+      await LoeschenMitRueckweg.produktion(db, id);
+      container
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Produktion gelöscht');
       if (mounted) Navigator.of(context).pop(true);
+      geloeschtMelden(
+        messenger,
+        text: 'Erfasste Produktion gelöscht.',
+        zurueck: () async {
+          await LoeschenMitRueckweg.produktionZurueck(db, id);
+          container
+              .read(autoBackupTriggerProvider)
+              .fireDebounced(reason: 'Produktion wiederhergestellt');
+          container.invalidate(productionHistoryProvider(artikel));
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

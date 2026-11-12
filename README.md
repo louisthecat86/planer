@@ -29,9 +29,9 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 | Gruppe      | Bereich               | Wofür                                                                                       |
 | ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
 |             | Übersicht             | Der heutige Tag: Aufträge und Auslastung aller Abteilungen, „Artikel planen"                 |
-| Planen      | Bedarf                | Offene Bedarfe; geplant ist, was an verknüpften Aufträgen im Board steht                     |
-|             | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
-|             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise ins Board           |
+| Planen      | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
+|             | Bedarf                | Offene Bedarfe; geplant ist, was an verknüpften Aufträgen im Board steht                     |
+|             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise oder ganz ins Board |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
 | Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten: Verlust, kg/h; die Kette im Board wird erledigt |
 |             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
@@ -47,6 +47,16 @@ Im Board zeigt jede Abteilung je Tag einen Balken bis zu ihrer Kapazität
 Karten lassen sich abhaken, und sobald eine Produktion erfasst ist, wird ihre
 ganze Kette grün. Unter den Anlagen hat jede Abteilung eine Zeile „Sonstige
 Aufgaben" für alles, was nicht aus einem Artikel kommt.
+
+**Löschen ohne Rückfrage:** Ein Bedarf, ein Auftrag im Board und eine
+erfasste Produktion sind mit einem Klick gelöscht; unten steht danach acht
+Sekunden lang „Rückgängig". Das geht, weil diese Daten beim Löschen nur als
+gelöscht markiert werden — Rückgängig holt genau die Zeilen zurück, die
+gerade gelöscht wurden, so wie sie waren
+(`lib/core/services/loeschen_mit_rueckweg.dart`, die Meldung in
+`lib/core/ui/rueckgaengig.dart`). Gefragt wird im Board nur noch, wenn es
+etwas zu wählen gibt: nur dieser Schritt oder die ganze Produktion. Wo
+Löschen endgültig ist — Artikel, Fotos, Backups —, bleibt die Rückfrage.
 
 Ein Auftrag im Board öffnet sein Fenster mit den Mengen der ganzen
 Produktion untereinander: **Rohware, Fertigware und Fleischeinwaage**,
@@ -532,8 +542,10 @@ Berechtigung fürs Internet.
    verkleinert zurück — längere Kante 1600 px, JPEG, rund 300 KB — und liegt
    im Ordner der App. Unter „Fotos" stehen alle zum Ansehen und Löschen.
 5. **„Ergebnis speichern"** und die Datei zurück an den PC — die Fotos
-   stehen mit darin. Unter „Ergebnis-Datei wählen" zeigt der Planer, was sich
-   ändern würde, und übernimmt nur, was angehakt ist: Produktionen landen in
+   stehen mit darin. Zum Einlesen führt auch „Vom Handy einlesen" oben in
+   der Produktionserfassung. Unter „Ergebnis-Datei wählen" zeigt der
+   Planer, was sich ändern würde, und übernimmt nur, was angehakt ist:
+   Produktionen landen in
    der Produktionserfassung (mit denselben Kennzahlen),
    Maschineneinstellungen am Schritt des Artikels. Hat sich ein Wert am PC
    inzwischen geändert, steht er als Konflikt da und ist nicht vorgewählt.
@@ -567,7 +579,8 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
   letzte. Geschrieben wird über eine Zwischendatei — ein abgebrochenes Backup
   hinterlässt keine halbe Datei. Vor jedem Wiederherstellen schreibt die App
   den aktuellen Stand weg. Ältere Backup-Versionen (ab 1.0) lassen sich weiter
-  einspielen.
+  einspielen. „Daten verwalten" zeigt die fünf neuesten Backups gleich, die
+  älteren hinter „Alle anzeigen".
 - **Angehängte Dateien** der Produktentwicklung (PDFs, Mails,
   Spezifikationen) und die **Fotos der Artikel** stehen nicht in jedem
   Auto-Backup, sondern einmal im Ordner `planer_dateien` neben den Backups,
@@ -578,6 +591,10 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
   Komplett-Backup): eine Datei mit allem, auch den Dateien und Fotos. Fehlen
   einem Auto-Backup beim Wiederherstellen Dateien oder Fotos, spielt die App
   nichts ein.
+- **Auftragsbestand im Backup** (ab Backup-Version 1.8): der eingelesene
+  Navision-Bericht und der Stand davor für „Änderungen" — nach dem
+  Wiederherstellen passt er zu Board und Bedarf. Ein älteres Backup kennt
+  ihn nicht und lässt den Auftragsbestand des Rechners, wie er ist.
 - **Produktentwicklung im Backup:** verschlüsselt. Ein Backup ohne diesen Teil
   lässt die lokalen Entwicklungsdaten unberührt, ebenso „App zurücksetzen".
   Auf demselben Rechner eingespielt, bleibt das aktuelle Passwort; ein Backup
@@ -619,6 +636,27 @@ flutter test
 `lib/features/<bereich>` je Bereich die Oberfläche. Die Lints sind streng
 (u. a. `require_trailing_commas`, `prefer_const_constructors`,
 `strict-casts`).
+
+**Ansichten halten sich selbst aktuell:** Übersicht, Board, Bedarf,
+Auftragsbestand samt „Änderungen", Erfassung und Artikelliste laden neu,
+sobald sich in der Datenbank etwas ändert, egal wo in der App
+(`neuLadenBeiAenderung` in `lib/core/providers/daten_waechter.dart`, am
+Anfang des Providers). Einen „Aktualisieren"-Knopf gibt es dort nicht mehr.
+Der Planungsvorschlag bleibt ein Entwurf und rechnet nur auf Knopfdruck
+neu, die Statistik ebenso.
+
+Zwei Tests wachen über die Daten:
+
+- `test/migration_test.dart` öffnet eine Datenbank aus **jeder früheren
+  Schema-Version** (`test/schemata/vNN.sql`, je Tabelle eine Zeile) mit dem
+  heutigen Stand: gleiches Schema wie eine neue Datenbank, keine Zeile
+  verloren, alles lesbar. Er merkt auch, wenn sich eine Tabelle ändert,
+  ohne dass `schemaVersion` steigt. Für eine neue Version legt er die
+  Schema-Datei selbst an und sagt das — sie gehört dann mit eingecheckt.
+- `test/backup_vollstaendig_test.dart` füllt **jede Tabelle**, sichert,
+  stellt auf einer leeren Datenbank wieder her und vergleicht. Eine neue
+  Tabelle, die im Backup fehlt, fällt hier auf. Was bewusst nicht im Backup
+  stehen soll, müsste der Test beim Namen nennen — zurzeit nichts.
 
 Die CI (`.github/workflows/desktop_build.yml`) läuft bei jedem Push und Pull
 Request auf `main`: Codegen, Analyse und Tests mit Flutter 3.41.6, danach

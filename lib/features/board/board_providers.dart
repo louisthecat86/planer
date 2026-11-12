@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/erledigt_service.dart';
 import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart'
@@ -385,6 +386,8 @@ Future<Map<String, List<Zusatzzeit>>> _ladeZusatzzeiten(
 final weekBoardProvider = FutureProvider.autoDispose
     .family<WeekBoard, DateTime>((ref, anyDayInWeek) {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   return ladeWochenboard(db, anyDayInWeek);
 });
 
@@ -480,6 +483,8 @@ Future<WeekBoard> ladeWochenboard(
 final dayBoardProvider = FutureProvider.autoDispose
     .family<DayBoard, DateTime>((ref, datum) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
 
   final tag = DateTime(datum.year, datum.month, datum.day);
   final naechsterTag = tagPlus(tag, 1);
@@ -536,6 +541,8 @@ final tagesaufgabenProvider = FutureProvider.autoDispose
     .family<Map<AufgabenZelle, List<Tagesaufgabe>>, DateTime>(
         (ref, anyDayInWeek) {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   final montag = _montag(anyDayInWeek);
   return TagesaufgabenService.fuerZeitraum(
     db,

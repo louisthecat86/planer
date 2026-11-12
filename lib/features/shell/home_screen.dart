@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/backup_service.dart';
 import '../../core/services/erledigt_service.dart';
@@ -128,6 +129,8 @@ final _uebersichtProvider =
     FutureProvider.autoDispose.family<_Uebersicht, DateTime?>(
         (ref, gewaehlterTag) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   final DateTime heute = gewaehlterTag ?? ref.watch(heuteProvider);
   final montag = montagDerWoche(heute);
   // Kalenderarithmetik statt Duration: Über eine Zeitumstellung hinweg
@@ -405,12 +408,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       appBar: AppBar(
         title: const Text('Übersicht'),
         actions: [
-          TextButton.icon(
-            onPressed: () => _aktualisieren(ref),
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Aktualisieren'),
-          ),
-          const SizedBox(width: 8),
           // Öffnet das Board gleich mit dem Planen-Fenster.
           FilledButton.icon(
             onPressed: () => context.goNamed('boardPlanen'),
@@ -436,6 +433,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
               const SizedBox(height: 16),
               daten.when(
+                // Beim Neuladen bleibt der Stand stehen.
+                skipLoadingOnReload: true,
                 loading: () => const Padding(
                   padding: EdgeInsets.symmetric(vertical: 48),
                   child: Center(child: CircularProgressIndicator()),
@@ -456,12 +455,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ),
     );
   }
-}
-
-void _aktualisieren(WidgetRef ref) {
-  ref
-    ..invalidate(bedarfProvider)
-    ..invalidate(_uebersichtProvider);
 }
 
 /// Öffnet die Stammdaten eines Artikels und lädt die Übersicht danach

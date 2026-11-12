@@ -11,6 +11,7 @@ import '../../core/database/database.dart';
 import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/artikel_providers.dart';
 import '../../core/providers/database_provider.dart';
+import '../../core/providers/daten_waechter.dart';
 import '../../core/services/artikel_anlage_service.dart';
 import '../../core/services/auftragsbestand_deckung.dart';
 import '../../core/services/auftragsbestand_import_service.dart';
@@ -50,6 +51,8 @@ import 'planung_pruefen.dart'
 final auftragsbestandProvider =
     FutureProvider.autoDispose<AuftragsbestandAnsicht>((ref) async {
   final db = ref.watch(databaseProvider);
+  // Hält sich selbst aktuell — siehe daten_waechter.dart.
+  neuLadenBeiAenderung(ref, db);
   // Um Mitternacht rechnet die Ansicht neu: Was gestern eingeplant war,
   // ist heute produziert.
   final heute = ref.watch(heuteProvider);
@@ -759,11 +762,6 @@ class _AuftragsbestandScreenState
             icon: const Icon(Icons.print),
             tooltip: 'Drucken',
           ),
-          IconButton(
-            onPressed: () => ref.invalidate(auftragsbestandProvider),
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Neu rechnen — etwa nach Änderungen im Board',
-          ),
           const SizedBox(width: 8),
           // Die Hauptaktion der Seite oben rechts — wie „Artikel planen" im
           // Board und „Neuer Artikel" in der Artikelliste.
@@ -813,6 +811,8 @@ class _AuftragsbestandScreenState
                 ),
               Expanded(
                 child: ansicht.when(
+                  // Beim Neuladen bleibt der Stand stehen.
+                  skipLoadingOnReload: true,
                   loading: () =>
                       const Center(child: CircularProgressIndicator()),
                   error: (e, _) => Center(

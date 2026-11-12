@@ -304,15 +304,10 @@ class _InfoTab extends ConsumerWidget {
           innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
           child: _InfoTabelle(zeilen: eintraege),
         );
+        // Ohne eigenes „Bearbeiten": Der Knopf bei den Stammdaten öffnet
+        // dasselbe Fenster, in dem auch die Merkmale stehen.
         final merkmale = Bereich(
           titel: 'Merkmale',
-          aktionen: [
-            TextButton.icon(
-              onPressed: bearbeiten,
-              icon: const Icon(Icons.edit_outlined, size: 16),
-              label: const Text('Bearbeiten'),
-            ),
-          ],
           innenAbstand: const EdgeInsets.fromLTRB(12, 0, 12, 2),
           child: _InfoTabelle(zeilen: merkmalZeilen),
         );

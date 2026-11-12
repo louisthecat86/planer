@@ -632,6 +632,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
           Expanded(
             child: istWoche
                 ? weekAsync.when(
+                    // Beim Neuladen bleibt der Stand stehen.
+                    skipLoadingOnReload: true,
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(
@@ -645,6 +647,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                     ),
                   )
                 : dayAsync.when(
+                    // Beim Neuladen bleibt der Stand stehen.
+                    skipLoadingOnReload: true,
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (e, _) => Center(

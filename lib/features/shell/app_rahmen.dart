@@ -111,13 +111,15 @@ const List<(String?, List<_Ziel>)> _gruppen = [
   (
     'Planen',
     [
-      _Ziel('bedarf', 'Bedarf', Icons.assignment_outlined, ['/bedarf']),
+      // In der Reihenfolge der Arbeit: Bericht einlesen, Bedarf ansehen,
+      // Vorschlag rechnen, im Board planen.
       _Ziel(
         'auftragsbestand',
         'Auftragsbestand',
         Icons.local_shipping_outlined,
         ['/auftragsbestand'],
       ),
+      _Ziel('bedarf', 'Bedarf', Icons.assignment_outlined, ['/bedarf']),
       _Ziel(
         'planungsvorschlag',
         'Planungsvorschlag',
@@ -221,7 +223,7 @@ const _Ziel _einstellungen = _Ziel(
   'settings',
   'Einstellungen',
   Icons.settings_outlined,
-  ['/settings', '/data', '/backup', '/handy'],
+  ['/settings', '/data', '/handy'],
 );
 
 /// Der Rahmen um jede Seite der App.

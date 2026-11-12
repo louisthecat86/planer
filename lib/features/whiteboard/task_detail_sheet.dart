@@ -7,8 +7,10 @@ import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
+import '../../core/services/loeschen_mit_rueckweg.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/ui/rueckgaengig.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
@@ -540,62 +542,55 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     );
   }
 
-  /// Löscht den Task (Soft-Delete). Fragt, ob nur dieser Schritt oder die
-  /// gesamte verkettete Produktion (alle Abteilungs-Schritte) entfernt wird.
+  /// Löscht aus der Planung — ohne Rückfrage, dafür mit „Rückgängig"
+  /// unten: Der Auftrag wird nur als gelöscht markiert.
+  ///
+  /// Gefragt wird nur, wenn es etwas zu wählen gibt: Hängen an der
+  /// Produktion mehrere Abteilungs-Schritte, dann ob nur dieser eine oder
+  /// alle verschwinden sollen.
   Future<void> _loeschen() async {
-    final wahl = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Aus der Planung löschen?'),
-        content: const Text(
-          'Nur diesen einen Schritt (diese Abteilung) entfernen oder die '
-          'gesamte Produktion dieses Artikels — also alle verketteten '
-          'Abteilungs-Schritte?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop('abbrechen'),
-            child: const Text('Abbrechen'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop('einzel'),
-            child: const Text('Nur dieser Schritt'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(ctx).colorScheme.error,
-              foregroundColor: Theme.of(ctx).colorScheme.onError,
-            ),
-            onPressed: () => Navigator.of(ctx).pop('ganze'),
-            child: const Text('Ganze Produktion'),
-          ),
-        ],
-      ),
-    );
-    if (wahl == null || wahl == 'abbrechen') return;
+    // Vorher holen: Dieses Fenster ist zu, wenn das Rückgängig kommt.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final db = container.read(databaseProvider);
+    final task = widget.wbTask.task;
 
     setState(() => _isSaving = true);
     try {
-      final db = ref.read(databaseProvider);
-      final jetzt = DateTime.now();
-      final ids = wahl == 'ganze'
-          ? await _produktionsKettenIds(db, widget.wbTask.task)
-          : [widget.wbTask.task.id];
+      final kette = await LoeschenMitRueckweg.kette(db, task);
+      var ids = [task.id];
+      if (kette.length > 1) {
+        if (!mounted) return;
+        final wahl = await _schrittOderAlle(kette.length);
+        if (wahl == null) {
+          if (mounted) setState(() => _isSaving = false);
+          return;
+        }
+        if (wahl) ids = kette;
+      }
 
-      await (db.update(db.productionTasks)..where((t) => t.id.isIn(ids)))
-          .write(
-        ProductionTasksCompanion(
-          deletedAt: Value(jetzt),
-          updatedAt: Value(jetzt),
-        ),
-      );
-
-      ref
+      final weg = await LoeschenMitRueckweg.auftraege(db, ids);
+      container
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Produktion aus Planung gelöscht');
-      ref.invalidate(dailyTasksProvider);
+      container.invalidate(dailyTasksProvider);
 
       if (mounted) Navigator.of(context).pop(true);
+      if (weg.isEmpty) return;
+      geloeschtMelden(
+        messenger,
+        text: weg.length == 1
+            ? 'Auftrag aus der Planung gelöscht.'
+            : 'Produktion aus der Planung gelöscht — '
+                '${weg.length} Schritte.',
+        zurueck: () async {
+          await LoeschenMitRueckweg.auftraegeZurueck(db, weg);
+          container
+              .read(autoBackupTriggerProvider)
+              .fireDebounced(reason: 'Produktion wieder in der Planung');
+          container.invalidate(dailyTasksProvider);
+        },
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -609,43 +604,38 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     }
   }
 
-  /// Sammelt alle Task-IDs der verketteten Produktion (über
-  /// [ProductionTask.parentTaskId]) zu der [start] gehört. Geht zur Wurzel
-  /// hoch und von dort über alle Nachfahren — getrennte Planungen desselben
-  /// Produkts bleiben unberührt, weil sie eigene Ketten bilden.
-  Future<List<String>> _produktionsKettenIds(
-    AppDatabase db,
-    ProductionTask start,
-  ) async {
-    final alle = await (db.select(db.productionTasks)
-          ..where((t) => t.productId.equals(start.productId))
-          ..where((t) => t.deletedAt.isNull()))
-        .get();
-    final byId = {for (final t in alle) t.id: t};
-
-    // Zur Wurzel hochlaufen.
-    var root = start;
-    final besucht = <String>{root.id};
-    while (root.parentTaskId != null &&
-        byId.containsKey(root.parentTaskId)) {
-      final parent = byId[root.parentTaskId]!;
-      if (!besucht.add(parent.id)) break; // Zyklus-Schutz
-      root = parent;
-    }
-
-    // Von der Wurzel alle Nachfahren einsammeln.
-    final kette = <String>{root.id};
-    var geaendert = true;
-    while (geaendert) {
-      geaendert = false;
-      for (final t in alle) {
-        final p = t.parentTaskId;
-        if (p != null && kette.contains(p) && kette.add(t.id)) {
-          geaendert = true;
-        }
-      }
-    }
-    return kette.toList();
+  /// Fragt, was gelöscht wird: `false` nur dieser Schritt, `true` die
+  /// ganze Produktion mit ihren [schritte] Abteilungs-Schritten, `null`
+  /// gar nichts.
+  Future<bool?> _schrittOderAlle(int schritte) {
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Was soll aus der Planung?'),
+        content: Text(
+          'An dieser Produktion hängen $schritte Abteilungs-Schritte. '
+          'Nur diesen einen entfernen oder alle?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Abbrechen'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Nur dieser Schritt'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Theme.of(ctx).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Ganze Produktion'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -959,7 +949,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                       foregroundColor: colors.error,
                     ),
                     icon: const Icon(Icons.delete_outline, size: 18),
-                    label: const Text('Aus Planung löschen …'),
+                    label: const Text('Aus Planung löschen'),
                   ),
                   const Spacer(),
                   TextButton(
