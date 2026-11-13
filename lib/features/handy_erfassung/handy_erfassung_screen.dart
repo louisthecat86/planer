@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:erfassung_format/erfassung_format.dart';
@@ -29,10 +27,6 @@ import 'handy_erfassung_dienst.dart';
 // Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
 // aufgenommen wurden. Der Weg ist eine Datei wie beim Backup — per Kabel,
 // Freigabe oder wie es passt.
-
-/// Ab dieser Größe wird das Ergebnis auf einem eigenen Isolate gelesen —
-/// mit Fotos ist die Datei schnell einige Megabyte groß.
-const int _imHintergrundAb = 512 * 1024;
 
 /// Wie weit das Paket nach vorn reicht.
 enum _Zeitraum {
@@ -187,15 +181,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   /// Meldet selbst, wenn das nicht geht.
   Future<void> _ergebnisLesen(Uint8List bytes) async {
     try {
-      final ergebnis = bytes.length < _imHintergrundAb
-          ? ErfassungsErgebnis.ausText(
-              utf8.decode(bytes, allowMalformed: true),
-            )
-          : await Isolate.run(
-              () => ErfassungsErgebnis.ausText(
-                utf8.decode(bytes, allowMalformed: true),
-              ),
-            );
+      final ergebnis = await ergebnisLesen(bytes);
       final vorschau = await HandyErfassungDienst(ref.read(databaseProvider))
           .vorschau(ergebnis);
       if (!mounted) return;

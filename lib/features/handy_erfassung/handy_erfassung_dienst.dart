@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:isolate';
+
 import 'package:drift/drift.dart';
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:uuid/uuid.dart';
@@ -25,6 +28,25 @@ import '../erfassung/geplante_produktion.dart';
 // Produktentwicklung — verschlüsselt wie ihre übrigen Dateien.
 
 /// Schlüssel der Felder eines Schritts im Paket.
+/// Ab dieser Größe wird das Ergebnis auf einem eigenen Isolate gelesen —
+/// mit Fotos ist die Datei schnell einige Megabyte groß.
+const int kErgebnisImHintergrundAb = 512 * 1024;
+
+/// Liest die Ergebnis-Datei vom Handy aus [bytes] — große im Hintergrund,
+/// damit das Fenster nicht stehen bleibt.
+///
+/// Eine Funktion für sich und keine Methode der Seite: Was aufs andere
+/// Isolate geht, nimmt alles mit, was im selben Rahmen steht. In der Seite
+/// war das die Seite selbst — und die lässt sich nicht verschicken; das
+/// Einlesen jeder Datei über [kErgebnisImHintergrundAb] schlug so fehl.
+Future<ErfassungsErgebnis> ergebnisLesen(Uint8List bytes) async =>
+    bytes.length < kErgebnisImHintergrundAb
+        ? _ergebnisAus(bytes)
+        : Isolate.run(() => _ergebnisAus(bytes));
+
+ErfassungsErgebnis _ergebnisAus(Uint8List bytes) =>
+    ErfassungsErgebnis.ausText(utf8.decode(bytes, allowMalformed: true));
+
 String steckbriefSchluessel(String parameterName) =>
     's:${parameterName.trim().toLowerCase()}';
 String parameterSchluessel(String parameterId) => 'p:$parameterId';
