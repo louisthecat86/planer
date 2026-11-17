@@ -13,9 +13,11 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/navision_katalog.dart';
+import '../../core/services/prozess_vorlagen.dart';
 import '../../core/services/prozesskette_service.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
+import '../../core/ui/rueckgaengig.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show
         HistorienLeistung,
@@ -37,6 +39,7 @@ import 'prozesskette_umbau.dart';
 import 'step_editor_dialog.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/constants/artikel_merkmale.dart';
+import '../prozessvorlagen/vorlage_waehlen.dart';
 
 // Die Datei war mit 4.750 Zeilen zu groß, um sich darin zurechtzufinden.
 // Sie ist deshalb zerlegt: Provider und gemeinsame Helfer liegen in
@@ -532,6 +535,53 @@ class _StepsList extends ConsumerWidget {
     }
   }
 
+  /// Wählt eine Prozessvorlage und legt ihre Schritte an — beim leeren
+  /// Artikel als ganze Kette, sonst hinter den vorhandenen. Danach steht
+  /// unten „Rückgängig".
+  Future<void> _vorlageAnwenden(BuildContext context) async {
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = ScaffoldMessenger.of(context);
+    final artikel = await container.read(productProvider(productId).future);
+    final db = container.read(databaseProvider);
+    final text = artikel == null
+        ? ''
+        : (await vorschlagsTexte(db, [artikel]))[artikel.id] ?? '';
+    if (!context.mounted) return;
+    final vorlage = await vorlageWaehlen(
+      context,
+      bezeichnung: text,
+      anhaengen: steps.isNotEmpty,
+    );
+    if (vorlage == null) return;
+    try {
+      final neu = await vorlageAnwenden(db, productId, vorlage);
+      container
+          .read(autoBackupTriggerProvider)
+          .fireDebounced(reason: 'Prozessvorlage angewendet');
+      container.invalidate(productStepsProvider(productId));
+      geloeschtMelden(
+        messenger,
+        text: 'Vorlage „${vorlage.name}" angewendet — '
+            '${neu.length} Schritte angelegt.',
+        zurueck: () async {
+          for (final id in neu) {
+            await ProzesskettenService.entferneSchritt(db, id);
+          }
+          container
+              .read(autoBackupTriggerProvider)
+              .fireDebounced(reason: 'Prozessvorlage zurückgenommen');
+          container.invalidate(productStepsProvider(productId));
+        },
+      );
+    } on StateError catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('Vorlage fehlgeschlagen: ${fehlerText(e)}')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
@@ -573,6 +623,18 @@ class _StepsList extends ConsumerWidget {
       ),
     );
 
+    // Eine feste Prozesskette aus den Prozessvorlagen — beim leeren
+    // Artikel der schnellste Weg zur Kette.
+    final vorlage = OutlinedButton.icon(
+      key: const ValueKey('artikel-vorlage'),
+      onPressed: () => _vorlageAnwenden(context),
+      icon: const Icon(Icons.account_tree_outlined, size: 16),
+      label: Text(steps.isEmpty ? 'Vorlage wählen' : 'Vorlage anhängen'),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+      ),
+    );
+
     return LayoutBuilder(
       builder: (context, constraints) {
         // Ab ~900px: feste Produktionsmittel-Leiste links — aus ihr lassen
@@ -603,9 +665,13 @@ class _StepsList extends ConsumerWidget {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: leistungsdaten,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          vorlage,
+                          const SizedBox(width: 8),
+                          leistungsdaten,
+                        ],
                       ),
                     ),
                     _BesonderheitBanner(productId: productId),
@@ -627,6 +693,8 @@ class _StepsList extends ConsumerWidget {
                 children: [
                   _ProduktionsmittelButton(productId: productId),
                   const Spacer(),
+                  vorlage,
+                  const SizedBox(width: 8),
                   leistungsdaten,
                 ],
               ),

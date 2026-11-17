@@ -225,7 +225,7 @@ const _Ziel _einstellungen = _Ziel(
   'settings',
   'Einstellungen',
   Icons.settings_outlined,
-  ['/settings', '/data', '/handy'],
+  ['/settings', '/data', '/handy', '/prozessvorlagen'],
 );
 
 /// Die Ziffern für Strg+1 … Strg+9.

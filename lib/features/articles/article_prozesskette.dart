@@ -172,8 +172,9 @@ class _LeereKette extends StatelessWidget {
             ),
             child: const LeerHinweis(
               'Noch keine Produktionsschritte.\n'
-              'Zieh ein Produktionsmittel aus dem Katalog hierher, tippe es '
-              'an — oder importiere eine Excel-Vorlage.',
+              'Wähle oben eine Prozessvorlage, zieh ein Produktionsmittel '
+              'aus dem Katalog hierher, tippe es an — oder importiere eine '
+              'Excel-Vorlage.',
               icon: Icons.account_tree_outlined,
             ),
           );

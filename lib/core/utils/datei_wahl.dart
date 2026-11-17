@@ -24,7 +24,10 @@ enum EinleseArt {
   navisionArtikel('navision_artikel'),
 
   /// Ergebnis-Datei der Handy-Erfassung.
-  handyErgebnis('handy_ergebnis');
+  handyErgebnis('handy_ergebnis'),
+
+  /// Datei mit Prozessvorlagen.
+  prozessVorlagen('prozess_vorlagen');
 
   const EinleseArt(this.kennung);
 

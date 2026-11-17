@@ -63,6 +63,13 @@ class SettingsScreen extends ConsumerWidget {
                       onTap: () => context.pushNamed('data'),
                     ),
                     _EinstellungsZeile(
+                      icon: Icons.account_tree_outlined,
+                      titel: 'Prozessvorlagen',
+                      text: 'Feste Prozessketten für Arten von Artikeln — '
+                          'am Artikel wählen oder vielen auf einmal zuordnen',
+                      onTap: () => context.pushNamed('prozessvorlagen'),
+                    ),
+                    _EinstellungsZeile(
                       icon: Icons.phone_android,
                       titel: 'Handy-Erfassung',
                       text: 'Datei für die App „Planer Erfassung" erstellen '

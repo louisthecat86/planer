@@ -33,6 +33,7 @@ import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/handy_erfassung/handy_erfassung_screen.dart';
+import 'features/prozessvorlagen/prozessvorlagen_screen.dart';
 import 'features/settings/maschinen_katalog_screen.dart';
 import 'features/settings/parameter_grenzen_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -285,6 +286,15 @@ final routerProvider = Provider<GoRouter>((ref) {
             name: 'grenzen',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: ParameterGrenzenScreen(),
+            ),
+          ),
+          // Prozessvorlagen: feste Prozessketten zum Wählen am Artikel — von
+          // den Einstellungen aus verlinkt.
+          GoRoute(
+            path: '/prozessvorlagen',
+            name: 'prozessvorlagen',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: ProzessvorlagenScreen(),
             ),
           ),
           GoRoute(

@@ -64,6 +64,18 @@ Artikel, der eine davon trägt, zeigt sie weiter, bis er ein Fließdiagramm
 bekommt; und solange gar keine Fließdiagramme hinterlegt sind, stehen sie
 weiter zur Wahl.
 
+**Prozessvorlagen:** Unter Einstellungen → Prozessvorlagen stehen feste
+Prozessketten für Arten von Artikeln („Schnitzel paniert, gebraten") — je
+Schritt Abteilung, Anlage und Tätigkeit. Am Artikel legt „Vorlage wählen"
+die Kette ohne Werte an (bei einem gepflegten Artikel hinten angehängt),
+gefüllt und angepasst wird danach dort. „Artikeln zuordnen" schlägt für alle
+Artikel ohne Schritte (ohne Muster) die passende Vorlage vor — über
+Stichworte in Bezeichnung und Navision-„Beschreibung 2" — und legt die
+angehakten an; Artikel mit Schritten bleiben unberührt, danach steht
+„Rückgängig" bereit. Die Vorlagen sind Daten des Betriebs: Sie stehen in
+`app_settings`, fahren mit im Backup und lassen sich als Datei weitergeben
+(`lib/core/services/prozess_vorlagen.dart`, `lib/features/prozessvorlagen/`).
+
 **Losgröße:** Im Entwurf einer Rezeptur rechnet „Losgröße" alle Zeilen auf
 eine gewünschte Gesamtmenge um — jede im selben Verhältnis, aufs Gramm
 gerundet; was beim Runden übrig bleibt, bekommt die größte Zeile, damit die
