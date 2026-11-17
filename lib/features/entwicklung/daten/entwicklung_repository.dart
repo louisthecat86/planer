@@ -10,6 +10,7 @@ import '../../../core/providers/database_provider.dart';
 import '../projekte/projekt_modell.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import '../rezepturen/losgroesse.dart';
 import '../rezepturen/stand_vergleich.dart';
 
 // Daten der Produktentwicklung: Zutaten und Rezepturen lesen und
@@ -473,6 +474,49 @@ class EntwicklungRepository {
     await (_db.update(_db.entwicklungRezepturPositionen)
           ..where((p) => p.id.equals(position.id)))
         .write(daten.copyWith(updatedAt: Value(DateTime.now())));
+  }
+
+  /// Rechnet den Entwurf [versionId] auf die Losgröße [zielKg] um: jede
+  /// Zeile im selben Verhältnis, sodass die Summe [zielKg] ergibt (siehe
+  /// [aufLosgroesse]). Zurück kommen die Mengen von vorher je Zeile — für
+  /// [zeilenMengenSetzen], falls es zurückgenommen wird.
+  Future<Map<String, double>> losgroesseSetzen(
+    String versionId,
+    double zielKg,
+  ) async {
+    await _nurEntwurf(versionId);
+    return _db.transaction(() async {
+      final zeilen = await positionen(versionId);
+      final neu = aufLosgroesse([for (final p in zeilen) p.mengeKg], zielKg);
+      final vorher = {for (final p in zeilen) p.id: p.mengeKg};
+      await zeilenMengenSetzen(versionId, {
+        for (final (i, p) in zeilen.indexed) p.id: neu[i],
+      });
+      return vorher;
+    });
+  }
+
+  /// Setzt die Mengen der Zeilen des Entwurfs [versionId] — [mengen] je
+  /// Zeilen-ID in kg. Zeilen, die nicht darin stehen oder nicht zu diesem
+  /// Stand gehören, bleiben.
+  Future<void> zeilenMengenSetzen(
+    String versionId,
+    Map<String, double> mengen,
+  ) async {
+    await _nurEntwurf(versionId);
+    final jetzt = DateTime.now();
+    await _db.batch((b) {
+      for (final e in mengen.entries) {
+        b.update(
+          _db.entwicklungRezepturPositionen,
+          EntwicklungRezepturPositionenCompanion(
+            mengeKg: Value(e.value),
+            updatedAt: Value(jetzt),
+          ),
+          where: (p) => p.id.equals(e.key) & p.versionId.equals(versionId),
+        );
+      }
+    });
   }
 
   Future<void> positionLoeschen(RezepturPosition position) async {

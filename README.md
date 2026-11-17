@@ -64,6 +64,13 @@ Artikel, der eine davon trägt, zeigt sie weiter, bis er ein Fließdiagramm
 bekommt; und solange gar keine Fließdiagramme hinterlegt sind, stehen sie
 weiter zur Wahl.
 
+**Losgröße:** Im Entwurf einer Rezeptur rechnet „Losgröße" alle Zeilen auf
+eine gewünschte Gesamtmenge um — jede im selben Verhältnis, aufs Gramm
+gerundet; was beim Runden übrig bleibt, bekommt die größte Zeile, damit die
+Summe genau stimmt (`lib/features/entwicklung/rezepturen/losgroesse.dart`).
+Die Losgröße ist die Summe der Zeilen, also die Einwaage. Abgeschlossene
+Stände bleiben, wie sie sind.
+
 **Zutaten aus Navision:** Im Zutatenkatalog der Produktentwicklung gleicht
 „Zutaten aus Navision abgleichen" den Katalog mit dem eingelesenen Stand der
 Artikelübersicht ab: Man hakt an, welche Produktbuchungsgruppen Rohwaren und

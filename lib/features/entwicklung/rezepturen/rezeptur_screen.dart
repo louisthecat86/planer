@@ -8,6 +8,7 @@ import '../../../core/database/database.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/theme/app_stil.dart';
 import '../../../core/ui/bausteine.dart';
+import '../../../core/ui/rueckgaengig.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
@@ -16,6 +17,7 @@ import '../etikett/etikett_dialog.dart';
 import '../projekte/projekt_repository.dart' show projekteProvider;
 import '../rechenkern/rechen_modell.dart';
 import 'fleischanteil_dialog.dart';
+import 'losgroesse_dialog.dart';
 import 'rezeptur_drucken.dart';
 import 'rezeptur_ergebnis_ansicht.dart';
 import 'rezepturen_ansicht.dart';
@@ -696,6 +698,35 @@ class Zusammensetzung extends ConsumerWidget {
       );
     }
 
+    /// Rechnet den Entwurf auf eine neue Losgröße um — alle Zeilen im
+    /// selben Verhältnis. Unten steht danach „Rückgängig": Zurückrechnen
+    /// träfe die alten Mengen wegen des Rundens nicht immer aufs Gramm.
+    Future<void> losgroesse() async {
+      final ziel = await losgroesseErfragen(
+        context,
+        summeKg: summe,
+        verlustProzent: version.verlustProzent,
+      );
+      if (ziel == null || !context.mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      Map<String, double>? vorher;
+      final ok = await ausfuehren(
+        () async => vorher = await repo().losgroesseSetzen(version.id, ziel),
+        'Losgröße geändert',
+      );
+      final alt = vorher;
+      if (!ok || alt == null) return;
+      geloeschtMelden(
+        messenger,
+        text: 'Rezeptur umgerechnet: ${mengeText(summe)} kg → '
+            '${mengeText(ziel)} kg.',
+        zurueck: () async {
+          await repo().zeilenMengenSetzen(version.id, alt);
+          gesichert('Losgröße zurückgenommen');
+        },
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -706,6 +737,14 @@ class Zusammensetzung extends ConsumerWidget {
               : 'Stand ${version.nummer} · abgeschlossen',
           innenAbstand: EdgeInsets.zero,
           aktionen: [
+            // Umrechnen geht erst, wenn Zeilen Mengen tragen.
+            if (entwurf && summe > 0)
+              TextButton.icon(
+                key: const ValueKey('rezeptur-losgroesse'),
+                onPressed: losgroesse,
+                icon: const Icon(Icons.scale_outlined, size: 18),
+                label: const Text('Losgröße'),
+              ),
             if (entwurf)
               TextButton.icon(
                 onPressed: einfuegen,
