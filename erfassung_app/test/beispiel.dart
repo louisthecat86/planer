@@ -1,8 +1,13 @@
 import 'package:erfassung_format/erfassung_format.dart';
 
-/// Ein erfundenes Paket für die Tests: zwei geplante Produktionen und
-/// zwei Artikel, einer mit Füller und Bratstraße.
-ErfassungsPaket beispielPaket({String id = 'paket-1'}) => ErfassungsPaket(
+/// Ein erfundenes Paket für die Tests: zwei geplante Produktionen, zwei
+/// Artikel, einer mit Füller und Bratstraße, und ein Katalog mit zwei
+/// Maschinen — ohne [mitKatalog] wie aus einem älteren Planer.
+ErfassungsPaket beispielPaket({
+  String id = 'paket-1',
+  bool mitKatalog = true,
+}) =>
+    ErfassungsPaket(
       id: id,
       erstellt: DateTime(2026, 11, 9, 17, 45),
       von: DateTime(2026, 11, 9),
@@ -111,4 +116,48 @@ ErfassungsPaket beispielPaket({String id = 'paket-1'}) => ErfassungsPaket(
           ],
         ),
       ],
+      maschinen: mitKatalog
+          ? const [
+              PaketMaschine(
+                id: 'm-fueller',
+                name: 'Füller Test',
+                abteilung: 'wurstkueche',
+                abteilungName: 'Wurstküche',
+                abteilungFarbe: 0xFF880E4F,
+                felder: [
+                  PaketFeld(
+                    schluessel: 's:füllgewicht',
+                    art: FeldArt.steckbrief,
+                    name: 'Füllgewicht',
+                    einheit: 'g',
+                  ),
+                  PaketFeld(
+                    schluessel: 'n',
+                    art: FeldArt.notiz,
+                    name: 'Maschineneinstellungen (Notiz)',
+                  ),
+                ],
+              ),
+              PaketMaschine(
+                id: 'm-kutter',
+                name: 'Kutter Test',
+                abteilung: 'kutterabteilung',
+                abteilungName: 'Kutterabteilung',
+                abteilungFarbe: 0xFF1565C0,
+                felder: [
+                  PaketFeld(
+                    schluessel: 's:messerdrehzahl',
+                    art: FeldArt.steckbrief,
+                    name: 'Messerdrehzahl',
+                    einheit: 'U/min',
+                  ),
+                  PaketFeld(
+                    schluessel: 'n',
+                    art: FeldArt.notiz,
+                    name: 'Maschineneinstellungen (Notiz)',
+                  ),
+                ],
+              ),
+            ]
+          : const [],
     );

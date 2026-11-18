@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'bausteine.dart';
 import 'fotos.dart';
 import 'modell.dart';
+import 'stand.dart';
 import 'stil.dart';
 
 /// Die Artikel des Pakets mit Suche. Antippen öffnet die Schritte des
@@ -104,8 +105,9 @@ class _ArtikelSeiteState extends State<ArtikelSeite> {
                           itemBuilder: (context, i) {
                             final a = treffer[i];
                             final geaendert = a.schritte
-                                .map(stand.geaendertIn)
-                                .fold(0, (s, n) => s + n);
+                                    .map(stand.geaendertIn)
+                                    .fold(0, (s, n) => s + n) +
+                                stand.kettenAenderungenIn(a.id);
                             return Padding(
                               padding: const EdgeInsets.only(bottom: 8),
                               child: TippZeile(
@@ -181,6 +183,56 @@ class SchritteSeite extends StatelessWidget {
     );
   }
 
+  Future<void> _entfernen(BuildContext context, KettenSchritt k) async {
+    final s = k.schritt;
+    final ja = await nachfragen(
+      context,
+      titel: '${s.anlage} entfernen?',
+      text: k.neu
+          ? 'Die Maschine kommt wieder aus der Kette — was an ihr '
+              'eingetragen ist, fällt weg.'
+          : 'Beim Einlesen am PC fällt der Schritt aus der Prozesskette. '
+              'Bis dahin lässt er sich hier mit „Behalten" zurückholen.',
+      ja: 'Entfernen',
+      gefaehrlich: true,
+    );
+    if (!ja) return;
+    await modell.schrittEntfernen(artikel: artikel, schritt: s);
+  }
+
+  Future<void> _hinzufuegen(
+    BuildContext context,
+    List<KettenSchritt> kette,
+    List<PaketMaschine> katalog,
+  ) async {
+    final maschine = await Navigator.of(context).push<PaketMaschine>(
+      MaterialPageRoute(
+        builder: (_) => MaschineWaehlenSeite(maschinen: katalog),
+      ),
+    );
+    if (maschine == null || !context.mounted) return;
+    final bleiben = [
+      for (final k in kette)
+        if (!k.entfernt) k.schritt,
+    ];
+    final platz = await showModalBottomSheet<_Platz>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _PlatzBlatt(
+        maschine: maschine,
+        schritte: bleiben,
+        vorschlag: platzVorschlag(bleiben, maschine.abteilung),
+      ),
+    );
+    if (platz == null) return;
+    await modell.maschineHinzu(
+      artikel: artikel,
+      maschine: maschine,
+      nachSchrittId: platz.nachSchrittId,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -189,6 +241,8 @@ class SchritteSeite extends StatelessWidget {
         final theme = Theme.of(context);
         final f = theme.colorScheme;
         final stand = modell.stand;
+        final kette = stand.ketteVon(artikel);
+        final katalog = stand.paket?.maschinen ?? const <PaketMaschine>[];
         return Scaffold(
           appBar: AppBar(
             title: Text(artikel.name),
@@ -225,15 +279,38 @@ class SchritteSeite extends StatelessWidget {
                       ),
                     ),
                   ),
-                for (final s in artikel.schritte)
+                for (final k in kette)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 12),
                     child: _SchrittKarte(
-                      schritt: s,
-                      wertVon: (feld) => stand.wertVon(s, feld),
-                      istGeaendert: (feld) => stand.istGeaendert(s, feld),
-                      onFeld: (feld) => _bearbeiten(context, s, feld),
+                      schritt: k.schritt,
+                      neu: k.neu,
+                      entfernt: k.entfernt,
+                      wertVon: (feld) => stand.wertVon(k.schritt, feld),
+                      istGeaendert: (feld) =>
+                          stand.istGeaendert(k.schritt, feld),
+                      onFeld: (feld) => _bearbeiten(context, k.schritt, feld),
+                      onEntfernen: () => _entfernen(context, k),
+                      onBehalten: () => modell.schrittBehalten(k.schritt.id),
                     ),
+                  ),
+                if (katalog.isEmpty)
+                  Hinweis(
+                    'Im Paket steht kein Maschinenkatalog — es stammt aus '
+                    'einem älteren Planer. Für „Maschine hinzufügen" am PC '
+                    'ein neues Paket erstellen.',
+                    farbe: f.onSurfaceVariant,
+                    icon: Icons.info_outline,
+                  )
+                else
+                  OutlinedButton.icon(
+                    key: const ValueKey('maschine-hinzu'),
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(Masse.tippHoehe),
+                    ),
+                    onPressed: () => _hinzufuegen(context, kette, katalog),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Maschine hinzufügen'),
                   ),
               ],
             ),
@@ -250,9 +327,17 @@ class _SchrittKarte extends StatelessWidget {
     required this.wertVon,
     required this.istGeaendert,
     required this.onFeld,
+    required this.onEntfernen,
+    required this.onBehalten,
+    this.neu = false,
+    this.entfernt = false,
   });
 
   final PaketSchritt schritt;
+  final bool neu;
+  final bool entfernt;
+  final VoidCallback onEntfernen;
+  final VoidCallback onBehalten;
   final String? Function(PaketFeld) wertVon;
   final bool Function(PaketFeld) istGeaendert;
   final void Function(PaketFeld) onFeld;
@@ -261,9 +346,12 @@ class _SchrittKarte extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
-    final farbe = schritt.abteilungFarbe == null
-        ? f.primary
-        : Color(schritt.abteilungFarbe!);
+    final farben = Farben.von(context);
+    final farbe = entfernt
+        ? f.outline
+        : schritt.abteilungFarbe == null
+            ? f.primary
+            : Color(schritt.abteilungFarbe!);
     final platten = [
       for (final x in schritt.felder)
         if (x.art == FeldArt.platte) x,
@@ -297,7 +385,7 @@ class _SchrittKarte extends StatelessWidget {
                     borderRadius: Masse.ecken,
                   ),
                   child: Text(
-                    '${schritt.nummer}',
+                    entfernt ? '–' : '${schritt.nummer}',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -313,6 +401,9 @@ class _SchrittKarte extends StatelessWidget {
                         schritt.anlage,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w600,
+                          color: entfernt ? f.onSurfaceVariant : null,
+                          decoration:
+                              entfernt ? TextDecoration.lineThrough : null,
                         ),
                       ),
                       if (unter.isNotEmpty)
@@ -322,30 +413,56 @@ class _SchrittKarte extends StatelessWidget {
                             color: f.onSurfaceVariant,
                           ),
                         ),
+                      if (neu || entfernt)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: entfernt
+                              ? Marke('wird entfernt', farbe: farben.warnung)
+                              : Marke('neu', farbe: farben.ok),
+                        ),
                     ],
                   ),
                 ),
+                if (entfernt)
+                  TextButton(
+                    key: ValueKey('schritt-behalten-${schritt.id}'),
+                    onPressed: onBehalten,
+                    child: const Text('Behalten'),
+                  )
+                else
+                  IconButton(
+                    key: ValueKey('schritt-entfernen-${schritt.id}'),
+                    tooltip: 'Aus der Kette nehmen',
+                    onPressed: onEntfernen,
+                    icon: Icon(Icons.delete_outline, color: f.onSurfaceVariant),
+                  ),
               ],
             ),
           ),
-          if (platten.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
-              child: _Platten(
-                felder: platten,
-                wertVon: wertVon,
-                istGeaendert: istGeaendert,
-                onFeld: onFeld,
+          // Ein herausgenommener Schritt zeigt seine Felder nicht mehr —
+          // sie gehen nicht mit, bleiben aber für „Behalten" stehen.
+          if (entfernt)
+            const SizedBox.shrink()
+          else ...[
+            if (platten.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
+                child: _Platten(
+                  felder: platten,
+                  wertVon: wertVon,
+                  istGeaendert: istGeaendert,
+                  onFeld: onFeld,
+                ),
               ),
-            ),
-          for (final (i, feld) in andere.indexed) ...[
-            if (i > 0 || platten.isNotEmpty) const Divider(),
-            _FeldZeile(
-              feld: feld,
-              wert: wertVon(feld),
-              geaendert: istGeaendert(feld),
-              onTap: () => onFeld(feld),
-            ),
+            for (final (i, feld) in andere.indexed) ...[
+              if (i > 0 || platten.isNotEmpty) const Divider(),
+              _FeldZeile(
+                feld: feld,
+                wert: wertVon(feld),
+                geaendert: istGeaendert(feld),
+                onTap: () => onFeld(feld),
+              ),
+            ],
           ],
         ],
       ),
@@ -746,6 +863,190 @@ class _WertBlattState extends State<_WertBlatt> {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Der gewählte Platz: hinter [nachSchrittId], null ganz vorn.
+class _Platz {
+  const _Platz(this.nachSchrittId);
+
+  final String? nachSchrittId;
+}
+
+/// Wählt, wo in der Kette die neue Maschine steht.
+class _PlatzBlatt extends StatefulWidget {
+  const _PlatzBlatt({
+    required this.maschine,
+    required this.schritte,
+    required this.vorschlag,
+  });
+
+  final PaketMaschine maschine;
+  final List<PaketSchritt> schritte;
+  final String? vorschlag;
+
+  @override
+  State<_PlatzBlatt> createState() => _PlatzBlattState();
+}
+
+class _PlatzBlattState extends State<_PlatzBlatt> {
+  late String? _nach = widget.vorschlag;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    Widget option(String? nach, String text) {
+      final gewaehlt = _nach == nach;
+      return ListTile(
+        key: ValueKey('platz-${nach ?? 'vorn'}'),
+        minTileHeight: Masse.tippHoehe,
+        selected: gewaehlt,
+        leading: Icon(
+          gewaehlt ? Icons.radio_button_checked : Icons.radio_button_off,
+        ),
+        title: Text(text),
+        onTap: () => setState(() => _nach = nach),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            widget.maschine.name,
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '${widget.maschine.abteilungName} · wo steht sie in der Kette?',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: f.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                option(null, 'Ganz vorn'),
+                for (final s in widget.schritte)
+                  option(s.id, 'Nach ${s.nummer} · ${s.anlage}'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton(
+            key: const ValueKey('platz-hinzu'),
+            onPressed: () => Navigator.of(context).pop(_Platz(_nach)),
+            child: const Text('Hinzufügen'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Der Maschinenkatalog aus dem Paket mit Suche, nach Abteilung. Antippen
+/// gibt die Maschine zurück.
+class MaschineWaehlenSeite extends StatefulWidget {
+  const MaschineWaehlenSeite({super.key, required this.maschinen});
+
+  final List<PaketMaschine> maschinen;
+
+  @override
+  State<MaschineWaehlenSeite> createState() => _MaschineWaehlenSeiteState();
+}
+
+class _MaschineWaehlenSeiteState extends State<MaschineWaehlenSeite> {
+  final _suche = TextEditingController();
+  String _text = '';
+
+  @override
+  void dispose() {
+    _suche.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    final q = _text.trim().toLowerCase();
+    final treffer = [
+      for (final m in widget.maschinen)
+        if (q.isEmpty || m.suchtext.contains(q)) m,
+    ];
+    final zeilen = <Widget>[];
+    String? abteilung;
+    for (final m in treffer) {
+      if (m.abteilungName != abteilung) {
+        abteilung = m.abteilungName;
+        zeilen.add(Abschnitt(m.abteilungName));
+      }
+      zeilen.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: TippZeile(
+            key: ValueKey('maschine-${m.id}'),
+            titel: m.name,
+            streifen:
+                m.abteilungFarbe == null ? null : Color(m.abteilungFarbe!),
+            onTap: () => Navigator.of(context).pop(m),
+          ),
+        ),
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Maschine hinzufügen')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+              child: TextField(
+                controller: _suche,
+                textInputAction: TextInputAction.search,
+                decoration: InputDecoration(
+                  hintText: 'Maschine oder Abteilung suchen',
+                  prefixIcon: const Icon(Icons.search),
+                  suffixIcon: _text.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: 'Suche leeren',
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _suche.clear();
+                            setState(() => _text = '');
+                          },
+                        ),
+                ),
+                onChanged: (t) => setState(() => _text = t),
+              ),
+            ),
+            Expanded(
+              child: treffer.isEmpty
+                  ? Center(
+                      child: Text(
+                        'Keine Treffer.',
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          color: f.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+                      children: zeilen,
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

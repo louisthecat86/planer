@@ -3,8 +3,9 @@ import 'grenze.dart';
 import 'werte.dart';
 
 /// Was der Planer fürs Handy mitgibt: die noch nicht erfassten
-/// Produktionen der gewählten Wochen und die Maschineneinstellungen der
-/// Artikel, so wie sie am PC stehen.
+/// Produktionen der gewählten Wochen, die Maschineneinstellungen der
+/// Artikel, so wie sie am PC stehen, und den Maschinenkatalog — aus dem
+/// lässt sich an der Anlage eine vergessene Maschine in die Kette holen.
 class ErfassungsPaket {
   const ErfassungsPaket({
     required this.id,
@@ -13,6 +14,7 @@ class ErfassungsPaket {
     required this.bis,
     this.produktionen = const [],
     this.artikel = const [],
+    this.maschinen = const [],
   });
 
   /// Kennung — das Ergebnis nennt sie, damit der Planer weiß, auf welchen
@@ -26,6 +28,17 @@ class ErfassungsPaket {
 
   final List<PaketProduktion> produktionen;
   final List<PaketArtikel> artikel;
+
+  /// Der Maschinenkatalog. Leer in einem Paket aus einem älteren Planer.
+  final List<PaketMaschine> maschinen;
+
+  /// Die Maschine mit [id] — null, wenn sie nicht im Katalog steht.
+  PaketMaschine? maschineMit(String id) {
+    for (final m in maschinen) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
 
   /// Der Artikel mit [id] — null, wenn er nicht im Paket steht.
   PaketArtikel? artikelMit(String id) {
@@ -46,6 +59,8 @@ class ErfassungsPaket {
         'bis': tagText(bis),
         'produktionen': [for (final p in produktionen) p.toJson()],
         'artikel': [for (final a in artikel) a.toJson()],
+        if (maschinen.isNotEmpty)
+          'maschinen': [for (final m in maschinen) m.toJson()],
       };
 
   /// Die Datei als Text.
@@ -68,6 +83,9 @@ class ErfassungsPaket {
       ],
       artikel: [
         for (final a in jsonListe(j, 'artikel', wo)) PaketArtikel.ausJson(a),
+      ],
+      maschinen: [
+        for (final m in jsonListe(j, 'maschinen', wo)) PaketMaschine.ausJson(m),
       ],
     );
   }
@@ -255,6 +273,56 @@ class PaketSchritt {
       abteilungFarbe: jsonGanzOder(j, 'abteilungFarbe'),
       anlage: jsonTextOder(j, 'anlage') ?? '',
       prozessschritt: jsonTextOder(j, 'prozessschritt'),
+      felder: [
+        for (final f in jsonListe(j, 'felder', wo)) PaketFeld.ausJson(f),
+      ],
+    );
+  }
+}
+
+/// Eine Maschine aus dem Katalog des Planers — mit den Feldern, die ein
+/// neuer Schritt an ihr bekommt.
+class PaketMaschine {
+  const PaketMaschine({
+    required this.id,
+    required this.name,
+    required this.abteilung,
+    required this.abteilungName,
+    this.abteilungFarbe,
+    this.felder = const [],
+  });
+
+  final String id;
+  final String name;
+
+  /// Die Stammabteilung der Maschine — in die kommt ein neuer Schritt.
+  final String abteilung;
+  final String abteilungName;
+  final int? abteilungFarbe;
+
+  /// Steckbrief, Platten und Notiz — alle noch ohne Wert.
+  final List<PaketFeld> felder;
+
+  /// Wonach die Suche in der App sucht: Name und Abteilung, klein.
+  String get suchtext => '$name $abteilungName'.toLowerCase();
+
+  JsonObjekt toJson() => {
+        'id': id,
+        'name': name,
+        'abteilung': abteilung,
+        'abteilungName': abteilungName,
+        if (abteilungFarbe != null) 'abteilungFarbe': abteilungFarbe,
+        'felder': [for (final f in felder) f.toJson()],
+      };
+
+  static PaketMaschine ausJson(JsonObjekt j) {
+    const wo = 'einer Maschine';
+    return PaketMaschine(
+      id: jsonText(j, 'id', wo),
+      name: jsonText(j, 'name', wo),
+      abteilung: jsonTextOder(j, 'abteilung') ?? '',
+      abteilungName: jsonTextOder(j, 'abteilungName') ?? '',
+      abteilungFarbe: jsonGanzOder(j, 'abteilungFarbe'),
       felder: [
         for (final f in jsonListe(j, 'felder', wo)) PaketFeld.ausJson(f),
       ],

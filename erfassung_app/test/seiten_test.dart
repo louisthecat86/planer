@@ -159,7 +159,88 @@ void main() {
       expect(platte('Platte Unten 1').dy, greaterThan(oben1.dy));
       expect(platte('Platte Unten 1').dx, oben1.dx);
     });
+
+    testWidgets('Schritte mit neuer und herausgenommener Maschine ($art)',
+        (tester) async {
+      final m = modell();
+      final artikel = m.stand.paket!.artikelMit('a1')!;
+      m.stand
+        ..maschineHinzu(
+          id: 'n1',
+          artikel: artikel,
+          maschine: m.stand.paket!.maschineMit('m-kutter')!,
+          nachSchrittId: 's1',
+          jetzt: DateTime(2026, 11, 10, 9),
+        )
+        ..schrittEntfernen(
+          artikel: artikel,
+          schritt: artikel.schrittMit('s1')!,
+          jetzt: DateTime(2026, 11, 10, 9),
+        );
+      await zeige(
+        tester,
+        SchritteSeite(modell: m, artikel: artikel),
+        dunkel: dunkel,
+        groesse: const Size(320, 2400),
+      );
+      expect(find.text('neu'), findsOneWidget);
+      expect(find.text('wird entfernt'), findsOneWidget);
+      expect(find.text('Behalten'), findsOneWidget);
+      // Die Felder des herausgenommenen Füllers stehen nicht mehr da.
+      expect(find.text('120 g'), findsNothing);
+      expect(find.text('Messerdrehzahl'), findsOneWidget);
+
+      await zeige(
+        tester,
+        MaschineWaehlenSeite(maschinen: m.stand.paket!.maschinen),
+        dunkel: dunkel,
+      );
+      expect(find.text('KUTTERABTEILUNG'), findsOneWidget);
+      expect(find.text('Kutter Test'), findsOneWidget);
+    });
   }
+
+  testWidgets('eine Maschine dazu und eine heraus', (tester) async {
+    final m = modell();
+    final artikel = m.stand.paket!.artikelMit('a1')!;
+    await zeige(
+      tester,
+      SchritteSeite(modell: m, artikel: artikel),
+      groesse: const Size(360, 2400),
+    );
+
+    await tester.tap(find.byKey(const ValueKey('maschine-hinzu')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'kutter');
+    await tester.pump();
+    expect(find.byKey(const ValueKey('maschine-m-fueller')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('maschine-m-kutter')));
+    await tester.pumpAndSettle();
+
+    // Vorgeschlagen: ans Ende, denn die Kutterabteilung hat noch keinen
+    // Schritt. Gewählt wird hinter den Füller.
+    await tester.tap(find.byKey(const ValueKey('platz-s1')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('platz-hinzu')));
+    await tester.pumpAndSettle();
+
+    final neu = m.stand.neueSchritte.values.single;
+    expect((neu.maschineId, neu.nachSchrittId), ('m-kutter', 's1'));
+    expect(find.text('Kutter Test'), findsOneWidget);
+    expect(find.text('neu'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('schritt-entfernen-s2')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Entfernen'));
+    await tester.pumpAndSettle();
+    expect(m.stand.entfernteSchritte.keys, ['s2']);
+    expect(find.text('wird entfernt'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('schritt-behalten-s2')));
+    await tester.pumpAndSettle();
+    expect(m.stand.entfernteSchritte, isEmpty);
+    expect(find.text('wird entfernt'), findsNothing);
+  });
 
   testWidgets('eine Produktion erfassen', (tester) async {
     final m = modell();

@@ -4,7 +4,8 @@ import 'dart:typed_data';
 import 'package:erfassung_format/erfassung_format.dart';
 
 // Der Stand der Erfassung auf dem Handy: das geöffnete Paket, die
-// erfassten Produktionen, die geänderten Maschineneinstellungen, die Fotos
+// erfassten Produktionen, die geänderten Maschineneinstellungen, die
+// Maschinen, die in einer Prozesskette dazukamen oder wegfallen, die Fotos
 // und das Kürzel. Ohne Flutter — die Oberfläche hängt über
 // [ErfassungsModell] (modell.dart) daran, gespeichert wird als eine
 // JSON-Datei im Ordner der App. Von den Fotos stehen hier nur die Angaben;
@@ -18,6 +19,35 @@ String wertSchluessel(String schrittId, String feld) => '$schrittId|$feld';
 String neueFotoId(DateTime jetzt, int zufall) =>
     'f-${jetzt.microsecondsSinceEpoch.toRadixString(36)}-'
     '${zufall.toRadixString(36)}';
+
+/// Eine ID für einen neuen Schritt — wie [neueFotoId], damit sie auch
+/// über mehrere Handys eindeutig ist. Der Planer legt den Schritt unter
+/// genau dieser ID an.
+String neueSchrittId(DateTime jetzt, int zufall) =>
+    'h-${jetzt.microsecondsSinceEpoch.toRadixString(36)}-'
+    '${zufall.toRadixString(36)}';
+
+/// Ein Schritt, wie er auf dem Handy in der Kette eines Artikels steht.
+typedef KettenSchritt = ({
+  PaketSchritt schritt,
+
+  /// Auf dem Handy dazugekommen.
+  bool neu,
+
+  /// Auf dem Handy herausgenommen — er steht noch da, damit er sich
+  /// zurückholen lässt.
+  bool entfernt,
+});
+
+/// Wohin eine neue Maschine kommt, wenn niemand etwas anderes wählt: hinter
+/// den letzten Schritt ihrer Abteilung — gibt es keinen, ans Ende. Die ID
+/// des Schritts davor, null: ganz vorn (nur in einer leeren Kette).
+String? platzVorschlag(List<PaketSchritt> schritte, String abteilung) {
+  for (final s in schritte.reversed) {
+    if (s.abteilung == abteilung) return s.id;
+  }
+  return schritte.isEmpty ? null : schritte.last.id;
+}
 
 String? _leerZuNull(String? s) {
   final t = s?.trim();
@@ -120,12 +150,16 @@ class Erfassungsstand {
     Map<String, ProduktionsEntwurf>? entwuerfe,
     Map<String, GeaenderterWert>? werte,
     Map<String, ErfasstesFoto>? fotos,
+    Map<String, NeuerSchritt>? neueSchritte,
+    Map<String, EntfernterSchritt>? entfernteSchritte,
     this.fotoWartend,
     this.gespeichertAm,
   })  : produktionen = produktionen ?? {},
         entwuerfe = entwuerfe ?? {},
         werte = werte ?? {},
-        fotos = fotos ?? {};
+        fotos = fotos ?? {},
+        neueSchritte = neueSchritte ?? {},
+        entfernteSchritte = entfernteSchritte ?? {};
 
   /// Das geöffnete Paket — null: noch keins.
   ErfassungsPaket? paket;
@@ -147,6 +181,13 @@ class Erfassungsstand {
   /// Die Fotos nach ihrer ID — nur die Angaben, ohne Bild.
   final Map<String, ErfasstesFoto> fotos;
 
+  /// Maschinen, die in eine Kette dazugekommen sind, nach der ID ihres
+  /// Schritts — in der Reihenfolge, in der sie dazukamen.
+  final Map<String, NeuerSchritt> neueSchritte;
+
+  /// Schritte aus dem Paket, die aus ihrer Kette fallen, nach ihrer ID.
+  final Map<String, EntfernterSchritt> entfernteSchritte;
+
   /// Das Foto, für das gerade die Kamera offen ist. Android darf die App
   /// schließen, solange die Kamera vorn ist — beim nächsten Start weiß die
   /// App damit noch, wozu das Bild gehört.
@@ -158,7 +199,11 @@ class Erfassungsstand {
 
   /// Ob etwas erfasst ist.
   bool get hatErfasstes =>
-      produktionen.isNotEmpty || werte.isNotEmpty || fotos.isNotEmpty;
+      produktionen.isNotEmpty ||
+      werte.isNotEmpty ||
+      fotos.isNotEmpty ||
+      neueSchritte.isNotEmpty ||
+      entfernteSchritte.isNotEmpty;
 
   /// Ob es Erfasstes gibt, das noch in keiner Ergebnis-Datei steht.
   bool get ungesichert => hatErfasstes && gespeichertAm == null;
@@ -201,6 +246,8 @@ class Erfassungsstand {
     entwuerfe.clear();
     werte.clear();
     fotos.clear();
+    neueSchritte.clear();
+    entfernteSchritte.clear();
     fotoWartend = null;
     gespeichertAm = null;
     return true;
@@ -338,6 +385,171 @@ class Erfassungsstand {
     gespeichertAm = null;
   }
 
+  // ── Prozessketten ───────────────────────────────────────────────────
+
+  /// Die Kette von [artikel], wie sie auf dem Handy steht: die Schritte
+  /// aus dem Paket, die neuen an ihrem Platz, die herausgenommenen noch
+  /// mit dabei. Gezählt werden nur die Schritte, die bleiben — ein
+  /// herausgenommener hat die Nummer 0.
+  List<KettenSchritt> ketteVon(PaketArtikel artikel) {
+    final p = paket;
+    final ids = [for (final s in artikel.schritte) s.id];
+    final neu = <String, PaketSchritt>{};
+    for (final n in neueSchritte.values) {
+      if (n.artikelId != artikel.id) continue;
+      final m = p?.maschineMit(n.maschineId);
+      neu[n.id] = PaketSchritt(
+        id: n.id,
+        nummer: 0,
+        abteilung: n.abteilung,
+        abteilungName: m?.abteilungName ?? n.abteilung,
+        abteilungFarbe: m?.abteilungFarbe,
+        anlage: m?.name ?? n.maschine,
+        felder: m?.felder ?? const [],
+      );
+      final nach = n.nachSchrittId;
+      final i = nach == null ? -1 : ids.indexOf(nach);
+      if (nach != null && i < 0) {
+        ids.add(n.id);
+      } else {
+        ids.insert(i + 1, n.id);
+      }
+    }
+    final ausPaket = {for (final s in artikel.schritte) s.id: s};
+    var nummer = 0;
+    return [
+      for (final id in ids)
+        () {
+          final s = ausPaket[id] ?? neu[id]!;
+          final weg = entfernteSchritte.containsKey(id);
+          if (!weg) nummer++;
+          return (
+            schritt: PaketSchritt(
+              id: s.id,
+              nummer: weg ? 0 : nummer,
+              abteilung: s.abteilung,
+              abteilungName: s.abteilungName,
+              abteilungFarbe: s.abteilungFarbe,
+              anlage: s.anlage,
+              prozessschritt: s.prozessschritt,
+              felder: s.felder,
+            ),
+            neu: neu.containsKey(id),
+            entfernt: weg,
+          );
+        }(),
+    ];
+  }
+
+  /// Wie viele Maschinen in der Kette von [artikelId] dazukamen oder
+  /// wegfallen.
+  int kettenAenderungenIn(String artikelId) =>
+      neueSchritte.values.where((n) => n.artikelId == artikelId).length +
+      entfernteSchritte.values.where((e) => e.artikelId == artikelId).length;
+
+  /// Holt [maschine] in die Kette von [artikel] — hinter [nachSchrittId],
+  /// ohne ganz nach vorn.
+  void maschineHinzu({
+    required String id,
+    required PaketArtikel artikel,
+    required PaketMaschine maschine,
+    required String? nachSchrittId,
+    required DateTime jetzt,
+  }) {
+    neueSchritte[id] = NeuerSchritt(
+      id: id,
+      artikelId: artikel.id,
+      maschineId: maschine.id,
+      maschine: maschine.name,
+      abteilung: maschine.abteilung,
+      nachSchrittId: nachSchrittId,
+      kuerzel: _leerZuNull(kuerzel),
+      erfasstAm: jetzt,
+    );
+    gespeichertAm = null;
+  }
+
+  /// Nimmt [schritt] aus der Kette von [artikel]. Ein Schritt aus dem
+  /// Paket bleibt sichtbar und lässt sich mit [schrittBehalten]
+  /// zurückholen, samt seiner Werte. Ein neuer verschwindet ganz — mit
+  /// dem, was an ihm eingetragen war; wer hinter ihm stand, rückt an
+  /// seinen Platz.
+  void schrittEntfernen({
+    required PaketArtikel artikel,
+    required PaketSchritt schritt,
+    required DateTime jetzt,
+  }) {
+    final neu = neueSchritte.remove(schritt.id);
+    if (neu != null) {
+      for (final MapEntry(:key, :value) in neueSchritte.entries.toList()) {
+        if (value.nachSchrittId != schritt.id) continue;
+        neueSchritte[key] = NeuerSchritt(
+          id: value.id,
+          artikelId: value.artikelId,
+          maschineId: value.maschineId,
+          maschine: value.maschine,
+          abteilung: value.abteilung,
+          nachSchrittId: neu.nachSchrittId,
+          kuerzel: value.kuerzel,
+          erfasstAm: value.erfasstAm,
+        );
+      }
+      werte.removeWhere((_, w) => w.schrittId == schritt.id);
+    } else {
+      entfernteSchritte[schritt.id] = EntfernterSchritt(
+        artikelId: artikel.id,
+        schrittId: schritt.id,
+        anlage: schritt.anlage,
+        kuerzel: _leerZuNull(kuerzel),
+        erfasstAm: jetzt,
+      );
+    }
+    gespeichertAm = null;
+  }
+
+  /// Holt einen herausgenommenen Schritt aus dem Paket zurück.
+  bool schrittBehalten(String schrittId) {
+    if (entfernteSchritte.remove(schrittId) == null) return false;
+    gespeichertAm = null;
+    return true;
+  }
+
+  /// Die neuen Schritte fürs Ergebnis: je Artikel in der Reihenfolge der
+  /// Kette, und jeder hinter dem nächsten Schritt davor, der bleibt.
+  List<NeuerSchritt> _neueFuersErgebnis() {
+    final p = paket;
+    if (p == null || neueSchritte.isEmpty) return const [];
+    final artikelIds = <String>{
+      for (final n in neueSchritte.values) n.artikelId,
+    };
+    final liste = <NeuerSchritt>[];
+    for (final artikelId in artikelIds) {
+      final artikel = p.artikelMit(artikelId) ??
+          PaketArtikel(id: artikelId, nummer: '', name: '');
+      String? davor;
+      for (final k in ketteVon(artikel)) {
+        if (k.entfernt) continue;
+        final n = neueSchritte[k.schritt.id];
+        if (n != null) {
+          liste.add(
+            NeuerSchritt(
+              id: n.id,
+              artikelId: n.artikelId,
+              maschineId: n.maschineId,
+              maschine: n.maschine,
+              abteilung: n.abteilung,
+              nachSchrittId: davor,
+              kuerzel: n.kuerzel,
+              erfasstAm: n.erfasstAm,
+            ),
+          );
+        }
+        davor = k.schritt.id;
+      }
+    }
+    return liste;
+  }
+
   /// Das Ergebnis für den Planer — null ohne Paket. Die Fotos gehen mit,
   /// soweit ihr Bild in [bilder] steht (ID → JPEG).
   ErfassungsErgebnis? ergebnis(
@@ -356,7 +568,14 @@ class Erfassungsstand {
       paketErstellt: p.erstellt,
       erstellt: jetzt,
       produktionen: liste,
-      werte: werte.values.toList(),
+      // Werte an einem herausgenommenen Schritt gehen nicht mit — sie
+      // bleiben aber auf dem Handy, falls er zurückgeholt wird.
+      werte: [
+        for (final w in werte.values)
+          if (!entfernteSchritte.containsKey(w.schrittId)) w,
+      ],
+      neueSchritte: _neueFuersErgebnis(),
+      entfernteSchritte: entfernteSchritte.values.toList(),
       fotos: [
         for (final f in fotoListe.reversed)
           if (bilder[f.id] case final bild?) f.mit(bild),
@@ -375,6 +594,12 @@ class Erfassungsstand {
         'werte': [for (final w in werte.values) w.toJson()],
         if (fotos.isNotEmpty)
           'fotos': [for (final f in fotos.values) f.toJson()],
+        if (neueSchritte.isNotEmpty)
+          'neueSchritte': [for (final n in neueSchritte.values) n.toJson()],
+        if (entfernteSchritte.isNotEmpty)
+          'entfernteSchritte': [
+            for (final e in entfernteSchritte.values) e.toJson(),
+          ],
         if (fotoWartend != null) 'fotoWartend': fotoWartend!.toJson(),
         if (gespeichertAm != null)
           'gespeichertAm': gespeichertAm!.toIso8601String(),
@@ -406,6 +631,15 @@ class Erfassungsstand {
         for (final e in jsonListe(j, 'entwuerfe', 'dem Stand'))
           if (ProduktionsEntwurf.ausJson(e) case final entwurf?) entwurf,
       ];
+      // Fehlen in älteren Ständen — dann gibt es keine.
+      final neueSchritte = [
+        for (final n in jsonListe(j, 'neueSchritte', 'dem Stand'))
+          NeuerSchritt.ausJson(n),
+      ];
+      final entfernteSchritte = [
+        for (final e in jsonListe(j, 'entfernteSchritte', 'dem Stand'))
+          EntfernterSchritt.ausJson(e),
+      ];
       final wartend = jsonObjektOder(j, 'fotoWartend');
       return Erfassungsstand(
         paket: paket == null ? null : ErfassungsPaket.ausJson(paket),
@@ -416,6 +650,10 @@ class Erfassungsstand {
           for (final w in werte) wertSchluessel(w.schrittId, w.schluessel): w,
         },
         fotos: {for (final f in fotos) f.id: f},
+        neueSchritte: {for (final n in neueSchritte) n.id: n},
+        entfernteSchritte: {
+          for (final e in entfernteSchritte) e.schrittId: e,
+        },
         fotoWartend: wartend == null ? null : ErfasstesFoto.ausJson(wartend),
         gespeichertAm:
             gespeichert == null ? null : DateTime.tryParse(gespeichert),

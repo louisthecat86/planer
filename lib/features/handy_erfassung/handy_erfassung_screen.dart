@@ -17,7 +17,10 @@ import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../articles/article_detail_providers.dart'
-    show productionHistoryProvider, stepParametersProvider;
+    show
+        productStepsProvider,
+        productionHistoryProvider,
+        stepParametersProvider;
 import '../entwicklung/daten/datei_typen.dart' show groesseText;
 import '../erfassung/produktion_erfassung_screen.dart'
     show erfassungWocheDatenProvider;
@@ -62,6 +65,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   final _produktionen = <ProduktionVorschau>{};
   final _werte = <WertVorschau>{};
   final _fotos = <FotoVorschau>{};
+  final _schritte = <SchrittVorschau>{};
 
   static DateTime get _montag {
     final heute = tagOhneZeit(DateTime.now());
@@ -197,6 +201,9 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         _fotos
           ..clear()
           ..addAll(vorschau.fotos.where((f) => f.vorgewaehlt));
+        _schritte
+          ..clear()
+          ..addAll(vorschau.schritte.where((s) => s.vorgewaehlt));
       });
     } on FormatFehler catch (e) {
       _melde(e.meldung, fehler: true);
@@ -218,6 +225,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         produktionen: _produktionen,
         werte: _werte,
         fotos: _fotos,
+        schritte: _schritte,
       );
       ref.read(autoBackupTriggerProvider).fireDebounced(
             reason: 'Handy-Erfassung eingelesen',
@@ -225,6 +233,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
       ref
         ..invalidate(productionHistoryProvider)
         ..invalidate(stepParametersProvider)
+        ..invalidate(productStepsProvider)
         ..invalidate(erfassungWocheDatenProvider);
       if (!mounted) return;
       final muster = _fotos
@@ -234,11 +243,14 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
       final p = bericht.produktionen;
       final w = bericht.werte;
       final f = bericht.fotos;
+      final k = bericht.schritte;
       _melde(
         [
           'Übernommen: ${p == 1 ? '1 Produktion' : '$p Produktionen'}, '
               '${w == 1 ? '1 Maschineneinstellung' : '$w '
                   'Maschineneinstellungen'}'
+              '${k == 0 ? '' : ', ${k == 1 ? '1 Änderung' : '$k '
+                  'Änderungen'} an Prozessketten'}'
               ' und ${f == 1 ? '1 Foto' : '$f Fotos'}.',
           if (f > 0 && muster > 0)
             '${muster == 1 ? 'Das Musterfoto liegt' : 'Die Musterfotos '
@@ -378,7 +390,8 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   Widget _vorschauBereich(BuildContext context, ErgebnisVorschau v) {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
-    final anzahl = _produktionen.length + _werte.length + _fotos.length;
+    final anzahl =
+        _produktionen.length + _werte.length + _fotos.length + _schritte.length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -442,6 +455,55 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
                           ),
                         ),
                       ),
+                    if (v.schritte.isNotEmpty)
+                      _Zwischentitel('PROZESSKETTEN (${v.schritte.length})'),
+                    for (final k in v.schritte)
+                      CheckboxListTile(
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        value: _schritte.contains(k),
+                        onChanged: !k.moeglich || _arbeitet
+                            ? null
+                            : (an) => setState(() {
+                                  if (an ?? false) {
+                                    _schritte.add(k);
+                                    return;
+                                  }
+                                  _schritte.remove(k);
+                                  // Ohne den neuen Schritt haben seine
+                                  // Werte keinen Platz.
+                                  if (k.neu case final n?) {
+                                    _werte.removeWhere(
+                                      (w) => w.wert.schrittId == n.id,
+                                    );
+                                  }
+                                }),
+                        secondary: Icon(
+                          k.istNeu
+                              ? Icons.add_circle_outline
+                              : Icons.remove_circle_outline,
+                          color: k.moeglich ? null : grau,
+                        ),
+                        title: Text(k.text),
+                        subtitle: Text(
+                          [
+                            [
+                              if (k.artikel.isNotEmpty) k.artikel,
+                              if ((k.neu?.kuerzel ?? k.entfernt?.kuerzel ?? '')
+                                  .isNotEmpty)
+                                'von ${k.neu?.kuerzel ?? k.entfernt?.kuerzel}',
+                            ].join(' · '),
+                            if (k.hinweis != null) k.hinweis!,
+                          ].join('\n'),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: k.moeglich ||
+                                    k.stand == SchrittStand.schonDa ||
+                                    k.stand == SchrittStand.schonEntfernt
+                                ? grau
+                                : theme.colorScheme.error,
+                          ),
+                        ),
+                      ),
                     if (v.werte.isNotEmpty)
                       _Zwischentitel(
                         'MASCHINENEINSTELLUNGEN (${v.werte.length})',
@@ -451,13 +513,14 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
                         dense: true,
                         controlAffinity: ListTileControlAffinity.leading,
                         value: _werte.contains(w),
-                        onChanged: !w.moeglich || _arbeitet
-                            ? null
-                            : (an) => setState(
-                                  () => an ?? false
-                                      ? _werte.add(w)
-                                      : _werte.remove(w),
-                                ),
+                        onChanged:
+                            !w.moeglich || _arbeitet || _ohneSeinenSchritt(v, w)
+                                ? null
+                                : (an) => setState(
+                                      () => an ?? false
+                                          ? _werte.add(w)
+                                          : _werte.remove(w),
+                                    ),
                         title: Text(
                           '${w.wert.name}: ${w.amPc ?? '—'} → '
                           '${_oderStrich(w.wert.neu)}',
@@ -550,6 +613,15 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         ),
       ],
     );
+  }
+
+  /// Ob [w] an einer Maschine hängt, die erst mit diesem Ergebnis in die
+  /// Kette käme — und die gerade nicht angehakt ist.
+  bool _ohneSeinenSchritt(ErgebnisVorschau v, WertVorschau w) {
+    for (final k in v.schritte) {
+      if (k.neu?.id == w.wert.schrittId) return !_schritte.contains(k);
+    }
+    return false;
   }
 
   static String _oderStrich(String? wert) {

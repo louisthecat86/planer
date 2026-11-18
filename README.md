@@ -582,7 +582,7 @@ Berechtigung fürs Internet.
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
    der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
-   und die Notiz, samt ihren Grenzen. Rezepturen und die Produktentwicklung
+   und die Notiz, samt ihren Grenzen — und den Maschinenkatalog. Rezepturen und die Produktentwicklung
    stehen nicht darin.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
    Planer Erfassung") oder in der App „Paket öffnen".
@@ -597,7 +597,11 @@ Berechtigung fürs Internet.
    eingestellt ist — mit der vollen Tastatur, die Platten von Bratstraße
    und Kombiofen in einer Zeile in Laufrichtung (Platte 1 rechts); harte
    Grenzen blockieren, weiche warnen, wie am PC. Jede Eingabe ist sofort
-   auf dem Handy gespeichert.
+   auf dem Handy gespeichert. Fehlt eine Maschine in der Kette, holt
+   **„Maschine hinzufügen"** sie aus dem Katalog — vorgeschlagen hinter den
+   letzten Schritt ihrer Abteilung, der Platz ist frei wählbar — und ihre
+   Werte lassen sich gleich eintragen. Der Papierkorb an einem Schritt nimmt
+   ihn aus der Kette; bis zum Einlesen holt „Behalten" ihn zurück.
 4. **Fotos:** Beim Erfassen einer Produktion und bei den
    Maschineneinstellungen eines Artikels nimmt „Foto aufnehmen" ein **Foto
    aus der Produktion** auf — es gehört zum Artikel. „Musterfoto aufnehmen"
@@ -614,6 +618,14 @@ Berechtigung fürs Internet.
    der Produktionserfassung (mit denselben Kennzahlen),
    Maschineneinstellungen am Schritt des Artikels. Hat sich ein Wert am PC
    inzwischen geändert, steht er als Konflikt da und ist nicht vorgewählt.
+   Unter **Prozessketten** stehen Maschinen, die dazukommen oder wegfallen:
+   Eine neue kommt hinter denselben Schritt wie auf dem Handy (gibt es den
+   nicht mehr, ans Ende ihrer Abteilung), mit den Werten, die an ihr
+   eingetragen wurden; ein entfernter Schritt fällt weg, seine
+   Leistungsdaten gehen wie beim Entfernen am PC an den nächsten Schritt
+   seiner Abteilung.
+   Fehlt die Maschine inzwischen im Katalog oder hätte die Kette mehr als
+   20 Schritte, lässt sich die Änderung nicht übernehmen.
    Fotos aus der Produktion kommen zum Artikel (Reiter „Infos" → **Fotos**:
    das Referenzbild vorn, dahinter die neuesten; antippen zeigt ein Foto
    groß, dort wird es zum Referenzbild, bekommt eine Bemerkung oder wird
@@ -629,8 +641,11 @@ Berechtigung fürs Internet.
 
 Das Austauschformat liegt als eigenes Paket in `packages/erfassung_format/`
 und wird von Planer und App benutzt — so passen beide zusammen. Ein Ergebnis
-mit Fotos trägt die Fassung 2; ein Planer auf älterem Stand sagt dann, dass
-er die Datei nicht liest, statt die Fotos wegzulassen.
+mit Fotos trägt die Fassung 2, eines mit geänderten Prozessketten die
+Fassung 3; ein Planer auf älterem Stand sagt dann, dass er die Datei nicht
+liest, statt etwas wegzulassen. Ein Paket aus einem älteren Planer hat
+keinen Maschinenkatalog — „Maschine hinzufügen" sagt dann, dass ein neues
+Paket nötig ist.
 
 ## Daten und Sicherung
 

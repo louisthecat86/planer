@@ -363,4 +363,197 @@ void main() {
     expect(wieder.fotos, isEmpty);
     expect(wieder.fotoWartend, isNull);
   });
+
+  group('Maschinen in der Kette', () {
+    late Erfassungsstand s;
+    late PaketArtikel artikel;
+    PaketMaschine maschine(String id) => s.paket!.maschineMit(id)!;
+
+    List<(String, int, bool, bool)> kette() => [
+          for (final k in s.ketteVon(artikel))
+            (k.schritt.id, k.schritt.nummer, k.neu, k.entfernt),
+        ];
+
+    setUp(() {
+      s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+      artikel = s.paket!.artikelMit('a1')!;
+    });
+
+    test('dazu: an ihrem Platz, mit den Feldern aus dem Katalog', () {
+      expect(s.hatErfasstes, isFalse);
+      s.maschineHinzu(
+        id: 'n1',
+        artikel: artikel,
+        maschine: maschine('m-kutter'),
+        nachSchrittId: 's1',
+        jetzt: jetzt,
+      );
+      expect(kette(), [
+        ('s1', 1, false, false),
+        ('n1', 2, true, false),
+        ('s2', 3, false, false),
+      ]);
+      final neu = s.ketteVon(artikel)[1].schritt;
+      expect(
+        (neu.anlage, neu.abteilungName, neu.felder.length),
+        ('Kutter Test', 'Kutterabteilung', 2),
+      );
+      expect(s.kettenAenderungenIn('a1'), 1);
+      expect(s.kettenAenderungenIn('a2'), 0);
+      expect(s.hatErfasstes, isTrue);
+
+      // Ganz vorn.
+      s.maschineHinzu(
+        id: 'n0',
+        artikel: artikel,
+        maschine: maschine('m-fueller'),
+        nachSchrittId: null,
+        jetzt: jetzt,
+      );
+      expect([for (final k in kette()) k.$1], ['n0', 's1', 'n1', 's2']);
+
+      final e = s.ergebnis(jetzt)!;
+      expect(
+        [for (final n in e.neueSchritte) (n.id, n.nachSchrittId, n.kuerzel)],
+        [('n0', null, 'AB'), ('n1', 's1', 'AB')],
+      );
+      expect(e.neueSchritte.last.abteilung, 'kutterabteilung');
+      // Mit geänderten Ketten die neue Fassung des Formats.
+      expect((jsonDecode(e.alsText()) as Map)['version'], 3);
+      final gelesen = ErfassungsErgebnis.ausText(e.alsText());
+      expect(gelesen.neueSchritte.last.maschineId, 'm-kutter');
+    });
+
+    test('Werte am neuen Schritt — und weg ist weg', () {
+      s
+        ..maschineHinzu(
+          id: 'n1',
+          artikel: artikel,
+          maschine: maschine('m-kutter'),
+          nachSchrittId: 's1',
+          jetzt: jetzt,
+        )
+        ..maschineHinzu(
+          id: 'n2',
+          artikel: artikel,
+          maschine: maschine('m-fueller'),
+          nachSchrittId: 'n1',
+          jetzt: jetzt,
+        );
+      final n1 = s.ketteVon(artikel)[1].schritt;
+      s.wertSetzen(
+        artikel: artikel,
+        schritt: n1,
+        feld: n1.feldMit('s:messerdrehzahl')!,
+        neu: '3000',
+        jetzt: jetzt,
+      );
+      expect(s.ergebnis(jetzt)!.werte.single.schrittId, 'n1');
+
+      s.schrittEntfernen(artikel: artikel, schritt: n1, jetzt: jetzt);
+      // Der zweite rückt an seinen Platz, der Wert ist weg.
+      expect([for (final k in kette()) k.$1], ['s1', 'n2', 's2']);
+      expect(s.neueSchritte['n2']!.nachSchrittId, 's1');
+      expect(s.werte, isEmpty);
+      expect(s.ergebnis(jetzt)!.neueSchritte.single.nachSchrittId, 's1');
+    });
+
+    test('raus aus dem Paket: steht noch da, geht nicht mit, kommt zurück', () {
+      final s1 = artikel.schrittMit('s1')!;
+      s.wertSetzen(
+        artikel: artikel,
+        schritt: s1,
+        feld: s1.feldMit('s:füllgewicht')!,
+        neu: '130',
+        jetzt: jetzt,
+      );
+      s.schrittEntfernen(artikel: artikel, schritt: s1, jetzt: jetzt);
+      expect(kette(), [
+        ('s1', 0, false, true),
+        ('s2', 1, false, false),
+      ]);
+      final e = s.ergebnis(jetzt)!;
+      expect(
+        [for (final x in e.entfernteSchritte) (x.schrittId, x.anlage)],
+        [('s1', 'Füller Test')],
+      );
+      // Der Wert bleibt auf dem Handy, geht aber nicht mit.
+      expect(e.werte, isEmpty);
+      expect(s.werte, hasLength(1));
+
+      expect(s.schrittBehalten('s1'), isTrue);
+      expect(s.schrittBehalten('s1'), isFalse);
+      expect(kette().first, ('s1', 1, false, false));
+      expect(s.ergebnis(jetzt)!.werte.single.neu, '130');
+      expect(s.ergebnis(jetzt)!.entfernteSchritte, isEmpty);
+    });
+
+    test('hinter einem Schritt, der wegfällt: hinter den davor', () {
+      s
+        ..maschineHinzu(
+          id: 'n1',
+          artikel: artikel,
+          maschine: maschine('m-kutter'),
+          nachSchrittId: 's2',
+          jetzt: jetzt,
+        )
+        ..schrittEntfernen(
+          artikel: artikel,
+          schritt: artikel.schrittMit('s2')!,
+          jetzt: jetzt,
+        );
+      expect(s.ergebnis(jetzt)!.neueSchritte.single.nachSchrittId, 's1');
+      s.schrittEntfernen(
+        artikel: artikel,
+        schritt: artikel.schrittMit('s1')!,
+        jetzt: jetzt,
+      );
+      // Fällt alles davor weg: ganz vorn.
+      expect(s.ergebnis(jetzt)!.neueSchritte.single.nachSchrittId, isNull);
+    });
+
+    test('der Vorschlag: hinter die eigene Abteilung, sonst ans Ende', () {
+      final schritte = artikel.schritte;
+      expect(platzVorschlag(schritte, 'wurstkueche'), 's1');
+      expect(platzVorschlag(schritte, 'bratstrasse'), 's2');
+      expect(platzVorschlag(schritte, 'kutterabteilung'), 's2');
+      expect(platzVorschlag(const [], 'kutterabteilung'), isNull);
+    });
+
+    test('übersteht das Schließen; ein neues Paket verwirft es', () {
+      s
+        ..maschineHinzu(
+          id: 'n1',
+          artikel: artikel,
+          maschine: maschine('m-kutter'),
+          nachSchrittId: 's1',
+          jetzt: jetzt,
+        )
+        ..schrittEntfernen(
+          artikel: artikel,
+          schritt: artikel.schrittMit('s2')!,
+          jetzt: jetzt,
+        )
+        ..gespeichertAm = jetzt;
+      final wieder = Erfassungsstand.ausText(s.alsText());
+      expect(wieder.alsText(), s.alsText());
+      expect(wieder.neueSchritte.keys, ['n1']);
+      expect(wieder.entfernteSchritte.keys, ['s2']);
+      expect(wieder.ungesichert, isFalse);
+
+      expect(wieder.paketOeffnen(beispielPaket(id: 'paket-2')), isTrue);
+      expect(wieder.neueSchritte, isEmpty);
+      expect(wieder.entfernteSchritte, isEmpty);
+    });
+
+    test('ein Paket aus einem älteren Planer hat keinen Katalog', () {
+      final alt = ErfassungsPaket.ausText(
+        beispielPaket(mitKatalog: false).alsText(),
+      );
+      expect(alt.maschinen, isEmpty);
+      expect(alt.maschineMit('m-kutter'), isNull);
+      final neu = ErfassungsPaket.ausText(beispielPaket().alsText());
+      expect([for (final m in neu.maschinen) m.id], ['m-fueller', 'm-kutter']);
+    });
+  });
 }

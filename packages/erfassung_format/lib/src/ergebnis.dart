@@ -4,7 +4,8 @@ import 'paket.dart';
 import 'werte.dart';
 
 /// Was vom Handy zurückkommt: die erfassten Produktionen, die an der
-/// Anlage geänderten Maschineneinstellungen und die Fotos.
+/// Anlage geänderten Maschineneinstellungen, die Fotos und die Maschinen,
+/// die in einer Prozesskette dazukamen oder wegfielen.
 class ErfassungsErgebnis {
   const ErfassungsErgebnis({
     required this.paketId,
@@ -13,6 +14,8 @@ class ErfassungsErgebnis {
     this.produktionen = const [],
     this.werte = const [],
     this.fotos = const [],
+    this.neueSchritte = const [],
+    this.entfernteSchritte = const [],
   });
 
   /// Das Paket, auf dem die Erfassung beruht.
@@ -26,7 +29,22 @@ class ErfassungsErgebnis {
   /// Die Fotos samt Bild.
   final List<ErfasstesFoto> fotos;
 
-  bool get leer => produktionen.isEmpty && werte.isEmpty && fotos.isEmpty;
+  /// Maschinen, die in eine Prozesskette dazukommen — in der Reihenfolge,
+  /// in der der Planer sie einfügt.
+  final List<NeuerSchritt> neueSchritte;
+
+  /// Schritte, die aus ihrer Prozesskette entfallen.
+  final List<EntfernterSchritt> entfernteSchritte;
+
+  /// Ob Prozessketten geändert sind.
+  bool get hatKettenAenderungen =>
+      neueSchritte.isNotEmpty || entfernteSchritte.isNotEmpty;
+
+  bool get leer =>
+      produktionen.isEmpty &&
+      werte.isEmpty &&
+      fotos.isEmpty &&
+      !hatKettenAenderungen;
 
   /// „Planer-Erfassung-Ergebnis_2026-11-09_1810_AB.json".
   String dateiname({String? kuerzel}) {
@@ -37,12 +55,16 @@ class ErfassungsErgebnis {
   }
 
   JsonObjekt toJson() => {
-        // Mit Fotos die neue Fassung: Ein Planer auf älterem Stand sagt
-        // dann, dass er die Datei nicht liest — statt die Fotos
-        // stillschweigend wegzulassen.
+        // Mit Fotos oder geänderten Ketten eine neuere Fassung: Ein
+        // Planer auf älterem Stand sagt dann, dass er die Datei nicht
+        // liest — statt sie stillschweigend wegzulassen.
         ...dateiKopf(
           DateiArt.ergebnis,
-          version: fotos.isEmpty ? kFormatVersionOhneFotos : kFormatVersion,
+          version: hatKettenAenderungen
+              ? kFormatVersion
+              : fotos.isEmpty
+                  ? kFormatVersionOhneFotos
+                  : kFormatVersionMitFotos,
         ),
         'paket': paketId,
         if (paketErstellt != null)
@@ -51,6 +73,10 @@ class ErfassungsErgebnis {
         'produktionen': [for (final p in produktionen) p.toJson()],
         'werte': [for (final w in werte) w.toJson()],
         if (fotos.isNotEmpty) 'fotos': [for (final f in fotos) f.toJson()],
+        if (neueSchritte.isNotEmpty)
+          'neueSchritte': [for (final s in neueSchritte) s.toJson()],
+        if (entfernteSchritte.isNotEmpty)
+          'entfernteSchritte': [for (final s in entfernteSchritte) s.toJson()],
       };
 
   /// Die Datei als Text.
@@ -77,6 +103,14 @@ class ErfassungsErgebnis {
       ],
       fotos: [
         for (final f in jsonListe(j, 'fotos', wo)) ErfasstesFoto.ausJson(f),
+      ],
+      neueSchritte: [
+        for (final s in jsonListe(j, 'neueSchritte', wo))
+          NeuerSchritt.ausJson(s),
+      ],
+      entfernteSchritte: [
+        for (final s in jsonListe(j, 'entfernteSchritte', wo))
+          EntfernterSchritt.ausJson(s),
       ],
     );
   }
@@ -256,6 +290,107 @@ class GeaenderterWert {
       name: jsonTextOder(j, 'name') ?? '',
       alt: jsonTextOder(j, 'alt'),
       neu: jsonTextOder(j, 'neu'),
+      kuerzel: jsonTextOder(j, 'kuerzel'),
+      erfasstAm: jsonZeitpunkt(j, 'erfasstAm', wo),
+    );
+  }
+}
+
+/// Eine Maschine aus dem Katalog, die an der Anlage in die Prozesskette
+/// eines Artikels geholt wurde — etwa weil sie am PC vergessen war.
+///
+/// Die [id] vergibt das Handy, und der Planer legt den Schritt unter
+/// genau dieser ID an: Geänderte Werte des neuen Schritts finden ihn so
+/// wieder, und ein zweites Einlesen derselben Datei legt ihn nicht noch
+/// einmal an.
+class NeuerSchritt {
+  const NeuerSchritt({
+    required this.id,
+    required this.artikelId,
+    required this.maschineId,
+    required this.maschine,
+    required this.abteilung,
+    required this.erfasstAm,
+    this.nachSchrittId,
+    this.kuerzel,
+  });
+
+  final String id;
+  final String artikelId;
+  final String maschineId;
+
+  /// Der Name der Maschine — zur Anzeige.
+  final String maschine;
+
+  /// Die Abteilung des Schritts.
+  final String abteilung;
+
+  /// Der Schritt, hinter dem er steht — null: ganz vorn. Kann auch ein
+  /// anderer neuer Schritt sein.
+  final String? nachSchrittId;
+
+  final String? kuerzel;
+  final DateTime erfasstAm;
+
+  JsonObjekt toJson() => {
+        'id': id,
+        'artikelId': artikelId,
+        'maschineId': maschineId,
+        'maschine': maschine,
+        'abteilung': abteilung,
+        if (nachSchrittId != null) 'nach': nachSchrittId,
+        if (kuerzel != null) 'kuerzel': kuerzel,
+        'erfasstAm': erfasstAm.toIso8601String(),
+      };
+
+  static NeuerSchritt ausJson(JsonObjekt j) {
+    const wo = 'einem neuen Schritt';
+    return NeuerSchritt(
+      id: jsonText(j, 'id', wo),
+      artikelId: jsonText(j, 'artikelId', wo),
+      maschineId: jsonText(j, 'maschineId', wo),
+      maschine: jsonTextOder(j, 'maschine') ?? '',
+      abteilung: jsonTextOder(j, 'abteilung') ?? '',
+      nachSchrittId: jsonTextOder(j, 'nach'),
+      kuerzel: jsonTextOder(j, 'kuerzel'),
+      erfasstAm: jsonZeitpunkt(j, 'erfasstAm', wo),
+    );
+  }
+}
+
+/// Ein Schritt, der an der Anlage aus der Prozesskette genommen wurde.
+class EntfernterSchritt {
+  const EntfernterSchritt({
+    required this.artikelId,
+    required this.schrittId,
+    required this.anlage,
+    required this.erfasstAm,
+    this.kuerzel,
+  });
+
+  final String artikelId;
+  final String schrittId;
+
+  /// Der Name der Anlage im Paket — zur Anzeige.
+  final String anlage;
+
+  final String? kuerzel;
+  final DateTime erfasstAm;
+
+  JsonObjekt toJson() => {
+        'artikelId': artikelId,
+        'schrittId': schrittId,
+        'anlage': anlage,
+        if (kuerzel != null) 'kuerzel': kuerzel,
+        'erfasstAm': erfasstAm.toIso8601String(),
+      };
+
+  static EntfernterSchritt ausJson(JsonObjekt j) {
+    const wo = 'einem entfernten Schritt';
+    return EntfernterSchritt(
+      artikelId: jsonText(j, 'artikelId', wo),
+      schrittId: jsonText(j, 'schrittId', wo),
+      anlage: jsonTextOder(j, 'anlage') ?? '',
       kuerzel: jsonTextOder(j, 'kuerzel'),
       erfasstAm: jsonZeitpunkt(j, 'erfasstAm', wo),
     );

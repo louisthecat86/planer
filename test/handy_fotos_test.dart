@@ -198,7 +198,7 @@ void main() {
         werte: const [],
         fotos: v.fotos,
       );
-      expect(bericht, (produktionen: 0, werte: 0, fotos: 1));
+      expect(bericht, (produktionen: 0, werte: 0, fotos: 1, schritte: 0));
       final fotos = await ArtikelFotoDienst(db).beobachten('a1').first;
       final foto = fotos.single;
       expect(foto.id, 'f1');

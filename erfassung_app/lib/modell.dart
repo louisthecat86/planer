@@ -140,6 +140,42 @@ class ErfassungsModell extends ChangeNotifier {
     await _geaendert();
   }
 
+  /// Holt [maschine] in die Kette von [artikel] — hinter [nachSchrittId],
+  /// ohne ganz nach vorn. Gibt die ID des neuen Schritts zurück.
+  Future<String> maschineHinzu({
+    required PaketArtikel artikel,
+    required PaketMaschine maschine,
+    required String? nachSchrittId,
+  }) async {
+    final jetzt = DateTime.now();
+    final id = neueSchrittId(jetzt, _zufall.nextInt(1 << 32));
+    _stand.maschineHinzu(
+      id: id,
+      artikel: artikel,
+      maschine: maschine,
+      nachSchrittId: nachSchrittId,
+      jetzt: jetzt,
+    );
+    await _geaendert();
+    return id;
+  }
+
+  Future<void> schrittEntfernen({
+    required PaketArtikel artikel,
+    required PaketSchritt schritt,
+  }) async {
+    _stand.schrittEntfernen(
+      artikel: artikel,
+      schritt: schritt,
+      jetzt: DateTime.now(),
+    );
+    await _geaendert();
+  }
+
+  Future<void> schrittBehalten(String schrittId) async {
+    if (_stand.schrittBehalten(schrittId)) await _geaendert();
+  }
+
   /// Merkt, dass das Ergebnis als Datei gespeichert ist.
   Future<void> ergebnisGespeichert(DateTime am) async {
     _stand.gespeichertAm = am;

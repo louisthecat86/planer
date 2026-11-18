@@ -1,8 +1,9 @@
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show OrderingTerm, Value;
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:produktion_planer/core/constants/parameter_namen.dart';
 import 'package:produktion_planer/core/database/database.dart';
+import 'package:produktion_planer/core/services/prozesskette_service.dart';
 import 'package:produktion_planer/features/handy_erfassung/handy_erfassung_dienst.dart';
 
 import 'helpers/test_db.dart';
@@ -508,7 +509,7 @@ void main() {
         produktionen: v.produktionen.where((p) => p.vorgewaehlt),
         werte: v.werte.where((w) => w.vorgewaehlt),
       );
-      expect(bericht, (produktionen: 1, werte: 5, fotos: 0));
+      expect(bericht, (produktionen: 1, werte: 5, fotos: 0, schritte: 0));
 
       final h = (await db.select(db.productionHistory).get()).single;
       expect(
@@ -597,8 +598,259 @@ void main() {
         produktionen: v.produktionen,
         werte: v.werte,
       );
-      expect(bericht, (produktionen: 0, werte: 0, fotos: 0));
+      expect(bericht, (produktionen: 0, werte: 0, fotos: 0, schritte: 0));
       expect(await db.select(db.productionHistory).get(), isEmpty);
+    });
+
+    group('Maschinen in der Kette', () {
+      final am = DateTime(2026, 11, 10, 9);
+
+      Future<List<(String, int, String?)>> kette(String productId) async => [
+            for (final s in await (db.select(db.productSteps)
+                  ..where((s) => s.productId.equals(productId))
+                  ..where((s) => s.deletedAt.isNull())
+                  ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+                .get())
+              (s.id, s.reihenfolge, s.maschineId),
+          ];
+
+      Future<void> kutter() async {
+        await seedAnlage(
+          db,
+          id: 'm3',
+          name: 'Kutter Test',
+          abteilung: 'kutterabteilung',
+        );
+        await db.into(db.machineParameterDefs).insert(
+              MachineParameterDefsCompanion.insert(
+                id: 'd-k',
+                maschineId: 'm3',
+                parameterName: 'Messerdrehzahl',
+                einheit: const Value('U/min'),
+              ),
+            );
+      }
+
+      NeuerSchritt neuer(
+        String id, {
+        String? nach,
+        String maschineId = 'm3',
+        String artikelId = 'a1',
+      }) =>
+          NeuerSchritt(
+            id: id,
+            artikelId: artikelId,
+            maschineId: maschineId,
+            maschine: 'Kutter Test',
+            abteilung: 'kutterabteilung',
+            nachSchrittId: nach,
+            kuerzel: 'AB',
+            erfasstAm: am,
+          );
+
+      test('der Katalog im Paket: je Maschine die Felder eines neuen Schritts',
+          () async {
+        await kutter();
+        final paket = await dienst.paketErstellen(
+          von: DateTime(2026, 11, 9),
+          bis: DateTime(2026, 11, 15),
+        );
+        final wieder = ErfassungsPaket.ausText(paket.alsText());
+        expect(
+          [for (final m in wieder.maschinen) (m.id, m.abteilungName)],
+          [
+            ('m2', 'Wurstküche'),
+            ('m3', 'Kutterabteilung'),
+            ('m1', 'Bratstraße'),
+          ],
+        );
+        final k = wieder.maschineMit('m3')!;
+        expect(
+          [for (final f in k.felder) (f.art, f.name, f.wert)],
+          [
+            (FeldArt.steckbrief, 'Messerdrehzahl', null),
+            (FeldArt.notiz, 'Maschineneinstellungen (Notiz)', null),
+          ],
+        );
+        // Die Bratstraße bringt ihre Platten mit — leer.
+        final brat = wieder.maschineMit('m1')!;
+        expect(brat.felder, hasLength(21));
+        expect(brat.felder.every((f) => f.wert == null), isTrue);
+      });
+
+      test(
+          'dazu, weg und Werte am neuen Schritt — zweimal einlesen schadet '
+          'nicht', () async {
+        await kutter();
+        // Zwischen Füller und Bratstraße ein Kutter, danach ein zweiter
+        // neuer Schritt direkt hinter ihm; die Bratstraße fällt weg.
+        final ergebnis = ErfassungsErgebnis(
+          paketId: 'p',
+          erstellt: DateTime(2026, 11, 10, 18),
+          neueSchritte: [
+            neuer('n1', nach: 's1'),
+            neuer('n2', nach: 'n1', maschineId: 'm2'),
+          ],
+          entfernteSchritte: [
+            EntfernterSchritt(
+              artikelId: 'a1',
+              schrittId: 's2',
+              anlage: 'Bratstraße Test',
+              erfasstAm: am,
+            ),
+          ],
+          werte: [
+            GeaenderterWert(
+              artikelId: 'a1',
+              schrittId: 'n1',
+              schluessel: steckbriefSchluessel('Messerdrehzahl'),
+              art: FeldArt.steckbrief,
+              name: 'Messerdrehzahl',
+              neu: '3000',
+              erfasstAm: am,
+            ),
+          ],
+        );
+        final v = await dienst.vorschau(ergebnis);
+        expect(
+          [for (final k in v.schritte) (k.stand, k.text)],
+          [
+            (SchrittStand.entfernen, 'Bratstraße Test entfernen'),
+            (SchrittStand.neu, 'Kutter Test dazu — nach Füller Test'),
+            (SchrittStand.neu, 'Füller Test dazu — nach Kutter Test'),
+          ],
+        );
+        expect(v.werte.single.stand, WertStand.neu);
+        expect(v.werte.single.schritt, 'Kutter Test');
+
+        final bericht = await dienst.uebernehmen(
+          produktionen: v.produktionen,
+          werte: v.werte,
+          schritte: v.schritte,
+        );
+        expect(bericht, (produktionen: 0, werte: 1, fotos: 0, schritte: 3));
+        expect(await kette('a1'), [
+          ('s1', 1, 'm2'),
+          ('n1', 2, 'm3'),
+          ('n2', 3, 'm2'),
+        ]);
+        final n1 = await (db.select(db.productSteps)
+              ..where((s) => s.id.equals('n1')))
+            .getSingle();
+        expect(n1.abteilung, 'kutterabteilung');
+        expect(
+          [for (final z in await zeilen('n1')) (z.parameterName, z.wert)],
+          [('Messerdrehzahl', '3000')],
+        );
+
+        // Noch einmal dieselbe Datei: nichts mehr zu tun.
+        final nochmal = await dienst.vorschau(ergebnis);
+        expect(
+          [for (final k in nochmal.schritte) k.stand],
+          [
+            SchrittStand.schonEntfernt,
+            SchrittStand.schonDa,
+            SchrittStand.schonDa,
+          ],
+        );
+        expect(nochmal.werte.single.stand, WertStand.gleich);
+        final zweiter = await dienst.uebernehmen(
+          produktionen: nochmal.produktionen,
+          werte: nochmal.werte,
+          schritte: nochmal.schritte,
+        );
+        expect(zweiter.schritte, 0);
+        expect(await kette('a1'), hasLength(3));
+      });
+
+      test('ohne den neuen Schritt kommen auch seine Werte nicht', () async {
+        await kutter();
+        final ergebnis = ErfassungsErgebnis(
+          paketId: 'p',
+          erstellt: DateTime(2026, 11, 10, 18),
+          neueSchritte: [neuer('n1', nach: 's1')],
+          werte: [
+            GeaenderterWert(
+              artikelId: 'a1',
+              schrittId: 'n1',
+              schluessel: kNotizSchluessel,
+              art: FeldArt.notiz,
+              name: 'Notiz',
+              neu: 'neu',
+              erfasstAm: am,
+            ),
+          ],
+        );
+        final v = await dienst.vorschau(ergebnis);
+        final bericht = await dienst.uebernehmen(
+          produktionen: const [],
+          werte: v.werte,
+        );
+        expect(bericht.werte, 0);
+        expect(await kette('a1'), hasLength(2));
+        expect(await zeilen('n1'), isEmpty);
+      });
+
+      test('vorn, ohne Vorgänger und was nicht geht', () async {
+        await kutter();
+        // Die Maschine m2 ist inzwischen aus dem Katalog gelöscht.
+        await (db.update(db.machines)..where((m) => m.id.equals('m2')))
+            .write(MachinesCompanion(deletedAt: Value(DateTime(2026, 11))));
+        final ergebnis = ErfassungsErgebnis(
+          paketId: 'p',
+          erstellt: DateTime(2026, 11, 10, 18),
+          neueSchritte: [
+            neuer('vorn'),
+            // Den Vorgänger gibt es im Planer nicht: ans Ende seiner
+            // Abteilung — hinter den Kutter, der eben vorn dazukam.
+            neuer('weg', nach: 'gibt-es-nicht'),
+            neuer('geloescht', nach: 's1', maschineId: 'm2'),
+            neuer('fremd', artikelId: 'fehlt'),
+          ],
+        );
+        final v = await dienst.vorschau(ergebnis);
+        expect(
+          [for (final k in v.schritte) k.stand],
+          [
+            SchrittStand.neu,
+            SchrittStand.neu,
+            SchrittStand.maschineFehlt,
+            SchrittStand.artikelFehlt,
+          ],
+        );
+        expect(v.schritte.first.text, 'Kutter Test dazu — ganz vorn');
+        await dienst.uebernehmen(
+          produktionen: const [],
+          werte: const [],
+          schritte: v.schritte,
+        );
+        expect(
+          [for (final s in await kette('a1')) s.$1],
+          ['vorn', 'weg', 's1', 's2'],
+        );
+      });
+
+      test('mehr Schritte, als ein Artikel haben kann: nicht dazu', () async {
+        await kutter();
+        for (var i = 3; i <= ProzesskettenService.maxSchritte; i++) {
+          await seedSchritt(
+            db,
+            id: 'x$i',
+            productId: 'a1',
+            reihenfolge: i,
+            abteilung: 'verpackung',
+          );
+        }
+        final v = await dienst.vorschau(
+          ErfassungsErgebnis(
+            paketId: 'p',
+            erstellt: DateTime(2026, 11, 10, 18),
+            neueSchritte: [neuer('n1', nach: 's1')],
+          ),
+        );
+        expect(v.schritte.single.stand, SchrittStand.zuViele);
+        expect(v.schritte.single.moeglich, isFalse);
+      });
     });
   });
 }

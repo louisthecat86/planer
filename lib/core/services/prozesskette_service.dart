@@ -77,8 +77,7 @@ class ProzesskettenService {
   static List<List<ProductStep>> bloecke(List<ProductStep> schritte) {
     final ergebnis = <List<ProductStep>>[];
     for (final s in schritte) {
-      if (ergebnis.isNotEmpty &&
-          ergebnis.last.first.abteilung == s.abteilung) {
+      if (ergebnis.isNotEmpty && ergebnis.last.first.abteilung == s.abteilung) {
         ergebnis.last.add(s);
       } else {
         ergebnis.add([s]);
@@ -201,10 +200,14 @@ class ProzesskettenService {
   /// Ein neuer Schritt bringt keine Leistungsdaten mit: Die gehören der
   /// Abteilung, in die er kommt.
   ///
+  /// [id] gibt dem Schritt eine vorgegebene ID — so legt die
+  /// Handy-Erfassung ihn unter der ID an, die das Handy vergeben hat.
+  ///
   /// Wirft einen [StateError], wenn die Kette schon [maxSchritte] Schritte
   /// hat.
   static Future<String> fuegeEin(
     AppDatabase db, {
+    String? id,
     required String productId,
     required String abteilung,
     int? index,
@@ -225,10 +228,10 @@ class ProzesskettenService {
       final ziel = (index ?? _endeDerAbteilung(vorher, abteilung))
           .clamp(0, vorher.length);
 
-      final id = const Uuid().v4();
+      final neueId = id ?? const Uuid().v4();
       await db.into(db.productSteps).insert(
             ProductStepsCompanion.insert(
-              id: id,
+              id: neueId,
               productId: productId,
               // Vorläufig — gleich danach wird die ganze Kette nummeriert.
               reihenfolge: vorher.length + 1,
@@ -243,12 +246,12 @@ class ProzesskettenService {
             ),
           );
       final neu = await (db.select(db.productSteps)
-            ..where((s) => s.id.equals(id)))
+            ..where((s) => s.id.equals(neueId)))
           .getSingle();
 
-      final ids = [for (final s in vorher) s.id]..insert(ziel, id);
+      final ids = [for (final s in vorher) s.id]..insert(ziel, neueId);
       await _schreibeKette(db, vorher, ids, neue: [neu]);
-      return id;
+      return neueId;
     });
   }
 
@@ -346,8 +349,7 @@ class ProzesskettenService {
                 ),
               );
           neue.add(
-            await (db.select(db.productSteps)
-                  ..where((s) => s.id.equals(neuId)))
+            await (db.select(db.productSteps)..where((s) => s.id.equals(neuId)))
                 .getSingle(),
           );
           ids.add(neuId);
@@ -527,9 +529,7 @@ class ProzesskettenService {
           ? _hatWerte(s)
           : s.basisMengeKg != werte.mengeKg ||
               s.basisDauerMinuten != werte.minuten;
-      if (s.reihenfolge == i + 1 &&
-          s.abteilung == abteilung &&
-          !werteAendern) {
+      if (s.reihenfolge == i + 1 && s.abteilung == abteilung && !werteAendern) {
         continue;
       }
       await _schreibe(

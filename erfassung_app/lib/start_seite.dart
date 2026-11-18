@@ -225,6 +225,9 @@ class _StartSeiteState extends State<StartSeite> {
         final farben = Farben.von(context);
         final stand = _modell.stand;
         final paket = stand.paket;
+        final aenderungen = stand.werte.length +
+            stand.neueSchritte.length +
+            stand.entfernteSchritte.length;
         return Scaffold(
           appBar: AppBar(
             title: const Text('Planer Erfassung'),
@@ -314,9 +317,7 @@ class _StartSeiteState extends State<StartSeite> {
                     titel: 'Maschineneinstellungen',
                     text: '${paket.artikel.length} Artikel mit ihren '
                         'Schritten und Anlagen',
-                    marke: stand.werte.isEmpty
-                        ? null
-                        : '${stand.werte.length} geändert',
+                    marke: aenderungen == 0 ? null : '$aenderungen geändert',
                     onTap: () => _oeffne(ArtikelSeite(modell: _modell)),
                   ),
                   const SizedBox(height: 12),

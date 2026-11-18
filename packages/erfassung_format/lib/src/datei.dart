@@ -9,7 +9,12 @@ const String kFormatName = 'planer-erfassung';
 ///
 /// 1 → Produktionen und Maschineneinstellungen
 /// 2 → ein Ergebnis kann Fotos enthalten
-const int kFormatVersion = 2;
+/// 3 → ein Ergebnis kann Maschinen in Prozessketten hinzufügen und
+///     entfernen
+const int kFormatVersion = 3;
+
+/// Die Fassung mit Fotos, aber ohne geänderte Prozessketten.
+const int kFormatVersionMitFotos = 2;
 
 /// Die Fassung ohne Fotos. So schreibt weiter, wer keine Fotos mitgibt:
 /// Ein Planer oder eine App auf älterem Stand liest die Datei dann wie
