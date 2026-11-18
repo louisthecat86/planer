@@ -10,7 +10,7 @@ import 'stil.dart';
 
 // Fotos: aus der laufenden Produktion eines Artikels und Musterfotos. Die
 // Kamera-App des Handys nimmt auf, die App bekommt das Bild verkleinert
-// zurück und legt es in ihren Ordner. Mit „Ergebnis speichern" gehen die
+// zurück und legt es in ihren Ordner. Mit „An PC" gehen die
 // Fotos in der Ergebnis-Datei an den Planer: Fotos aus der Produktion zum
 // Artikel, Musterfotos in den Foto-Eingang der Produktentwicklung.
 
@@ -125,11 +125,11 @@ class FotoBild extends StatelessWidget {
     );
     final d = datei;
     return ClipRRect(
-      borderRadius: Masse.ecken,
+      borderRadius: Masse.eckenKlein,
       child: Container(
         width: breite,
         height: hoehe,
-        color: f.surfaceContainerHighest,
+        color: Farben.von(context).flaeche2,
         child: d == null
             ? fehlt
             : Image.file(
@@ -301,10 +301,11 @@ class _FotoSeite extends StatelessWidget {
   }
 }
 
-/// Alle Fotos auf dem Handy: oben der Knopf fürs Musterfoto, darunter die
-/// Musterfotos und die Fotos aus der Produktion — das neueste zuerst.
-class FotosSeite extends StatelessWidget {
-  const FotosSeite({super.key, required this.modell});
+/// Der Bereich „Fotos": oben der Knopf fürs Musterfoto, darunter die
+/// Musterfotos und die Fotos aus der Produktion als Raster — das neueste
+/// zuerst. Antippen zeigt ein Foto groß.
+class FotosAnsicht extends StatelessWidget {
+  const FotosAnsicht({super.key, required this.modell});
 
   final ErfassungsModell modell;
 
@@ -321,47 +322,69 @@ class FotosSeite extends StatelessWidget {
           for (final x in stand.fotoListe)
             if (x.art == FotoArt.produktion) x,
         ];
-        return Scaffold(
-          appBar: AppBar(title: const Text('Fotos')),
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+        Widget raster(List<ErfasstesFoto> fotos) => GridView.count(
+              crossAxisCount: 3,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              mainAxisSpacing: 10,
+              crossAxisSpacing: 8,
+              childAspectRatio: 0.78,
               children: [
-                FilledButton.icon(
-                  key: const ValueKey('foto-muster'),
-                  onPressed: () => musterfotoAufnehmen(context, modell),
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: const Text('Musterfoto aufnehmen'),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Fotos aus der Produktion nimmst du beim Erfassen einer '
-                  'Produktion oder bei den Maschineneinstellungen des '
-                  'Artikels auf.',
+                for (final x in fotos) _FotoKachel(modell: modell, foto: x),
+              ],
+            );
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 32),
+          children: [
+            FilledButton.icon(
+              key: const ValueKey('foto-muster'),
+              onPressed: () => musterfotoAufnehmen(context, modell),
+              icon: const Icon(Icons.photo_camera_outlined),
+              label: const Text('Musterfoto aufnehmen'),
+            ),
+            if (stand.fotos.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 28),
+                child: Text(
+                  'Noch keine Fotos. Fotos aus der Produktion nimmst du beim '
+                  'Erfassen oder an der Kette eines Artikels auf.',
+                  textAlign: TextAlign.center,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: f.onSurfaceVariant,
                   ),
                 ),
-                if (muster.isNotEmpty)
-                  Abschnitt('Musterfotos', zusatz: '${muster.length}'),
-                for (final x in muster) _FotoZeile(modell: modell, foto: x),
-                if (produktion.isNotEmpty)
-                  Abschnitt(
-                    'Aus der Produktion',
-                    zusatz: '${produktion.length}',
-                  ),
-                for (final x in produktion) _FotoZeile(modell: modell, foto: x),
-              ],
-            ),
-          ),
+              ),
+            if (muster.isNotEmpty) ...[
+              Abschnitt('Musterfotos', zusatz: '${muster.length}'),
+              raster(muster),
+            ],
+            if (produktion.isNotEmpty) ...[
+              Abschnitt('Aus der Produktion', zusatz: '${produktion.length}'),
+              raster(produktion),
+            ],
+          ],
         );
       },
     );
   }
 }
 
-class _FotoZeile extends StatelessWidget {
-  const _FotoZeile({required this.modell, required this.foto});
+/// Alle Fotos als eigene Seite.
+class FotosSeite extends StatelessWidget {
+  const FotosSeite({super.key, required this.modell});
+
+  final ErfassungsModell modell;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Fotos')),
+        body: SafeArea(child: FotosAnsicht(modell: modell)),
+      );
+}
+
+/// Ein Foto im Raster: das Bild, darunter wozu es gehört und wann.
+class _FotoKachel extends StatelessWidget {
+  const _FotoKachel({required this.modell, required this.foto});
 
   final ErfassungsModell modell;
   final ErfasstesFoto foto;
@@ -370,45 +393,45 @@ class _FotoZeile extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Flaeche(
-        key: ValueKey('fotozeile-${foto.id}'),
-        onTap: () => fotoZeigen(context, modell, foto),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Row(
-            children: [
-              FotoBild(datei: modell.fotoDatei(foto.id)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      fotoTitel(foto),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${tagKurz(foto.aufgenommenAm)} '
-                      '${uhrzeit(foto.aufgenommenAm)} Uhr · '
-                      '${groesseText(foto.groesse)}',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: f.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
+    return InkWell(
+      key: ValueKey('fotozeile-${foto.id}'),
+      borderRadius: Masse.eckenKlein,
+      onTap: () => fotoZeigen(context, modell, foto),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: LayoutBuilder(
+              builder: (context, c) => FotoBild(
+                datei: modell.fotoDatei(foto.id),
+                breite: c.maxWidth,
+                hoehe: c.maxHeight,
               ),
-              Icon(Icons.chevron_right, color: f.onSurfaceVariant),
-            ],
+            ),
           ),
-        ),
+          const SizedBox(height: 5),
+          Text(
+            switch (foto.art) {
+              FotoArt.produktion => foto.artikel ?? 'Produktion',
+              FotoArt.muster => (foto.bezeichnung ?? '').isEmpty
+                  ? 'Musterfoto'
+                  : foto.bezeichnung!,
+            },
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          Text(
+            '${tagKurz(foto.aufgenommenAm)} ${uhrzeit(foto.aufgenommenAm)}',
+            maxLines: 1,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: f.onSurfaceVariant,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
       ),
     );
   }

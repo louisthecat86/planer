@@ -8,20 +8,24 @@ import 'modell.dart';
 import 'stand.dart';
 import 'stil.dart';
 
-/// Die Artikel des Pakets mit Suche. Antippen öffnet die Schritte des
-/// Artikels mit ihren Maschineneinstellungen — mit [waehlen] gibt die
-/// Seite stattdessen den Artikel zurück.
-class ArtikelSeite extends StatefulWidget {
-  const ArtikelSeite({super.key, required this.modell, this.waehlen = false});
+/// Die Liste der Artikel im Bereich „Anlagen": oben die Suche, ohne
+/// Suchwort zuerst, was bis heute geplant ist und was zuletzt offen war,
+/// darunter alle. Die grüne Zahl sagt, wie viel an einem Artikel geändert
+/// ist. Antippen öffnet die Kette mit den Maschineneinstellungen — mit
+/// [waehlen] gibt die Liste stattdessen den Artikel zurück.
+class AnlagenAnsicht extends StatefulWidget {
+  const AnlagenAnsicht({super.key, required this.modell, this.waehlen});
 
   final ErfassungsModell modell;
-  final bool waehlen;
+
+  /// Wählt einen Artikel aus, statt ihn zu öffnen.
+  final void Function(PaketArtikel)? waehlen;
 
   @override
-  State<ArtikelSeite> createState() => _ArtikelSeiteState();
+  State<AnlagenAnsicht> createState() => _AnlagenAnsichtState();
 }
 
-class _ArtikelSeiteState extends State<ArtikelSeite> {
+class _AnlagenAnsichtState extends State<AnlagenAnsicht> {
   final _suche = TextEditingController();
   String _text = '';
 
@@ -29,6 +33,19 @@ class _ArtikelSeiteState extends State<ArtikelSeite> {
   void dispose() {
     _suche.dispose();
     super.dispose();
+  }
+
+  void _oeffnen(PaketArtikel a) {
+    final waehlen = widget.waehlen;
+    if (waehlen != null) {
+      waehlen(a);
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SchritteSeite(modell: widget.modell, artikel: a),
+      ),
+    );
   }
 
   @override
@@ -39,130 +56,169 @@ class _ArtikelSeiteState extends State<ArtikelSeite> {
         final theme = Theme.of(context);
         final f = theme.colorScheme;
         final stand = widget.modell.stand;
+        final paket = stand.paket;
+        final alle = paket?.artikel ?? const <PaketArtikel>[];
         final q = _text.trim().toLowerCase();
-        final alle = stand.paket?.artikel ?? const <PaketArtikel>[];
+
+        int geaendert(PaketArtikel a) =>
+            a.schritte.map(stand.geaendertIn).fold(0, (s, n) => s + n) +
+            stand.kettenAenderungenIn(a.id);
+
+        Widget zeile(PaketArtikel a, {String abschnitt = ''}) {
+          final n = geaendert(a);
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: TippZeile(
+              key: ValueKey('artikel-$abschnitt${a.id}'),
+              titel: a.name,
+              unter: [
+                if (a.nummer.isNotEmpty) a.nummer,
+                a.schritte.length == 1
+                    ? '1 Schritt'
+                    : '${a.schritte.length} Schritte',
+              ].join(' · '),
+              rechts: n == 0 ? null : ZahlPunkt(n),
+              onTap: () => _oeffnen(a),
+            ),
+          );
+        }
+
+        final jetzt = DateTime.now();
+        // Geplant bis einschließlich heute und noch nicht erfasst.
+        final morgen = DateTime(jetzt.year, jetzt.month, jetzt.day + 1);
+        final geplantIds = <String>{
+          for (final p in paket?.produktionen ?? const <PaketProduktion>[])
+            if (p.datum.isBefore(morgen) &&
+                stand.statusVon(p.id) != ProduktionsStatus.erfasst)
+              p.artikelId,
+        };
+        final geplant = [
+          for (final a in alle)
+            if (geplantIds.contains(a.id)) a,
+        ];
+        final zuletzt = [
+          for (final id in stand.zuletzt)
+            if (paket?.artikelMit(id) case final a?)
+              if (!geplantIds.contains(id)) a,
+        ];
         final treffer = [
           for (final a in alle)
             if (q.isEmpty || a.suchtext.contains(q)) a,
         ];
-        // Was heute und morgen geplant ist, steht ohne Suche oben.
-        final geplant = <String>{
-          for (final p in stand.offen) p.artikelId,
-        };
-        if (q.isEmpty) {
-          treffer.sort((a, b) {
-            final ga = geplant.contains(a.id) ? 0 : 1;
-            final gb = geplant.contains(b.id) ? 0 : 1;
-            return ga.compareTo(gb);
-          });
-        }
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              widget.waehlen ? 'Artikel wählen' : 'Maschineneinstellungen',
-            ),
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  child: TextField(
-                    controller: _suche,
-                    textInputAction: TextInputAction.search,
-                    decoration: InputDecoration(
-                      hintText: 'Artikel oder Nummer suchen',
-                      prefixIcon: const Icon(Icons.search),
-                      suffixIcon: _text.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: 'Suche leeren',
-                              icon: const Icon(Icons.clear),
-                              onPressed: () {
-                                _suche.clear();
-                                setState(() => _text = '');
-                              },
-                            ),
+
+        final kopf = <Widget>[
+          TextField(
+            controller: _suche,
+            textInputAction: TextInputAction.search,
+            decoration: InputDecoration(
+              hintText: 'Artikel oder Nummer suchen',
+              fillColor: f.surface,
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Suche leeren',
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _suche.clear();
+                        setState(() => _text = '');
+                      },
                     ),
-                    onChanged: (t) => setState(() => _text = t),
-                  ),
-                ),
-                Expanded(
-                  child: treffer.isEmpty
-                      ? Center(
-                          child: Text(
-                            alle.isEmpty
-                                ? 'Im Paket steht kein Artikel.'
-                                : 'Keine Treffer.',
-                            style: theme.textTheme.bodyLarge?.copyWith(
-                              color: f.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-                          itemCount: treffer.length,
-                          itemBuilder: (context, i) {
-                            final a = treffer[i];
-                            final geaendert = a.schritte
-                                    .map(stand.geaendertIn)
-                                    .fold(0, (s, n) => s + n) +
-                                stand.kettenAenderungenIn(a.id);
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: TippZeile(
-                                titel: a.name,
-                                unter: [
-                                  if (a.nummer.isNotEmpty) a.nummer,
-                                  a.schritte.length == 1
-                                      ? '1 Schritt'
-                                      : '${a.schritte.length} Schritte',
-                                  if (geplant.contains(a.id)) 'geplant',
-                                ].join(' · '),
-                                rechts: geaendert == 0
-                                    ? null
-                                    : Marke(
-                                        '$geaendert geändert',
-                                        farbe: Farben.von(context).ok,
-                                      ),
-                                onTap: () => widget.waehlen
-                                    ? Navigator.of(context).pop(a)
-                                    : Navigator.of(context).push(
-                                        MaterialPageRoute<void>(
-                                          builder: (_) => SchritteSeite(
-                                            modell: widget.modell,
-                                            artikel: a,
-                                          ),
-                                        ),
-                                      ),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
             ),
+            onChanged: (t) => setState(() => _text = t),
           ),
+          if (q.isEmpty && geplant.isNotEmpty) ...[
+            Abschnitt('Heute geplant', zusatz: '${geplant.length}'),
+            for (final a in geplant) zeile(a, abschnitt: 'h-'),
+          ],
+          if (q.isEmpty && zuletzt.isNotEmpty) ...[
+            const Abschnitt('Zuletzt geöffnet'),
+            for (final a in zuletzt) zeile(a, abschnitt: 'z-'),
+          ],
+          if (treffer.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: Text(
+                alle.isEmpty
+                    ? 'Im Paket steht kein Artikel.'
+                    : 'Keine Treffer.',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: f.onSurfaceVariant,
+                ),
+              ),
+            )
+          else
+            Abschnitt(
+              q.isEmpty ? 'Alle Artikel' : 'Treffer',
+              zusatz: '${treffer.length}',
+            ),
+        ];
+        return ListView.builder(
+          padding: const EdgeInsets.fromLTRB(14, 4, 14, 32),
+          itemCount: kopf.length + treffer.length,
+          itemBuilder: (context, i) =>
+              i < kopf.length ? kopf[i] : zeile(treffer[i - kopf.length]),
         );
       },
     );
   }
 }
 
-/// Die Schritte eines Artikels mit ihren Maschineneinstellungen: je
-/// Schritt die Anlage und ihre Felder. Antippen ändert einen Wert.
-class SchritteSeite extends StatelessWidget {
+/// Die Artikel als eigene Seite — zum Wählen eines Artikels für eine
+/// Erfassung ohne Plan ([waehlen]: gibt den Artikel zurück) oder zum
+/// Öffnen.
+class ArtikelSeite extends StatelessWidget {
+  const ArtikelSeite({super.key, required this.modell, this.waehlen = false});
+
+  final ErfassungsModell modell;
+  final bool waehlen;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(waehlen ? 'Artikel wählen' : 'Maschineneinstellungen'),
+      ),
+      body: SafeArea(
+        child: AnlagenAnsicht(
+          modell: modell,
+          waehlen: waehlen ? (a) => Navigator.of(context).pop(a) : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Die Prozesskette eines Artikels mit ihren Maschineneinstellungen —
+/// als Zeitstrahl: je Schritt die Anlage, ihre Platten und ihre Werte als
+/// Kacheln. Antippen ändert einen Wert; geänderte stehen grün da.
+class SchritteSeite extends StatefulWidget {
   const SchritteSeite({super.key, required this.modell, required this.artikel});
 
   final ErfassungsModell modell;
   final PaketArtikel artikel;
+
+  @override
+  State<SchritteSeite> createState() => _SchritteSeiteState();
+}
+
+class _SchritteSeiteState extends State<SchritteSeite> {
+  @override
+  void initState() {
+    super.initState();
+    // Für „Zuletzt geöffnet" — nach dem ersten Bild, nicht mittendrin.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => widget.modell.artikelGeoeffnet(widget.artikel.id),
+    );
+  }
 
   Future<void> _bearbeiten(
     BuildContext context,
     PaketSchritt schritt,
     PaketFeld feld,
   ) async {
-    final stand = modell.stand;
+    final stand = widget.modell.stand;
     final ergebnis = await showModalBottomSheet<_Eingabe>(
       context: context,
       isScrollControlled: true,
@@ -175,8 +231,8 @@ class SchritteSeite extends StatelessWidget {
       ),
     );
     if (ergebnis == null) return;
-    await modell.wertSetzen(
-      artikel: artikel,
+    await widget.modell.wertSetzen(
+      artikel: widget.artikel,
       schritt: schritt,
       feld: feld,
       neu: ergebnis.zuruecksetzen ? feld.wert : ergebnis.wert,
@@ -197,7 +253,7 @@ class SchritteSeite extends StatelessWidget {
       gefaehrlich: true,
     );
     if (!ja) return;
-    await modell.schrittEntfernen(artikel: artikel, schritt: s);
+    await widget.modell.schrittEntfernen(artikel: widget.artikel, schritt: s);
   }
 
   Future<void> _hinzufuegen(
@@ -226,8 +282,8 @@ class SchritteSeite extends StatelessWidget {
       ),
     );
     if (platz == null) return;
-    await modell.maschineHinzu(
-      artikel: artikel,
+    await widget.modell.maschineHinzu(
+      artikel: widget.artikel,
       maschine: maschine,
       nachSchrittId: platz.nachSchrittId,
     );
@@ -235,6 +291,8 @@ class SchritteSeite extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final modell = widget.modell;
+    final artikel = widget.artikel;
     return ListenableBuilder(
       listenable: modell,
       builder: (context, _) {
@@ -243,9 +301,12 @@ class SchritteSeite extends StatelessWidget {
         final stand = modell.stand;
         final kette = stand.ketteVon(artikel);
         final katalog = stand.paket?.maschinen ?? const <PaketMaschine>[];
+        final geaendert =
+            artikel.schritte.map(stand.geaendertIn).fold(0, (s, n) => s + n) +
+                stand.kettenAenderungenIn(artikel.id);
+        final bleiben = kette.where((k) => !k.entfernt).length;
         return Scaffold(
           appBar: AppBar(
-            title: Text(artikel.name),
             actions: [
               IconButton(
                 key: const ValueKey('schritte-foto'),
@@ -266,22 +327,39 @@ class SchritteSeite extends StatelessWidget {
           ),
           body: SafeArea(
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 28),
               children: [
-                if (artikel.nummer.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Text(
-                      'Artikel ${artikel.nummer} · tippe einen Wert an, um '
-                      'einzutragen, was an der Anlage eingestellt ist.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: f.onSurfaceVariant,
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        artikel.name,
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          height: 1.25,
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 3),
+                      Text(
+                        [
+                          if (artikel.nummer.isNotEmpty) artikel.nummer,
+                          bleiben == 1 ? '1 Schritt' : '$bleiben Schritte',
+                          if (geaendert > 0) '$geaendert geändert',
+                        ].join(' · '),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: f.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
-                for (final k in kette)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
+                ),
+                for (final (i, k) in kette.indexed)
+                  _KettenGlied(
+                    schritt: k.schritt,
+                    entfernt: k.entfernt,
+                    letztes: i == kette.length - 1 && katalog.isEmpty,
                     child: _SchrittKarte(
                       schritt: k.schritt,
                       neu: k.neu,
@@ -303,20 +381,94 @@ class SchritteSeite extends StatelessWidget {
                     icon: Icons.info_outline,
                   )
                 else
-                  OutlinedButton.icon(
-                    key: const ValueKey('maschine-hinzu'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(Masse.tippHoehe),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 44),
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('maschine-hinzu'),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(Masse.tippHoehe),
+                        foregroundColor: f.primary,
+                        side: BorderSide(color: f.outline, width: 1.5),
+                      ),
+                      onPressed: () => _hinzufuegen(context, kette, katalog),
+                      icon: const Icon(Icons.add),
+                      label: const Text('Maschine hinzufügen'),
                     ),
-                    onPressed: () => _hinzufuegen(context, kette, katalog),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Maschine hinzufügen'),
                   ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// Ein Glied im Zeitstrahl: links die Nummer im Kreis in der Farbe der
+/// Abteilung und die Linie zum nächsten Schritt, rechts die Karte.
+class _KettenGlied extends StatelessWidget {
+  const _KettenGlied({
+    required this.schritt,
+    required this.entfernt,
+    required this.letztes,
+    required this.child,
+  });
+
+  final PaketSchritt schritt;
+  final bool entfernt;
+  final bool letztes;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = Theme.of(context).colorScheme;
+    final farbe = entfernt
+        ? f.outline
+        : schritt.abteilungFarbe == null
+            ? f.primary
+            : Color(schritt.abteilungFarbe!);
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 44,
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration:
+                      BoxDecoration(color: farbe, shape: BoxShape.circle),
+                  child: Text(
+                    entfernt ? '–' : '${schritt.nummer}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: ThemeData.estimateBrightnessForColor(farbe) ==
+                              Brightness.dark
+                          ? Colors.white
+                          : Colors.black,
+                    ),
+                  ),
+                ),
+                if (!letztes)
+                  Expanded(
+                    child: Container(width: 2, color: f.outline),
+                  ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: child,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -347,52 +499,30 @@ class _SchrittKarte extends StatelessWidget {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
     final farben = Farben.von(context);
-    final farbe = entfernt
-        ? f.outline
-        : schritt.abteilungFarbe == null
-            ? f.primary
-            : Color(schritt.abteilungFarbe!);
     final platten = [
       for (final x in schritt.felder)
         if (x.art == FeldArt.platte) x,
     ];
-    final andere = [
+    final werte = [
       for (final x in schritt.felder)
-        if (x.art != FeldArt.platte) x,
+        if (x.art != FeldArt.platte && x.art != FeldArt.notiz) x,
+    ];
+    final notizen = [
+      for (final x in schritt.felder)
+        if (x.art == FeldArt.notiz) x,
     ];
     final unter = [
       if (schritt.abteilungName.isNotEmpty) schritt.abteilungName,
       if (schritt.prozessschritt case final p? when p != schritt.anlage) p,
     ].join(' · ');
     return Flaeche(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              border: Border(left: BorderSide(color: farbe, width: 6)),
-              color: f.surfaceContainerHighest,
-            ),
-            padding: const EdgeInsets.fromLTRB(10, 10, 12, 10),
-            child: Row(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 6, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
               children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: farbe,
-                    borderRadius: Masse.ecken,
-                  ),
-                  child: Text(
-                    entfernt ? '–' : '${schritt.nummer}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,7 +530,7 @@ class _SchrittKarte extends StatelessWidget {
                       Text(
                         schritt.anlage,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                           color: entfernt ? f.onSurfaceVariant : null,
                           decoration:
                               entfernt ? TextDecoration.lineThrough : null,
@@ -438,45 +568,68 @@ class _SchrittKarte extends StatelessWidget {
                   ),
               ],
             ),
-          ),
-          // Ein herausgenommener Schritt zeigt seine Felder nicht mehr —
-          // sie gehen nicht mit, bleiben aber für „Behalten" stehen.
-          if (entfernt)
-            const SizedBox.shrink()
-          else ...[
-            if (platten.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(6, 10, 6, 4),
-                child: _Platten(
-                  felder: platten,
-                  wertVon: wertVon,
-                  istGeaendert: istGeaendert,
-                  onFeld: onFeld,
+            // Ein herausgenommener Schritt zeigt seine Felder nicht mehr —
+            // sie gehen nicht mit, bleiben aber für „Behalten" stehen.
+            if (!entfernt) ...[
+              if (platten.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 8, 2),
+                  child: _Platten(
+                    felder: platten,
+                    wertVon: wertVon,
+                    istGeaendert: istGeaendert,
+                    onFeld: onFeld,
+                  ),
                 ),
-              ),
-            for (final (i, feld) in andere.indexed) ...[
-              if (i > 0 || platten.isNotEmpty) const Divider(),
-              _FeldZeile(
-                feld: feld,
-                wert: wertVon(feld),
-                geaendert: istGeaendert(feld),
-                onTap: () => onFeld(feld),
-              ),
+              if (werte.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 8, 0),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      for (final feld in werte)
+                        _WertKachel(
+                          key:
+                              ValueKey('feld-${schritt.id}-${feld.schluessel}'),
+                          feld: feld,
+                          wert: wertVon(feld),
+                          geaendert: istGeaendert(feld),
+                          onTap: () => onFeld(feld),
+                        ),
+                    ],
+                  ),
+                ),
+              for (final feld in notizen)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 6, 8, 0),
+                  child: _WertKachel(
+                    key: ValueKey('feld-${schritt.id}-${feld.schluessel}'),
+                    feld: feld,
+                    wert: wertVon(feld),
+                    geaendert: istGeaendert(feld),
+                    onTap: () => onFeld(feld),
+                    breit: true,
+                  ),
+                ),
             ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Ein Feld als Zeile: Name, Wert groß, Grenzen klein darunter.
-class _FeldZeile extends StatelessWidget {
-  const _FeldZeile({
+/// Ein Wert als kleine Kachel: oben der Name, darunter der Wert. Geändert
+/// grün, außerhalb der üblichen Grenzen orange, leer mit „eintragen".
+class _WertKachel extends StatelessWidget {
+  const _WertKachel({
+    super.key,
     required this.feld,
     required this.wert,
     required this.geaendert,
     required this.onTap,
+    this.breit = false,
   });
 
   final PaketFeld feld;
@@ -484,69 +637,67 @@ class _FeldZeile extends StatelessWidget {
   final bool geaendert;
   final VoidCallback onTap;
 
+  /// Über die ganze Breite — für die Notiz.
+  final bool breit;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
     final farben = Farben.von(context);
     final pruefung = feld.grenze?.pruefe(wert) ?? GrenzPruefung.inOrdnung;
+    final warnung = pruefung.status != GrenzStatus.ok;
     final leer = wert == null;
-    final notiz = feld.art == FeldArt.notiz;
     final einheit = feld.einheit?.trim() ?? '';
-    return InkWell(
-      onTap: onTap,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Masse.tippHoehe),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 8, 10, 8),
-          child: Row(
+    final farbe = geaendert ? farben.ok : null;
+    final text = leer
+        ? 'eintragen'
+        : einheit.isEmpty || breit
+            ? wert!
+            : '$wert $einheit';
+    return Material(
+      color: geaendert ? farben.ok.withValues(alpha: 0.14) : farben.flaeche2,
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          width: breit ? double.infinity : null,
+          constraints: const BoxConstraints(minHeight: 52, minWidth: 72),
+          padding: const EdgeInsets.fromLTRB(11, 7, 11, 7),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      feld.name,
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: f.onSurfaceVariant,
-                      ),
-                    ),
-                    Text(
-                      leer
-                          ? 'eintragen …'
-                          : einheit.isEmpty || notiz
-                              ? wert!
-                              : '$wert $einheit',
-                      maxLines: notiz ? 6 : 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: (notiz
-                              ? theme.textTheme.bodyLarge
-                              : theme.textTheme.titleMedium)
-                          ?.copyWith(
-                        fontWeight: leer ? null : FontWeight.w600,
-                        color: leer
-                            ? f.onSurfaceVariant
-                            : pruefung.status == GrenzStatus.ok
-                                ? null
-                                : farben.warnung,
-                      ),
-                    ),
-                    if (pruefung.meldung case final m?)
-                      Text(
-                        m,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: farben.warnung,
-                        ),
-                      ),
-                  ],
+              Text(
+                breit ? 'Notiz' : feld.name,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: farbe ?? f.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(width: 8),
-              if (geaendert)
-                Marke('geändert', farbe: farben.ok)
-              else
-                Icon(Icons.edit_outlined, size: 20, color: f.onSurfaceVariant),
+              Text(
+                text,
+                maxLines: breit ? 6 : 2,
+                overflow: TextOverflow.ellipsis,
+                style: (breit
+                        ? theme.textTheme.bodyMedium
+                        : theme.textTheme.titleSmall)
+                    ?.copyWith(
+                  fontWeight: leer || breit ? FontWeight.w500 : FontWeight.w800,
+                  color: leer
+                      ? f.onSurfaceVariant
+                      : warnung
+                          ? farben.warnung
+                          : farbe,
+                ),
+              ),
+              if (pruefung.meldung case final m? when warnung)
+                Text(
+                  m,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: farben.warnung,
+                  ),
+                ),
             ],
           ),
         ),
@@ -686,12 +837,12 @@ class _PlattenReihe extends StatelessWidget {
                   child: Material(
                     color: istGeaendert(x)
                         ? farben.ok.withValues(alpha: 0.14)
-                        : f.surfaceContainerHighest,
+                        : farben.flaeche2,
                     shape: RoundedRectangleBorder(
-                      borderRadius: Masse.ecken,
-                      side: BorderSide(
-                        color: istGeaendert(x) ? farben.ok : f.outline,
-                      ),
+                      borderRadius: const BorderRadius.all(Radius.circular(8)),
+                      side: istGeaendert(x)
+                          ? BorderSide(color: farben.ok)
+                          : BorderSide.none,
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: InkWell(

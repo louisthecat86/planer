@@ -18,6 +18,9 @@ import 'stil.dart';
 /// [geplant] ist die Produktion aus dem Paket; ohne Plan steht der
 /// [artikel] fest. [vorhanden] ist eine frühere Erfassung zum Ändern,
 /// [begonnen] eine zwischengespeicherte ohne Plan zum Weitermachen.
+/// Mit [fertigMelden] kommt die Seite von „Fertig": Ist noch kein Ende
+/// eingetragen, steht dort die Uhrzeit des Handys, und der Cursor steht in
+/// der Fertigware.
 ///
 /// Zwischenspeichern: Was eingetragen ist, bleibt auch ohne Erfassen —
 /// über den Knopf, beim Zurückgehen und wenn die App in den Hintergrund
@@ -31,9 +34,11 @@ class ErfassenSeite extends StatefulWidget {
     this.artikel,
     this.vorhanden,
     this.begonnen,
+    this.fertigMelden = false,
   });
 
   final ErfassungsModell modell;
+  final bool fertigMelden;
   final PaketProduktion? geplant;
   final PaketArtikel? artikel;
   final ErfassteProduktion? vorhanden;
@@ -120,6 +125,9 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    if (widget.fertigMelden && _alt == null && _ende.text.trim().isEmpty) {
+      _ende.text = uhrzeit(DateTime.now());
+    }
   }
 
   /// Geht die App in den Hintergrund, kann Android sie jederzeit
@@ -287,6 +295,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final f = theme.colorScheme;
+    final farben = Farben.von(context);
     final plan = _plan;
     final artikel = widget.modell.stand.paket?.artikelMit(_artikelId);
 
@@ -298,11 +307,16 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
     final leistung = kgProStunde(fertig ?? roh, dauer);
     final kennzahlen = [
       if (verlust != null && verlust >= 0)
-        'Verlust ${zahlText(verlust * 100)} %',
-      if (dauer != null)
-        'Dauer ${dauer ~/ 60}:'
-            '${(dauer % 60).round().toString().padLeft(2, '0')} h',
-      if (leistung != null) '${zahlText(leistung, nachkomma: 0)} kg/h',
+        ('Ausbeute', '${zahlText((1 - verlust) * 100)} %'),
+      if (verlust != null && verlust >= 0)
+        ('Verlust', '${zahlText(verlust * 100)} %'),
+      if (dauer != null) ('Dauer', dauerText(dauer)),
+      if (leistung != null)
+        (
+          'Leistung',
+          '${zahlText(leistung, nachkomma: 0)} '
+              'kg/h'
+        ),
     ];
 
     final begonnen = _alt == null && widget.modell.stand.entwuerfe[_id] != null;
@@ -333,37 +347,62 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
         ),
         body: SafeArea(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
             children: [
               Text(
                 _artikelName,
                 style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
+                  fontWeight: FontWeight.w800,
+                  height: 1.25,
                 ),
               ),
-              if (_artikelNummer.isNotEmpty || plan != null)
-                Text(
-                  [
-                    if (_artikelNummer.isNotEmpty) _artikelNummer,
-                    if (plan != null && plan.abteilungName.isNotEmpty)
-                      plan.abteilungName,
-                    if (plan == null) 'ohne Plan',
-                  ].join(' · '),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: f.onSurfaceVariant,
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (plan != null && plan.abteilungName.isNotEmpty) ...[
+                    Flexible(
+                      child: AbteilungsMarke(
+                        name: plan.abteilungName,
+                        farbe: plan.abteilungFarbe,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    [
+                      if (_artikelNummer.isNotEmpty) _artikelNummer,
+                      if (plan == null) 'ohne Plan',
+                    ].join(' · '),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: f.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                ],
+              ),
               if (_entwurf case final e?) ...[
                 const SizedBox(height: 10),
-                Hinweis(
-                  'Begonnen — zwischengespeichert ${tagKurz(e.geaendertAm)} '
-                  'um ${uhrzeit(e.geaendertAm)}. Erfasst ist die Produktion '
-                  'erst mit „Produktion erfassen".',
-                  farbe: f.primary,
-                  icon: Icons.pending_actions,
+                Row(
+                  children: [
+                    Marke(
+                      zeitAus(e.start) != null ? 'läuft' : 'begonnen',
+                      farbe:
+                          zeitAus(e.start) != null ? farben.warnung : f.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Begonnen — zwischengespeichert '
+                        '${tagKurz(e.geaendertAm)} um '
+                        '${uhrzeit(e.geaendertAm)}',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: f.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
               Flaeche(
                 child: Row(
                   children: [
@@ -377,7 +416,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                         tagLang(_datum, DateTime.now()),
                         textAlign: TextAlign.center,
                         style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ),
@@ -390,71 +429,129 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                 ),
               ),
               const Abschnitt('Mengen'),
-              _MengenFeld(
-                controller: _roh,
-                label: 'Rohware (kg) *',
-                plan: plan?.rohKg,
-                onChanged: () => setState(() => _fehler = null),
-              ),
-              const SizedBox(height: 10),
-              _MengenFeld(
-                controller: _fleisch,
-                label: 'davon Fleisch (kg)',
-                plan: plan?.fleischKg,
-                onChanged: () => setState(() => _fehler = null),
-              ),
-              const SizedBox(height: 10),
-              _MengenFeld(
-                controller: _fertig,
-                label: 'Fertigware (kg)',
-                plan: plan?.fertigKg,
-                onChanged: () => setState(() => _fehler = null),
+              Flaeche(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _MengenFeld(
+                        controller: _roh,
+                        label: 'Rohware (kg) *',
+                        plan: plan?.rohKg,
+                        onChanged: () => setState(() => _fehler = null),
+                      ),
+                      const SizedBox(height: 10),
+                      _MengenFeld(
+                        controller: _fleisch,
+                        label: 'davon Fleisch (kg)',
+                        plan: plan?.fleischKg,
+                        onChanged: () => setState(() => _fehler = null),
+                      ),
+                      const SizedBox(height: 10),
+                      _MengenFeld(
+                        controller: _fertig,
+                        label: 'Fertigware (kg)',
+                        plan: plan?.fertigKg,
+                        autofocus: widget.fertigMelden,
+                        hervorheben: widget.fertigMelden,
+                        onChanged: () => setState(() => _fehler = null),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               const Abschnitt('Zeit'),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _ZeitFeld(
-                      controller: _start,
-                      label: 'Start',
-                      plan: plan?.start,
-                      onChanged: () => setState(() => _fehler = null),
-                    ),
+              Flaeche(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _ZeitFeld(
+                          controller: _start,
+                          label: 'Start',
+                          plan: plan?.start,
+                          onChanged: () => setState(() => _fehler = null),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _ZeitFeld(
+                          controller: _ende,
+                          label: 'Ende',
+                          onChanged: () => setState(() => _fehler = null),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _ZeitFeld(
-                      controller: _ende,
-                      label: 'Ende',
-                      onChanged: () => setState(() => _fehler = null),
-                    ),
-                  ),
-                ],
+                ),
               ),
               if (kennzahlen.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Text(
-                  kennzahlen.join(' · '),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: f.primary,
-                  ),
+                Row(
+                  children: [
+                    for (final (i, (name, wert)) in kennzahlen.indexed) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                          decoration: BoxDecoration(
+                            color: f.surface,
+                            borderRadius: Masse.eckenKlein,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: f.onSurfaceVariant,
+                                ),
+                              ),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  wert,
+                                  style: theme.textTheme.titleSmall?.copyWith(
+                                    fontWeight: FontWeight.w800,
+                                    color: farben.ok,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
               const Abschnitt('Dazu'),
-              TextField(
-                controller: _bemerkung,
-                decoration: const InputDecoration(labelText: 'Bemerkung'),
-                minLines: 1,
-                maxLines: 4,
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: _kuerzel,
-                decoration: const InputDecoration(labelText: 'Kürzel'),
-                maxLength: 12,
-                textCapitalization: TextCapitalization.characters,
+              Flaeche(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      TextField(
+                        controller: _bemerkung,
+                        decoration:
+                            const InputDecoration(labelText: 'Bemerkung'),
+                        minLines: 1,
+                        maxLines: 4,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _kuerzel,
+                        decoration: const InputDecoration(labelText: 'Kürzel'),
+                        maxLength: 12,
+                        textCapitalization: TextCapitalization.characters,
+                      ),
+                    ],
+                  ),
+                ),
               ),
               if (_artikelId.isNotEmpty) ...[
                 const Abschnitt('Fotos aus der Produktion'),
@@ -464,14 +561,23 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                   artikel: _artikelName,
                   produktionId: _id,
                 ),
-                const SizedBox(height: 16),
               ],
+              const SizedBox(height: 20),
               if (_fehler case final fehler?) ...[
                 Hinweis(fehler, farbe: f.error, icon: Icons.error_outline),
                 const SizedBox(height: 12),
               ],
               FilledButton.icon(
                 key: const ValueKey('produktion-erfassen'),
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(60),
+                  backgroundColor: farben.ok,
+                  foregroundColor: Colors.black,
+                  textStyle: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 onPressed: _speichern,
                 icon: const Icon(Icons.check),
                 label: Text(
@@ -479,7 +585,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                 ),
               ),
               if (_alt == null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   key: const ValueKey('zwischenspeichern'),
                   onPressed: _zwischenspeichernUndZurueck,
@@ -487,7 +593,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                   label: const Text('Zwischenspeichern'),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                  padding: const EdgeInsets.only(top: 6),
                   child: Text(
                     'Hält fest, was eingetragen ist — die Produktion bleibt '
                     'offen, bis sie erfasst wird.',
@@ -499,8 +605,8 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                 ),
               ],
               if (artikel != null) ...[
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
+                const SizedBox(height: 8),
+                TextButton.icon(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute<void>(
                       builder: (_) => SchritteSeite(
@@ -529,24 +635,38 @@ class _MengenFeld extends StatelessWidget {
     required this.label,
     required this.onChanged,
     this.plan,
+    this.autofocus = false,
+    this.hervorheben = false,
   });
 
   final TextEditingController controller;
   final String label;
   final double? plan;
   final VoidCallback onChanged;
+  final bool autofocus;
+
+  /// Das Feld, um das es gerade geht — mit Rand in der Farbe der Aktion.
+  final bool hervorheben;
 
   @override
   Widget build(BuildContext context) {
     final p = plan;
+    final f = Theme.of(context).colorScheme;
     return TextField(
       controller: controller,
+      autofocus: autofocus,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9.,]'))],
       textInputAction: TextInputAction.next,
-      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
       decoration: InputDecoration(
         labelText: label,
+        enabledBorder: hervorheben
+            ? OutlineInputBorder(
+                borderRadius: Masse.eckenKlein,
+                borderSide: BorderSide(color: f.primary, width: 1.5),
+              )
+            : null,
         helperText: p == null ? null : 'geplant ${zahlText(p)} kg',
         suffixIcon: p == null
             ? null
@@ -590,7 +710,7 @@ class _ZeitFeld extends StatelessWidget {
             LengthLimitingTextInputFormatter(5),
           ],
           textInputAction: TextInputAction.next,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
           decoration: InputDecoration(
             labelText: label,
             hintText: '00:00',
@@ -599,15 +719,18 @@ class _ZeitFeld extends StatelessWidget {
           onChanged: (_) => onChanged(),
         ),
         const SizedBox(height: 6),
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(64, Masse.tippHoehe - 12),
+        // „Jetzt" übernimmt die Uhrzeit des Handys — bleibt, wie es ist.
+        FilledButton.tonalIcon(
+          key: ValueKey('jetzt-$label'),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(64, Masse.tippHoehe - 8),
           ),
           onPressed: () {
             controller.text = uhrzeit(DateTime.now());
             onChanged();
           },
-          child: const Text('Jetzt'),
+          icon: const Icon(Icons.schedule, size: 20),
+          label: const Text('Jetzt'),
         ),
       ],
     );

@@ -119,6 +119,27 @@ class ErfassungsModell extends ChangeNotifier {
     if (_stand.entwurfLoeschen(produktionId)) await _geaendert();
   }
 
+  /// Startet eine Produktion mit der Uhrzeit des Handys — siehe
+  /// [Erfassungsstand.produktionStarten].
+  Future<void> produktionStarten({
+    required String produktionId,
+    required String artikelId,
+    required String artikel,
+  }) async {
+    final neu = _stand.produktionStarten(
+      produktionId: produktionId,
+      artikelId: artikelId,
+      artikel: artikel,
+      jetzt: DateTime.now(),
+    );
+    if (neu) await _geaendert();
+  }
+
+  /// Merkt den Artikel als zuletzt geöffnet.
+  Future<void> artikelGeoeffnet(String artikelId) async {
+    if (_stand.artikelGeoeffnet(artikelId)) await _geaendert();
+  }
+
   Future<void> produktionLoeschen(String produktionId) async {
     _stand.produktionLoeschen(produktionId);
     await _geaendert();

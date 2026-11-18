@@ -1,8 +1,7 @@
 import 'package:erfassung/artikel_seite.dart';
 import 'package:erfassung/erfassen_seite.dart';
-import 'package:erfassung/fotos.dart';
 import 'package:erfassung/modell.dart';
-import 'package:erfassung/produktionen_seite.dart';
+import 'package:erfassung/heute_seite.dart';
 import 'package:erfassung/stand.dart';
 import 'package:erfassung/start_seite.dart';
 import 'package:erfassung/stil.dart';
@@ -81,33 +80,41 @@ void main() {
 
       final m = modell();
       await zeige(tester, StartSeite(modell: m), dunkel: dunkel);
-      expect(find.text('Produktionen'), findsOneWidget);
-      expect(find.text('Maschineneinstellungen'), findsOneWidget);
-      expect(find.text('2 geplante sind noch offen'), findsOneWidget);
+      // Titel oben und Bereich unten.
+      expect(find.text('Heute'), findsNWidgets(2));
+      expect(find.text('Anlagen'), findsOneWidget);
       expect(find.text('Fotos'), findsOneWidget);
-      expect(find.text('Musterfoto aufnehmen'), findsOneWidget);
+      expect(find.byKey(const ValueKey('an-pc')), findsOneWidget);
+      // Beide geplanten Produktionen liegen in der Vergangenheit: offen.
+      expect(find.byKey(const ValueKey('start-t1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('start-t2')), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('bereich-anlagen')));
+      await tester.pumpAndSettle();
+      expect(find.text('2 Artikel'), findsOneWidget);
+      expect(find.text('ALLE ARTIKEL'), findsOneWidget);
+      expect(find.text('Kochschinken'), findsWidgets);
     });
 
-    testWidgets('Fotos: Kachel, Liste und großes Bild ($art)', (tester) async {
+    testWidgets('Fotos: Bereich, Raster und großes Bild ($art)',
+        (tester) async {
       final m = mitFotos();
-      await zeige(
-        tester,
-        StartSeite(modell: m),
-        dunkel: dunkel,
-        groesse: const Size(360, 1400),
-      );
-      expect(find.text('2 Fotos · 512 KB'), findsOneWidget);
-      // Fotos zählen als Erfasstes — das Ergebnis lässt sich speichern.
+      await zeige(tester, StartSeite(modell: m), dunkel: dunkel);
+      // Fotos zählen als Erfasstes — „An PC" zählt sie.
       expect(
-        find.textContaining('noch in keiner Ergebnis-Datei'),
+        find.descendant(
+          of: find.byKey(const ValueKey('an-pc')),
+          matching: find.text('2'),
+        ),
         findsOneWidget,
       );
 
-      await zeige(tester, FotosSeite(modell: m), dunkel: dunkel);
+      await tester.tap(find.byKey(const ValueKey('bereich-fotos')));
+      await tester.pumpAndSettle();
+      expect(find.text('2 Fotos · 512 KB'), findsOneWidget);
       expect(find.text('Musterfoto aufnehmen'), findsOneWidget);
       expect(
-        find.text('Musterfoto · Pfeffer grob, zweiter Versuch mit langem '
-            'Namen'),
+        find.text('Pfeffer grob, zweiter Versuch mit langem Namen'),
         findsOneWidget,
       );
       expect(find.text('MUSTERFOTOS'), findsOneWidget);
@@ -129,14 +136,46 @@ void main() {
       expect(find.byKey(const ValueKey('fotozeile-f-2')), findsOneWidget);
     });
 
-    testWidgets('Produktionen, Artikel und Schritte ($art)', (tester) async {
+    testWidgets('Heute: läuft, offen, morgen eingeklappt ($art)',
+        (tester) async {
       final m = modell();
-      await zeige(tester, ProduktionenSeite(modell: m), dunkel: dunkel);
-      expect(find.text('Kochschinken'), findsOneWidget);
-      expect(find.text('Ohne Plan erfassen'), findsOneWidget);
+      m.stand.produktionStarten(
+        produktionId: 't1',
+        artikelId: 'a1',
+        artikel: 'Grillwurst',
+        jetzt: DateTime(2026, 11, 10, 6, 10),
+      );
+      await zeige(
+        tester,
+        Scaffold(
+          body: HeuteAnsicht(
+            modell: m,
+            onOhnePlan: () {},
+            jetzt: () => DateTime(2026, 11, 10, 9, 16),
+          ),
+        ),
+        dunkel: dunkel,
+      );
+      expect(find.text('LÄUFT'), findsOneWidget);
+      expect(find.byKey(const ValueKey('fertig-t1')), findsOneWidget);
+      expect(find.text('seit 06:10 · 3:06 h'), findsOneWidget);
+      expect(find.text('1.250'), findsOneWidget);
+      // t2 ist morgen — eingeklappt.
+      expect(find.byKey(const ValueKey('karte-t2')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('klappe-morgen')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('start-t2')), findsOneWidget);
+      expect(find.text('Wurstküche'), findsOneWidget);
+    });
 
-      await zeige(tester, ArtikelSeite(modell: m), dunkel: dunkel);
-      expect(find.text('Kochschinken'), findsOneWidget);
+    testWidgets('Anlagen und die Kette eines Artikels ($art)', (tester) async {
+      final m = modell();
+      await zeige(
+        tester,
+        Scaffold(body: AnlagenAnsicht(modell: m)),
+        dunkel: dunkel,
+      );
+      expect(find.text('Kochschinken'), findsWidgets);
 
       await zeige(
         tester,
@@ -147,6 +186,9 @@ void main() {
       expect(find.text('Füller Test'), findsOneWidget);
       expect(find.text('Bratstraße Test'), findsOneWidget);
       expect(find.text('120 g'), findsOneWidget);
+      // Der Artikel steht jetzt unter „Zuletzt geöffnet".
+      await tester.pump();
+      expect(m.stand.zuletzt, ['a1']);
       // Wie an der Anlage: alle Platten einer Reihe in einer Zeile,
       // Platte 1 rechts, oben über unten.
       Offset platte(String name) =>
@@ -270,7 +312,8 @@ void main() {
     await tester.enterText(felder.at(3), '600');
     await tester.enterText(felder.at(4), '13:30');
     await tester.pump();
-    expect(find.textContaining('Verlust 20'), findsOneWidget);
+    expect(find.text('Verlust'), findsOneWidget);
+    expect(find.text('20,0 %'), findsOneWidget);
     await tester.tap(find.text('Produktion erfassen'));
     // Die Meldung am unteren Rand ablaufen lassen.
     await tester.pump();
@@ -433,5 +476,61 @@ void main() {
     expect(find.byKey(const ValueKey('muster-bezeichnung')), findsNothing);
     expect(m.stand.fotos, isEmpty);
     expect(m.stand.fotoWartend, isNull);
+  });
+
+  testWidgets('Start und Fertig: die Uhrzeit vom Handy, dann erfassen',
+      (tester) async {
+    final m = modell();
+    await zeige(
+      tester,
+      Scaffold(body: HeuteAnsicht(modell: m, onOhnePlan: () {})),
+      groesse: const Size(360, 2000),
+    );
+    await tester.tap(find.byKey(const ValueKey('start-t1')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final start = m.stand.entwuerfe['t1']!.start;
+    expect(start, matches(RegExp(r'^\d\d:\d\d$')));
+    expect(m.stand.produktionen, isEmpty);
+
+    await tester.tap(find.byKey(const ValueKey('fertig-t1')));
+    await tester.pumpAndSettle();
+    // Start steht da, das Ende ist die Uhrzeit des Handys, „Jetzt" gibt
+    // es weiter.
+    // (Das Ende kann in derselben Minute liegen wie der Start.)
+    expect(find.text(start), findsWidgets);
+    expect(find.byKey(const ValueKey('jetzt-Start')), findsOneWidget);
+    expect(find.byKey(const ValueKey('jetzt-Ende')), findsOneWidget);
+    final felder = find.byType(TextField);
+    await tester.enterText(felder.at(0), '1250');
+    await tester.enterText(felder.at(2), '1000');
+    await tester.pump();
+    expect(find.text('Ausbeute'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('produktion-erfassen')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+
+    final e = m.stand.produktionen['t1']!;
+    expect((e.rohKg, e.fertigKg, e.start), (1250.0, 1000.0, start));
+    expect(e.ende, isNotNull);
+    expect(m.stand.entwuerfe, isEmpty);
+    expect(find.byKey(const ValueKey('erfasst-t1')), findsOneWidget);
+  });
+
+  testWidgets('An PC: was mitgeht, und der Knopf zum Speichern',
+      (tester) async {
+    final m = mitFotos();
+    await zeige(tester, StartSeite(modell: m), groesse: const Size(360, 900));
+    await tester.tap(find.byKey(const ValueKey('an-pc')));
+    await tester.pumpAndSettle();
+    expect(find.text('An den PC senden'), findsOneWidget);
+    expect(find.text('Produktionen'), findsOneWidget);
+    expect(find.text('Maschinenwerte'), findsOneWidget);
+    final knopf = tester.widget<ButtonStyleButton>(
+      find.byKey(const ValueKey('ergebnis-speichern')),
+    );
+    expect(knopf.onPressed, isNotNull);
   });
 }

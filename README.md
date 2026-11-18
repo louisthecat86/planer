@@ -586,15 +586,29 @@ Berechtigung fürs Internet.
    stehen nicht darin.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
    Planer Erfassung") oder in der App „Paket öffnen".
-3. **Erfassen:** je geplanter Produktion Rohware, davon Fleisch, Fertigware,
-   Start und Ende („Jetzt"), Bemerkung und Kürzel — auch ohne Plan.
+3. **Erfassen:** Die App hat unten drei Bereiche — **Heute**, **Anlagen**,
+   **Fotos** — und oben immer die Kamera fürs Musterfoto und **„An PC"** mit
+   der Zahl dessen, was noch in keiner Ergebnis-Datei steht. „Heute" ist
+   die Arbeitsliste: oben, was läuft (mit der Zeit seit dem Start), darunter,
+   was bis heute offen ist, dann das Erfasste; morgen und später in der
+   Woche stehen eingeklappt darunter. **„Start"** auf einer Karte hält die
+   Uhrzeit des Handys als Start fest, **„Fertig"** öffnet die Erfassung mit
+   der Uhrzeit als Ende — eingetragen werden Rohware, davon Fleisch,
+   Fertigware, Start und Ende („Jetzt" übernimmt die Uhrzeit des Handys),
+   Bemerkung und Kürzel; Ausbeute, Verlust, Dauer und kg/h rechnet die App
+   gleich aus. „Ohne Plan erfassen" steht unten in „Heute" und im Menü.
    **Zwischenspeichern:** Rohware und Startzeit lassen sich schon eintragen,
    solange die Produktion läuft. Über „Zwischenspeichern", beim Zurückgehen
    und wenn die App in den Hintergrund geht, bleibt alles stehen; die
-   Produktion heißt dann „begonnen" und ist erst mit „Produktion erfassen"
-   erfasst. Begonnenes steht in keiner Ergebnis-Datei.
-   Bei den Maschineneinstellungen je Schritt eintragen, was an der Anlage
-   eingestellt ist — mit der vollen Tastatur, die Platten von Bratstraße
+   Produktion heißt dann „begonnen" (mit Startzeit: „läuft") und ist erst
+   mit „Produktion erfassen" erfasst. Begonnenes steht in keiner
+   Ergebnis-Datei.
+   Unter **Anlagen** stehen oben die heute geplanten und die zuletzt
+   geöffneten Artikel, darunter alle mit Suche; die grüne Zahl sagt, wie
+   viel an einem Artikel geändert ist. Die Kette eines Artikels steht als
+   Zeitstrahl da, die Werte je Schritt als Kacheln — geänderte grün. Je
+   Schritt eintragen, was an der Anlage eingestellt ist — mit der vollen
+   Tastatur, die Platten von Bratstraße
    und Kombiofen in einer Zeile in Laufrichtung (Platte 1 rechts); harte
    Grenzen blockieren, weiche warnen, wie am PC. Jede Eingabe ist sofort
    auf dem Handy gespeichert. Fehlt eine Maschine in der Kette, holt
@@ -605,13 +619,16 @@ Berechtigung fürs Internet.
 4. **Fotos:** Beim Erfassen einer Produktion und bei den
    Maschineneinstellungen eines Artikels nimmt „Foto aufnehmen" ein **Foto
    aus der Produktion** auf — es gehört zum Artikel. „Musterfoto aufnehmen"
-   auf der Startseite fragt nur nach einer Bezeichnung; Projekte und Kunden
+   (Kamera oben oder im Bereich „Fotos") fragt nur nach einer Bezeichnung;
+   Projekte und Kunden
    stehen nicht auf dem Handy. Aufgenommen wird mit der Kamera-App des
    Handys (die App braucht dafür keine Kamera-Berechtigung); das Bild kommt
    verkleinert zurück — längere Kante 1600 px, JPEG, rund 300 KB — und liegt
-   im Ordner der App. Unter „Fotos" stehen alle zum Ansehen und Löschen.
-5. **„Ergebnis speichern"** und die Datei zurück an den PC — die Fotos
-   stehen mit darin. Zum Einlesen führt auch „Vom Handy einlesen" oben in
+   im Ordner der App. Unter „Fotos" stehen alle als Raster zum Ansehen und
+   Löschen.
+5. **„An PC"** zeigt, was in die Datei geht (Produktionen, Maschinenwerte,
+   Prozessketten, Fotos) und was noch läuft; **„Ergebnis-Datei speichern"**
+   und die Datei zurück an den PC — die Fotos stehen mit darin. Zum Einlesen führt auch „Vom Handy einlesen" oben in
    der Produktionserfassung. Unter „Ergebnis-Datei wählen" zeigt der
    Planer, was sich ändern würde, und übernimmt nur, was angehakt ist:
    Produktionen landen in

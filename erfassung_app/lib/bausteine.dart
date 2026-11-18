@@ -39,6 +39,12 @@ String tagLang(DateTime d, DateTime heute) {
   return '${_wochentageLang[d.weekday - 1]}, $datum';
 }
 
+/// „3:06 h" aus Minuten.
+String dauerText(double minuten) {
+  final m = minuten.round();
+  return '${m ~/ 60}:${_zwei(m % 60)} h';
+}
+
 /// Eine Überschrift über einem Abschnitt.
 class Abschnitt extends StatelessWidget {
   const Abschnitt(this.text, {super.key, this.zusatz});
@@ -53,11 +59,11 @@ class Abschnitt extends StatelessWidget {
     final theme = Theme.of(context);
     final stil = theme.textTheme.labelMedium?.copyWith(
       fontWeight: FontWeight.w700,
-      letterSpacing: 0.6,
+      letterSpacing: 0.8,
       color: theme.colorScheme.onSurfaceVariant,
     );
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 6),
+      padding: const EdgeInsets.fromLTRB(6, 18, 6, 8),
       child: Row(
         children: [
           Expanded(child: Text(text.toUpperCase(), style: stil)),
@@ -68,24 +74,36 @@ class Abschnitt extends StatelessWidget {
   }
 }
 
-/// Eine Fläche mit Rand — wie die Bereiche im Planer.
+/// Eine Fläche: Karte ohne Rahmen mit runden Ecken. Mit [farbe] bekommt
+/// sie einen farbigen Rand — etwa für eine laufende Produktion.
 class Flaeche extends StatelessWidget {
-  const Flaeche({super.key, required this.child, this.onTap, this.farbe});
+  const Flaeche({
+    super.key,
+    required this.child,
+    this.onTap,
+    this.farbe,
+    this.hintergrund,
+  });
 
   final Widget child;
   final VoidCallback? onTap;
 
-  /// Die Farbe des Rands — sonst die graue Linie.
+  /// Die Farbe des Rands — ohne keiner.
   final Color? farbe;
+
+  /// Die Farbe der Fläche — sonst die der Karten.
+  final Color? hintergrund;
 
   @override
   Widget build(BuildContext context) {
     final f = Theme.of(context).colorScheme;
     return Material(
-      color: f.surface,
+      color: hintergrund ?? f.surface,
       shape: RoundedRectangleBorder(
         borderRadius: Masse.ecken,
-        side: BorderSide(color: farbe ?? f.outline),
+        side: farbe == null
+            ? BorderSide.none
+            : BorderSide(color: farbe!, width: 1.5),
       ),
       clipBehavior: Clip.antiAlias,
       child: onTap == null ? child : InkWell(onTap: onTap, child: child),
@@ -93,8 +111,48 @@ class Flaeche extends StatelessWidget {
   }
 }
 
-/// Eine Zeile zum Antippen: vorn ein Streifen in der Farbe der Abteilung,
-/// Titel, darunter ein Satz, rechts ein Pfeil oder eine Marke.
+/// Ein Punkt in der Farbe einer Abteilung mit ihrem Namen.
+class AbteilungsMarke extends StatelessWidget {
+  const AbteilungsMarke({super.key, required this.name, this.farbe});
+
+  final String name;
+  final int? farbe;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(
+            color: farbe == null ? f.onSurfaceVariant : Color(farbe!),
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: f.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Eine Zeile zum Antippen: Titel, darunter ein Satz, rechts ein Pfeil
+/// oder eine Marke. [streifen] setzt vor den Satz einen Punkt in der
+/// Farbe der Abteilung.
 class TippZeile extends StatelessWidget {
   const TippZeile({
     super.key,
@@ -118,50 +176,59 @@ class TippZeile extends StatelessWidget {
     return Flaeche(
       onTap: onTap,
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: Masse.tippHoehe),
-        child: IntrinsicHeight(
+        constraints: const BoxConstraints(minHeight: Masse.tippHoehe + 8),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (streifen != null) Container(width: 6, color: streifen),
               Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        titel,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      titel,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                        height: 1.25,
+                      ),
+                    ),
+                    if (unter != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 3),
+                        child: Row(
+                          children: [
+                            if (streifen != null) ...[
+                              Container(
+                                width: 9,
+                                height: 9,
+                                decoration: BoxDecoration(
+                                  color: streifen,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                            ],
+                            Expanded(
+                              child: Text(
+                                unter!,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: f.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      if (unter != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            unter!,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: f.onSurfaceVariant,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: Center(
-                  child: rechts ??
-                      Icon(Icons.chevron_right, color: f.onSurfaceVariant),
-                ),
-              ),
+              const SizedBox(width: 10),
+              rechts ?? Icon(Icons.chevron_right, color: f.onSurfaceVariant),
             ],
           ),
         ),
@@ -170,7 +237,7 @@ class TippZeile extends StatelessWidget {
   }
 }
 
-/// Eine kleine Marke: „erfasst", „3 geändert".
+/// Eine kleine Marke: „erfasst", „neu".
 class Marke extends StatelessWidget {
   const Marke(this.text, {super.key, required this.farbe});
 
@@ -180,10 +247,10 @@ class Marke extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
       decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.14),
-        borderRadius: Masse.ecken,
+        color: farbe.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         text,
@@ -191,6 +258,38 @@ class Marke extends StatelessWidget {
           fontSize: 12.5,
           fontWeight: FontWeight.w700,
           color: farbe,
+        ),
+      ),
+    );
+  }
+}
+
+/// Eine Zahl im Kreis — wie viel an einem Artikel geändert ist.
+class ZahlPunkt extends StatelessWidget {
+  const ZahlPunkt(this.zahl, {super.key});
+
+  final int zahl;
+
+  @override
+  Widget build(BuildContext context) {
+    final ok = Farben.von(context).ok;
+    return Container(
+      constraints: const BoxConstraints(minWidth: 26),
+      height: 26,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: ok,
+        borderRadius: BorderRadius.circular(13),
+      ),
+      child: Text(
+        '$zahl',
+        style: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: ThemeData.estimateBrightnessForColor(ok) == Brightness.dark
+              ? Colors.white
+              : Colors.black,
         ),
       ),
     );
@@ -208,11 +307,10 @@ class Hinweis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: farbe.withValues(alpha: 0.10),
-        borderRadius: Masse.ecken,
-        border: Border.all(color: farbe.withValues(alpha: 0.5)),
+        color: farbe.withValues(alpha: 0.12),
+        borderRadius: Masse.eckenKlein,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

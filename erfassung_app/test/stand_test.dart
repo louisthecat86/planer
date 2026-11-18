@@ -556,4 +556,144 @@ void main() {
       expect([for (final m in neu.maschinen) m.id], ['m-fueller', 'm-kutter']);
     });
   });
+
+  group('Heute', () {
+    // Dienstag, 10.11. um 9 Uhr: t1 ist heute geplant, t2 morgen.
+    final dienstag = DateTime(2026, 11, 10, 9);
+    late Erfassungsstand s;
+
+    setUp(() {
+      s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+    });
+
+    List<String> ids(List<HeuteEintrag> l) => [for (final e in l) e.id];
+
+    test('offen, morgen, später — nach dem Tag', () {
+      var u = s.uebersicht(dienstag);
+      expect(u.laeuft, isEmpty);
+      expect(ids(u.offen), ['t1']);
+      expect(ids(u.morgen), ['t2']);
+      // Einen Tag später ist t1 liegengeblieben und t2 dran: beide offen.
+      u = s.uebersicht(DateTime(2026, 11, 11, 7));
+      expect(ids(u.offen), ['t1', 't2']);
+      expect(u.morgen, isEmpty);
+      // Einen Tag vorher steht t2 unter „später".
+      u = s.uebersicht(DateTime(2026, 11, 9, 7));
+      expect(u.offen, isEmpty);
+      expect(ids(u.morgen), ['t1']);
+      expect(ids(u.spaeter), ['t2']);
+    });
+
+    test('Start hält die Uhrzeit fest — dann läuft sie', () {
+      expect(
+        s.produktionStarten(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          jetzt: DateTime(2026, 11, 10, 6, 7),
+        ),
+        isTrue,
+      );
+      final e = s.entwuerfe['t1']!;
+      expect((e.start, e.datum, e.roh), ('06:07', DateTime(2026, 11, 10), ''));
+      expect(s.statusVon('t1'), ProduktionsStatus.laeuft);
+      final u = s.uebersicht(dienstag);
+      expect(ids(u.laeuft), ['t1']);
+      expect(u.laeuft.single.start, '06:07');
+      // Die geplante Menge, solange nichts eingetragen ist.
+      expect(u.laeuft.single.rohKg, 1250);
+
+      // Ein zweites Mal ändert die Startzeit nicht.
+      expect(
+        s.produktionStarten(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          jetzt: DateTime(2026, 11, 10, 8),
+        ),
+        isFalse,
+      );
+      expect(s.entwuerfe['t1']!.start, '06:07');
+      // Begonnenes geht nicht in die Datei.
+      expect(s.hatErfasstes, isFalse);
+    });
+
+    test('Start übernimmt, was schon eingetragen war', () {
+      s.entwurfMerken(
+        ProduktionsEntwurf(
+          produktionId: 't2',
+          artikelId: 'a2',
+          artikel: 'Kochschinken',
+          datum: DateTime(2026, 11, 11),
+          geaendertAm: jetzt,
+          roh: '310',
+          bemerkung: 'neue Charge',
+        ),
+      );
+      var u = s.uebersicht(dienstag);
+      expect(u.morgen.single.begonnen, isTrue);
+      expect(u.morgen.single.rohKg, 310);
+      s.produktionStarten(
+        produktionId: 't2',
+        artikelId: 'a2',
+        artikel: 'Kochschinken',
+        jetzt: DateTime(2026, 11, 10, 10, 30),
+      );
+      final e = s.entwuerfe['t2']!;
+      expect((e.roh, e.bemerkung, e.start), ('310', 'neue Charge', '10:30'));
+      u = s.uebersicht(dienstag);
+      expect(ids(u.laeuft), ['t2']);
+      expect(u.morgen, isEmpty);
+    });
+
+    test('erfasst und ohne Plan', () {
+      s
+        ..produktionErfassen(erfasst('t1'))
+        ..produktionErfassen(erfasst('frei-1', artikelId: 'a2'))
+        ..entwurfMerken(
+          ProduktionsEntwurf(
+            produktionId: 'frei-2',
+            artikelId: 'a2',
+            artikel: 'Kochschinken',
+            datum: DateTime(2026, 11, 10),
+            geaendertAm: jetzt,
+            start: '0700',
+          ),
+        );
+      final u = s.uebersicht(dienstag);
+      expect(ids(u.erfasst).toSet(), {'t1', 'frei-1'});
+      expect(ids(u.laeuft), ['frei-2']);
+      expect(u.laeuft.single.start, '07:00');
+      expect(u.laeuft.single.plan, isNull);
+      expect(s.postenAnzahl, 2);
+      // Eine erfasste Produktion lässt sich nicht noch einmal starten.
+      expect(
+        s.produktionStarten(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          jetzt: dienstag,
+        ),
+        isFalse,
+      );
+    });
+
+    test('zuletzt geöffnet: der jüngste vorn, höchstens acht', () {
+      expect(s.artikelGeoeffnet('a1'), isTrue);
+      expect(s.artikelGeoeffnet('a1'), isFalse);
+      s.artikelGeoeffnet('a2');
+      expect(s.zuletzt, ['a2', 'a1']);
+      s.artikelGeoeffnet('a1');
+      expect(s.zuletzt, ['a1', 'a2']);
+      for (var i = 0; i < 10; i++) {
+        s.artikelGeoeffnet('x$i');
+      }
+      expect(s.zuletzt, hasLength(Erfassungsstand.kZuletztMax));
+      expect(s.zuletzt.first, 'x9');
+      final wieder = Erfassungsstand.ausText(s.alsText());
+      expect(wieder.zuletzt, s.zuletzt);
+      // Ein Stand von früher kennt die Liste nicht.
+      expect(Erfassungsstand.ausText('{"kuerzel": "AB"}').zuletzt, isEmpty);
+    });
+  });
 }

@@ -49,6 +49,66 @@ String? platzVorschlag(List<PaketSchritt> schritte, String abteilung) {
   return schritte.isEmpty ? null : schritte.last.id;
 }
 
+/// Wie weit eine Produktion ist.
+enum ProduktionsStatus {
+  /// Noch nicht gestartet — vielleicht schon etwas eingetragen.
+  offen,
+
+  /// Gestartet: Eine Startzeit ist eingetragen, erfasst ist sie noch nicht.
+  laeuft,
+
+  /// Erfasst.
+  erfasst,
+}
+
+/// Eine Produktion auf der Seite „Heute": geplant ([plan]), begonnen
+/// ([entwurf]) oder erfasst ([erfasst]) — oder mehreres davon.
+class HeuteEintrag {
+  const HeuteEintrag({
+    required this.id,
+    required this.status,
+    this.plan,
+    this.entwurf,
+    this.erfasst,
+  });
+
+  final String id;
+  final ProduktionsStatus status;
+  final PaketProduktion? plan;
+  final ProduktionsEntwurf? entwurf;
+  final ErfassteProduktion? erfasst;
+
+  String get artikelId =>
+      plan?.artikelId ?? entwurf?.artikelId ?? erfasst?.artikelId ?? '';
+
+  String get artikel =>
+      plan?.artikel ?? entwurf?.artikel ?? erfasst?.artikel ?? '';
+
+  /// Die Rohware, die zählt: erfasst, sonst eingetragen, sonst geplant.
+  double? get rohKg =>
+      erfasst?.rohKg ?? zahlAus(entwurf?.roh ?? '') ?? plan?.rohKg;
+
+  /// Die eingetragene Startzeit („06:10") — null ohne.
+  String? get start => zeitAus(erfasst?.start ?? entwurf?.start);
+
+  /// Der Tag: erfasst, begonnen, sonst geplant.
+  DateTime get datum =>
+      erfasst?.datum ?? entwurf?.datum ?? plan?.datum ?? DateTime(2000);
+
+  /// Ob schon etwas eingetragen ist, ohne dass sie läuft.
+  bool get begonnen => status == ProduktionsStatus.offen && entwurf != null;
+}
+
+/// Die Produktionen fürs Handy sortiert: was läuft, was bis heute offen
+/// ist, was erfasst ist — und was morgen und später geplant ist.
+typedef HeuteUebersicht = ({
+  List<HeuteEintrag> laeuft,
+  List<HeuteEintrag> offen,
+  List<HeuteEintrag> erfasst,
+  List<HeuteEintrag> morgen,
+  List<HeuteEintrag> spaeter,
+});
+
 String? _leerZuNull(String? s) {
   final t = s?.trim();
   return t == null || t.isEmpty ? null : t;
@@ -152,9 +212,11 @@ class Erfassungsstand {
     Map<String, ErfasstesFoto>? fotos,
     Map<String, NeuerSchritt>? neueSchritte,
     Map<String, EntfernterSchritt>? entfernteSchritte,
+    List<String>? zuletzt,
     this.fotoWartend,
     this.gespeichertAm,
-  })  : produktionen = produktionen ?? {},
+  })  : zuletzt = zuletzt ?? [],
+        produktionen = produktionen ?? {},
         entwuerfe = entwuerfe ?? {},
         werte = werte ?? {},
         fotos = fotos ?? {},
@@ -187,6 +249,12 @@ class Erfassungsstand {
 
   /// Schritte aus dem Paket, die aus ihrer Kette fallen, nach ihrer ID.
   final Map<String, EntfernterSchritt> entfernteSchritte;
+
+  /// Die zuletzt geöffneten Artikel, der jüngste zuerst — höchstens
+  /// [kZuletztMax].
+  final List<String> zuletzt;
+
+  static const int kZuletztMax = 8;
 
   /// Das Foto, für das gerade die Kamera offen ist. Android darf die App
   /// schließen, solange die Kamera vorn ist — beim nächsten Start weiß die
@@ -384,6 +452,152 @@ class Erfassungsstand {
     );
     gespeichertAm = null;
   }
+
+  // ── Heute ───────────────────────────────────────────────────────────
+
+  /// Wie weit die Produktion [produktionId] ist.
+  ProduktionsStatus statusVon(String produktionId) {
+    if (produktionen.containsKey(produktionId)) {
+      return ProduktionsStatus.erfasst;
+    }
+    final e = entwuerfe[produktionId];
+    return e != null && zeitAus(e.start) != null
+        ? ProduktionsStatus.laeuft
+        : ProduktionsStatus.offen;
+  }
+
+  /// Alle Produktionen nach [ProduktionsStatus] und Tag, bezogen auf
+  /// [jetzt]: Was läuft, steht oben, egal für welchen Tag es geplant war.
+  /// Offen heißt: geplant bis heute — auch Liegengebliebenes von gestern.
+  HeuteUebersicht uebersicht(DateTime jetzt) {
+    final heute = DateTime(jetzt.year, jetzt.month, jetzt.day);
+    final morgen = DateTime(heute.year, heute.month, heute.day + 1);
+    final laeuft = <HeuteEintrag>[];
+    final offen = <HeuteEintrag>[];
+    final erfasst = <HeuteEintrag>[];
+    final spaeterMorgen = <HeuteEintrag>[];
+    final spaeter = <HeuteEintrag>[];
+    void einordnen(HeuteEintrag e) {
+      switch (e.status) {
+        case ProduktionsStatus.laeuft:
+          laeuft.add(e);
+        case ProduktionsStatus.erfasst:
+          erfasst.add(e);
+        case ProduktionsStatus.offen:
+          final tag = DateTime(e.datum.year, e.datum.month, e.datum.day);
+          if (!tag.isAfter(heute)) {
+            offen.add(e);
+          } else if (tag == morgen) {
+            spaeterMorgen.add(e);
+          } else {
+            spaeter.add(e);
+          }
+      }
+    }
+
+    final geplant = <String>{};
+    for (final p in paket?.produktionen ?? const <PaketProduktion>[]) {
+      geplant.add(p.id);
+      einordnen(
+        HeuteEintrag(
+          id: p.id,
+          status: statusVon(p.id),
+          plan: p,
+          entwurf: entwuerfe[p.id],
+          erfasst: produktionen[p.id],
+        ),
+      );
+    }
+    // Ohne Plan: begonnen oder erfasst.
+    final frei = <String>{
+      ...entwuerfe.keys,
+      ...produktionen.keys,
+    }.where((id) => !geplant.contains(id));
+    for (final id in frei) {
+      einordnen(
+        HeuteEintrag(
+          id: id,
+          status: statusVon(id),
+          entwurf: entwuerfe[id],
+          erfasst: produktionen[id],
+        ),
+      );
+    }
+    int nachStart(HeuteEintrag a, HeuteEintrag b) =>
+        (a.start ?? '').compareTo(b.start ?? '');
+    int nachTag(HeuteEintrag a, HeuteEintrag b) {
+      final t = a.datum.compareTo(b.datum);
+      if (t != 0) return t;
+      return (a.plan?.start ?? '99').compareTo(b.plan?.start ?? '99');
+    }
+
+    laeuft.sort(nachStart);
+    offen.sort(nachTag);
+    spaeterMorgen.sort(nachTag);
+    spaeter.sort(nachTag);
+    erfasst.sort(
+      (a, b) => b.erfasst!.erfasstAm.compareTo(a.erfasst!.erfasstAm),
+    );
+    return (
+      laeuft: laeuft,
+      offen: offen,
+      erfasst: erfasst,
+      morgen: spaeterMorgen,
+      spaeter: spaeter,
+    );
+  }
+
+  /// Startet die Produktion [produktionId] jetzt: Die Uhrzeit von [jetzt]
+  /// wird als Start festgehalten — als begonnene Erfassung, wie beim
+  /// Zwischenspeichern. Was schon eingetragen war, bleibt; eine schon
+  /// eingetragene Startzeit auch. Gibt zurück, ob sich etwas geändert hat.
+  bool produktionStarten({
+    required String produktionId,
+    required String artikelId,
+    required String artikel,
+    required DateTime jetzt,
+  }) {
+    if (produktionen.containsKey(produktionId)) return false;
+    final alt = entwuerfe[produktionId];
+    if (alt != null && zeitAus(alt.start) != null) return false;
+    entwuerfe[produktionId] = ProduktionsEntwurf(
+      produktionId: produktionId,
+      artikelId: alt?.artikelId ?? artikelId,
+      artikel: alt?.artikel ?? artikel,
+      // Der Tag, an dem wirklich produziert wird.
+      datum: DateTime(jetzt.year, jetzt.month, jetzt.day),
+      geaendertAm: jetzt,
+      roh: alt?.roh ?? '',
+      fleisch: alt?.fleisch ?? '',
+      fertig: alt?.fertig ?? '',
+      start: uhrzeit(jetzt),
+      ende: alt?.ende ?? '',
+      bemerkung: alt?.bemerkung ?? '',
+    );
+    return true;
+  }
+
+  /// Merkt [artikelId] als zuletzt geöffnet. Gibt zurück, ob sich etwas
+  /// geändert hat.
+  bool artikelGeoeffnet(String artikelId) {
+    if (zuletzt.isNotEmpty && zuletzt.first == artikelId) return false;
+    zuletzt
+      ..remove(artikelId)
+      ..insert(0, artikelId);
+    if (zuletzt.length > kZuletztMax) {
+      zuletzt.removeRange(kZuletztMax, zuletzt.length);
+    }
+    return true;
+  }
+
+  /// Wie viele Posten das Ergebnis hätte: Produktionen, geänderte Werte,
+  /// Änderungen an Ketten und Fotos.
+  int get postenAnzahl =>
+      produktionen.length +
+      werte.length +
+      neueSchritte.length +
+      entfernteSchritte.length +
+      fotos.length;
 
   // ── Prozessketten ───────────────────────────────────────────────────
 
@@ -587,6 +801,7 @@ class Erfassungsstand {
 
   String alsText() => jsonEncode({
         'kuerzel': kuerzel,
+        if (zuletzt.isNotEmpty) 'zuletzt': zuletzt,
         if (paket != null) 'paket': paket!.toJson(),
         'produktionen': [for (final e in produktionen.values) e.toJson()],
         if (entwuerfe.isNotEmpty)
@@ -641,9 +856,11 @@ class Erfassungsstand {
           EntfernterSchritt.ausJson(e),
       ];
       final wartend = jsonObjektOder(j, 'fotoWartend');
+      final zuletzt = j['zuletzt'];
       return Erfassungsstand(
         paket: paket == null ? null : ErfassungsPaket.ausJson(paket),
         kuerzel: jsonTextOder(j, 'kuerzel') ?? '',
+        zuletzt: zuletzt is List ? [...zuletzt.whereType<String>()] : null,
         produktionen: {for (final e in produktionen) e.produktionId: e},
         entwuerfe: {for (final e in entwuerfe) e.produktionId: e},
         werte: {
