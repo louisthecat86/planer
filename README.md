@@ -635,7 +635,7 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
 ## Daten und Sicherung
 
 - **Datenbank:** SQLite über [drift](https://drift.simonbinder.eu/), Datei
-  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 41.
+  `produktion_planer.sqlite` im Dokumente-Ordner, Schema-Version 42.
 - **Backups** (`.planerbackup`, gepackt) liegen im Ordner `backups` unter den
   Dokumenten oder in einem selbst gewählten Ordner. Nach Änderungen sichert die
   App automatisch (höchstens einmal je Minute) und beim Beenden, wenn sich seit
@@ -679,10 +679,10 @@ er die Datei nicht liest, statt die Fotos wegzulassen.
 
 | Bereich            | Tabellen                                                                                                     |
 | ------------------ | ------------------------------------------------------------------------------------------------------------ |
-| Stammdaten         | `products`, `product_steps`, `product_step_parameters`, `machines`, `machine_parameter_defs`, `parameter_grenzen`, `zusatzzeiten`, `raw_materials`, `product_raw_materials`, `raw_material_batches`, `artikel_fotos`, `artikel_foto_inhalte` |
-| Planung            | `production_tasks`, `task_dependencies`, `demands`, `tagesaufgaben`, `auftragsbestand_artikel`, `auftragsbestand_positionen` (dazu je `…_vorher` für den Vergleich) |
-| Ist und Archiv     | `production_runs`, `production_history`, `week_snapshots`                                                    |
-| Sonstiges          | `app_settings`, `order_list_items`                                                                           |
+| Stammdaten         | `products`, `product_steps`, `product_step_parameters`, `machines`, `machine_parameter_defs`, `parameter_grenzen`, `zusatzzeiten`, `navision_artikel`, `artikel_fotos`, `artikel_foto_inhalte` |
+| Planung            | `production_tasks`, `demands`, `tagesaufgaben`, `auftragsbestand_artikel`, `auftragsbestand_positionen` (dazu je `…_vorher` für den Vergleich) |
+| Ist und Archiv     | `production_history`, `week_snapshots`                                                                       |
+| Sonstiges          | `app_settings`                                                                                               |
 | Produktentwicklung | `entwicklung_zutaten`, `entwicklung_rezepturen`, `entwicklung_rezeptur_versionen`, `entwicklung_rezeptur_positionen`, `entwicklung_gesamtprojekte`, `entwicklung_projekte`, `entwicklung_projekt_eintraege`, `entwicklung_dateien`, `entwicklung_datei_inhalte`, `entwicklung_fliessdiagramme` |
 
 ## Entwickeln

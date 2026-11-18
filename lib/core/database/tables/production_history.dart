@@ -9,9 +9,7 @@ import 'products.dart';
 /// befüllt und beim Export wieder in dieselbe Vorlage zurückgeschrieben —
 /// so haben App und Excel in beide Richtungen denselben Stand.
 ///
-/// Bewusst getrennt von [ProductionRuns]: Letztere hängen an einer
-/// konkreten Task und füttern die schrittweise Lernlogik. Diese Tabelle
-/// bildet dagegen die artikelweite Bilanz einer kompletten Produktion ab
+/// Die Tabelle bildet die artikelweite Bilanz einer kompletten Produktion ab
 /// (Rohware rein → Fertigware raus), genau wie das Excel-Blatt.
 class ProductionHistory extends Table {
   TextColumn get id => text()();

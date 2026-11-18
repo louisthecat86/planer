@@ -459,13 +459,7 @@ class BackupService {
       'data': {
         'products': await _exportProducts(database),
         'product_steps': await _exportProductSteps(database),
-        'raw_materials': await _exportRawMaterials(database),
-        'product_raw_materials': await _exportProductRawMaterials(database),
-        'raw_material_batches': await _exportRawMaterialBatches(database),
         'production_tasks': await _exportProductionTasks(database),
-        'production_runs': await _exportProductionRuns(database),
-        'task_dependencies': await _exportTaskDependencies(database),
-        'order_list_items': await _exportOrderListItems(database),
         // ── v3-Erweiterungen ─────────────────────────────────────────
         'machines': await _exportMachines(database),
         'product_step_parameters': await _exportProductStepParameters(database),
@@ -622,7 +616,6 @@ class BackupService {
 
         // Reihenfolge wichtig wegen Foreign-Key-Constraints!
         await _importProducts(database, data);
-        await _importRawMaterials(database, data);
         // Machines vor ProductSteps importieren (FK)
         await _importMachines(database, data);
         // Steckbriefe hängen an den Maschinen → direkt danach.
@@ -631,12 +624,7 @@ class BackupService {
         await _importZusatzzeiten(database, data);
         await _importProductSteps(database, data);
         await _importProductStepParameters(database, data);
-        await _importProductRawMaterials(database, data);
-        await _importRawMaterialBatches(database, data);
         await _importProductionTasks(database, data);
-        await _importProductionRuns(database, data);
-        await _importTaskDependencies(database, data);
-        await _importOrderListItems(database, data);
         // Bedarf, Produktionshistorie und Wochen-Snapshots — kommen nach
         // products (production_history hat einen FK darauf).
         await _importDemands(database, data);
@@ -1037,53 +1025,11 @@ class BackupService {
           .map((s) => s.toJson())
           .toList();
 
-  static Future<List<Map<String, dynamic>>> _exportRawMaterials(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.rawMaterials).get())
-          .map((m) => m.toJson())
-          .toList();
-
-  static Future<List<Map<String, dynamic>>> _exportProductRawMaterials(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.productRawMaterials).get())
-          .map((p) => p.toJson())
-          .toList();
-
-  static Future<List<Map<String, dynamic>>> _exportRawMaterialBatches(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.rawMaterialBatches).get())
-          .map((b) => b.toJson())
-          .toList();
-
   static Future<List<Map<String, dynamic>>> _exportProductionTasks(
     AppDatabase db,
   ) async =>
       (await db.select(db.productionTasks).get())
           .map((t) => t.toJson())
-          .toList();
-
-  static Future<List<Map<String, dynamic>>> _exportProductionRuns(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.productionRuns).get())
-          .map((r) => r.toJson())
-          .toList();
-
-  static Future<List<Map<String, dynamic>>> _exportTaskDependencies(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.taskDependencies).get())
-          .map((d) => d.toJson())
-          .toList();
-
-  static Future<List<Map<String, dynamic>>> _exportOrderListItems(
-    AppDatabase db,
-  ) async =>
-      (await db.select(db.orderListItems).get())
-          .map((o) => o.toJson())
           .toList();
 
   // ── v3-Tabellen ────────────────────────────────────────────────────
@@ -1218,26 +1164,6 @@ class BackupService {
     }
   }
 
-  static Future<void> _importRawMaterials(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final materials = _zeilen(data, 'raw_materials');
-    // Gleiche Begründung wie bei _importProducts: eigene Konflikt-Regel.
-    for (final m in materials) {
-      final material = RawMaterial.fromJson(m);
-      await db.into(db.rawMaterials).insert(
-            material.toCompanion(true),
-            onConflict: DoUpdate(
-              (old) => RawMaterialsCompanion(
-                name: Value(material.name),
-                updatedAt: Value(DateTime.now()),
-              ),
-            ),
-          );
-    }
-  }
-
   static Future<void> _importProductSteps(
     AppDatabase db,
     Map<String, dynamic> data,
@@ -1252,35 +1178,6 @@ class BackupService {
     );
   }
 
-  static Future<void> _importProductRawMaterials(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'product_raw_materials');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => ProductRawMaterial.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.productRawMaterials, eintraege),
-    );
-  }
-
-  /// DataClass von RawMaterialBatches heißt automatisch RawMaterialBatche.
-  static Future<void> _importRawMaterialBatches(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'raw_material_batches');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => RawMaterialBatche.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.rawMaterialBatches, eintraege),
-    );
-  }
-
   static Future<void> _importProductionTasks(
     AppDatabase db,
     Map<String, dynamic> data,
@@ -1292,48 +1189,6 @@ class BackupService {
         .toList();
     await db.batch(
       (b) => b.insertAllOnConflictUpdate(db.productionTasks, eintraege),
-    );
-  }
-
-  static Future<void> _importProductionRuns(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'production_runs');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => ProductionRun.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.productionRuns, eintraege),
-    );
-  }
-
-  static Future<void> _importTaskDependencies(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'task_dependencies');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => TaskDependency.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.taskDependencies, eintraege),
-    );
-  }
-
-  static Future<void> _importOrderListItems(
-    AppDatabase db,
-    Map<String, dynamic> data,
-  ) async {
-    final zeilen = _zeilen(data, 'order_list_items');
-    if (zeilen.isEmpty) return;
-    final eintraege = zeilen
-        .map((z) => OrderListItem.fromJson(z).toCompanion(true))
-        .toList();
-    await db.batch(
-      (b) => b.insertAllOnConflictUpdate(db.orderListItems, eintraege),
     );
   }
 
@@ -1502,22 +1357,15 @@ class BackupService {
   /// Reihenfolge wegen Foreign-Key-Constraints (Kinder zuerst).
   static Future<void> _clearDatabase(AppDatabase db) async {
     // Tasks und abhängige Tabellen zuerst
-    await db.delete(db.productionRuns).go();
-    await db.delete(db.taskDependencies).go();
     await db.delete(db.productionTasks).go();
-    await db.delete(db.orderListItems).go();
     // Schritt-Parameter vor Schritten
     await db.delete(db.productStepParameters).go();
     await db.delete(db.productSteps).go();
-    // Produkte und ihre Material-Verknüpfungen
-    await db.delete(db.productRawMaterials).go();
-    await db.delete(db.rawMaterialBatches).go();
     // Historie & Bedarf verweisen auf products (production_history per FK) —
     // vor dem Löschen der Produkte leeren, sonst FOREIGN KEY constraint failed.
     await db.delete(db.productionHistory).go();
     await db.delete(db.demands).go();
     await db.delete(db.products).go();
-    await db.delete(db.rawMaterials).go();
     // Steckbriefe hängen an den Maschinen → vor dem Katalog löschen.
     await db.delete(db.zusatzzeiten).go();
     await db.delete(db.machineParameterDefs).go();

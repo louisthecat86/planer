@@ -5,23 +5,17 @@ import 'tables/app_settings.dart';
 import 'tables/auftragsbestand.dart';
 import 'tables/machine_parameter_defs.dart';
 import 'tables/machines.dart';
-import 'tables/order_list_items.dart';
 import 'tables/parameter_grenzen.dart';
-import 'tables/product_raw_materials.dart';
 import 'tables/product_step_parameters.dart';
 import 'tables/product_steps.dart';
 import 'tables/production_history.dart';
-import 'tables/production_runs.dart';
 import 'tables/demands.dart';
 import 'tables/entwicklung.dart';
 import 'tables/production_tasks.dart';
 import 'tables/artikel_fotos.dart';
 import 'tables/navision_artikel.dart';
 import 'tables/products.dart';
-import 'tables/raw_material_batches.dart';
-import 'tables/raw_materials.dart';
 import 'tables/tagesaufgaben.dart';
-import 'tables/task_dependencies.dart';
 import 'tables/week_snapshots.dart';
 import 'tables/zusatzzeiten.dart';
 
@@ -41,14 +35,8 @@ part 'database.g.dart';
     ProductSteps,
     ProductStepParameters,
     Machines,
-    RawMaterials,
-    ProductRawMaterials,
-    RawMaterialBatches,
     ProductionTasks,
-    ProductionRuns,
     ProductionHistory,
-    TaskDependencies,
-    OrderListItems,
     AppSettings,
     WeekSnapshots,
     Demands,
@@ -92,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 41;
+  int get schemaVersion => 42;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -633,6 +621,22 @@ class AppDatabase extends _$AppDatabase {
             // App Muster („Nummer 2") und, was Rohware oder Zutat ist.
             await m.createTable(navisionArtikel);
           }
+          if (from < 42) {
+            // Tabellen aus einem frühen Entwurf (Rohwaren, Chargen,
+            // Produktionsläufe, Abhängigkeiten, Bestelllisten), die nie
+            // benutzt wurden. Kinder zuerst, falls Fremdschlüssel greifen;
+            // ihre Indizes gehen mit.
+            for (final t in const [
+              'order_list_items',
+              'product_raw_materials',
+              'raw_material_batches',
+              'raw_materials',
+              'production_runs',
+              'task_dependencies',
+            ]) {
+              await customStatement('DROP TABLE IF EXISTS $t');
+            }
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -693,20 +697,8 @@ class AppDatabase extends _$AppDatabase {
       'ON production_tasks(datum, abteilung)',
     );
     await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_production_runs_task_id '
-      'ON production_runs(task_id)',
-    );
-    await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_production_history_product '
       'ON production_history(product_id, datum)',
-    );
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_batches_raw_material_id '
-      'ON raw_material_batches(raw_material_id)',
-    );
-    await customStatement(
-      'CREATE INDEX IF NOT EXISTS idx_order_list_woche '
-      'ON order_list_items(woche_start_datum)',
     );
     // v4-Indizes
     await customStatement(

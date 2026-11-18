@@ -3,9 +3,8 @@ import 'package:drift/drift.dart';
 /// Produkt-Stammdaten (das "lernende" Zentrum der App).
 ///
 /// Jedes Produkt, das jemals produziert wurde, steht hier einmal drin.
-/// Details (Abteilungsfolge, Rohwaren) hängen über [ProductSteps] und
-/// [ProductRawMaterials] dran. Beim erneuten Planen desselben Produkts
-/// werden diese Daten automatisch übernommen.
+/// Die Abteilungsfolge hängt über [ProductSteps] dran. Beim erneuten
+/// Planen desselben Produkts wird sie automatisch übernommen.
 ///
 /// **Gruppenspezifische Felder:** Je nach [produktgruppe] werden beim
 /// Import einer Vorlage unterschiedliche Spalten gefüllt. Welche Gruppe

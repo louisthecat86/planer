@@ -7,10 +7,10 @@ import 'products.dart';
 /// Jede Zeile = ein Schritt im Durchlauf eines Produkts.
 /// Beispiel "Leberkäse": (1) Zerlegung, (2) Wurstküche, (3) Bratstraße, (4) Verpackung.
 ///
-/// Die `basis_*`-Felder sind **Mittelwerte über alle bisherigen Runs**
-/// (siehe [ProductionRuns]). Sie werden nach jedem abgeschlossenen Auftrag
-/// neu berechnet. Beim Anlegen eines neuen Auftrags werden daraus die
-/// geplanten Werte linear auf die Auftragsmenge hochgerechnet:
+/// Die `basis_*`-Felder sind die Leistungsdaten des Schritts — „Menge X kg
+/// in Zeit Y", in der Artikelansicht gepflegt. Beim Anlegen eines neuen
+/// Auftrags werden daraus die geplanten Werte linear auf die Auftragsmenge
+/// hochgerechnet:
 ///
 ///     geplante_dauer = fix_zeit_minuten + basis_dauer_minuten * (auftrags_menge / basis_menge_kg)
 ///
@@ -55,7 +55,7 @@ class ProductSteps extends Table {
   /// Fixe Rüstzeit, unabhängig von der Menge. NULL/0 = rein lineare Skalierung.
   RealColumn get fixZeitMinuten => real().nullable()();
 
-  /// Standardabweichung der gemessenen Dauern (aus [ProductionRuns] berechnet).
+  /// Standardabweichung der gemessenen Dauern — derzeit ungenutzt.
   RealColumn get dauerStdAbweichung => real().nullable()();
 
   IntColumn get basisMitarbeiter => integer()();
