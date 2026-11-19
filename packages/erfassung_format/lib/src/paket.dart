@@ -15,6 +15,7 @@ class ErfassungsPaket {
     this.produktionen = const [],
     this.artikel = const [],
     this.maschinen = const [],
+    this.erfahrungen = const [],
   });
 
   /// Kennung — das Ergebnis nennt sie, damit der Planer weiß, auf welchen
@@ -31,6 +32,19 @@ class ErfassungsPaket {
 
   /// Der Maschinenkatalog. Leer in einem Paket aus einem älteren Planer.
   final List<PaketMaschine> maschinen;
+
+  /// Wie lange Produktionen bisher gedauert haben — je Artikel, für den
+  /// welche mit Menge und Zeit erfasst sind. Leer in einem Paket aus einem
+  /// älteren Planer.
+  final List<PaketErfahrung> erfahrungen;
+
+  /// Die Erfahrung für den Artikel [artikelId] — null ohne.
+  PaketErfahrung? erfahrungFuer(String artikelId) {
+    for (final e in erfahrungen) {
+      if (e.artikelId == artikelId) return e;
+    }
+    return null;
+  }
 
   /// Die Maschine mit [id] — null, wenn sie nicht im Katalog steht.
   PaketMaschine? maschineMit(String id) {
@@ -61,6 +75,8 @@ class ErfassungsPaket {
         'artikel': [for (final a in artikel) a.toJson()],
         if (maschinen.isNotEmpty)
           'maschinen': [for (final m in maschinen) m.toJson()],
+        if (erfahrungen.isNotEmpty)
+          'erfahrungen': [for (final e in erfahrungen) e.toJson()],
       };
 
   /// Die Datei als Text.
@@ -86,6 +102,10 @@ class ErfassungsPaket {
       ],
       maschinen: [
         for (final m in jsonListe(j, 'maschinen', wo)) PaketMaschine.ausJson(m),
+      ],
+      erfahrungen: [
+        for (final e in jsonListe(j, 'erfahrungen', wo))
+          PaketErfahrung.ausJson(e),
       ],
     );
   }
@@ -276,6 +296,52 @@ class PaketSchritt {
       felder: [
         for (final f in jsonListe(j, 'felder', wo)) PaketFeld.ausJson(f),
       ],
+    );
+  }
+}
+
+/// Wie lange die letzten Produktionen eines Artikels gedauert haben — der
+/// Schnitt, mit dem auch der Planer die Dauer plant: Ø Rohware und Ø Zeit
+/// der zuletzt erfassten Produktionen mit Menge und Zeit.
+class PaketErfahrung {
+  const PaketErfahrung({
+    required this.artikelId,
+    required this.mengeKg,
+    required this.minuten,
+    required this.anzahl,
+  });
+
+  final String artikelId;
+
+  /// Ø Rohware je Produktion in kg.
+  final double mengeKg;
+
+  /// Ø Zeit je Produktion in Minuten.
+  final double minuten;
+
+  /// Aus so vielen Produktionen stammt der Schnitt.
+  final int anzahl;
+
+  /// Ø kg Rohware je Stunde.
+  double get kgProStunde => mengeKg / minuten * 60;
+
+  /// Minuten für [kg] Rohware — linear hochgerechnet.
+  double minutenFuer(double kg) => minuten * kg / mengeKg;
+
+  JsonObjekt toJson() => {
+        'artikelId': artikelId,
+        'mengeKg': mengeKg,
+        'minuten': minuten,
+        'anzahl': anzahl,
+      };
+
+  static PaketErfahrung ausJson(JsonObjekt j) {
+    const wo = 'einer Erfahrung';
+    return PaketErfahrung(
+      artikelId: jsonText(j, 'artikelId', wo),
+      mengeKg: jsonZahl(j, 'mengeKg', wo),
+      minuten: jsonZahl(j, 'minuten', wo),
+      anzahl: jsonGanzOder(j, 'anzahl') ?? 1,
     );
   }
 }

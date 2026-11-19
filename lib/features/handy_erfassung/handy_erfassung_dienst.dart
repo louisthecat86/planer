@@ -14,6 +14,7 @@ import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/services/prozesskette_service.dart';
 import '../entwicklung/daten/dateien.dart';
 import '../erfassung/geplante_produktion.dart';
+import '../whiteboard/whiteboard_provider.dart' show leistungAusProduktionen;
 
 // Die Handy-Erfassung im Planer: das Paket fürs Handy schreiben und das
 // Ergebnis vom Handy einlesen. Ohne Oberfläche — die steht in
@@ -371,6 +372,7 @@ class HandyErfassungDienst {
       ],
       artikel: await _artikel(),
       maschinen: await _katalog(),
+      erfahrungen: await _erfahrungen(),
     );
   }
 
@@ -417,6 +419,33 @@ class HandyErfassungDienst {
                 ),
             ],
           ),
+    ];
+  }
+
+  /// Je Artikel der Schnitt seiner letzten erfassten Produktionen mit
+  /// Menge und Zeit — genau der, mit dem die Planung die Dauer rechnet
+  /// ([leistungAusProduktionen]). Artikel ohne solche fehlen.
+  Future<List<PaketErfahrung>> _erfahrungen() async {
+    final jeArtikel = <String, List<ProductionHistoryData>>{};
+    for (final h in await (_db.select(_db.productionHistory)
+          ..where((h) => h.deletedAt.isNull())
+          ..orderBy([
+            (h) => OrderingTerm.desc(h.datum),
+            (h) => OrderingTerm.desc(h.createdAt),
+          ]))
+        .get()) {
+      (jeArtikel[h.productId] ??= []).add(h);
+    }
+    return [
+      for (final MapEntry(key: id, value: liste) in jeArtikel.entries)
+        if (leistungAusProduktionen(liste) case final l?)
+          if (l.mengeKg > 0 && l.minuten > 0)
+            PaketErfahrung(
+              artikelId: id,
+              mengeKg: l.mengeKg,
+              minuten: l.minuten,
+              anzahl: l.anzahl,
+            ),
     ];
   }
 

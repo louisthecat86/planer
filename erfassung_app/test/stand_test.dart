@@ -696,4 +696,58 @@ void main() {
       expect(Erfassungsstand.ausText('{"kuerzel": "AB"}').zuletzt, isEmpty);
     });
   });
+
+  group('Dauer nach der Erfahrung', () {
+    late Erfassungsstand s;
+    setUp(() {
+      s = Erfassungsstand()..paketOeffnen(beispielPaket());
+    });
+
+    test('hochgerechnet auf die Menge, mit Ende ab dem Start', () {
+      final p = s.prognose(artikelId: 'a1', kg: 1250, start: '06:10');
+      expect((p.minuten, p.ende), (300.0, '11:10'));
+      expect(
+        p.text,
+        'Voraussichtlich 5:00 h für 1.250 kg Rohware — fertig gegen 11:10. '
+        'Erfahrung: Ø 250 kg/h aus den letzten 7 Produktionen.',
+      );
+      // Ohne Start: nur die Dauer.
+      final ohne = s.prognose(artikelId: 'a1', kg: 500);
+      expect((ohne.minuten, ohne.ende), (120.0, null));
+      expect(ohne.text, startsWith('Voraussichtlich 2:00 h für 500 kg'));
+      // Über Mitternacht.
+      expect(s.prognose(artikelId: 'a1', kg: 1000, start: '22').ende, '02:00');
+    });
+
+    test('ohne Erfahrung oder ohne Menge: warum nicht', () {
+      final keine = s.prognose(artikelId: 'a2', kg: 300, start: '06:00');
+      expect((keine.minuten, keine.ende), (null, null));
+      expect(
+        keine.text,
+        'Keine Dauer ermittelbar — für diesen Artikel ist noch keine '
+        'Produktion mit Menge und Zeit erfasst.',
+      );
+      final ohneKg = s.prognose(artikelId: 'a1', kg: null);
+      expect(ohneKg.minuten, isNull);
+      expect(ohneKg.text, contains('keine Rohware'));
+      expect(ohneKg.text, contains('Ø 250 kg/h'));
+    });
+
+    test('ein Paket aus einem älteren Planer kennt keine Erfahrung', () {
+      final alt = ErfassungsPaket.ausText(
+        jsonEncode(
+          (jsonDecode(beispielPaket(id: 'paket-alt').alsText())
+              as Map<String, dynamic>)
+            ..remove('erfahrungen'),
+        ),
+      );
+      expect(alt.erfahrungen, isEmpty);
+      s.paketOeffnen(alt);
+      expect(s.prognose(artikelId: 'a1', kg: 1000).minuten, isNull);
+      // Hin und zurück bleibt sie erhalten.
+      final wieder = ErfassungsPaket.ausText(beispielPaket().alsText());
+      expect(wieder.erfahrungFuer('a1')!.kgProStunde, closeTo(250, 1e-9));
+      expect(wieder.erfahrungFuer('a1')?.anzahl, 7);
+    });
+  });
 }

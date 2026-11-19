@@ -80,7 +80,22 @@ class _HeuteAnsichtState extends State<HeuteAnsicht> {
       artikelId: e.artikelId,
       artikel: e.artikel,
     );
-    if (mounted) melde(context, 'Gestartet um ${uhrzeit(_jetzt())}');
+    if (!mounted) return;
+    // Wie lange es nach der Erfahrung dauert — oder warum sich das nicht
+    // sagen lässt.
+    final start = _modell.stand.entwuerfe[e.id]?.start;
+    final p = _modell.stand.prognose(
+      artikelId: e.artikelId,
+      kg: e.rohKg,
+      start: start,
+    );
+    await prognoseZeigen(
+      context,
+      titel: 'Gestartet um ${zeitAus(start) ?? uhrzeit(_jetzt())}',
+      text: p.text,
+      ermittelt: p.minuten != null,
+      ende: p.ende,
+    );
   }
 
   bool _aufgeklappt(String abschnitt, {required bool vorgabe}) =>
@@ -148,6 +163,13 @@ class _HeuteAnsichtState extends State<HeuteAnsicht> {
         Widget karte(HeuteEintrag e) => _ProduktionsKarte(
               eintrag: e,
               jetzt: jetzt,
+              prognose: e.status == ProduktionsStatus.laeuft
+                  ? _modell.stand.prognose(
+                      artikelId: e.artikelId,
+                      kg: e.rohKg,
+                      start: e.start,
+                    )
+                  : null,
               onTap: () => _erfassen(e),
               onStart: () => _starten(e),
               onFertig: () => _erfassen(e, fertig: true),
@@ -305,9 +327,13 @@ class _ProduktionsKarte extends StatelessWidget {
     required this.onTap,
     required this.onStart,
     required this.onFertig,
+    this.prognose,
   });
 
   final HeuteEintrag eintrag;
+
+  /// Bei einer laufenden: wann sie nach der Erfahrung fertig ist.
+  final Prognose? prognose;
   final DateTime jetzt;
   final VoidCallback onTap;
   final VoidCallback onStart;
@@ -328,7 +354,8 @@ class _ProduktionsKarte extends StatelessWidget {
     if (laeuft) {
       final start = e.start!;
       final seit = dauerMinuten(start, uhrzeit(jetzt)) ?? 0;
-      links = Row(
+      final bis = prognose?.ende;
+      final seitZeile = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
@@ -352,6 +379,26 @@ class _ProduktionsKarte extends StatelessWidget {
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: farben.warnung,
                 fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      );
+      links = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          seitZeile,
+          Padding(
+            padding: const EdgeInsets.only(left: 20, top: 3),
+            child: Text(
+              bis == null
+                  ? 'Dauer unbekannt'
+                  : 'fertig gegen $bis · '
+                      '${dauerText(prognose!.minuten!)}',
+              key: ValueKey('prognose-${e.id}'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: f.onSurfaceVariant,
               ),
             ),
           ),

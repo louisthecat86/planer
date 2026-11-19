@@ -159,6 +159,8 @@ void main() {
       expect(find.text('LÄUFT'), findsOneWidget);
       expect(find.byKey(const ValueKey('fertig-t1')), findsOneWidget);
       expect(find.text('seit 06:10 · 3:06 h'), findsOneWidget);
+      // 1.250 kg bei Ø 250 kg/h: 5 Stunden.
+      expect(find.text('fertig gegen 11:10 · 5:00 h'), findsOneWidget);
       expect(find.text('1.250'), findsOneWidget);
       // t2 ist morgen — eingeklappt.
       expect(find.byKey(const ValueKey('karte-t2')), findsNothing);
@@ -487,8 +489,12 @@ void main() {
       groesse: const Size(360, 2000),
     );
     await tester.tap(find.byKey(const ValueKey('start-t1')));
-    await tester.pump();
-    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    // Beim Start: wie lange es nach der Erfahrung dauert.
+    expect(find.byKey(const ValueKey('prognose')), findsOneWidget);
+    expect(find.textContaining('Voraussichtlich 5:00 h'), findsOneWidget);
+    expect(find.text('fertig gegen'), findsOneWidget);
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     final start = m.stand.entwuerfe['t1']!.start;
     expect(start, matches(RegExp(r'^\d\d:\d\d$')));
@@ -532,5 +538,30 @@ void main() {
       find.byKey(const ValueKey('ergebnis-speichern')),
     );
     expect(knopf.onPressed, isNotNull);
+  });
+
+  testWidgets('„Jetzt" am Start: ohne Erfahrung sagt die App, warum',
+      (tester) async {
+    final m = modell();
+    // Kochschinken wurde noch nie erfasst.
+    final plan = m.stand.paket!.produktionen.singleWhere((p) => p.id == 't2');
+    await zeige(
+      tester,
+      ErfassenSeite(modell: m, geplant: plan),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.byKey(const ValueKey('prognose-text')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('jetzt-Start')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('prognose')), findsOneWidget);
+    expect(find.text('fertig gegen'), findsNothing);
+    expect(
+      find.textContaining('Keine Dauer ermittelbar'),
+      findsNWidgets(2),
+    );
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    // Unter der Zeit bleibt der Satz stehen, bis das Ende eingetragen ist.
+    expect(find.byKey(const ValueKey('prognose-text')), findsOneWidget);
   });
 }

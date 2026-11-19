@@ -648,6 +648,51 @@ void main() {
             erfasstAm: am,
           );
 
+      test('die Erfahrung im Paket: wie die Planung die Dauer rechnet',
+          () async {
+        Future<void> erfasst(
+          String id,
+          String productId,
+          DateTime datum, {
+          double? kg,
+          double? minuten,
+        }) =>
+            db.into(db.productionHistory).insert(
+                  ProductionHistoryCompanion.insert(
+                    id: id,
+                    productId: productId,
+                    datum: datum,
+                    kgRohware: Value(kg),
+                    produktionszeitMinuten: Value(minuten),
+                  ),
+                );
+        // a1: zweimal mit Menge und Zeit — Ø 900 kg in 3 h —, einmal ohne
+        // Zeit (zählt nicht). a2: nur ohne Menge.
+        await erfasst('h1', 'a1', DateTime(2026, 11, 2), kg: 800, minuten: 160);
+        await erfasst(
+          'h2',
+          'a1',
+          DateTime(2026, 11, 3),
+          kg: 1000,
+          minuten: 200,
+        );
+        await erfasst('h3', 'a1', DateTime(2026, 11, 4), kg: 500);
+        await erfasst('h4', 'a2', DateTime(2026, 11, 4), minuten: 60);
+
+        final paket = ErfassungsPaket.ausText(
+          (await dienst.paketErstellen(
+            von: DateTime(2026, 11, 9),
+            bis: DateTime(2026, 11, 15),
+          ))
+              .alsText(),
+        );
+        final e = paket.erfahrungFuer('a1')!;
+        expect((e.mengeKg, e.minuten, e.anzahl), (900.0, 180.0, 2));
+        expect(e.kgProStunde, closeTo(300, 1e-9));
+        expect(paket.erfahrungFuer('a2'), isNull);
+        expect(paket.erfahrungen, hasLength(1));
+      });
+
       test('der Katalog im Paket: je Maschine die Felder eines neuen Schritts',
           () async {
         await kutter();

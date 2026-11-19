@@ -109,6 +109,17 @@ typedef HeuteUebersicht = ({
   List<HeuteEintrag> spaeter,
 });
 
+/// Was die Erfahrung über die Dauer einer Produktion sagt: [minuten] und
+/// [ende] nur, wenn sie sich ermitteln lassen; [text] sagt es in Worten —
+/// auch, warum nicht.
+typedef Prognose = ({double? minuten, String? ende, String text});
+
+/// „3:40 h".
+String _dauer(double minuten) {
+  final m = minuten.round();
+  return '${m ~/ 60}:${(m % 60).toString().padLeft(2, '0')} h';
+}
+
 String? _leerZuNull(String? s) {
   final t = s?.trim();
   return t == null || t.isEmpty ? null : t;
@@ -575,6 +586,57 @@ class Erfassungsstand {
       bemerkung: alt?.bemerkung ?? '',
     );
     return true;
+  }
+
+  /// Wie lange eine Produktion von [artikelId] mit [kg] Rohware nach den
+  /// bisherigen Produktionen dauert — und, mit [start], wann sie fertig
+  /// ist. Ohne erfasste Produktionen des Artikels oder ohne Menge sagt der
+  /// Text, warum sich keine Dauer ermitteln lässt.
+  Prognose prognose({
+    required String artikelId,
+    required double? kg,
+    String? start,
+  }) {
+    final e = paket?.erfahrungFuer(artikelId);
+    if (e == null || e.mengeKg <= 0 || e.minuten <= 0) {
+      return (
+        minuten: null,
+        ende: null,
+        text: 'Keine Dauer ermittelbar — für diesen Artikel ist noch keine '
+            'Produktion mit Menge und Zeit erfasst.',
+      );
+    }
+    final herkunft = e.anzahl == 1
+        ? 'der letzten Produktion'
+        : 'den letzten ${e.anzahl} Produktionen';
+    final leistung = 'Ø ${zahlText(e.kgProStunde, nachkomma: 0)} kg/h aus '
+        '$herkunft';
+    if (kg == null || !kg.isFinite || kg <= 0) {
+      return (
+        minuten: null,
+        ende: null,
+        text: 'Keine Dauer ermittelbar — es ist keine Rohware geplant oder '
+            'eingetragen. Bisher $leistung.',
+      );
+    }
+    final minuten = e.minutenFuer(kg);
+    String? ende;
+    final ab = zeitAus(start);
+    if (ab != null) {
+      final teile = ab.split(':');
+      final summe =
+          int.parse(teile[0]) * 60 + int.parse(teile[1]) + minuten.round();
+      final m = summe % (24 * 60);
+      ende = '${(m ~/ 60).toString().padLeft(2, '0')}:'
+          '${(m % 60).toString().padLeft(2, '0')}';
+    }
+    return (
+      minuten: minuten,
+      ende: ende,
+      text: 'Voraussichtlich ${_dauer(minuten)} für ${zahlText(kg)} kg '
+          'Rohware${ende == null ? '' : ' — fertig gegen $ende'}. '
+          'Erfahrung: $leistung.',
+    );
   }
 
   /// Merkt [artikelId] als zuletzt geöffnet. Gibt zurück, ob sich etwas

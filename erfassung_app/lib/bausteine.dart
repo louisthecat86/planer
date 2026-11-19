@@ -364,6 +364,64 @@ Future<bool> nachfragen(
   return antwort ?? false;
 }
 
+/// Zeigt, wie lange eine Produktion nach der Erfahrung dauert — beim
+/// Start. [text] ist der Satz aus der Prognose; [ermittelt] sagt, ob sich
+/// eine Dauer ermitteln ließ.
+Future<void> prognoseZeigen(
+  BuildContext context, {
+  required String titel,
+  required String text,
+  required bool ermittelt,
+  String? ende,
+}) {
+  return showDialog<void>(
+    context: context,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      final f = theme.colorScheme;
+      final farben = Farben.von(ctx);
+      return AlertDialog(
+        key: const ValueKey('prognose'),
+        icon: Icon(
+          ermittelt ? Icons.timer_outlined : Icons.help_outline,
+          color: ermittelt ? farben.warnung : f.onSurfaceVariant,
+          size: 32,
+        ),
+        title: Text(titel),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (ende != null) ...[
+              Text(
+                'fertig gegen',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: f.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                ende,
+                style: theme.textTheme.displaySmall?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: farben.warnung,
+                ),
+              ),
+              const SizedBox(height: 10),
+            ],
+            Text(text, textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(96, 48)),
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      );
+    },
+  );
+}
+
 /// Zeigt kurz einen Satz am unteren Rand.
 void melde(BuildContext context, String text) {
   ScaffoldMessenger.of(context)

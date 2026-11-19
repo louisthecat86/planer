@@ -222,6 +222,27 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
 
   String? _leerZuNull(String s) => s.trim().isEmpty ? null : s.trim();
 
+  /// Was die Erfahrung über die Dauer sagt — mit der eingetragenen
+  /// Rohware, sonst der geplanten.
+  Prognose _prognose(PaketProduktion? plan) => widget.modell.stand.prognose(
+        artikelId: _artikelId,
+        kg: zahlAus(_roh.text) ?? plan?.rohKg,
+        start: _start.text,
+      );
+
+  /// Nach „Jetzt" am Start: wie lange es dauert, oder warum sich das nicht
+  /// sagen lässt.
+  Future<void> _prognoseZeigen(PaketProduktion? plan) async {
+    final p = _prognose(plan);
+    await prognoseZeigen(
+      context,
+      titel: 'Gestartet um ${zeitAus(_start.text) ?? _start.text}',
+      text: p.text,
+      ermittelt: p.minuten != null,
+      ende: p.ende,
+    );
+  }
+
   Future<void> _speichern() async {
     var zahlFalsch = false;
     var zeitFalsch = false;
@@ -474,6 +495,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                           label: 'Start',
                           plan: plan?.start,
                           onChanged: () => setState(() => _fehler = null),
+                          onJetzt: () => _prognoseZeigen(plan),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -488,6 +510,39 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                   ),
                 ),
               ),
+              if (zeitAus(_start.text) != null &&
+                  zeitAus(_ende.text) == null) ...[
+                const SizedBox(height: 10),
+                Builder(
+                  builder: (context) {
+                    final p = _prognose(plan);
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          p.minuten == null
+                              ? Icons.help_outline
+                              : Icons.timer_outlined,
+                          size: 20,
+                          color: p.minuten == null
+                              ? f.onSurfaceVariant
+                              : farben.warnung,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            p.text,
+                            key: const ValueKey('prognose-text'),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: f.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
               if (kennzahlen.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Row(
@@ -690,12 +745,16 @@ class _ZeitFeld extends StatelessWidget {
     required this.label,
     required this.onChanged,
     this.plan,
+    this.onJetzt,
   });
 
   final TextEditingController controller;
   final String label;
   final String? plan;
   final VoidCallback onChanged;
+
+  /// Nach „Jetzt" — etwa um beim Start die Dauer zu zeigen.
+  final VoidCallback? onJetzt;
 
   @override
   Widget build(BuildContext context) {
@@ -728,6 +787,7 @@ class _ZeitFeld extends StatelessWidget {
           onPressed: () {
             controller.text = uhrzeit(DateTime.now());
             onChanged();
+            onJetzt?.call();
           },
           icon: const Icon(Icons.schedule, size: 20),
           label: const Text('Jetzt'),

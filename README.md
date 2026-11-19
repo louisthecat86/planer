@@ -582,7 +582,9 @@ Berechtigung fürs Internet.
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
    der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
-   und die Notiz, samt ihren Grenzen — und den Maschinenkatalog. Rezepturen und die Produktentwicklung
+   und die Notiz, samt ihren Grenzen —, den Maschinenkatalog und je Artikel
+   die Erfahrung aus den erfassten Produktionen (Ø Menge und Ø Zeit der
+   letzten zehn, wie in der Planung). Rezepturen und die Produktentwicklung
    stehen nicht darin.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
    Planer Erfassung") oder in der App „Paket öffnen".
@@ -592,7 +594,12 @@ Berechtigung fürs Internet.
    die Arbeitsliste: oben, was läuft (mit der Zeit seit dem Start), darunter,
    was bis heute offen ist, dann das Erfasste; morgen und später in der
    Woche stehen eingeklappt darunter. **„Start"** auf einer Karte hält die
-   Uhrzeit des Handys als Start fest, **„Fertig"** öffnet die Erfassung mit
+   Uhrzeit des Handys als Start fest und zeigt, wie lange die Produktion
+   nach der Erfahrung dauert und wann sie fertig ist — auf die Rohware
+   hochgerechnet; gibt es für den Artikel noch keine erfasste Produktion
+   mit Menge und Zeit, sagt die App das. Dasselbe zeigt „Jetzt" am Start
+   in der Erfassung, und eine laufende Karte trägt „fertig gegen …".
+   **„Fertig"** öffnet die Erfassung mit
    der Uhrzeit als Ende — eingetragen werden Rohware, davon Fleisch,
    Fertigware, Start und Ende („Jetzt" übernimmt die Uhrzeit des Handys),
    Bemerkung und Kürzel; Ausbeute, Verlust, Dauer und kg/h rechnet die App

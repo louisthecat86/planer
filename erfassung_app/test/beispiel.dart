@@ -116,6 +116,16 @@ ErfassungsPaket beispielPaket({
           ],
         ),
       ],
+      // Grillwurst wurde schon produziert: Ø 1.000 kg in 4 h, also
+      // 250 kg/h. Kochschinken noch nie.
+      erfahrungen: const [
+        PaketErfahrung(
+          artikelId: 'a1',
+          mengeKg: 1000,
+          minuten: 240,
+          anzahl: 7,
+        ),
+      ],
       maschinen: mitKatalog
           ? const [
               PaketMaschine(
