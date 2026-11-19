@@ -65,7 +65,8 @@ class BackupService {
   ///       davor); ältere Backups lassen den des Rechners unberührt
   /// 1.9 → inkl. Stand der Navision-Artikelübersicht (`navision_artikel`);
   ///       ältere Backups lassen den des Rechners unberührt
-  static const String _currentVersion = '1.9';
+  /// 1.10 → `production_history` mit Ende an der Verpackung (`endeVpk`)
+  static const String _currentVersion = '1.10';
 
   /// Alle Versionen, die beim Import gelesen werden können. Ältere
   /// Backups bleiben gültig — die dort fehlenden Tabellen werden beim
@@ -81,6 +82,7 @@ class BackupService {
     '1.7',
     '1.8',
     '1.9',
+    '1.10',
   };
 
   /// Nur für Tests: dieser Ordner statt des eingestellten — die Tests

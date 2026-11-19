@@ -448,6 +448,7 @@ void main() {
             fertigKg: 408,
             start: '06:00',
             ende: '14:30',
+            endeVpk: '15:10',
             charge: 'L1',
             kuerzel: 'AB',
             erfasstAm: DateTime(2026, 11, 10, 14, 35),
@@ -522,7 +523,9 @@ void main() {
         ),
         ('a1', dienstag, 510.0, 450.0, 408.0),
       );
+      // Die Leistung zählt bis Ende Auflegen; Ende VPK steht nur da.
       expect(h.produktionszeitMinuten, 510);
+      expect((h.startzeit, h.endzeit, h.endeVpk), ('06:00', '14:30', '15:10'));
       expect(h.verlustAnteil, closeTo(0.2, 1e-9));
       expect(h.notizen, 'Charge L1 · erfasst von AB');
 

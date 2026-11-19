@@ -750,4 +750,59 @@ void main() {
       expect(wieder.erfahrungFuer('a1')?.anzahl, 7);
     });
   });
+
+  group('Ende VPK', () {
+    test('im Entwurf, beim Start und im Ergebnis', () {
+      final s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+      s.entwurfMerken(
+        ProduktionsEntwurf(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          datum: DateTime(2026, 11, 10),
+          geaendertAm: jetzt,
+          endeVpk: '10:45',
+        ),
+      );
+      expect(s.entwuerfe['t1']!.leer, isFalse);
+      // Start behält, was schon eingetragen war.
+      s.produktionStarten(
+        produktionId: 't1',
+        artikelId: 'a1',
+        artikel: 'Grillwurst',
+        jetzt: DateTime(2026, 11, 10, 6),
+      );
+      expect(s.entwuerfe['t1']!.endeVpk, '10:45');
+      final wieder = Erfassungsstand.ausText(s.alsText());
+      expect(wieder.entwuerfe['t1']!.endeVpk, '10:45');
+      expect(
+        wieder.entwuerfe['t1']!.gleicheEingaben(s.entwuerfe['t1']!),
+        isTrue,
+      );
+
+      // Ohne Ende VPK bleibt das Ergebnis bei der älteren Fassung.
+      s.produktionErfassen(erfasst('t2', artikelId: 'a2'));
+      expect((jsonDecode(s.ergebnis(jetzt)!.alsText()) as Map)['version'], 1);
+      s.produktionErfassen(
+        ErfassteProduktion(
+          produktionId: 't1',
+          artikelId: 'a1',
+          artikel: 'Grillwurst',
+          datum: DateTime(2026, 11, 10),
+          rohKg: 1000,
+          start: '06:00',
+          ende: '09:00',
+          endeVpk: '09:40',
+          erfasstAm: jetzt,
+        ),
+      );
+      final text = s.ergebnis(jetzt)!.alsText();
+      expect((jsonDecode(text) as Map)['version'], 4);
+      final gelesen = ErfassungsErgebnis.ausText(text);
+      expect(
+        gelesen.produktionen.singleWhere((p) => p.produktionId == 't1').endeVpk,
+        '09:40',
+      );
+    });
+  });
 }

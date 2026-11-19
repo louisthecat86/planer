@@ -55,16 +55,19 @@ class ErfassungsErgebnis {
   }
 
   JsonObjekt toJson() => {
-        // Mit Fotos oder geänderten Ketten eine neuere Fassung: Ein
-        // Planer auf älterem Stand sagt dann, dass er die Datei nicht
-        // liest — statt sie stillschweigend wegzulassen.
+        // Mit Fotos, geänderten Ketten oder einem Ende an der Verpackung
+        // eine neuere Fassung: Ein Planer auf älterem Stand sagt dann,
+        // dass er die Datei nicht liest — statt etwas stillschweigend
+        // wegzulassen.
         ...dateiKopf(
           DateiArt.ergebnis,
-          version: hatKettenAenderungen
+          version: produktionen.any((p) => p.endeVpk != null)
               ? kFormatVersion
-              : fotos.isEmpty
-                  ? kFormatVersionOhneFotos
-                  : kFormatVersionMitFotos,
+              : hatKettenAenderungen
+                  ? kFormatVersionMitKetten
+                  : fotos.isEmpty
+                      ? kFormatVersionOhneFotos
+                      : kFormatVersionMitFotos,
         ),
         'paket': paketId,
         if (paketErstellt != null)
@@ -151,6 +154,7 @@ class ErfassteProduktion {
     this.fertigKg,
     this.start,
     this.ende,
+    this.endeVpk,
     this.charge,
     this.kuerzel,
     this.bemerkung,
@@ -170,9 +174,12 @@ class ErfassteProduktion {
   final double? fleischKg;
   final double? fertigKg;
 
-  /// „HH:MM".
+  /// „HH:MM". [ende] ist das Ende des Auflegens — es zählt mit [start]
+  /// für die Leistung. [endeVpk] ist das Ende an der Verpackung: Danach
+  /// ist die Produktion ganz durch die Anlagen.
   final String? start;
   final String? ende;
+  final String? endeVpk;
 
   final String? charge;
   final String? kuerzel;
@@ -209,6 +216,7 @@ class ErfassteProduktion {
         if (fertigKg != null) 'fertigKg': fertigKg,
         if (start != null) 'start': start,
         if (ende != null) 'ende': ende,
+        if (endeVpk != null) 'endeVpk': endeVpk,
         if (charge != null) 'charge': charge,
         if (kuerzel != null) 'kuerzel': kuerzel,
         if (bemerkung != null) 'bemerkung': bemerkung,
@@ -227,6 +235,7 @@ class ErfassteProduktion {
       fertigKg: jsonZahlOder(j, 'fertigKg'),
       start: zeitAus(jsonTextOder(j, 'start')),
       ende: zeitAus(jsonTextOder(j, 'ende')),
+      endeVpk: zeitAus(jsonTextOder(j, 'endeVpk')),
       charge: jsonTextOder(j, 'charge'),
       kuerzel: jsonTextOder(j, 'kuerzel'),
       bemerkung: jsonTextOder(j, 'bemerkung'),

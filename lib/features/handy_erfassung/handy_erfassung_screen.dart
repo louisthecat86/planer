@@ -635,6 +635,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         if (e.fertigKg != null) 'Fertigware ${Format.kg(e.fertigKg!)}',
         if (e.start != null || e.ende != null)
           '${e.start ?? '?'}–${e.ende ?? '?'} Uhr',
+        if (e.endeVpk != null) 'VPK ${e.endeVpk} Uhr',
         if (e.notiz != null) e.notiz!,
       ].join(' · ');
 }

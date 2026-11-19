@@ -94,6 +94,7 @@ class _ProductionEntryDialogState
   final _fertigController = TextEditingController();
   final _startController = TextEditingController();
   final _endController = TextEditingController();
+  final _vpkController = TextEditingController();
   final _notizenController = TextEditingController();
 
   bool _saving = false;
@@ -111,6 +112,7 @@ class _ProductionEntryDialogState
       _fertigController.text = _kgText(e.kgFertigware);
       _startController.text = e.startzeit ?? '';
       _endController.text = e.endzeit ?? '';
+      _vpkController.text = e.endeVpk ?? '';
       _notizenController.text = e.notizen ?? '';
     } else {
       final d = widget.vorschlagDatum ?? DateTime.now();
@@ -132,6 +134,7 @@ class _ProductionEntryDialogState
     _fertigController.dispose();
     _startController.dispose();
     _endController.dispose();
+    _vpkController.dispose();
     _notizenController.dispose();
     super.dispose();
   }
@@ -220,6 +223,7 @@ class _ProductionEntryDialogState
         kgFertigware: (fertig != null && fertig > 0) ? fertig : null,
         startzeit: _startController.text,
         endzeit: _endController.text,
+        endeVpk: _vpkController.text,
         notizen: _notizenController.text,
         vorhandeneId: widget.existing?.id,
       );
@@ -404,7 +408,7 @@ class _ProductionEntryDialogState
               ),
               const SizedBox(height: 14),
 
-              // Start + Ende
+              // Start, Ende Auflegen, Ende Verpackung
               Row(
                 children: [
                   Expanded(
@@ -422,13 +426,31 @@ class _ProductionEntryDialogState
                     child: TextField(
                       controller: _endController,
                       decoration: const InputDecoration(
-                        labelText: 'Endzeit',
+                        labelText: 'Ende Auflegen',
                         hintText: '09:15',
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _vpkController,
+                      decoration: const InputDecoration(
+                        labelText: 'Ende VPK',
+                        hintText: '09:50',
+                      ),
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Leistung und Produktionszeit zählen von Start bis Ende '
+                'Auflegen; Ende VPK steht nur in der Historie.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
               ),
               const SizedBox(height: 14),
 
@@ -448,7 +470,8 @@ class _ProductionEntryDialogState
                 const SizedBox(height: 8),
                 const HinweisBox(
                   'Ohne Fertigware zählt diese Produktion nicht für die '
-                  'Ausbeute, ohne Start- und Endzeit nicht für die Leistung.',
+                  'Ausbeute, ohne Start und Ende Auflegen nicht für die '
+                  'Leistung.',
                   art: StatusArt.warnung,
                 ),
               ],

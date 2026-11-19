@@ -313,9 +313,14 @@ void main() {
     await tester.enterText(felder.at(2), '1008,4');
     await tester.enterText(felder.at(3), '600');
     await tester.enterText(felder.at(4), '13:30');
+    // Ende an der Verpackung — zählt nicht für die Leistung.
+    await tester.enterText(felder.at(5), '14:15');
     await tester.pump();
     expect(find.text('Verlust'), findsOneWidget);
     expect(find.text('20,0 %'), findsOneWidget);
+    expect(find.text('Bis VPK'), findsOneWidget);
+    expect(find.text('8:15 h'), findsOneWidget);
+    expect(find.text('7:30 h'), findsOneWidget);
     await tester.tap(find.text('Produktion erfassen'));
     // Die Meldung am unteren Rand ablaufen lassen.
     await tester.pump();
@@ -324,8 +329,8 @@ void main() {
 
     final e = m.stand.produktionen['t1']!;
     expect(
-      (e.rohKg, e.fertigKg, e.start, e.ende),
-      (1260.5, 1008.4, '06:00', '13:30'),
+      (e.rohKg, e.fertigKg, e.start, e.ende, e.endeVpk),
+      (1260.5, 1008.4, '06:00', '13:30', '14:15'),
     );
     expect(e.kuerzel, 'AB');
     expect(m.stand.offen.single.id, 't2');
@@ -508,6 +513,7 @@ void main() {
     expect(find.text(start), findsWidgets);
     expect(find.byKey(const ValueKey('jetzt-Start')), findsOneWidget);
     expect(find.byKey(const ValueKey('jetzt-Ende')), findsOneWidget);
+    expect(find.byKey(const ValueKey('jetzt-EndeVpk')), findsOneWidget);
     final felder = find.byType(TextField);
     await tester.enterText(felder.at(0), '1250');
     await tester.enterText(felder.at(2), '1000');
@@ -521,6 +527,7 @@ void main() {
     final e = m.stand.produktionen['t1']!;
     expect((e.rohKg, e.fertigKg, e.start), (1250.0, 1000.0, start));
     expect(e.ende, isNotNull);
+    expect(e.endeVpk, isNull);
     expect(m.stand.entwuerfe, isEmpty);
     expect(find.byKey(const ValueKey('erfasst-t1')), findsOneWidget);
   });
@@ -563,5 +570,42 @@ void main() {
     await tester.pumpAndSettle();
     // Unter der Zeit bleibt der Satz stehen, bis das Ende eingetragen ist.
     expect(find.byKey(const ValueKey('prognose-text')), findsOneWidget);
+  });
+
+  testWidgets('Aufgelegt, dann „Fertig": die Uhrzeit kommt ins Ende VPK',
+      (tester) async {
+    final m = modell();
+    m.stand.entwurfMerken(
+      ProduktionsEntwurf(
+        produktionId: 't1',
+        artikelId: 'a1',
+        artikel: 'Grillwurst',
+        datum: DateTime(2026, 11, 10),
+        geaendertAm: DateTime(2026, 11, 10, 9),
+        start: '06:00',
+        ende: '09:00',
+      ),
+    );
+    await zeige(
+      tester,
+      Scaffold(
+        body: HeuteAnsicht(
+          modell: m,
+          onOhnePlan: () {},
+          jetzt: () => DateTime(2026, 11, 10, 9, 20),
+        ),
+      ),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.text('aufgelegt bis 09:00 · VPK läuft'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('fertig-t1')));
+    await tester.pumpAndSettle();
+    final felder = find.byType(TextField);
+    String text(int i) =>
+        tester.widget<TextField>(felder.at(i)).controller!.text;
+    expect(text(3), '06:00');
+    expect(text(4), '09:00');
+    expect(text(5), matches(RegExp(r'^\d\d:\d\d$')));
   });
 }

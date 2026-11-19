@@ -80,7 +80,7 @@ class AppDatabase extends _$AppDatabase {
   /// Konstruktor für Tests — erlaubt Injection eines In-Memory-Executors.
 
   @override
-  int get schemaVersion => 42;
+  int get schemaVersion => 43;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -636,6 +636,16 @@ class AppDatabase extends _$AppDatabase {
             ]) {
               await customStatement('DROP TABLE IF EXISTS $t');
             }
+          }
+          if (from < 43) {
+            // Ende an der Verpackung — neben Start und Ende Auflegen. Nur
+            // wenn sie fehlt: Eine Datenbank, die älter als die Historie
+            // ist, legt die Tabelle weiter oben schon mit ihr an.
+            await _addColumnIfNotExists(
+              'production_history',
+              'ende_vpk',
+              'TEXT',
+            );
           }
         },
         beforeOpen: (details) async {

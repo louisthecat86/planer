@@ -144,6 +144,7 @@ class ProduktionsEntwurf {
     this.fertig = '',
     this.start = '',
     this.ende = '',
+    this.endeVpk = '',
     this.bemerkung = '',
   });
 
@@ -160,11 +161,16 @@ class ProduktionsEntwurf {
   final String fleisch;
   final String fertig;
   final String start;
+
+  /// Ende des Auflegens.
   final String ende;
+
+  /// Ende an der Verpackung.
+  final String endeVpk;
   final String bemerkung;
 
   /// Ob gar nichts eingetragen ist — so ein Entwurf wird nicht gemerkt.
-  bool get leer => [roh, fleisch, fertig, start, ende, bemerkung]
+  bool get leer => [roh, fleisch, fertig, start, ende, endeVpk, bemerkung]
       .every((t) => t.trim().isEmpty);
 
   /// Ob [anderer] dieselben Eingaben trägt — der Zeitpunkt zählt nicht.
@@ -175,6 +181,7 @@ class ProduktionsEntwurf {
       fertig == anderer.fertig &&
       start == anderer.start &&
       ende == anderer.ende &&
+      endeVpk == anderer.endeVpk &&
       bemerkung == anderer.bemerkung;
 
   JsonObjekt toJson() => {
@@ -188,6 +195,7 @@ class ProduktionsEntwurf {
         if (fertig.isNotEmpty) 'fertig': fertig,
         if (start.isNotEmpty) 'start': start,
         if (ende.isNotEmpty) 'ende': ende,
+        if (endeVpk.isNotEmpty) 'endeVpk': endeVpk,
         if (bemerkung.isNotEmpty) 'bemerkung': bemerkung,
       };
 
@@ -208,6 +216,7 @@ class ProduktionsEntwurf {
       fertig: jsonTextOder(j, 'fertig') ?? '',
       start: jsonTextOder(j, 'start') ?? '',
       ende: jsonTextOder(j, 'ende') ?? '',
+      endeVpk: jsonTextOder(j, 'endeVpk') ?? '',
       bemerkung: jsonTextOder(j, 'bemerkung') ?? '',
     );
   }
@@ -583,6 +592,7 @@ class Erfassungsstand {
       fertig: alt?.fertig ?? '',
       start: uhrzeit(jetzt),
       ende: alt?.ende ?? '',
+      endeVpk: alt?.endeVpk ?? '',
       bemerkung: alt?.bemerkung ?? '',
     );
     return true;

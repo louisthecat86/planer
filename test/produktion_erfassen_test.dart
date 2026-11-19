@@ -47,6 +47,7 @@ void main() {
       kgFertigware: 400,
       startzeit: '06:00',
       endzeit: '10:00',
+      endeVpk: ' 10:40 ',
       notizen: '  ',
     );
 
@@ -54,7 +55,9 @@ void main() {
     expect(neu.datum, DateTime(2026, 9, 3), reason: 'tagesgenau');
     expect(neu.quelle, 'app');
     expect(neu.verlustAnteil, closeTo(0.2, 1e-9));
+    // Ende VPK zählt nicht für die Produktionszeit.
     expect(neu.produktionszeitMinuten, 240);
+    expect(neu.endeVpk, '10:40');
     expect(neu.kgProStundeRoh, closeTo(125, 1e-9));
     expect(neu.notizen, isNull);
 
@@ -72,6 +75,7 @@ void main() {
     final geaendert = await db.select(db.productionHistory).getSingle();
     expect(geaendert.verlustAnteil, closeTo(0.1, 1e-9));
     expect(geaendert.startzeit, isNull);
+    expect(geaendert.endeVpk, isNull);
     expect(geaendert.produktionszeitMinuten, isNull);
     expect(geaendert.kgProStundeRoh, isNull);
   });

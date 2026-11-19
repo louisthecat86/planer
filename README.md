@@ -600,8 +600,10 @@ Berechtigung fürs Internet.
    mit Menge und Zeit, sagt die App das. Dasselbe zeigt „Jetzt" am Start
    in der Erfassung, und eine laufende Karte trägt „fertig gegen …".
    **„Fertig"** öffnet die Erfassung mit
-   der Uhrzeit als Ende — eingetragen werden Rohware, davon Fleisch,
-   Fertigware, Start und Ende („Jetzt" übernimmt die Uhrzeit des Handys),
+   der Uhrzeit im ersten noch leeren Ende — eingetragen werden Rohware,
+   davon Fleisch, Fertigware, Start, **Ende Auflegen** und **Ende VPK**
+   („Jetzt" übernimmt die Uhrzeit des Handys; Leistung und Produktionszeit
+   zählen von Start bis Ende Auflegen, Ende VPK steht in der Historie),
    Bemerkung und Kürzel; Ausbeute, Verlust, Dauer und kg/h rechnet die App
    gleich aus. „Ohne Plan erfassen" steht unten in „Heute" und im Menü.
    **Zwischenspeichern:** Rohware und Startzeit lassen sich schon eintragen,

@@ -392,10 +392,15 @@ class _ProduktionsKarte extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(left: 20, top: 3),
             child: Text(
-              bis == null
-                  ? 'Dauer unbekannt'
-                  : 'fertig gegen $bis · '
-                      '${dauerText(prognose!.minuten!)}',
+              // Ist das Auflegen schon zu Ende, läuft nur noch die
+              // Verpackung.
+              switch (zeitAus(e.entwurf?.ende)) {
+                final aufgelegt? => 'aufgelegt bis $aufgelegt · VPK läuft',
+                _ => bis == null
+                    ? 'Dauer unbekannt'
+                    : 'fertig gegen $bis · '
+                        '${dauerText(prognose!.minuten!)}',
+              },
               key: ValueKey('prognose-${e.id}'),
               style: theme.textTheme.bodySmall?.copyWith(
                 color: f.onSurfaceVariant,

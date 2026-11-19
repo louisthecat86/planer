@@ -83,6 +83,9 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
   late final _ende = TextEditingController(
     text: _entwurf?.ende ?? _alt?.ende ?? '',
   );
+  late final _endeVpk = TextEditingController(
+    text: _entwurf?.endeVpk ?? _alt?.endeVpk ?? '',
+  );
   late final _bemerkung = TextEditingController(
     text: _entwurf?.bemerkung ?? _alt?.bemerkung ?? '',
   );
@@ -125,8 +128,14 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (widget.fertigMelden && _alt == null && _ende.text.trim().isEmpty) {
-      _ende.text = uhrzeit(DateTime.now());
+    // „Fertig": die Uhrzeit ins erste Ende, das noch leer ist — erst
+    // Auflegen, dann Verpackung.
+    if (widget.fertigMelden && _alt == null) {
+      if (_ende.text.trim().isEmpty) {
+        _ende.text = uhrzeit(DateTime.now());
+      } else if (_endeVpk.text.trim().isEmpty) {
+        _endeVpk.text = uhrzeit(DateTime.now());
+      }
     }
   }
 
@@ -157,6 +166,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
         fertig: _fertig.text.trim(),
         start: _start.text.trim(),
         ende: _ende.text.trim(),
+        endeVpk: _endeVpk.text.trim(),
         bemerkung: _bemerkung.text.trim(),
       ),
     );
@@ -196,6 +206,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
       _fertig,
       _start,
       _ende,
+      _endeVpk,
       _bemerkung,
       _kuerzel,
     ]) {
@@ -251,6 +262,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
     final fertig = _lies(_fertig, () => zahlFalsch = true);
     final start = _liesZeit(_start, () => zeitFalsch = true);
     final ende = _liesZeit(_ende, () => zeitFalsch = true);
+    final endeVpk = _liesZeit(_endeVpk, () => zeitFalsch = true);
     final fehler = zahlFalsch
         ? 'Bitte die Mengen als Zahl eintragen, etwa 512,5.'
         : zeitFalsch
@@ -282,6 +294,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
         fertigKg: fertig,
         start: start,
         ende: ende,
+        endeVpk: endeVpk,
         kuerzel: kuerzel,
         bemerkung: _leerZuNull(_bemerkung.text),
         erfasstAm: jetzt,
@@ -332,6 +345,8 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
       if (verlust != null && verlust >= 0)
         ('Verlust', '${zahlText(verlust * 100)} %'),
       if (dauer != null) ('Dauer', dauerText(dauer)),
+      if (dauerMinuten(_start.text, _endeVpk.text) case final d?)
+        ('Bis VPK', dauerText(d)),
       if (leistung != null)
         (
           'Leistung',
@@ -486,25 +501,59 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
               Flaeche(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(
-                        child: _ZeitFeld(
-                          controller: _start,
-                          label: 'Start',
-                          plan: plan?.start,
-                          onChanged: () => setState(() => _fehler = null),
-                          onJetzt: () => _prognoseZeigen(plan),
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _ZeitFeld(
+                              controller: _start,
+                              label: 'Start',
+                              kennung: 'Start',
+                              plan: plan?.start,
+                              onChanged: () => setState(() => _fehler = null),
+                              onJetzt: () => _prognoseZeigen(plan),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _ZeitFeld(
+                              controller: _ende,
+                              label: 'Ende Auflegen',
+                              kennung: 'Ende',
+                              onChanged: () => setState(() => _fehler = null),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ZeitFeld(
-                          controller: _ende,
-                          label: 'Ende',
-                          onChanged: () => setState(() => _fehler = null),
-                        ),
+                      const SizedBox(height: 12),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: _ZeitFeld(
+                              controller: _endeVpk,
+                              label: 'Ende VPK',
+                              kennung: 'EndeVpk',
+                              onChanged: () => setState(() => _fehler = null),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                'Wann das Letzte verpackt ist. Die Leistung '
+                                'zählt von Start bis Ende Auflegen.',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: f.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -545,43 +594,47 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
               ],
               if (kennzahlen.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    for (final (i, (name, wert)) in kennzahlen.indexed) ...[
-                      if (i > 0) const SizedBox(width: 8),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
-                          decoration: BoxDecoration(
-                            color: f.surface,
-                            borderRadius: Masse.eckenKlein,
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: f.onSurfaceVariant,
-                                ),
-                              ),
-                              FittedBox(
-                                fit: BoxFit.scaleDown,
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  wert,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: farben.ok,
+                // Drei Kacheln je Reihe.
+                LayoutBuilder(
+                  builder: (context, c) => Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final (name, wert) in kennzahlen)
+                        SizedBox(
+                          width: (c.maxWidth - 16) / 3,
+                          child: Container(
+                            padding: const EdgeInsets.fromLTRB(10, 8, 6, 8),
+                            decoration: BoxDecoration(
+                              color: f.surface,
+                              borderRadius: Masse.eckenKlein,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  name,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: f.onSurfaceVariant,
                                   ),
                                 ),
-                              ),
-                            ],
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    wert,
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: farben.ok,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                     ],
-                  ],
+                  ),
                 ),
               ],
               const Abschnitt('Dazu'),
@@ -744,9 +797,13 @@ class _ZeitFeld extends StatelessWidget {
     required this.controller,
     required this.label,
     required this.onChanged,
+    required this.kennung,
     this.plan,
     this.onJetzt,
   });
+
+  /// Für den Schlüssel von „Jetzt": `jetzt-<kennung>`.
+  final String kennung;
 
   final TextEditingController controller;
   final String label;
@@ -780,7 +837,7 @@ class _ZeitFeld extends StatelessWidget {
         const SizedBox(height: 6),
         // „Jetzt" übernimmt die Uhrzeit des Handys — bleibt, wie es ist.
         FilledButton.tonalIcon(
-          key: ValueKey('jetzt-$label'),
+          key: ValueKey('jetzt-$kennung'),
           style: FilledButton.styleFrom(
             minimumSize: const Size(64, Masse.tippHoehe - 8),
           ),

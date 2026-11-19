@@ -6487,6 +6487,12 @@ class $ProductionHistoryTable extends ProductionHistory
   late final GeneratedColumn<String> endzeit = GeneratedColumn<String>(
       'endzeit', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _endeVpkMeta =
+      const VerificationMeta('endeVpk');
+  @override
+  late final GeneratedColumn<String> endeVpk = GeneratedColumn<String>(
+      'ende_vpk', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   static const VerificationMeta _produktionszeitMinutenMeta =
       const VerificationMeta('produktionszeitMinuten');
   @override
@@ -6551,6 +6557,7 @@ class $ProductionHistoryTable extends ProductionHistory
         verlustAnteil,
         startzeit,
         endzeit,
+        endeVpk,
         produktionszeitMinuten,
         kgProStundeRoh,
         kgProStundeGegart,
@@ -6618,6 +6625,10 @@ class $ProductionHistoryTable extends ProductionHistory
       context.handle(_endzeitMeta,
           endzeit.isAcceptableOrUnknown(data['endzeit']!, _endzeitMeta));
     }
+    if (data.containsKey('ende_vpk')) {
+      context.handle(_endeVpkMeta,
+          endeVpk.isAcceptableOrUnknown(data['ende_vpk']!, _endeVpkMeta));
+    }
     if (data.containsKey('produktionszeit_minuten')) {
       context.handle(
           _produktionszeitMinutenMeta,
@@ -6683,6 +6694,8 @@ class $ProductionHistoryTable extends ProductionHistory
           .read(DriftSqlType.string, data['${effectivePrefix}startzeit']),
       endzeit: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}endzeit']),
+      endeVpk: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}ende_vpk']),
       produktionszeitMinuten: attachedDatabase.typeMapping.read(
           DriftSqlType.double,
           data['${effectivePrefix}produktionszeit_minuten']),
@@ -6736,8 +6749,15 @@ class ProductionHistoryData extends DataClass
   /// Startzeit der Produktion als "HH:MM".
   final String? startzeit;
 
-  /// Endzeit der Produktion als "HH:MM".
+  /// Ende des Auflegens als "HH:MM" — an der Bratstraße: wann das Letzte
+  /// aufs Band kam. Zählt mit [startzeit] für die Produktionszeit und die
+  /// Leistung.
   final String? endzeit;
+
+  /// Ende an der Verpackung als "HH:MM" — wann das Letzte verpackt war.
+  /// Nach dem Auflegen läuft das Produkt noch durch die Anlagen; diese
+  /// Zeit zählt nicht für die Leistung, sie steht nur in der Historie.
+  final String? endeVpk;
 
   /// Reine Produktionsdauer in Minuten (Excel: „Produktionszeit").
   final double? produktionszeitMinuten;
@@ -6765,6 +6785,7 @@ class ProductionHistoryData extends DataClass
       this.verlustAnteil,
       this.startzeit,
       this.endzeit,
+      this.endeVpk,
       this.produktionszeitMinuten,
       this.kgProStundeRoh,
       this.kgProStundeGegart,
@@ -6796,6 +6817,9 @@ class ProductionHistoryData extends DataClass
     }
     if (!nullToAbsent || endzeit != null) {
       map['endzeit'] = Variable<String>(endzeit);
+    }
+    if (!nullToAbsent || endeVpk != null) {
+      map['ende_vpk'] = Variable<String>(endeVpk);
     }
     if (!nullToAbsent || produktionszeitMinuten != null) {
       map['produktionszeit_minuten'] = Variable<double>(produktionszeitMinuten);
@@ -6841,6 +6865,9 @@ class ProductionHistoryData extends DataClass
       endzeit: endzeit == null && nullToAbsent
           ? const Value.absent()
           : Value(endzeit),
+      endeVpk: endeVpk == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endeVpk),
       produktionszeitMinuten: produktionszeitMinuten == null && nullToAbsent
           ? const Value.absent()
           : Value(produktionszeitMinuten),
@@ -6876,6 +6903,7 @@ class ProductionHistoryData extends DataClass
       verlustAnteil: serializer.fromJson<double?>(json['verlustAnteil']),
       startzeit: serializer.fromJson<String?>(json['startzeit']),
       endzeit: serializer.fromJson<String?>(json['endzeit']),
+      endeVpk: serializer.fromJson<String?>(json['endeVpk']),
       produktionszeitMinuten:
           serializer.fromJson<double?>(json['produktionszeitMinuten']),
       kgProStundeRoh: serializer.fromJson<double?>(json['kgProStundeRoh']),
@@ -6901,6 +6929,7 @@ class ProductionHistoryData extends DataClass
       'verlustAnteil': serializer.toJson<double?>(verlustAnteil),
       'startzeit': serializer.toJson<String?>(startzeit),
       'endzeit': serializer.toJson<String?>(endzeit),
+      'endeVpk': serializer.toJson<String?>(endeVpk),
       'produktionszeitMinuten':
           serializer.toJson<double?>(produktionszeitMinuten),
       'kgProStundeRoh': serializer.toJson<double?>(kgProStundeRoh),
@@ -6923,6 +6952,7 @@ class ProductionHistoryData extends DataClass
           Value<double?> verlustAnteil = const Value.absent(),
           Value<String?> startzeit = const Value.absent(),
           Value<String?> endzeit = const Value.absent(),
+          Value<String?> endeVpk = const Value.absent(),
           Value<double?> produktionszeitMinuten = const Value.absent(),
           Value<double?> kgProStundeRoh = const Value.absent(),
           Value<double?> kgProStundeGegart = const Value.absent(),
@@ -6945,6 +6975,7 @@ class ProductionHistoryData extends DataClass
             verlustAnteil.present ? verlustAnteil.value : this.verlustAnteil,
         startzeit: startzeit.present ? startzeit.value : this.startzeit,
         endzeit: endzeit.present ? endzeit.value : this.endzeit,
+        endeVpk: endeVpk.present ? endeVpk.value : this.endeVpk,
         produktionszeitMinuten: produktionszeitMinuten.present
             ? produktionszeitMinuten.value
             : this.produktionszeitMinuten,
@@ -6976,6 +7007,7 @@ class ProductionHistoryData extends DataClass
           : this.verlustAnteil,
       startzeit: data.startzeit.present ? data.startzeit.value : this.startzeit,
       endzeit: data.endzeit.present ? data.endzeit.value : this.endzeit,
+      endeVpk: data.endeVpk.present ? data.endeVpk.value : this.endeVpk,
       produktionszeitMinuten: data.produktionszeitMinuten.present
           ? data.produktionszeitMinuten.value
           : this.produktionszeitMinuten,
@@ -7005,6 +7037,7 @@ class ProductionHistoryData extends DataClass
           ..write('verlustAnteil: $verlustAnteil, ')
           ..write('startzeit: $startzeit, ')
           ..write('endzeit: $endzeit, ')
+          ..write('endeVpk: $endeVpk, ')
           ..write('produktionszeitMinuten: $produktionszeitMinuten, ')
           ..write('kgProStundeRoh: $kgProStundeRoh, ')
           ..write('kgProStundeGegart: $kgProStundeGegart, ')
@@ -7028,6 +7061,7 @@ class ProductionHistoryData extends DataClass
       verlustAnteil,
       startzeit,
       endzeit,
+      endeVpk,
       produktionszeitMinuten,
       kgProStundeRoh,
       kgProStundeGegart,
@@ -7049,6 +7083,7 @@ class ProductionHistoryData extends DataClass
           other.verlustAnteil == this.verlustAnteil &&
           other.startzeit == this.startzeit &&
           other.endzeit == this.endzeit &&
+          other.endeVpk == this.endeVpk &&
           other.produktionszeitMinuten == this.produktionszeitMinuten &&
           other.kgProStundeRoh == this.kgProStundeRoh &&
           other.kgProStundeGegart == this.kgProStundeGegart &&
@@ -7070,6 +7105,7 @@ class ProductionHistoryCompanion
   final Value<double?> verlustAnteil;
   final Value<String?> startzeit;
   final Value<String?> endzeit;
+  final Value<String?> endeVpk;
   final Value<double?> produktionszeitMinuten;
   final Value<double?> kgProStundeRoh;
   final Value<double?> kgProStundeGegart;
@@ -7089,6 +7125,7 @@ class ProductionHistoryCompanion
     this.verlustAnteil = const Value.absent(),
     this.startzeit = const Value.absent(),
     this.endzeit = const Value.absent(),
+    this.endeVpk = const Value.absent(),
     this.produktionszeitMinuten = const Value.absent(),
     this.kgProStundeRoh = const Value.absent(),
     this.kgProStundeGegart = const Value.absent(),
@@ -7109,6 +7146,7 @@ class ProductionHistoryCompanion
     this.verlustAnteil = const Value.absent(),
     this.startzeit = const Value.absent(),
     this.endzeit = const Value.absent(),
+    this.endeVpk = const Value.absent(),
     this.produktionszeitMinuten = const Value.absent(),
     this.kgProStundeRoh = const Value.absent(),
     this.kgProStundeGegart = const Value.absent(),
@@ -7131,6 +7169,7 @@ class ProductionHistoryCompanion
     Expression<double>? verlustAnteil,
     Expression<String>? startzeit,
     Expression<String>? endzeit,
+    Expression<String>? endeVpk,
     Expression<double>? produktionszeitMinuten,
     Expression<double>? kgProStundeRoh,
     Expression<double>? kgProStundeGegart,
@@ -7151,6 +7190,7 @@ class ProductionHistoryCompanion
       if (verlustAnteil != null) 'verlust_anteil': verlustAnteil,
       if (startzeit != null) 'startzeit': startzeit,
       if (endzeit != null) 'endzeit': endzeit,
+      if (endeVpk != null) 'ende_vpk': endeVpk,
       if (produktionszeitMinuten != null)
         'produktionszeit_minuten': produktionszeitMinuten,
       if (kgProStundeRoh != null) 'kg_pro_stunde_roh': kgProStundeRoh,
@@ -7174,6 +7214,7 @@ class ProductionHistoryCompanion
       Value<double?>? verlustAnteil,
       Value<String?>? startzeit,
       Value<String?>? endzeit,
+      Value<String?>? endeVpk,
       Value<double?>? produktionszeitMinuten,
       Value<double?>? kgProStundeRoh,
       Value<double?>? kgProStundeGegart,
@@ -7193,6 +7234,7 @@ class ProductionHistoryCompanion
       verlustAnteil: verlustAnteil ?? this.verlustAnteil,
       startzeit: startzeit ?? this.startzeit,
       endzeit: endzeit ?? this.endzeit,
+      endeVpk: endeVpk ?? this.endeVpk,
       produktionszeitMinuten:
           produktionszeitMinuten ?? this.produktionszeitMinuten,
       kgProStundeRoh: kgProStundeRoh ?? this.kgProStundeRoh,
@@ -7235,6 +7277,9 @@ class ProductionHistoryCompanion
     }
     if (endzeit.present) {
       map['endzeit'] = Variable<String>(endzeit.value);
+    }
+    if (endeVpk.present) {
+      map['ende_vpk'] = Variable<String>(endeVpk.value);
     }
     if (produktionszeitMinuten.present) {
       map['produktionszeit_minuten'] =
@@ -7279,6 +7324,7 @@ class ProductionHistoryCompanion
           ..write('verlustAnteil: $verlustAnteil, ')
           ..write('startzeit: $startzeit, ')
           ..write('endzeit: $endzeit, ')
+          ..write('endeVpk: $endeVpk, ')
           ..write('produktionszeitMinuten: $produktionszeitMinuten, ')
           ..write('kgProStundeRoh: $kgProStundeRoh, ')
           ..write('kgProStundeGegart: $kgProStundeGegart, ')
@@ -24163,6 +24209,7 @@ typedef $$ProductionHistoryTableCreateCompanionBuilder
   Value<double?> verlustAnteil,
   Value<String?> startzeit,
   Value<String?> endzeit,
+  Value<String?> endeVpk,
   Value<double?> produktionszeitMinuten,
   Value<double?> kgProStundeRoh,
   Value<double?> kgProStundeGegart,
@@ -24184,6 +24231,7 @@ typedef $$ProductionHistoryTableUpdateCompanionBuilder
   Value<double?> verlustAnteil,
   Value<String?> startzeit,
   Value<String?> endzeit,
+  Value<String?> endeVpk,
   Value<double?> produktionszeitMinuten,
   Value<double?> kgProStundeRoh,
   Value<double?> kgProStundeGegart,
@@ -24249,6 +24297,9 @@ class $$ProductionHistoryTableFilterComposer
 
   ColumnFilters<String> get endzeit => $composableBuilder(
       column: $table.endzeit, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get endeVpk => $composableBuilder(
+      column: $table.endeVpk, builder: (column) => ColumnFilters(column));
 
   ColumnFilters<double> get produktionszeitMinuten => $composableBuilder(
       column: $table.produktionszeitMinuten,
@@ -24334,6 +24385,9 @@ class $$ProductionHistoryTableOrderingComposer
   ColumnOrderings<String> get endzeit => $composableBuilder(
       column: $table.endzeit, builder: (column) => ColumnOrderings(column));
 
+  ColumnOrderings<String> get endeVpk => $composableBuilder(
+      column: $table.endeVpk, builder: (column) => ColumnOrderings(column));
+
   ColumnOrderings<double> get produktionszeitMinuten => $composableBuilder(
       column: $table.produktionszeitMinuten,
       builder: (column) => ColumnOrderings(column));
@@ -24415,6 +24469,9 @@ class $$ProductionHistoryTableAnnotationComposer
   GeneratedColumn<String> get endzeit =>
       $composableBuilder(column: $table.endzeit, builder: (column) => column);
 
+  GeneratedColumn<String> get endeVpk =>
+      $composableBuilder(column: $table.endeVpk, builder: (column) => column);
+
   GeneratedColumn<double> get produktionszeitMinuten => $composableBuilder(
       column: $table.produktionszeitMinuten, builder: (column) => column);
 
@@ -24494,6 +24551,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             Value<double?> verlustAnteil = const Value.absent(),
             Value<String?> startzeit = const Value.absent(),
             Value<String?> endzeit = const Value.absent(),
+            Value<String?> endeVpk = const Value.absent(),
             Value<double?> produktionszeitMinuten = const Value.absent(),
             Value<double?> kgProStundeRoh = const Value.absent(),
             Value<double?> kgProStundeGegart = const Value.absent(),
@@ -24514,6 +24572,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             verlustAnteil: verlustAnteil,
             startzeit: startzeit,
             endzeit: endzeit,
+            endeVpk: endeVpk,
             produktionszeitMinuten: produktionszeitMinuten,
             kgProStundeRoh: kgProStundeRoh,
             kgProStundeGegart: kgProStundeGegart,
@@ -24534,6 +24593,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             Value<double?> verlustAnteil = const Value.absent(),
             Value<String?> startzeit = const Value.absent(),
             Value<String?> endzeit = const Value.absent(),
+            Value<String?> endeVpk = const Value.absent(),
             Value<double?> produktionszeitMinuten = const Value.absent(),
             Value<double?> kgProStundeRoh = const Value.absent(),
             Value<double?> kgProStundeGegart = const Value.absent(),
@@ -24554,6 +24614,7 @@ class $$ProductionHistoryTableTableManager extends RootTableManager<
             verlustAnteil: verlustAnteil,
             startzeit: startzeit,
             endzeit: endzeit,
+            endeVpk: endeVpk,
             produktionszeitMinuten: produktionszeitMinuten,
             kgProStundeRoh: kgProStundeRoh,
             kgProStundeGegart: kgProStundeGegart,

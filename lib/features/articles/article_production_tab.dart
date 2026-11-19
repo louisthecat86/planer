@@ -53,7 +53,7 @@ class _ProductionTab extends ConsumerWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   // Breit: eine Spalte je Kennzahl. Schmal: zweizeilig.
-                  final breit = constraints.maxWidth >= 880;
+                  final breit = constraints.maxWidth >= 1060;
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     mainAxisSize: MainAxisSize.min,
@@ -195,7 +195,8 @@ class _KennzahlenCard extends StatelessWidget {
 
 /// Spaltenbreiten der Produktionsliste — für Kopf und Zeilen dieselben.
 abstract final class _HistSpalten {
-  static const double datum = 120;
+  static const double datum = 96;
+  static const double zeit = 72;
   static const double menge = 96;
   static const double anteil = 84;
   static const double dauer = 104;
@@ -238,6 +239,9 @@ class _HistorieKopf extends StatelessWidget {
             width: _HistSpalten.datum,
             child: Text('Datum', style: stil),
           ),
+          rechts('Start', _HistSpalten.zeit),
+          rechts('Ende Aufl.', _HistSpalten.zeit),
+          rechts('Ende VPK', _HistSpalten.zeit),
           rechts('Rohware', _HistSpalten.menge),
           rechts('davon Fleisch', _HistSpalten.menge),
           rechts('Fertigware', _HistSpalten.menge),
@@ -288,9 +292,16 @@ class _HistorieZeile extends StatelessWidget {
 
     final start = e.startzeit;
     final ende = e.endzeit;
-    final zeitText = (start != null && ende != null)
-        ? '$start – $ende'
-        : (start ?? '');
+    final vpk = e.endeVpk;
+    // Nur in der schmalen Ansicht unter dem Datum — breit haben die Zeiten
+    // eigene Spalten.
+    final zeitText = [
+      if (start != null && ende != null)
+        '$start – $ende'
+      else if (start != null)
+        start,
+      if (vpk != null) 'VPK $vpk',
+    ].join(' · ');
     final notiz = e.notizen?.trim() ?? '';
     final ausApp = e.quelle == 'app';
 
@@ -305,7 +316,7 @@ class _HistorieZeile extends StatelessWidget {
           fmtDatum(e.datum),
           style: zahlen?.copyWith(fontWeight: FontWeight.w600),
         ),
-        if (zeitText.isNotEmpty)
+        if (!breit && zeitText.isNotEmpty)
           Text(
             zeitText,
             style: theme.textTheme.bodySmall?.copyWith(color: grau),
@@ -350,6 +361,9 @@ class _HistorieZeile extends StatelessWidget {
       inhalt = Row(
         children: [
           SizedBox(width: _HistSpalten.datum, child: datum),
+          zelle(start ?? '—', _HistSpalten.zeit),
+          zelle(ende ?? '—', _HistSpalten.zeit),
+          zelle(vpk ?? '—', _HistSpalten.zeit),
           zelle(kg(roh), _HistSpalten.menge),
           zelle(kg(fleisch), _HistSpalten.menge),
           zelle(kg(fertig), _HistSpalten.menge),

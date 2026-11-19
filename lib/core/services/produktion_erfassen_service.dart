@@ -103,6 +103,7 @@ class ProduktionErfassenService {
     double? kgFertigware,
     String? startzeit,
     String? endzeit,
+    String? endeVpk,
     String? notizen,
     String? vorhandeneId,
   }) async {
@@ -113,6 +114,7 @@ class ProduktionErfassenService {
 
     final start = leerZuNull(startzeit);
     final ende = leerZuNull(endzeit);
+    final vpk = leerZuNull(endeVpk);
     final k = kennzahlen(
       kgRohware: kgRohware,
       kgFertigware: kgFertigware,
@@ -136,6 +138,7 @@ class ProduktionErfassenService {
           verlustAnteil: Value(k.verlustAnteil),
           startzeit: Value(start),
           endzeit: Value(ende),
+          endeVpk: Value(vpk),
           produktionszeitMinuten: Value(k.produktionszeitMinuten),
           kgProStundeRoh: Value(k.kgProStundeRoh),
           kgProStundeGegart: Value(k.kgProStundeGegart),
@@ -157,6 +160,7 @@ class ProduktionErfassenService {
             verlustAnteil: Value(k.verlustAnteil),
             startzeit: Value(start),
             endzeit: Value(ende),
+            endeVpk: Value(vpk),
             produktionszeitMinuten: Value(k.produktionszeitMinuten),
             kgProStundeRoh: Value(k.kgProStundeRoh),
             kgProStundeGegart: Value(k.kgProStundeGegart),

@@ -37,8 +37,15 @@ class ProductionHistory extends Table {
   /// Startzeit der Produktion als "HH:MM".
   TextColumn get startzeit => text().nullable()();
 
-  /// Endzeit der Produktion als "HH:MM".
+  /// Ende des Auflegens als "HH:MM" — an der Bratstraße: wann das Letzte
+  /// aufs Band kam. Zählt mit [startzeit] für die Produktionszeit und die
+  /// Leistung.
   TextColumn get endzeit => text().nullable()();
+
+  /// Ende an der Verpackung als "HH:MM" — wann das Letzte verpackt war.
+  /// Nach dem Auflegen läuft das Produkt noch durch die Anlagen; diese
+  /// Zeit zählt nicht für die Leistung, sie steht nur in der Historie.
+  TextColumn get endeVpk => text().nullable()();
 
   /// Reine Produktionsdauer in Minuten (Excel: „Produktionszeit").
   RealColumn get produktionszeitMinuten => real().nullable()();

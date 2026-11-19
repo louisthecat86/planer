@@ -1071,6 +1071,7 @@ class HandyErfassungDienst {
           kgFertigware: e.fertigKg,
           startzeit: e.start,
           endzeit: e.ende,
+          endeVpk: e.endeVpk,
           notizen: e.notiz,
         );
         p++;
