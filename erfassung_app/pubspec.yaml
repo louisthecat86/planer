@@ -4,7 +4,7 @@ description: >-
   Maschineneinstellungen und Fotos direkt an der Anlage erfassen, ohne
   Netz.
 publish_to: none
-version: 1.5.0+6
+version: 1.5.1+7
 
 environment:
   sdk: ^3.5.0
@@ -22,6 +22,14 @@ dependencies:
   image_picker: ^1.1.2
   # Der Ordner der App für den Stand der Erfassung und die Fotos.
   path_provider: ^2.1.0
+
+# Ab 2.3.0 holt path_provider_android den Ordner der App über JNI — im
+# Release-Build findet es dabei die Klasse android.content.Context nicht,
+# und die App erreicht ihren Speicher nicht („ClassNotFoundException:
+# Landroid/content/Context;"). 2.2.23 ist die letzte Fassung ohne JNI.
+# Erst lösen, wenn eine neuere Fassung nachweislich im Release-Build läuft.
+dependency_overrides:
+  path_provider_android: 2.2.23
 
 dev_dependencies:
   flutter_test:
