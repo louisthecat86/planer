@@ -805,4 +805,20 @@ void main() {
       );
     });
   });
+
+  test('ein geänderter Wert trägt Anlage und Nummer des Schritts', () {
+    final s = Erfassungsstand(kuerzel: 'AB')..paketOeffnen(beispielPaket());
+    final artikel = s.paket!.artikelMit('a1')!;
+    final schritt = artikel.schrittMit('s2')!;
+    s.wertSetzen(
+      artikel: artikel,
+      schritt: schritt,
+      feld: schritt.felder.first,
+      neu: '199',
+      jetzt: jetzt,
+    );
+    final w =
+        ErfassungsErgebnis.ausText(s.ergebnis(jetzt)!.alsText()).werte.single;
+    expect((w.anlage, w.nummer), (schritt.anlage, 2));
+  });
 }

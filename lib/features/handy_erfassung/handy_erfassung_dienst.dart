@@ -129,10 +129,29 @@ class WertVorschau {
     required this.schritt,
     this.amPc,
     this.hinweis,
-  });
+    String? schrittId,
+    String? schluessel,
+  })  : _schrittId = schrittId,
+        _schluessel = schluessel;
 
   final GeaenderterWert wert;
   final WertStand stand;
+
+  final String? _schrittId;
+  final String? _schluessel;
+
+  /// Der Schritt im Planer, an den der Wert geht. Meist der vom Handy —
+  /// wurde die Kette am PC inzwischen neu angelegt (etwa beim
+  /// Stammdaten-Import), der eine Schritt desselben Artikels, der das Feld
+  /// hat.
+  String get schrittId => _schrittId ?? wert.schrittId;
+
+  /// Das Feld an [schrittId] — siehe dort.
+  String get schluessel => _schluessel ?? wert.schluessel;
+
+  /// Ob der Wert über das Feld einem neu angelegten Schritt zugeordnet
+  /// wurde.
+  bool get zugeordnet => _schrittId != null && _schrittId != wert.schrittId;
   final String artikel;
 
   /// „2 · Bratstraße".
@@ -753,20 +772,36 @@ class HandyErfassungDienst {
             .get();
     final staende = await _feldStaende(schritte);
     final schrittVon = {for (final s in schritte) s.id: s};
+    final ersatz = await _ersatzSuche(ergebnis, schrittVon, ketten.felder);
 
     final werte = <WertVorschau>[];
     for (final w in ergebnis.werte) {
-      final s = schrittVon[w.schrittId];
+      var s = schrittVon[w.schrittId];
       final artikel = artikelText(w.artikelId, '');
       // Ein Wert an einer Maschine, die erst mit diesem Ergebnis in die
       // Kette kommt: Er zählt wie ein neuer Wert an einem leeren Schritt.
       final neuerSchritt = s == null ? ketten.felder[w.schrittId] : null;
-      final stand = staende[w.schrittId] ?? neuerSchritt;
+      var stand = staende[w.schrittId] ?? neuerSchritt;
       _FeldStand? feld;
       for (final f in stand?.felder ?? const <_FeldStand>[]) {
         if (f.feld.schluessel == w.schluessel) {
           feld = f;
           break;
+        }
+      }
+      String? schrittId;
+      String? schluessel;
+      if (feld == null && neuerSchritt == null) {
+        // Den Schritt oder das Feld gibt es so nicht mehr — die Kette oder
+        // der Parameter wurde am PC neu angelegt. Dann der eine Schritt
+        // desselben Artikels, der das Feld hat.
+        final t = ersatz(w);
+        if (t != null) {
+          s = t.schritt;
+          stand = t.stand;
+          feld = t.feld;
+          schrittId = t.schritt.id;
+          schluessel = t.feld.feld.schluessel;
         }
       }
       if ((s == null && neuerSchritt == null) ||
@@ -779,12 +814,16 @@ class HandyErfassungDienst {
             artikel: artikel,
             schritt: stand?.anlage ?? '',
             hinweis: s == null
-                ? 'Den Schritt gibt es im Planer nicht mehr.'
+                ? 'Den Schritt gibt es im Planer nicht mehr, und im Artikel '
+                    'steht kein eindeutiger Schritt mit diesem Feld.'
                 : 'Das Feld gibt es an diesem Schritt nicht mehr.',
           ),
         );
         continue;
       }
+      final zugeordnetHinweis = schrittId != null && schrittId != w.schrittId
+          ? 'Die Kette wurde am PC neu angelegt — zugeordnet über das Feld.'
+          : null;
       final amPc = feld.feld.wert;
       final neu = _leerZuNull(w.neu);
       final pruefung = feld.feld.grenze?.pruefe(neu) ?? GrenzPruefung.inOrdnung;
@@ -811,7 +850,14 @@ class HandyErfassungDienst {
           artikel: artikel,
           schritt: stand.anlage,
           amPc: amPc,
-          hinweis: hinweis,
+          hinweis: _leerZuNull(
+            [
+              if (zugeordnetHinweis != null) zugeordnetHinweis,
+              if (hinweis != null) hinweis,
+            ].join(' '),
+          ),
+          schrittId: schrittId,
+          schluessel: schluessel,
         ),
       );
     }
@@ -822,6 +868,126 @@ class HandyErfassungDienst {
       fotos: await _fotoVorschau(ergebnis.fotos, artikelText, produkte.keys),
       schritte: ketten.vorschau,
     );
+  }
+
+  /// Sucht für einen Wert, dessen Schritt oder Feld es nicht mehr gibt,
+  /// den Ersatz im selben Artikel — die Kette wurde am PC inzwischen neu
+  /// angelegt (etwa beim Stammdaten-Import), die IDs stimmen nicht mehr.
+  ///
+  /// Die Werte eines alten Schritts bleiben zusammen: Gesucht wird der
+  /// Schritt, der alle ihre Felder hat — Steckbrief, Platte und Notiz über
+  /// den Schlüssel, weitere Parameter über den Namen —, bei bekannter
+  /// Anlage nur an dieser Anlage, bei mehreren der mit der nächsten
+  /// Nummer. Klappt das nicht, der eine Schritt, der das einzelne Feld
+  /// hat. Sonst ist es nicht eindeutig: null. Fehlt nur das Feld, wird nur
+  /// am Schritt selbst gesucht. Neue Schritte aus demselben Ergebnis
+  /// zählen nicht.
+  Future<
+      ({
+        ProductStep schritt,
+        ({String anlage, List<_FeldStand> felder}) stand,
+        _FeldStand feld,
+      })?
+          Function(GeaenderterWert)> _ersatzSuche(
+    ErfassungsErgebnis ergebnis,
+    Map<String, ProductStep> gefunden,
+    Map<String, ({String anlage, List<_FeldStand> felder})> neue,
+  ) async {
+    final artikelIds = {
+      for (final w in ergebnis.werte)
+        if (!gefunden.containsKey(w.schrittId) || w.art == FeldArt.parameter)
+          if (!neue.containsKey(w.schrittId)) w.artikelId,
+    };
+    if (artikelIds.isEmpty) return (_) => null;
+    final ketten = await (_db.select(_db.productSteps)
+          ..where((s) => s.deletedAt.isNull())
+          ..where((s) => s.productId.isIn(artikelIds))
+          ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
+        .get();
+    final staende = await _feldStaende(ketten);
+
+    _FeldStand? feldAn(ProductStep s, GeaenderterWert w) {
+      final name = w.name.trim().toLowerCase();
+      for (final f in staende[s.id]?.felder ?? const <_FeldStand>[]) {
+        final passt = w.art == FeldArt.parameter
+            ? f.feld.art == FeldArt.parameter &&
+                f.feld.name.trim().toLowerCase() == name
+            : f.feld.schluessel == w.schluessel;
+        if (passt) return f;
+      }
+      return null;
+    }
+
+    /// Unter [kandidaten] der eine: erst nach Anlage, dann nach Nummer.
+    ProductStep? eindeutig(
+      List<ProductStep> kandidaten,
+      String? anlage,
+      int? nummer,
+    ) {
+      var liste = kandidaten;
+      final a = anlage?.trim().toLowerCase();
+      if (a != null && a.isNotEmpty) {
+        final gleich = [
+          for (final s in liste)
+            if (staende[s.id]?.anlage.trim().toLowerCase() == a) s,
+        ];
+        if (gleich.isNotEmpty) liste = gleich;
+      }
+      if (liste.length == 1) return liste.single;
+      if (liste.isEmpty || nummer == null) return null;
+      int abstand(ProductStep s) => (s.reihenfolge - nummer).abs();
+      final naechster = liste.map(abstand).reduce((x, y) => x < y ? x : y);
+      final beste = [
+        for (final s in liste)
+          if (abstand(s) == naechster) s,
+      ];
+      return beste.length == 1 ? beste.single : null;
+    }
+
+    // Je altem Schritt, den es nicht mehr gibt: der neue.
+    final jeAltemSchritt = <String, List<GeaenderterWert>>{};
+    for (final w in ergebnis.werte) {
+      if (gefunden.containsKey(w.schrittId) || neue.containsKey(w.schrittId)) {
+        continue;
+      }
+      (jeAltemSchritt[w.schrittId] ??= []).add(w);
+    }
+    final zuordnung = <String, ProductStep>{};
+    for (final MapEntry(key: alt, value: werte) in jeAltemSchritt.entries) {
+      final w0 = werte.first;
+      final kandidaten = [
+        for (final s in ketten)
+          if (s.productId == w0.artikelId &&
+              werte.every((w) => feldAn(s, w) != null))
+            s,
+      ];
+      final s = eindeutig(kandidaten, w0.anlage, w0.nummer);
+      if (s != null) zuordnung[alt] = s;
+    }
+
+    return (GeaenderterWert w) {
+      final ProductStep? schritt;
+      if (gefunden[w.schrittId] case final da?) {
+        // Der Schritt ist noch da, nur das Feld nicht: nur an ihm.
+        schritt = da;
+      } else if (zuordnung[w.schrittId] case final z?) {
+        schritt = z;
+      } else {
+        schritt = eindeutig(
+          [
+            for (final s in ketten)
+              if (s.productId == w.artikelId && feldAn(s, w) != null) s,
+          ],
+          w.anlage,
+          w.nummer,
+        );
+      }
+      if (schritt == null) return null;
+      final feld = feldAn(schritt, w);
+      final stand = staende[schritt.id];
+      if (feld == null || stand == null) return null;
+      return (schritt: schritt, stand: stand, feld: feld);
+    };
   }
 
   /// Die Änderungen an den Prozessketten — und die Felder der neuen
@@ -1106,15 +1272,15 @@ class HandyErfassungDienst {
         final schritte = await (_db.select(_db.productSteps)
               ..where((s) => s.deletedAt.isNull())
               ..where(
-                (s) => s.id.isIn({for (final x in liste) x.wert.schrittId}),
+                (s) => s.id.isIn({for (final x in liste) x.schrittId}),
               ))
             .get();
         final staende = await _feldStaende(schritte);
         for (final x in liste) {
           _FeldStand? feld;
           for (final f
-              in staende[x.wert.schrittId]?.felder ?? const <_FeldStand>[]) {
-            if (f.feld.schluessel == x.wert.schluessel) {
+              in staende[x.schrittId]?.felder ?? const <_FeldStand>[]) {
+            if (f.feld.schluessel == x.schluessel) {
               feld = f;
               break;
             }
@@ -1139,7 +1305,7 @@ class HandyErfassungDienst {
             await _db.into(_db.productStepParameters).insert(
                   ProductStepParametersCompanion(
                     id: Value(const Uuid().v4()),
-                    stepId: Value(x.wert.schrittId),
+                    stepId: Value(x.schrittId),
                     parameterGruppe: Value(feld.gruppe!),
                     parameterName: Value(
                       feld.feld.art == FeldArt.notiz

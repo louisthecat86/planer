@@ -605,6 +605,162 @@ void main() {
       expect(await db.select(db.productionHistory).get(), isEmpty);
     });
 
+    group('Kette am PC neu angelegt', () {
+      // Wie beim Stammdaten-Import: Die Schritte von a1 werden gelöscht
+      // und mit neuen IDs wieder angelegt — nach dem Erstellen des Pakets.
+      Future<void> neuAnlegen(List<(String, String, String)> kette) async {
+        await (db.delete(db.productStepParameters)
+              ..where((p) => p.stepId.isIn(['s1', 's2'])))
+            .go();
+        await (db.delete(db.productSteps)
+              ..where((s) => s.productId.equals('a1')))
+            .go();
+        for (final (i, (id, maschine, abteilung)) in kette.indexed) {
+          await seedSchritt(
+            db,
+            id: id,
+            productId: 'a1',
+            reihenfolge: i + 1,
+            abteilung: abteilung,
+            maschineId: maschine,
+          );
+        }
+      }
+
+      GeaenderterWert wert(
+        String schrittId,
+        String schluessel,
+        FeldArt art,
+        String neu, {
+        String? anlage,
+        int? nummer,
+      }) =>
+          GeaenderterWert(
+            artikelId: 'a1',
+            schrittId: schrittId,
+            schluessel: schluessel,
+            art: art,
+            name: schluessel,
+            neu: neu,
+            anlage: anlage,
+            nummer: nummer,
+            erfasstAm: DateTime(2026, 11, 20, 9),
+          );
+
+      ErfassungsErgebnis ergebnis(List<GeaenderterWert> werte) =>
+          ErfassungsErgebnis.ausText(
+            ErfassungsErgebnis(
+              paketId: 'p',
+              erstellt: DateTime(2026, 11, 20, 10),
+              werte: werte,
+            ).alsText(),
+          );
+
+      test('die Werte finden den neuen Schritt über ihre Felder', () async {
+        await neuAnlegen([
+          ('n1', 'm2', 'wurstkueche'),
+          ('n2', 'm1', 'bratstrasse'),
+        ]);
+        final e = ergebnis([
+          wert(
+            's1',
+            steckbriefSchluessel('Füllgewicht'),
+            FeldArt.steckbrief,
+            '130',
+          ),
+          wert('s2', plattenSchluessel('Platte Oben 1'), FeldArt.platte, '185'),
+          wert(
+            's2',
+            plattenSchluessel('Platte Unten 1'),
+            FeldArt.platte,
+            '180',
+          ),
+          // Die Notiz gibt es an beiden — aber der alte Schritt s2 hat
+          // auch Platten: also die Bratstraße.
+          wert('s2', kNotizSchluessel, FeldArt.notiz, 'Band schneller'),
+        ]);
+        final v = await dienst.vorschau(e);
+        expect(
+          [for (final w in v.werte) (w.stand, w.schrittId, w.zugeordnet)],
+          [
+            (WertStand.neu, 'n1', true),
+            (WertStand.neu, 'n2', true),
+            (WertStand.neu, 'n2', true),
+            (WertStand.neu, 'n2', true),
+          ],
+        );
+        expect(v.werte.first.hinweis, contains('neu angelegt'));
+
+        final bericht = await dienst.uebernehmen(
+          produktionen: const [],
+          werte: v.werte,
+        );
+        expect(bericht.werte, 4);
+        expect(
+          {for (final z in await zeilen('n1')) z.parameterName: z.wert},
+          {'Füllgewicht': '130'},
+        );
+        expect(
+          {for (final z in await zeilen('n2')) z.parameterName: z.wert},
+          {
+            'Platte Oben 1': '185',
+            'Platte Unten 1': '180',
+            kMaschinenNotizParam: 'Band schneller',
+          },
+        );
+        // Ein zweites Einlesen ändert nichts mehr.
+        final nochmal = await dienst.vorschau(e);
+        expect(
+          nochmal.werte.every((w) => w.stand == WertStand.gleich),
+          isTrue,
+        );
+      });
+
+      test('zwei gleiche Anlagen: Anlage und Nummer entscheiden', () async {
+        await neuAnlegen([
+          ('n1', 'm2', 'wurstkueche'),
+          ('n2', 'm2', 'wurstkueche'),
+          ('n3', 'm1', 'bratstrasse'),
+        ]);
+        final ohne = wert(
+          's1',
+          steckbriefSchluessel('Programm'),
+          FeldArt.steckbrief,
+          '7',
+        );
+        final mit = wert(
+          's9',
+          steckbriefSchluessel('Programm'),
+          FeldArt.steckbrief,
+          '8',
+          anlage: 'Füller Test',
+          nummer: 2,
+        );
+        final v = await dienst.vorschau(ergebnis([ohne, mit]));
+        // Ohne Angabe aus einer älteren App: nicht eindeutig.
+        expect(v.werte.first.stand, WertStand.fehlt);
+        expect(v.werte.first.hinweis, contains('kein eindeutiger'));
+        expect(v.werte.last.stand, WertStand.neu);
+        expect(v.werte.last.schrittId, 'n2');
+      });
+
+      test('ein Wert an einem Schritt, den es noch gibt, bleibt dort',
+          () async {
+        final v = await dienst.vorschau(
+          ergebnis([
+            wert(
+              's1',
+              steckbriefSchluessel('Füllgewicht'),
+              FeldArt.steckbrief,
+              '130',
+            ),
+          ]),
+        );
+        expect(v.werte.single.schrittId, 's1');
+        expect(v.werte.single.zugeordnet, isFalse);
+      });
+    });
+
     group('Maschinen in der Kette', () {
       final am = DateTime(2026, 11, 10, 9);
 

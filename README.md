@@ -646,6 +646,12 @@ Berechtigung fürs Internet.
    der Produktionserfassung (mit denselben Kennzahlen),
    Maschineneinstellungen am Schritt des Artikels. Hat sich ein Wert am PC
    inzwischen geändert, steht er als Konflikt da und ist nicht vorgewählt.
+   Wurde die Kette eines Artikels am PC seit dem Paket neu angelegt (etwa
+   beim Stammdaten-Import oder durch ein eingespieltes Backup), stimmen die
+   Schritt-IDs nicht mehr: Dann gehen die Werte an den Schritt desselben
+   Artikels, der ihre Felder hat — bei gleichen Anlagen nach Anlage und
+   Nummer, die das Handy mitschickt —, und die Vorschau sagt „zugeordnet
+   über das Feld". Ist das nicht eindeutig, fehlt der Wert mit Hinweis.
    Unter **Prozessketten** stehen Maschinen, die dazukommen oder wegfallen:
    Eine neue kommt hinter denselben Schritt wie auf dem Handy (gibt es den
    nicht mehr, ans Ende ihrer Abteilung), mit den Werten, die an ihr

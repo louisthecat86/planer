@@ -468,6 +468,10 @@ class Erfassungsstand {
       alt: _leerZuNull(feld.wert),
       neu: wert,
       kuerzel: _leerZuNull(kuerzel),
+      // Damit der Planer den Schritt auch findet, wenn die Kette am PC
+      // neu angelegt wurde.
+      anlage: schritt.anlage,
+      nummer: schritt.nummer > 0 ? schritt.nummer : null,
       erfasstAm: jetzt,
     );
     gespeichertAm = null;

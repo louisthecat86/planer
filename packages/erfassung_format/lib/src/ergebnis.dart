@@ -258,10 +258,19 @@ class GeaenderterWert {
     this.alt,
     this.neu,
     this.kuerzel,
+    this.anlage,
+    this.nummer,
   });
 
   final String artikelId;
   final String schrittId;
+
+  /// Die Anlage des Schritts und seine Nummer in der Kette, wie im Paket.
+  /// Damit findet der Planer den Schritt auch dann, wenn die Kette am PC
+  /// inzwischen neu angelegt wurde und die ID nicht mehr stimmt. Fehlen in
+  /// Ergebnissen älterer Apps.
+  final String? anlage;
+  final int? nummer;
 
   /// Der Schlüssel des Felds im Schritt (PaketFeld.schluessel).
   final String schluessel;
@@ -286,6 +295,8 @@ class GeaenderterWert {
         if (alt != null) 'alt': alt,
         if (neu != null) 'neu': neu,
         if (kuerzel != null) 'kuerzel': kuerzel,
+        if (anlage != null) 'anlage': anlage,
+        if (nummer != null) 'nummer': nummer,
         'erfasstAm': erfasstAm.toIso8601String(),
       };
 
@@ -300,6 +311,8 @@ class GeaenderterWert {
       alt: jsonTextOder(j, 'alt'),
       neu: jsonTextOder(j, 'neu'),
       kuerzel: jsonTextOder(j, 'kuerzel'),
+      anlage: jsonTextOder(j, 'anlage'),
+      nummer: jsonGanzOder(j, 'nummer'),
       erfasstAm: jsonZeitpunkt(j, 'erfasstAm', wo),
     );
   }
