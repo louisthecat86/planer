@@ -86,7 +86,7 @@ class HeuteEintrag {
 
   /// Die Rohware, die zählt: erfasst, sonst eingetragen, sonst geplant.
   double? get rohKg =>
-      erfasst?.rohKg ?? zahlAus(entwurf?.roh ?? '') ?? plan?.rohKg;
+      erfasst?.rohKg ?? rechneAus(entwurf?.roh ?? '') ?? plan?.rohKg;
 
   /// Die eingetragene Startzeit („06:10") — null ohne.
   String? get start => zeitAus(erfasst?.start ?? entwurf?.start);

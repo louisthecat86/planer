@@ -608,4 +608,51 @@ void main() {
     expect(text(4), '09:00');
     expect(text(5), matches(RegExp(r'^\d\d:\d\d$')));
   });
+
+  testWidgets('Rechnen in den Mengenfeldern: nur das Ergebnis zählt',
+      (tester) async {
+    final m = modell();
+    final plan = m.stand.paket!.produktionen.first;
+    await zeige(
+      tester,
+      ErfassenSeite(modell: m, geplant: plan),
+      groesse: const Size(360, 2200),
+    );
+    final felder = find.byType(TextField);
+    TextEditingController feld(int i) =>
+        tester.widget<TextField>(felder.at(i)).controller!;
+
+    // Die Tasten erscheinen, sobald das Feld den Cursor hat.
+    expect(find.byKey(const ValueKey('rechnen-roh-mal')), findsNothing);
+    await tester.enterText(felder.at(0), '270');
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('rechnen-roh-mal')));
+    await tester.pump();
+    expect(feld(0).text, '270×');
+    expect(find.text('Rechnung noch nicht vollständig'), findsOneWidget);
+
+    await tester.enterText(felder.at(0), '270×10');
+    await tester.pump();
+    expect(find.text('= 2.700 kg'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('rechnen-roh-gleich')));
+    await tester.pump();
+    expect(feld(0).text, '2700');
+
+    // Wechselt der Cursor ins nächste Feld, wird ausgerechnet.
+    await tester.enterText(felder.at(2), '2700/3*2');
+    await tester.pump();
+    await tester.enterText(felder.at(1), '1500+700');
+    await tester.pump();
+    expect(feld(2).text, '1800');
+    expect(find.text('= 2.200 kg'), findsOneWidget);
+
+    // Gespeichert wird das Ergebnis — auch aus einem Feld, das noch die
+    // Rechnung zeigt.
+    await tester.tap(find.byKey(const ValueKey('produktion-erfassen')));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final e = m.stand.produktionen[plan.id]!;
+    expect((e.rohKg, e.fleischKg, e.fertigKg), (2700.0, 2200.0, 1800.0));
+  });
 }

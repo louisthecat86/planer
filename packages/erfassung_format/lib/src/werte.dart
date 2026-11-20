@@ -11,6 +11,115 @@ double? zahlAus(String? text) {
   return double.tryParse(t);
 }
 
+/// Die Rechenzeichen, die [rechneAus] kennt — mal auch als „x" und „×",
+/// geteilt auch als „:" und „÷", minus auch als „−".
+const String kRechenzeichen = '+-−*x×X/:÷()';
+
+/// Ob [text] eine Rechnung ist und nicht nur eine Zahl — ein Minus ganz
+/// vorn zählt nicht.
+bool istRechnung(String? text) {
+  final t = text?.trim() ?? '';
+  if (t.isEmpty) return false;
+  final rest = t.startsWith('-') || t.startsWith('−') ? t.substring(1) : t;
+  return rest.split('').any(kRechenzeichen.contains);
+}
+
+/// Rechnet [text] aus: „270*10" → 2700, „270 x 10 + 35,5" → 2735,5,
+/// „(270+250)*4" → 2080. Punkt vor Strich, Klammern gehen. Ein Komma oder
+/// ein Punkt trennt die Nachkommastellen — wie bei [zahlAus]. Ohne
+/// Rechenzeichen ist es [zahlAus].
+///
+/// null, wenn es keine vollständige Rechnung ist („270*", „270**10"),
+/// durch null geteilt wird oder etwas anderes darin steht.
+double? rechneAus(String? text) {
+  final t = text?.trim() ?? '';
+  if (t.isEmpty) return null;
+  if (!istRechnung(t)) return zahlAus(t);
+  final r = _Rechner(t.replaceAll(' ', ''));
+  try {
+    final wert = r.summe();
+    if (r.pos != r.text.length || !wert.isFinite) return null;
+    return wert;
+  } on FormatException {
+    return null;
+  }
+}
+
+/// Liest eine Rechnung von links nach rechts: Summe aus Produkten aus
+/// Zahlen oder Klammern.
+class _Rechner {
+  _Rechner(this.text);
+
+  final String text;
+  int pos = 0;
+
+  String? get _zeichen => pos < text.length ? text[pos] : null;
+
+  double summe() {
+    var wert = produkt();
+    while (true) {
+      final z = _zeichen;
+      if (z == '+') {
+        pos++;
+        wert += produkt();
+      } else if (z == '-' || z == '−') {
+        pos++;
+        wert -= produkt();
+      } else {
+        return wert;
+      }
+    }
+  }
+
+  double produkt() {
+    var wert = faktor();
+    while (true) {
+      final z = _zeichen;
+      if (z == '*' || z == 'x' || z == 'X' || z == '×') {
+        pos++;
+        wert *= faktor();
+      } else if (z == '/' || z == ':' || z == '÷') {
+        pos++;
+        final teiler = faktor();
+        if (teiler == 0) throw const FormatException('durch null');
+        wert /= teiler;
+      } else {
+        return wert;
+      }
+    }
+  }
+
+  double faktor() {
+    final z = _zeichen;
+    if (z == '-' || z == '−') {
+      pos++;
+      return -faktor();
+    }
+    if (z == '(') {
+      pos++;
+      final wert = summe();
+      if (_zeichen != ')') throw const FormatException('Klammer fehlt');
+      pos++;
+      return wert;
+    }
+    final start = pos;
+    var trenner = false;
+    while (pos < text.length) {
+      final c = text[pos];
+      if (c == ',' || c == '.') {
+        if (trenner) throw const FormatException('zwei Kommas');
+        trenner = true;
+      } else if (c.codeUnitAt(0) < 0x30 || c.codeUnitAt(0) > 0x39) {
+        break;
+      }
+      pos++;
+    }
+    final zahl = zahlAus(text.substring(start, pos));
+    if (zahl == null) throw const FormatException('keine Zahl');
+    return zahl;
+  }
+}
+
 /// „1.250", „12,5" — ganze Zahlen ohne Nachkommastellen, sonst mit
 /// [nachkomma] Stellen.
 String zahlText(double wert, {int nachkomma = 1}) {

@@ -601,7 +601,9 @@ Berechtigung fürs Internet.
    in der Erfassung, und eine laufende Karte trägt „fertig gegen …".
    **„Fertig"** öffnet die Erfassung mit
    der Uhrzeit im ersten noch leeren Ende — eingetragen werden Rohware,
-   davon Fleisch, Fertigware, Start, **Ende Auflegen** und **Ende VPK**
+   davon Fleisch, Fertigware (in den Mengenfeldern lässt sich rechnen:
+   „270×10" ergibt 2.700 — die Tasten × + − ÷ = stehen unter dem Feld,
+   gemerkt wird nur das Ergebnis), Start, **Ende Auflegen** und **Ende VPK**
    („Jetzt" übernimmt die Uhrzeit des Handys; Leistung und Produktionszeit
    zählen von Start bis Ende Auflegen, Ende VPK steht in der Historie),
    Bemerkung und Kürzel; Ausbeute, Verlust, Dauer und kg/h rechnet die App

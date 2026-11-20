@@ -161,9 +161,9 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
         artikel: _artikelName,
         datum: _datum,
         geaendertAm: DateTime.now(),
-        roh: _roh.text.trim(),
-        fleisch: _fleisch.text.trim(),
-        fertig: _fertig.text.trim(),
+        roh: _mengeText(_roh),
+        fleisch: _mengeText(_fleisch),
+        fertig: _mengeText(_fertig),
         start: _start.text.trim(),
         ende: _ende.text.trim(),
         endeVpk: _endeVpk.text.trim(),
@@ -217,9 +217,20 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
 
   /// Die Zahl im Feld — null bei leer; [ungueltig] meldet Text, der
   /// keine Zahl ist.
+  /// Was von einem Mengenfeld gemerkt wird: bei einer Rechnung ihr
+  /// Ergebnis, sonst der Text.
+  static String _mengeText(TextEditingController c) {
+    final t = c.text.trim();
+    if (!istRechnung(t)) return t;
+    final wert = rechneAus(t);
+    return wert == null ? t : eingabeText(wert);
+  }
+
   double? _lies(TextEditingController c, void Function() ungueltig) {
     if (c.text.trim().isEmpty) return null;
-    final z = zahlAus(c.text);
+    // Auch eine Rechnung, die noch nicht ersetzt ist — gespeichert wird
+    // ihr Ergebnis.
+    final z = rechneAus(c.text);
     if (z == null || z < 0) ungueltig();
     return z;
   }
@@ -237,7 +248,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
   /// Rohware, sonst der geplanten.
   Prognose _prognose(PaketProduktion? plan) => widget.modell.stand.prognose(
         artikelId: _artikelId,
-        kg: zahlAus(_roh.text) ?? plan?.rohKg,
+        kg: rechneAus(_roh.text) ?? plan?.rohKg,
         start: _start.text,
       );
 
@@ -474,6 +485,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                       _MengenFeld(
                         controller: _roh,
                         label: 'Rohware (kg) *',
+                        kennung: 'roh',
                         plan: plan?.rohKg,
                         onChanged: () => setState(() => _fehler = null),
                       ),
@@ -481,6 +493,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                       _MengenFeld(
                         controller: _fleisch,
                         label: 'davon Fleisch (kg)',
+                        kennung: 'fleisch',
                         plan: plan?.fleischKg,
                         onChanged: () => setState(() => _fehler = null),
                       ),
@@ -488,6 +501,7 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                       _MengenFeld(
                         controller: _fertig,
                         label: 'Fertigware (kg)',
+                        kennung: 'fertig',
                         plan: plan?.fertigKg,
                         autofocus: widget.fertigMelden,
                         hervorheben: widget.fertigMelden,
@@ -737,10 +751,11 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
 
 /// Ein Mengenfeld mit Zahlentastatur — der Plan steht darunter und lässt
 /// sich mit einem Tipp übernehmen.
-class _MengenFeld extends StatelessWidget {
+class _MengenFeld extends StatefulWidget {
   const _MengenFeld({
     required this.controller,
     required this.label,
+    required this.kennung,
     required this.onChanged,
     this.plan,
     this.autofocus = false,
@@ -749,6 +764,9 @@ class _MengenFeld extends StatelessWidget {
 
   final TextEditingController controller;
   final String label;
+
+  /// Für die Schlüssel der Rechentasten: `rechnen-<kennung>-…`.
+  final String kennung;
   final double? plan;
   final VoidCallback onChanged;
   final bool autofocus;
@@ -757,36 +775,176 @@ class _MengenFeld extends StatelessWidget {
   final bool hervorheben;
 
   @override
+  State<_MengenFeld> createState() => _MengenFeldState();
+}
+
+/// Rechnen im Feld: „270*10" zeigt darunter „= 2.700 kg". Beim Verlassen
+/// des Feldes oder mit „=" steht nur noch das Ergebnis da — gespeichert
+/// wird nie die Rechnung.
+class _MengenFeldState extends State<_MengenFeld> {
+  final _fokus = FocusNode();
+
+  TextEditingController get _c => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _fokus.addListener(_fokusGeaendert);
+  }
+
+  @override
+  void dispose() {
+    _fokus
+      ..removeListener(_fokusGeaendert)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _fokusGeaendert() {
+    if (!_fokus.hasFocus) _ausrechnen();
+    if (mounted) setState(() {});
+  }
+
+  /// Ersetzt eine Rechnung durch ihr Ergebnis. Eine unvollständige bleibt
+  /// stehen — das Speichern sagt dann, dass es keine Zahl ist.
+  void _ausrechnen() {
+    if (!istRechnung(_c.text)) return;
+    final wert = rechneAus(_c.text);
+    if (wert == null) return;
+    _c.value = TextEditingValue(
+      text: eingabeText(wert),
+      selection: TextSelection.collapsed(offset: eingabeText(wert).length),
+    );
+    widget.onChanged();
+  }
+
+  /// Setzt [zeichen] an die Stelle des Cursors.
+  void _einfuegen(String zeichen) {
+    final v = _c.value;
+    final sel = v.selection.isValid
+        ? v.selection
+        : TextSelection.collapsed(offset: v.text.length);
+    final text = v.text.replaceRange(sel.start, sel.end, zeichen);
+    _c.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: sel.start + zeichen.length),
+    );
+    widget.onChanged();
+    setState(() {});
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final p = plan;
-    final f = Theme.of(context).colorScheme;
-    return TextField(
-      controller: controller,
-      autofocus: autofocus,
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9.,]'))],
-      textInputAction: TextInputAction.next,
-      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-      decoration: InputDecoration(
-        labelText: label,
-        enabledBorder: hervorheben
-            ? OutlineInputBorder(
-                borderRadius: Masse.eckenKlein,
-                borderSide: BorderSide(color: f.primary, width: 1.5),
-              )
-            : null,
-        helperText: p == null ? null : 'geplant ${zahlText(p)} kg',
-        suffixIcon: p == null
-            ? null
-            : TextButton(
-                onPressed: () {
-                  controller.text = eingabeText(p);
-                  onChanged();
-                },
-                child: const Text('Plan'),
+    final p = widget.plan;
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    final farben = Farben.von(context);
+    final rechnung = istRechnung(_c.text);
+    final ergebnis = rechnung ? rechneAus(_c.text) : null;
+    final String? hilfe;
+    final Color? hilfeFarbe;
+    if (rechnung && ergebnis != null) {
+      hilfe = '= ${zahlText(ergebnis, nachkomma: 2)} kg';
+      hilfeFarbe = farben.ok;
+    } else if (rechnung) {
+      hilfe = 'Rechnung noch nicht vollständig';
+      hilfeFarbe = farben.warnung;
+    } else {
+      hilfe = p == null ? null : 'geplant ${zahlText(p)} kg';
+      hilfeFarbe = null;
+    }
+
+    Widget taste(String zeichen, String name, {String? anzeige}) => Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: FilledButton.tonal(
+              key: ValueKey('rechnen-${widget.kennung}-$name'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(0, 46),
+                padding: EdgeInsets.zero,
+                textStyle: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
+              onPressed: zeichen == '='
+                  ? () {
+                      _ausrechnen();
+                      setState(() {});
+                    }
+                  : () => _einfuegen(zeichen),
+              child: Text(anzeige ?? zeichen),
+            ),
+          ),
+        );
+
+    // Die Tasten zählen als Teil des Feldes: Antippen nimmt ihm den Cursor
+    // nicht.
+    return TextFieldTapRegion(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _c,
+            focusNode: _fokus,
+            autofocus: widget.autofocus,
+            keyboardType: const TextInputType.numberWithOptions(
+              decimal: true,
+              signed: true,
+            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(
+                RegExp(r'[0-9.,+\-−*x×X/:÷() ]'),
+              ),
+            ],
+            textInputAction: TextInputAction.next,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+            decoration: InputDecoration(
+              labelText: widget.label,
+              enabledBorder: widget.hervorheben
+                  ? OutlineInputBorder(
+                      borderRadius: Masse.eckenKlein,
+                      borderSide: BorderSide(color: f.primary, width: 1.5),
+                    )
+                  : null,
+              helperText: hilfe,
+              helperStyle: hilfeFarbe == null
+                  ? null
+                  : theme.textTheme.bodyMedium?.copyWith(
+                      color: hilfeFarbe,
+                      fontWeight: FontWeight.w700,
+                    ),
+              suffixIcon: p == null
+                  ? null
+                  : TextButton(
+                      onPressed: () {
+                        _c.text = eingabeText(p);
+                        widget.onChanged();
+                      },
+                      child: const Text('Plan'),
+                    ),
+            ),
+            onChanged: (_) {
+              widget.onChanged();
+              setState(() {});
+            },
+            onSubmitted: (_) => _ausrechnen(),
+          ),
+          if (_fokus.hasFocus)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                children: [
+                  taste('×', 'mal'),
+                  taste('+', 'plus'),
+                  taste('−', 'minus'),
+                  taste('/', 'geteilt', anzeige: '÷'),
+                  taste('=', 'gleich'),
+                ],
+              ),
+            ),
+        ],
       ),
-      onChanged: (_) => onChanged(),
     );
   }
 }
