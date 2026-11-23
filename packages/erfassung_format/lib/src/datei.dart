@@ -32,7 +32,10 @@ enum DateiArt {
   paket('paket'),
 
   /// Vom Handy zurück an den Planer.
-  ergebnis('ergebnis');
+  ergebnis('ergebnis'),
+
+  /// Vom Handy zurück, verschlüsselt (ergebnis_schutz.dart).
+  ergebnisGeschuetzt('ergebnis-geschuetzt');
 
   const DateiArt(this.schluessel);
 
@@ -72,7 +75,7 @@ JsonObjekt dateiLesen(String text, DateiArt erwartet) {
   final art = daten['art'];
   if (art != erwartet.schluessel) {
     throw FormatFehler(
-      erwartet == DateiArt.paket
+      erwartet == DateiArt.paket || art != DateiArt.paket.schluessel
           ? 'Das ist ein Ergebnis vom Handy — es gehört in den Planer '
               '(Einstellungen → Handy-Erfassung → Ergebnis einlesen).'
           : 'Das ist ein Paket für das Handy, kein Ergebnis — es gehört '

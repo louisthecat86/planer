@@ -546,6 +546,11 @@ void main() {
       find.byKey(const ValueKey('ergebnis-speichern')),
     );
     expect(knopf.onPressed, isNotNull);
+    final mail = tester.widget<ButtonStyleButton>(
+      find.byKey(const ValueKey('ergebnis-mailen')),
+    );
+    expect(mail.onPressed, isNotNull);
+    expect(find.text('E-Mail-Adresse eintragen'), findsOneWidget);
   });
 
   testWidgets('„Jetzt" am Start: ohne Erfahrung sagt die App, warum',

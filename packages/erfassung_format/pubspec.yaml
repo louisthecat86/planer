@@ -8,3 +8,8 @@ publish_to: none
 
 environment:
   sdk: ^3.5.0
+
+dependencies:
+  # Verschlüsselt das Ergebnis (ergebnis_schutz.dart) — dieselbe
+  # Bibliothek, mit der der Planer seine Entwicklungsdaten schützt.
+  pointycastle: ^4.0.0

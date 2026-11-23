@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Was die App an andere Apps weitergeben darf: nur den Anhang für die
+     E-Mail an den PC (Zwischenspeicher, Ordner „ergebnis"). -->
+<paths>
+    <cache-path name="ergebnis" path="ergebnis/" />
+</paths>

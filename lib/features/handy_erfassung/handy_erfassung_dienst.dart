@@ -12,6 +12,7 @@ import '../../core/database/database.dart';
 import '../../core/services/artikel_fotos.dart';
 import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/services/prozesskette_service.dart';
+import '../../core/utils/krypto.dart';
 import '../entwicklung/daten/dateien.dart';
 import '../erfassung/geplante_produktion.dart';
 import '../whiteboard/whiteboard_provider.dart' show leistungAusProduktionen;
@@ -41,13 +42,59 @@ const int kErgebnisImHintergrundAb = 512 * 1024;
 /// Isolate geht, nimmt alles mit, was im selben Rahmen steht. In der Seite
 /// war das die Seite selbst — und die lässt sich nicht verschicken; das
 /// Einlesen jeder Datei über [kErgebnisImHintergrundAb] schlug so fehl.
-Future<ErfassungsErgebnis> ergebnisLesen(Uint8List bytes) async =>
-    bytes.length < kErgebnisImHintergrundAb
-        ? _ergebnisAus(bytes)
-        : Isolate.run(() => _ergebnisAus(bytes));
+///
+/// Ist das Ergebnis verschlüsselt, liefert [schluesselFuer] den Schlüssel
+/// zur Paket-ID ([HandyErfassungDienst.ergebnisSchluessel]).
+Future<ErfassungsErgebnis> ergebnisLesen(
+  Uint8List bytes, {
+  Future<List<int>?> Function(String paketId)? schluesselFuer,
+}) async {
+  final gross = bytes.length >= kErgebnisImHintergrundAb;
+  final (offen, geschuetzt) = await _oeffnen(bytes, gross);
+  if (offen != null) return offen;
+  final schluessel = await schluesselFuer?.call(geschuetzt!.paketId);
+  if (schluessel == null) {
+    throw const FormatFehler(
+      'Das Ergebnis ist verschlüsselt, aber dieser Planer hat noch keinen '
+      'Schlüssel — es gehört zu einem Paket eines anderen Planers.',
+    );
+  }
+  return _entschluesseln(geschuetzt!, schluessel, gross);
+}
 
-ErfassungsErgebnis _ergebnisAus(Uint8List bytes) =>
-    ErfassungsErgebnis.ausText(utf8.decode(bytes, allowMalformed: true));
+// Eigene Funktionen für das, was aufs andere Isolate geht: So nimmt es
+// nur seine Argumente mit, nicht den Rahmen von [ergebnisLesen] mit
+// dessen Rückruf in die Datenbank.
+
+Future<(ErfassungsErgebnis?, GeschuetztesErgebnis?)> _oeffnen(
+  Uint8List bytes,
+  bool gross,
+) =>
+    gross
+        ? Isolate.run(() => _oeffnenSofort(bytes))
+        : Future.sync(() => _oeffnenSofort(bytes));
+
+(ErfassungsErgebnis?, GeschuetztesErgebnis?) _oeffnenSofort(Uint8List bytes) {
+  final text = utf8.decode(bytes, allowMalformed: true);
+  final g = geschuetztesErgebnis(text);
+  if (g != null) return (null, g);
+  return (ErfassungsErgebnis.ausText(text), null);
+}
+
+Future<ErfassungsErgebnis> _entschluesseln(
+  GeschuetztesErgebnis g,
+  List<int> schluessel,
+  bool gross,
+) =>
+    gross
+        ? Isolate.run(() => ergebnisEntschluesseln(g, schluessel))
+        : Future.sync(() => ergebnisEntschluesseln(g, schluessel));
+
+/// Unter diesem Schlüssel steht in app_settings das Geheimnis, aus dem
+/// der Planer für jedes Paket den Schlüssel des Ergebnisses ableitet. Es
+/// verlässt den PC nie (nur mit dem Backup); nach außen geht je Paket nur
+/// der abgeleitete Schlüssel.
+const String kErgebnisGeheimnis = 'handy_ergebnis_geheimnis';
 
 String steckbriefSchluessel(String parameterName) =>
     's:${parameterName.trim().toLowerCase()}';
@@ -349,6 +396,37 @@ class HandyErfassungDienst {
 
   // ── Paket ───────────────────────────────────────────────────────────
 
+  /// Der Schlüssel, mit dem die App das Ergebnis zum Paket [paketId]
+  /// verschlüsselt: HMAC-SHA256 aus dem Geheimnis dieses Planers und der
+  /// Paket-ID. Ohne Geheimnis null — mit [anlegen] wird es dann erzeugt.
+  Future<Uint8List?> ergebnisSchluessel(
+    String paketId, {
+    bool anlegen = false,
+  }) async {
+    final zeile = await (_db.select(_db.appSettings)
+          ..where((s) => s.key.equals(kErgebnisGeheimnis)))
+        .getSingleOrNull();
+    Uint8List? geheimnis;
+    if (zeile != null) {
+      try {
+        geheimnis = base64Decode(zeile.value);
+      } on FormatException {
+        geheimnis = null;
+      }
+    }
+    if (geheimnis == null || geheimnis.length != kSchluesselLaenge) {
+      if (!anlegen) return null;
+      geheimnis = zufallsBytes(kSchluesselLaenge);
+      await _db.into(_db.appSettings).insertOnConflictUpdate(
+            AppSettingsCompanion.insert(
+              key: kErgebnisGeheimnis,
+              value: base64Encode(geheimnis),
+            ),
+          );
+    }
+    return hmacSha256(geheimnis, utf8.encode('ergebnis:$paketId'));
+  }
+
   /// Das Paket fürs Handy: die noch nicht erfassten Produktionen von
   /// [von] bis einschließlich [bis] und die Maschineneinstellungen aller
   /// Artikel mit Prozesskette — mit [nurGeplante] nur die der geplanten
@@ -372,8 +450,12 @@ class HandyErfassungDienst {
         for (final g in liste) g.task.productId,
     };
     bool mit(String artikelId) => !nurGeplante || ids.contains(artikelId);
+    final id = const Uuid().v4();
     return ErfassungsPaket(
-      id: const Uuid().v4(),
+      id: id,
+      ergebnisSchluessel: base64Encode(
+        (await ergebnisSchluessel(id, anlegen: true))!,
+      ),
       erstellt: jetzt ?? DateTime.now(),
       von: erster,
       bis: letzter,

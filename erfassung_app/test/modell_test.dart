@@ -146,6 +146,37 @@ void main() {
     expect(fotoDateien(), isEmpty);
   });
 
+  test('mit Schlüssel im Paket geht das Ergebnis verschlüsselt', () async {
+    final schluessel = List.generate(32, (i) => i);
+    final m = modell();
+    await m.paketOeffnen(
+      beispielPaket(ergebnisSchluessel: base64Encode(schluessel)),
+    );
+    kamera.naechstes = bildA;
+    await m.fotoAufnehmen(bezeichnung: 'Pfeffer grob');
+
+    final datei = (await m.ergebnisDatei(DateTime(2026, 11, 10, 18)))!;
+    expect(datei.geschuetzt, isTrue);
+    final text = utf8.decode(datei.bytes);
+    expect(text.contains('Pfeffer'), isFalse);
+    final offen =
+        ergebnisEntschluesseln(geschuetztesErgebnis(text)!, schluessel);
+    expect(offen.fotos.single.bezeichnung, 'Pfeffer grob');
+    expect(offen.fotos.single.daten, bildA);
+
+    // Ohne Schlüssel im Paket wie bisher offen.
+    final ohne = modell();
+    await ohne.paketOeffnen(beispielPaket());
+    kamera.naechstes = bildB;
+    await ohne.fotoAufnehmen(bezeichnung: 'M');
+    final offenDatei = (await ohne.ergebnisDatei(DateTime(2026, 11, 10)))!;
+    expect(offenDatei.geschuetzt, isFalse);
+    expect(
+      ErfassungsErgebnis.ausText(utf8.decode(offenDatei.bytes)).fotos,
+      hasLength(1),
+    );
+  });
+
   test('das Ergebnis trägt die Bilder; ein fehlendes wird gezählt', () async {
     final m = modell();
     await m.paketOeffnen(beispielPaket());
@@ -190,8 +221,11 @@ void main() {
 
     kamera.naechstes = bildA;
     await m.fotoAufnehmen(bezeichnung: 'drei');
+    await m.mailAnSetzen(' pc@example.org ');
     await m.leeren();
     expect(fotoDateien(), isEmpty);
+    expect(m.stand.mailAn, 'pc@example.org');
+    expect(m.stand.kuerzel, 'AB');
   });
 
   test(

@@ -226,6 +226,7 @@ class Erfassungsstand {
   Erfassungsstand({
     this.paket,
     this.kuerzel = '',
+    this.mailAn = '',
     Map<String, ErfassteProduktion>? produktionen,
     Map<String, ProduktionsEntwurf>? entwuerfe,
     Map<String, GeaenderterWert>? werte,
@@ -248,6 +249,10 @@ class Erfassungsstand {
 
   /// Wer erfasst.
   String kuerzel;
+
+  /// An welche E-Mail-Adresse das Ergebnis geht — leer: noch keine.
+  /// Bleibt wie das Kürzel über ein neues Paket hinaus.
+  String mailAn;
 
   /// Die erfassten Produktionen nach ihrer ID im Paket (frei erfasste:
   /// eine eigene).
@@ -877,6 +882,7 @@ class Erfassungsstand {
 
   String alsText() => jsonEncode({
         'kuerzel': kuerzel,
+        if (mailAn.isNotEmpty) 'mailAn': mailAn,
         if (zuletzt.isNotEmpty) 'zuletzt': zuletzt,
         if (paket != null) 'paket': paket!.toJson(),
         'produktionen': [for (final e in produktionen.values) e.toJson()],
@@ -936,6 +942,7 @@ class Erfassungsstand {
       return Erfassungsstand(
         paket: paket == null ? null : ErfassungsPaket.ausJson(paket),
         kuerzel: jsonTextOder(j, 'kuerzel') ?? '',
+        mailAn: jsonTextOder(j, 'mailAn') ?? '',
         zuletzt: zuletzt is List ? [...zuletzt.whereType<String>()] : null,
         produktionen: {for (final e in produktionen) e.produktionId: e},
         entwuerfe: {for (final e in entwuerfe) e.produktionId: e},

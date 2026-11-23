@@ -67,3 +67,9 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // FileProvider: gibt das Ergebnis als Anhang an die E-Mail-App weiter
+    // (MainActivity.perMail).
+    implementation("androidx.core:core-ktx:1.13.1")
+}

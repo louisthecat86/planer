@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:erfassung/modell.dart' show istMailAdresse;
 import 'package:erfassung/stand.dart';
 import 'package:erfassung_format/erfassung_format.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -174,6 +175,25 @@ void main() {
       expect(e.start, '0610');
       expect(e.ende, '');
       expect(e.bemerkung, 'Charge 2');
+    });
+
+    test('die E-Mail-Adresse übersteht Schließen und neues Paket', () {
+      final s = Erfassungsstand(kuerzel: 'AB', mailAn: 'pc@example.org')
+        ..paketOeffnen(beispielPaket());
+      final wieder = Erfassungsstand.ausText(s.alsText());
+      expect(wieder.mailAn, 'pc@example.org');
+      wieder.paketOeffnen(beispielPaket(id: 'paket-2'));
+      expect(wieder.mailAn, 'pc@example.org');
+      // Ältere Stände kennen sie nicht.
+      expect(Erfassungsstand.ausText('{"kuerzel":"AB"}').mailAn, '');
+    });
+
+    test('was als E-Mail-Adresse durchgeht', () {
+      expect(istMailAdresse('pc@example.org'), isTrue);
+      expect(istMailAdresse(' pc@example.org '), isTrue);
+      for (final t in ['', 'pc', 'pc@', 'pc@example', 'a b@example.org']) {
+        expect(istMailAdresse(t), isFalse, reason: t);
+      }
     });
 
     test('ein Stand von früher kennt keine Entwürfe', () {

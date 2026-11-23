@@ -19,6 +19,7 @@ library;
 
 export 'src/datei.dart';
 export 'src/ergebnis.dart';
+export 'src/ergebnis_schutz.dart';
 export 'src/foto.dart';
 export 'src/grenze.dart';
 export 'src/paket.dart';

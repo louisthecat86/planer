@@ -6,9 +6,11 @@ import 'package:erfassung_format/erfassung_format.dart';
 ErfassungsPaket beispielPaket({
   String id = 'paket-1',
   bool mitKatalog = true,
+  String? ergebnisSchluessel,
 }) =>
     ErfassungsPaket(
       id: id,
+      ergebnisSchluessel: ergebnisSchluessel,
       erstellt: DateTime(2026, 11, 9, 17, 45),
       von: DateTime(2026, 11, 9),
       bis: DateTime(2026, 11, 15),

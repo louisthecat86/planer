@@ -1,4 +1,8 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'datei.dart';
+import 'ergebnis_schutz.dart' show kErgebnisSchluesselLaenge;
 import 'grenze.dart';
 import 'werte.dart';
 
@@ -16,6 +20,7 @@ class ErfassungsPaket {
     this.artikel = const [],
     this.maschinen = const [],
     this.erfahrungen = const [],
+    this.ergebnisSchluessel,
   });
 
   /// Kennung — das Ergebnis nennt sie, damit der Planer weiß, auf welchen
@@ -37,6 +42,23 @@ class ErfassungsPaket {
   /// welche mit Menge und Zeit erfasst sind. Leer in einem Paket aus einem
   /// älteren Planer.
   final List<PaketErfahrung> erfahrungen;
+
+  /// Mit diesem Schlüssel verschlüsselt die App das Ergebnis
+  /// (ergebnis_schutz.dart) — Base64, null in einem Paket aus einem
+  /// älteren Planer: Dann geht das Ergebnis offen zurück.
+  final String? ergebnisSchluessel;
+
+  /// [ergebnisSchluessel] als Bytes — null ohne oder wenn er nicht passt.
+  Uint8List? get ergebnisSchluesselBytes {
+    final s = ergebnisSchluessel;
+    if (s == null) return null;
+    try {
+      final b = base64Decode(s);
+      return b.length == kErgebnisSchluesselLaenge ? b : null;
+    } on FormatException {
+      return null;
+    }
+  }
 
   /// Die Erfahrung für den Artikel [artikelId] — null ohne.
   PaketErfahrung? erfahrungFuer(String artikelId) {
@@ -77,6 +99,8 @@ class ErfassungsPaket {
           'maschinen': [for (final m in maschinen) m.toJson()],
         if (erfahrungen.isNotEmpty)
           'erfahrungen': [for (final e in erfahrungen) e.toJson()],
+        if (ergebnisSchluessel != null)
+          'ergebnisSchluessel': ergebnisSchluessel,
       };
 
   /// Die Datei als Text.
@@ -107,6 +131,7 @@ class ErfassungsPaket {
         for (final e in jsonListe(j, 'erfahrungen', wo))
           PaketErfahrung.ausJson(e),
       ],
+      ergebnisSchluessel: jsonTextOder(j, 'ergebnisSchluessel'),
     );
   }
 }

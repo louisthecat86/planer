@@ -24,6 +24,7 @@ import '../articles/article_detail_providers.dart'
 import '../entwicklung/daten/datei_typen.dart' show groesseText;
 import '../erfassung/produktion_erfassung_screen.dart'
     show erfassungWocheDatenProvider;
+import 'ergebnis_suche.dart';
 import 'handy_erfassung_dienst.dart';
 import 'qr_senden.dart';
 
@@ -71,6 +72,40 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   final _werte = <WertVorschau>{};
   final _fotos = <FotoVorschau>{};
   final _schritte = <SchrittVorschau>{};
+
+  /// Ein neues Ergebnis im Download-Ordner — etwa der gespeicherte Anhang
+  /// der E-Mail vom Handy.
+  GefundenesErgebnis? _gefunden;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_suchen());
+  }
+
+  Future<void> _suchen() async {
+    final gefunden = await ergebnisInDownloads();
+    if (mounted) setState(() => _gefunden = gefunden);
+  }
+
+  Future<void> _gefundenesLesen(GefundenesErgebnis g) async {
+    setState(() {
+      _arbeitet = true;
+      _meldung = null;
+    });
+    final Uint8List bytes;
+    try {
+      bytes = await File(g.pfad).readAsBytes();
+    } catch (e) {
+      _melde(
+        'Die Datei ließ sich nicht lesen: ${fehlerText(e)}',
+        fehler: true,
+      );
+      unawaited(_suchen());
+      return;
+    }
+    await _ergebnisLesen(bytes);
+  }
 
   static DateTime get _montag {
     final heute = tagOhneZeit(DateTime.now());
@@ -219,9 +254,12 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   /// Meldet selbst, wenn das nicht geht.
   Future<void> _ergebnisLesen(Uint8List bytes) async {
     try {
-      final ergebnis = await ergebnisLesen(bytes);
-      final vorschau = await HandyErfassungDienst(ref.read(databaseProvider))
-          .vorschau(ergebnis);
+      final dienst = HandyErfassungDienst(ref.read(databaseProvider));
+      final ergebnis = await ergebnisLesen(
+        bytes,
+        schluesselFuer: dienst.ergebnisSchluessel,
+      );
+      final vorschau = await dienst.vorschau(ergebnis);
       if (!mounted) return;
       setState(() {
         _arbeitet = false;
@@ -269,6 +307,8 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
         ..invalidate(stepParametersProvider)
         ..invalidate(productStepsProvider)
         ..invalidate(erfassungWocheDatenProvider);
+      await ergebnisUebernommen(vorschau.ergebnis.erstellt);
+      unawaited(_suchen());
       if (!mounted) return;
       final muster = _fotos
           .where((f) => f.moeglich && f.foto.art == FotoArt.muster)
@@ -332,23 +372,9 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
                       const SizedBox(height: 12),
                     ],
                     if (vorschau == null) ...[
-                      _paketBereich(context),
+                      _zeitraumBereich(context),
                       const SizedBox(height: 12),
-                      Bereich(
-                        titel: '2 · Ergebnis vom Handy einlesen',
-                        icon: Icons.download_outlined,
-                        untertitel: 'wählen oder aufs Fenster ziehen — vor dem '
-                            'Übernehmen siehst du, was sich ändert',
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: FilledButton.tonalIcon(
-                            key: const ValueKey('handy-ergebnis'),
-                            onPressed: _arbeitet ? null : _ergebnisWaehlen,
-                            icon: const Icon(Icons.folder_open, size: 18),
-                            label: const Text('Ergebnis-Datei wählen …'),
-                          ),
-                        ),
-                      ),
+                      _kacheln(context),
                       const SizedBox(height: 12),
                       const _Anleitung(),
                     ] else
@@ -363,87 +389,155 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     );
   }
 
-  Widget _paketBereich(BuildContext context) {
+  Widget _zeitraumBereich(BuildContext context) {
     final theme = Theme.of(context);
     final (von, bis) = _tage;
     return Bereich(
-      titel: '1 · Datei fürs Handy erstellen',
-      icon: Icons.phone_android,
-      untertitel: 'geplante Produktionen und die Maschineneinstellungen '
-          'aller Artikel',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      titel: 'Welche Produktionen aufs Handy?',
+      icon: Icons.date_range_outlined,
+      untertitel: 'für QR-Code und Datei',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final z in _Zeitraum.values)
-                ChoiceChip(
-                  label: Text(z.label),
-                  selected: _zeitraum == z,
-                  onSelected: (_) => setState(() => _zeitraum = z),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          if (_zeitraum == _Zeitraum.frei)
-            Wrap(
-              spacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                OutlinedButton(
-                  onPressed: () => _tagWaehlen(von: true),
-                  child: Text('von ${Format.datum(_von)}'),
-                ),
-                OutlinedButton(
-                  onPressed: () => _tagWaehlen(von: false),
-                  child: Text('bis ${Format.datum(_bis)}'),
-                ),
-              ],
-            )
-          else
+          for (final z in _Zeitraum.values)
+            ChoiceChip(
+              label: Text(z.label),
+              selected: _zeitraum == z,
+              onSelected: (_) => setState(() => _zeitraum = z),
+            ),
+          const SizedBox(width: 8),
+          if (_zeitraum == _Zeitraum.frei) ...[
+            OutlinedButton(
+              onPressed: () => _tagWaehlen(von: true),
+              child: Text('von ${Format.datum(_von)}'),
+            ),
+            OutlinedButton(
+              onPressed: () => _tagWaehlen(von: false),
+              child: Text('bis ${Format.datum(_bis)}'),
+            ),
+          ] else
             Text(
-              'Produktionen vom ${Format.datum(von)} bis ${Format.datum(bis)}',
-              style: theme.textTheme.bodySmall?.copyWith(
+              '${Format.datum(von)} bis ${Format.datum(bis)}',
+              style: theme.textTheme.bodyMedium?.copyWith(
                 color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                key: const ValueKey('handy-paket'),
-                onPressed: _arbeitet ? null : _paketErstellen,
-                icon: const Icon(Icons.save_alt, size: 18),
-                label: const Text('Datei erstellen …'),
-              ),
-              OutlinedButton.icon(
-                key: const ValueKey('handy-qr'),
-                onPressed: _arbeitet ? null : _qrSenden,
-                icon: const Icon(Icons.qr_code_2, size: 18),
-                label: const Text('Per QR-Code aufs Handy …'),
-              ),
-            ],
-          ),
-          CheckboxListTile(
-            key: const ValueKey('handy-qr-alle'),
-            contentPadding: EdgeInsets.zero,
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            value: _qrAlleArtikel,
-            onChanged: (v) => setState(() => _qrAlleArtikel = v ?? false),
-            title: const Text('Per QR-Code alle Artikel mitschicken'),
-            subtitle: const Text(
-              'Sonst nur die Artikel der geplanten Produktionen — das geht '
-              'in Sekunden. Die Datei enthält immer alle.',
-            ),
-          ),
         ],
       ),
     );
+  }
+
+  /// Die drei Wege: per QR-Code aufs Handy, als Datei aufs Handy, das
+  /// Ergebnis zurück. Nebeneinander, auf schmalen Fenstern untereinander.
+  Widget _kacheln(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final frei = !_arbeitet;
+    final gefunden = _gefunden;
+    final kacheln = [
+      _Kachel(
+        key: const ValueKey('handy-qr'),
+        icon: Icons.qr_code_2,
+        titel: 'Per QR-Code aufs Handy',
+        text: 'Das Handy auf den Bildschirm halten — ohne Kabel, in '
+            'Sekunden.',
+        onTap: frei ? _qrSenden : null,
+        unten: InkWell(
+          key: const ValueKey('handy-qr-alle'),
+          borderRadius: BorderRadius.circular(6),
+          onTap: () => setState(() => _qrAlleArtikel = !_qrAlleArtikel),
+          child: Row(
+            children: [
+              Checkbox(
+                value: _qrAlleArtikel,
+                onChanged: (v) => setState(() => _qrAlleArtikel = v ?? false),
+              ),
+              Expanded(
+                child: Text(
+                  'Alle Artikel mitschicken (dauert gut eine Minute)',
+                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      _Kachel(
+        key: const ValueKey('handy-paket'),
+        icon: Icons.save_alt,
+        titel: 'Als Datei aufs Handy',
+        text: 'Speichern und per Kabel oder Freigabe aufs Handy bringen. '
+            'Mit allen Artikeln.',
+        onTap: frei ? _paketErstellen : null,
+      ),
+      _Kachel(
+        key: const ValueKey('handy-ergebnis'),
+        icon: Icons.move_to_inbox_outlined,
+        titel: 'Ergebnis vom Handy einlesen',
+        text: 'Den Anhang der E-Mail vom Handy wählen — oder die Datei '
+            'aufs Fenster ziehen. Vor dem Übernehmen siehst du, was sich '
+            'ändert.',
+        hervorgehoben: gefunden != null,
+        onTap: frei ? _ergebnisWaehlen : null,
+        unten: gefunden == null
+            ? null
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Neu im Download-Ordner — vom '
+                    '${_zeitstempelLesbar(gefunden)}:',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  FilledButton.icon(
+                    key: const ValueKey('handy-gefunden'),
+                    onPressed: frei ? () => _gefundenesLesen(gefunden) : null,
+                    icon: const Icon(Icons.download_done, size: 18),
+                    label: const Text('Jetzt einlesen'),
+                  ),
+                ],
+              ),
+      ),
+    ];
+    return LayoutBuilder(
+      builder: (context, box) {
+        if (box.maxWidth < 720) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, k) in kacheln.indexed) ...[
+                if (i > 0) const SizedBox(height: 12),
+                k,
+              ],
+            ],
+          );
+        }
+        return IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (i, k) in kacheln.indexed) ...[
+                if (i > 0) const SizedBox(width: 12),
+                Expanded(child: k),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /// „2026-11-23_1410" als „23.11., 14:10 Uhr".
+  static String _zeitstempelLesbar(GefundenesErgebnis g) {
+    final z = g.zeitstempel;
+    return '${z.substring(8, 10)}.${z.substring(5, 7)}., '
+        '${z.substring(11, 13)}:${z.substring(13, 15)} Uhr';
   }
 
   Widget _vorschauBereich(BuildContext context, ErgebnisVorschau v) {
@@ -729,14 +823,14 @@ class _Anleitung extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     const schritte = [
-      'Datei erstellen und aufs Handy ziehen — per Kabel, Freigabe oder wie '
-          'es passt.',
-      'Auf dem Handy die Datei antippen und mit „Planer Erfassung" öffnen '
-          '(oder in der App „Paket öffnen").',
+      'Aufs Handy: „Per QR-Code" und in der App „Per QR-Code empfangen" '
+          '— oder die Datei aufs Handy bringen und dort öffnen.',
       'An der Anlage erfassen: Produktionen, Maschineneinstellungen und '
           'Fotos — ohne Netz, alles bleibt auf dem Handy.',
-      'In der App „Ergebnis speichern", die Datei zurück an den PC und hier '
-          'einlesen.',
+      'In der App „An PC" → „Per E-Mail an den PC": Die E-Mail-App öffnet '
+          'sich mit dem Ergebnis als Anhang, nur noch absenden.',
+      'Am PC den Anhang speichern — liegt er im Download-Ordner, bietet '
+          'ihn diese Seite von selbst an — und einlesen.',
     ];
     return Bereich(
       titel: 'So geht’s',
@@ -764,6 +858,85 @@ class _Anleitung extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+/// Eine große Kachel zum Anklicken: Symbol, Titel, ein Satz — darunter,
+/// was noch dazugehört.
+class _Kachel extends StatelessWidget {
+  const _Kachel({
+    super.key,
+    required this.icon,
+    required this.titel,
+    required this.text,
+    required this.onTap,
+    this.unten,
+    this.hervorgehoben = false,
+  });
+
+  final IconData icon;
+  final String titel;
+  final String text;
+  final VoidCallback? onTap;
+  final Widget? unten;
+
+  /// Mit farbigem Rand — es wartet etwas.
+  final bool hervorgehoben;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    return Material(
+      color: f.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: hervorgehoben ? f.primary : f.outline,
+          width: hervorgehoben ? 2 : 1,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: f.primaryContainer,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, size: 28, color: f.onPrimaryContainer),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                titel,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: onTap == null ? f.onSurfaceVariant : null,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                text,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: f.onSurfaceVariant,
+                ),
+              ),
+              if (unten != null) ...[
+                const SizedBox(height: 12),
+                unten!,
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

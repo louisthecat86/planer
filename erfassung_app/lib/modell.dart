@@ -16,6 +16,10 @@ typedef ErgebnisDatei = ({
   ErfassungsErgebnis ergebnis,
   Uint8List bytes,
   int fotosFehlen,
+
+  /// Verschlüsselt mit dem Schlüssel aus dem Paket — nur der Planer, der
+  /// das Paket geschrieben hat, kann es öffnen.
+  bool geschuetzt,
 });
 
 /// Der Stand der Erfassung für die Oberfläche: Jede Änderung wird sofort
@@ -101,6 +105,11 @@ class ErfassungsModell extends ChangeNotifier {
 
   Future<void> kuerzelSetzen(String kuerzel) async {
     _stand.kuerzel = kuerzel.trim();
+    await _geaendert();
+  }
+
+  Future<void> mailAnSetzen(String adresse) async {
+    _stand.mailAn = adresse.trim();
     await _geaendert();
   }
 
@@ -203,9 +212,9 @@ class ErfassungsModell extends ChangeNotifier {
     await _geaendert();
   }
 
-  /// Verwirft Paket und Erfasstes — das Kürzel bleibt.
+  /// Verwirft Paket und Erfasstes — Kürzel und E-Mail-Adresse bleiben.
   Future<void> leeren() async {
-    _stand = Erfassungsstand(kuerzel: _stand.kuerzel);
+    _stand = Erfassungsstand(kuerzel: _stand.kuerzel, mailAn: _stand.mailAn);
     await _geaendert();
     await _fotoDateienAbgleichen();
   }
@@ -347,13 +356,23 @@ class ErfassungsModell extends ChangeNotifier {
     }
     final ergebnis = _stand.ergebnis(jetzt, bilder: bilder);
     if (ergebnis == null) return null;
+    final schluessel = _stand.paket?.ergebnisSchluesselBytes;
     return (
       ergebnis: ergebnis,
-      bytes: utf8.encode(ergebnis.alsText()),
+      // Mit Fotos sind das schnell einige Megabyte — verschlüsselt wird
+      // im Hintergrund, damit die Oberfläche nicht steht.
+      bytes: schluessel == null
+          ? utf8.encode(ergebnis.alsText())
+          : await compute(_schuetzen, (ergebnis, schluessel)),
       fotosFehlen: _stand.fotos.length - bilder.length,
+      geschuetzt: schluessel != null,
     );
   }
 }
+
+/// Das Ergebnis verschlüsselt als Bytes der Datei.
+Uint8List _schuetzen((ErfassungsErgebnis, Uint8List) a) =>
+    utf8.encode(ergebnisGeschuetzt(a.$1, a.$2));
 
 /// Liest ein Paket aus den Bytes einer Datei — oder wirft einen
 /// [FormatFehler] mit dem Grund.
@@ -384,3 +403,67 @@ class GeoeffneteDatei {
     });
   }
 }
+
+/// Wie das Öffnen der E-Mail-App ausging.
+enum MailErgebnis {
+  /// Die E-Mail-App ist offen — ob die Nachricht rausgeht, weiß nur sie.
+  geoeffnet,
+
+  /// Auf dem Handy gibt es keine E-Mail-App.
+  keineApp,
+
+  /// Etwas anderes ging schief.
+  fehler,
+}
+
+/// Öffnet die E-Mail-App des Handys mit fertiger Nachricht: Empfänger,
+/// Betreff, Text und die Ergebnis-Datei als Anhang. Abgeschickt wird
+/// dort — die App selbst braucht dafür kein Netz.
+class MailVersand {
+  MailVersand._();
+
+  static const _kanal = MethodChannel('planer_erfassung/datei');
+
+  /// Legt [bytes] als [dateiname] in den Zwischenspeicher der App und
+  /// öffnet damit die E-Mail-App.
+  static Future<MailErgebnis> senden({
+    required String an,
+    required String betreff,
+    required String text,
+    required String dateiname,
+    required List<int> bytes,
+  }) async {
+    try {
+      // Nur in diesem Ordner gibt Android die Datei an die E-Mail-App
+      // weiter (res/xml/dateien.xml). Alte Anhänge räumen wir weg.
+      final ordner = Directory('${(await getTemporaryDirectory()).path}'
+          '/ergebnis');
+      if (await ordner.exists()) await ordner.delete(recursive: true);
+      await ordner.create(recursive: true);
+      final datei = File('${ordner.path}/$dateiname');
+      await datei.writeAsBytes(bytes, flush: true);
+      final antwort = await _kanal.invokeMethod<String>('perMail', {
+        'pfad': datei.path,
+        'an': an,
+        'betreff': betreff,
+        'text': text,
+      });
+      return switch (antwort) {
+        'ok' => MailErgebnis.geoeffnet,
+        'keineApp' => MailErgebnis.keineApp,
+        _ => MailErgebnis.fehler,
+      };
+    } on PlatformException {
+      return MailErgebnis.fehler;
+    } on MissingPluginException {
+      return MailErgebnis.fehler;
+    } on FileSystemException {
+      return MailErgebnis.fehler;
+    }
+  }
+}
+
+/// Ob [adresse] wie eine E-Mail-Adresse aussieht — mehr prüft erst der
+/// Versand.
+bool istMailAdresse(String adresse) =>
+    RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(adresse.trim());

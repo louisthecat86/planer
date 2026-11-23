@@ -575,10 +575,14 @@ Projektberichts trägt jeder selbst ein.
 Die Android-App **Planer Erfassung** (`erfassung_app/`) ersetzt das Papier an
 der Anlage: Produktionen, Maschineneinstellungen und Fotos werden dort
 erfasst, wo sie anfallen. Der Weg vom PC aufs Handy ist ein QR-Code am
-Bildschirm oder eine Datei, zurück eine Datei wie beim Backup — kein Server,
-kein Netz; die App hat nicht einmal die Berechtigung fürs Internet.
+Bildschirm oder eine Datei, zurück eine E-Mail mit der Ergebnis-Datei oder
+die Datei selbst — kein Server; die App hat nicht einmal die Berechtigung
+fürs Internet (die E-Mail schickt die E-Mail-App des Handys). Die Seite
+Einstellungen → Handy-Erfassung hat dafür drei Kacheln: „Per QR-Code aufs
+Handy", „Als Datei aufs Handy" und „Ergebnis vom Handy einlesen"; darüber
+der Zeitraum.
 
-1. **Planer → Einstellungen → Handy-Erfassung → „Datei erstellen":** Das Paket
+1. **Planer → Einstellungen → Handy-Erfassung → „Als Datei aufs Handy":** Das Paket
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
    der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
@@ -653,9 +657,34 @@ kein Netz; die App hat nicht einmal die Berechtigung fürs Internet.
    im Ordner der App. Unter „Fotos" stehen alle als Raster zum Ansehen und
    Löschen.
 5. **„An PC"** zeigt, was in die Datei geht (Produktionen, Maschinenwerte,
-   Prozessketten, Fotos) und was noch läuft; **„Ergebnis-Datei speichern"**
-   und die Datei zurück an den PC — die Fotos stehen mit darin. Zum Einlesen führt auch „Vom Handy einlesen" oben in
-   der Produktionserfassung. Unter „Ergebnis-Datei wählen" zeigt der
+   Prozessketten, Fotos) und was noch läuft. **„Per E-Mail an den PC"**
+   öffnet die E-Mail-App des Handys mit Empfänger, Betreff und der
+   Ergebnis-Datei als Anhang (beim ersten Mal fragt die App nach der
+   Adresse und merkt sie sich, auch über ein neues Paket hinaus); nach dem
+   Absenden bestätigt man „Ja, gesendet". Weitergereicht wird der Anhang
+   über einen FileProvider aus dem Zwischenspeicher der App
+   (`res/xml/dateien.xml`, `MainActivity.perMail`); über 15 MB warnt die
+   App vorher. „Als Datei speichern" geht weiterhin — die Fotos stehen in
+   beiden Fällen mit darin.
+
+   **Verschlüsselt:** Jedes Paket trägt einen eigenen Schlüssel
+   (`ergebnisSchluessel`), mit dem die App das Ergebnis verschlüsselt
+   (`packages/erfassung_format/lib/src/ergebnis_schutz.dart`:
+   ChaCha20-Poly1305 aus pointycastle über das gepackte Ergebnis, die
+   Paket-ID offen, aber mitgeschützt). So darf es über jeden Weg zurück,
+   auch über ein privates Postfach; eine unterwegs veränderte Datei liest
+   der Planer nicht ein. Den Schlüssel leitet der Planer per HMAC-SHA256
+   aus der Paket-ID und einem Geheimnis ab, das nur in seiner Datenbank
+   steht (`app_settings`, `handy_ergebnis_geheimnis`, reist mit dem
+   Backup) — gespeichert wird je Paket nichts. Geheim bleibt der Schlüssel
+   nur, wenn das Paket per QR-Code aufs Handy kommt; als Datei reist er
+   mit ihr. Ein Paket aus einem älteren Planer hat keinen Schlüssel —
+   dann geht das Ergebnis wie bisher offen, und „An PC" sagt das. Am PC den Anhang speichern: Liegt ein neues
+   Ergebnis (`Planer-Erfassung-Ergebnis_….json`) im Download-Ordner oder
+   dort, woher zuletzt eins kam, bietet die Kachel es mit „Jetzt einlesen"
+   an; übernommene bietet sie nicht wieder an (gemerkt wird der Zeitstempel
+   aus dem Namen). Zum Einlesen führt auch „Vom Handy einlesen" oben in
+   der Produktionserfassung. Unter „Ergebnis vom Handy einlesen" zeigt der
    Planer, was sich ändern würde, und übernimmt nur, was angehakt ist:
    Produktionen landen in
    der Produktionserfassung (mit denselben Kennzahlen),
