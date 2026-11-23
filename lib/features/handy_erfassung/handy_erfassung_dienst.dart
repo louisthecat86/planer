@@ -351,11 +351,13 @@ class HandyErfassungDienst {
 
   /// Das Paket fürs Handy: die noch nicht erfassten Produktionen von
   /// [von] bis einschließlich [bis] und die Maschineneinstellungen aller
-  /// Artikel mit Prozesskette.
+  /// Artikel mit Prozesskette — mit [nurGeplante] nur die der geplanten
+  /// Produktionen: viel kleiner, etwa für den Weg per QR-Code.
   Future<ErfassungsPaket> paketErstellen({
     required DateTime von,
     required DateTime bis,
     DateTime? jetzt,
+    bool nurGeplante = false,
   }) async {
     final erster = _tag(von);
     final letzter = _tag(bis);
@@ -365,6 +367,11 @@ class HandyErfassungDienst {
       DateTime(letzter.year, letzter.month, letzter.day + 1),
     );
     final tage = geplant.keys.toList()..sort();
+    final ids = {
+      for (final liste in geplant.values)
+        for (final g in liste) g.task.productId,
+    };
+    bool mit(String artikelId) => !nurGeplante || ids.contains(artikelId);
     return ErfassungsPaket(
       id: const Uuid().v4(),
       erstellt: jetzt ?? DateTime.now(),
@@ -389,9 +396,15 @@ class HandyErfassungDienst {
               fertigKg: g.fertigKg,
             ),
       ],
-      artikel: await _artikel(),
+      artikel: [
+        for (final a in await _artikel())
+          if (mit(a.id)) a,
+      ],
       maschinen: await _katalog(),
-      erfahrungen: await _erfahrungen(),
+      erfahrungen: [
+        for (final e in await _erfahrungen())
+          if (mit(e.artikelId)) e,
+      ],
     );
   }
 

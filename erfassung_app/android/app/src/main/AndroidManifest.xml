@@ -1,6 +1,17 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Bewusst ohne Internet-Berechtigung: Die App arbeitet nur mit
-         Dateien, nichts verlässt das Gerät über das Netz. -->
+         Dateien und QR-Codes, nichts verlässt das Gerät über das Netz.
+         Die Code-Erkennung des Scanners (ML Kit) bringt eigene
+         Berechtigungen fürs Netz mit — hier werden sie wieder entfernt.
+         Die Kamera-Berechtigung bringt der Scanner selbst mit; die App
+         fragt erst danach, wenn ein QR-Code gelesen werden soll. -->
+    <uses-permission
+        android:name="android.permission.INTERNET"
+        tools:node="remove" />
+    <uses-permission
+        android:name="android.permission.ACCESS_NETWORK_STATE"
+        tools:node="remove" />
     <application
         android:label="Planer Erfassung"
         android:name="${applicationName}"

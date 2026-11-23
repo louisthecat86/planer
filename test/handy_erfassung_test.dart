@@ -402,6 +402,40 @@ void main() {
       expect(wieder.produktionen.single.id, 't1');
     });
 
+    test('nurGeplante: nur die Artikel der geplanten Produktionen', () async {
+      await seedSchritt(
+        db,
+        id: 's9',
+        productId: 'a2',
+        reihenfolge: 1,
+        abteilung: 'wurstkueche',
+        maschineId: 'm2',
+      );
+      await auftrag('t1', 'a1', dienstag);
+      final alle = await dienst.paketErstellen(
+        von: DateTime(2026, 11, 9),
+        bis: DateTime(2026, 11, 15),
+      );
+      expect({for (final a in alle.artikel) a.id}, {'a1', 'a2'});
+      final schlank = await dienst.paketErstellen(
+        von: DateTime(2026, 11, 9),
+        bis: DateTime(2026, 11, 15),
+        nurGeplante: true,
+      );
+      expect([for (final a in schlank.artikel) a.id], ['a1']);
+      expect(schlank.produktionen.single.id, 't1');
+      // Der Katalog bleibt — am Handy lässt sich weiter jede Maschine
+      // in die Kette nehmen.
+      expect(schlank.maschinen.length, alle.maschinen.length);
+
+      // Und per QR-Code kommt es unverändert an.
+      final s = QrSammler();
+      for (final b in qrBilder(schlank, lauf: 'T1', bytesJeBild: 300)) {
+        s.aufnehmen(b);
+      }
+      expect(s.paket().alsText(), schlank.alsText());
+    });
+
     test(
         'das Ergebnis: Vorschau, übernehmen, und zweimal einlesen schadet '
         'nicht', () async {

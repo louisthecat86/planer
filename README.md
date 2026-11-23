@@ -574,9 +574,9 @@ Projektberichts trägt jeder selbst ein.
 
 Die Android-App **Planer Erfassung** (`erfassung_app/`) ersetzt das Papier an
 der Anlage: Produktionen, Maschineneinstellungen und Fotos werden dort
-erfasst, wo sie anfallen. Der Weg zwischen PC und Handy ist eine Datei wie
-beim Backup — kein Server, kein Netz; die App hat nicht einmal die
-Berechtigung fürs Internet.
+erfasst, wo sie anfallen. Der Weg vom PC aufs Handy ist ein QR-Code am
+Bildschirm oder eine Datei, zurück eine Datei wie beim Backup — kein Server,
+kein Netz; die App hat nicht einmal die Berechtigung fürs Internet.
 
 1. **Planer → Einstellungen → Handy-Erfassung → „Datei erstellen":** Das Paket
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
@@ -587,7 +587,21 @@ Berechtigung fürs Internet.
    letzten zehn, wie in der Planung). Rezepturen und die Produktentwicklung
    stehen nicht darin.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
-   Planer Erfassung") oder in der App „Paket öffnen".
+   Planer Erfassung") oder in der App „Datei öffnen".
+
+   **Oder per QR-Code:** „Per QR-Code aufs Handy …" zeigt dasselbe Paket
+   gepackt (gzip) als Folge wechselnder QR-Codes, in der App „Per QR-Code
+   empfangen" (oder im Menü „Paket per QR-Code") sammelt sie mit der Kamera
+   ein — in beliebiger Reihenfolge; ein verpasstes Bild kommt in der
+   nächsten Runde wieder, gzip prüft am Ende, dass nichts verfälscht ist.
+   Ohne Haken bei „alle Artikel mitschicken" stehen nur die Artikel der
+   geplanten Produktionen darin (eine Woche: rund 15 Bilder, wenige
+   Sekunden), mit Haken alle (gut 450 Bilder, gut eine Minute je Runde).
+   „Sicher" zeigt kleinere Codes, falls ein Handy die großen nicht liest.
+   Das Format steht in `packages/erfassung_format/lib/src/qr_uebertragung.dart`.
+   Die Erkennung (ML Kit über `mobile_scanner`) steckt in der App und läuft
+   ohne Netz; die Netz-Berechtigungen, die sie mitbringt, entfernt das
+   Manifest wieder.
 3. **Erfassen:** Die App hat unten drei Bereiche — **Heute**, **Anlagen**,
    **Fotos** — und oben immer die Kamera fürs Musterfoto und **„An PC"** mit
    der Zahl dessen, was noch in keiner Ergebnis-Datei steht. „Heute" ist
@@ -633,7 +647,8 @@ Berechtigung fürs Internet.
    (Kamera oben oder im Bereich „Fotos") fragt nur nach einer Bezeichnung;
    Projekte und Kunden
    stehen nicht auf dem Handy. Aufgenommen wird mit der Kamera-App des
-   Handys (die App braucht dafür keine Kamera-Berechtigung); das Bild kommt
+   Handys (dafür braucht die App keine Kamera-Berechtigung — die fragt erst
+   der QR-Scanner ab); das Bild kommt
    verkleinert zurück — längere Kante 1600 px, JPEG, rund 300 KB — und liegt
    im Ordner der App. Unter „Fotos" stehen alle als Raster zum Ansehen und
    Löschen.

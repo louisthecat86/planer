@@ -25,6 +25,7 @@ import '../entwicklung/daten/datei_typen.dart' show groesseText;
 import '../erfassung/produktion_erfassung_screen.dart'
     show erfassungWocheDatenProvider;
 import 'handy_erfassung_dienst.dart';
+import 'qr_senden.dart';
 
 // Einstellungen → Handy-Erfassung: die Datei fürs Handy erstellen und das
 // Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
@@ -56,6 +57,10 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   late DateTime _bis = tagPlus(_montag, 6);
 
   bool _arbeitet = false;
+
+  /// Per QR-Code auch die Artikel ohne geplante Produktion mitschicken —
+  /// dann lassen sich am Handy alle Einstellungen ändern, es dauert aber.
+  bool _qrAlleArtikel = false;
 
   /// Was zuletzt geschah — oder schiefging.
   String? _meldung;
@@ -128,6 +133,35 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     } catch (e) {
       _melde(
         'Die Datei ließ sich nicht erstellen: ${fehlerText(e)}',
+        fehler: true,
+      );
+    }
+  }
+
+  /// Dasselbe Paket als wechselnde QR-Codes zum Abfotografieren.
+  Future<void> _qrSenden() async {
+    setState(() {
+      _arbeitet = true;
+      _meldung = null;
+    });
+    try {
+      final (von, bis) = _tage;
+      final paket = await HandyErfassungDienst(ref.read(databaseProvider))
+          .paketErstellen(von: von, bis: bis, nurGeplante: !_qrAlleArtikel);
+      final daten = qrPacken(paket);
+      if (!mounted) return;
+      setState(() => _arbeitet = false);
+      final n = paket.produktionen.length;
+      await qrSendenZeigen(
+        context,
+        daten: daten,
+        info: '${n == 1 ? '1 Produktion' : '$n Produktionen'}, die '
+            'Maschineneinstellungen von ${paket.artikel.length} Artikeln '
+            '· ${groesseText(daten.length)}',
+      );
+    } catch (e) {
+      _melde(
+        'Die QR-Codes ließen sich nicht erstellen: ${fehlerText(e)}',
         fehler: true,
       );
     }
@@ -376,11 +410,36 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
               ),
             ),
           const SizedBox(height: 12),
-          FilledButton.icon(
-            key: const ValueKey('handy-paket'),
-            onPressed: _arbeitet ? null : _paketErstellen,
-            icon: const Icon(Icons.save_alt, size: 18),
-            label: const Text('Datei erstellen …'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton.icon(
+                key: const ValueKey('handy-paket'),
+                onPressed: _arbeitet ? null : _paketErstellen,
+                icon: const Icon(Icons.save_alt, size: 18),
+                label: const Text('Datei erstellen …'),
+              ),
+              OutlinedButton.icon(
+                key: const ValueKey('handy-qr'),
+                onPressed: _arbeitet ? null : _qrSenden,
+                icon: const Icon(Icons.qr_code_2, size: 18),
+                label: const Text('Per QR-Code aufs Handy …'),
+              ),
+            ],
+          ),
+          CheckboxListTile(
+            key: const ValueKey('handy-qr-alle'),
+            contentPadding: EdgeInsets.zero,
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            value: _qrAlleArtikel,
+            onChanged: (v) => setState(() => _qrAlleArtikel = v ?? false),
+            title: const Text('Per QR-Code alle Artikel mitschicken'),
+            subtitle: const Text(
+              'Sonst nur die Artikel der geplanten Produktionen — das geht '
+              'in Sekunden. Die Datei enthält immer alle.',
+            ),
           ),
         ],
       ),

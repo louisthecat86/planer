@@ -76,7 +76,8 @@ void main() {
         StartSeite(modell: modell(mitPaket: false)),
         dunkel: dunkel,
       );
-      expect(find.text('Paket öffnen'), findsOneWidget);
+      expect(find.text('Per QR-Code empfangen'), findsOneWidget);
+      expect(find.text('Datei öffnen'), findsOneWidget);
 
       final m = modell();
       await zeige(tester, StartSeite(modell: m), dunkel: dunkel);

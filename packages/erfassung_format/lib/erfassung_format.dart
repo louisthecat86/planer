@@ -6,7 +6,9 @@
 /// 1. Der Planer schreibt unter Einstellungen → Handy-Erfassung ein
 ///    [ErfassungsPaket]: die noch nicht erfassten Produktionen der
 ///    gewählten Wochen und die Maschineneinstellungen aller Artikel.
-/// 2. Die App öffnet die Datei, an der Anlage wird erfasst — offline.
+/// 2. Die App öffnet die Datei — oder sammelt dasselbe Paket per Kamera
+///    von wechselnden QR-Codes am Bildschirm ein ([qrBilder],
+///    [QrSammler]). An der Anlage wird erfasst — offline.
 /// 3. Die App schreibt ein [ErfassungsErgebnis] — mit den Fotos, die an
 ///    der Anlage aufgenommen wurden ([ErfasstesFoto]); der Planer liest
 ///    es ein, zeigt vorher, was er übernimmt, und trägt es ein.
@@ -20,4 +22,5 @@ export 'src/ergebnis.dart';
 export 'src/foto.dart';
 export 'src/grenze.dart';
 export 'src/paket.dart';
+export 'src/qr_uebertragung.dart';
 export 'src/werte.dart';

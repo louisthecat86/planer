@@ -8,6 +8,7 @@ import 'erfassen_seite.dart';
 import 'fotos.dart';
 import 'heute_seite.dart';
 import 'modell.dart';
+import 'qr_empfang.dart';
 import 'senden.dart';
 import 'stil.dart';
 
@@ -66,6 +67,13 @@ class _StartSeiteState extends State<StartSeite> {
     final bytes = gewaehlt?.files.firstOrNull?.bytes;
     if (bytes == null || !mounted) return;
     await _paketUebernehmen(() => paketAusBytes(bytes));
+  }
+
+  /// Das Paket per Kamera von den QR-Codes am Bildschirm des Planers.
+  Future<void> _paketPerQr() async {
+    final lesen = await qrEmpfangen(context);
+    if (lesen == null || !mounted) return;
+    await _paketUebernehmen(lesen);
   }
 
   /// Öffnet das Paket aus [lesen] — fragt vorher, wenn dabei Erfasstes
@@ -203,6 +211,7 @@ class _StartSeiteState extends State<StartSeite> {
                   _OhnePaket(
                     kuerzel: stand.kuerzel,
                     onOeffnen: _paketWaehlen,
+                    onQr: _paketPerQr,
                     onKuerzel: _kuerzelAendern,
                   ),
                 ],
@@ -248,6 +257,7 @@ class _StartSeiteState extends State<StartSeite> {
                     _Menue.ohnePlan => _ohnePlan(),
                     _Menue.kuerzel => _kuerzelAendern(),
                     _Menue.paket => _paketWaehlen(),
+                    _Menue.qr => _paketPerQr(),
                   },
                   kuerzel: stand.kuerzel,
                 ),
@@ -308,7 +318,7 @@ class _StartSeiteState extends State<StartSeite> {
   }
 }
 
-enum _Menue { ohnePlan, kuerzel, paket }
+enum _Menue { ohnePlan, kuerzel, paket, qr }
 
 /// Der Kopf über jedem Bereich: großer Titel, darunter eine Zeile, rechts
 /// Kamera, „An PC" und das Menü.
@@ -453,6 +463,13 @@ class _Kopf extends StatelessWidget {
                   title: Text('Anderes Paket öffnen'),
                 ),
               ),
+              const PopupMenuItem(
+                value: _Menue.qr,
+                child: ListTile(
+                  leading: Icon(Icons.qr_code_scanner),
+                  title: Text('Paket per QR-Code'),
+                ),
+              ),
             ],
           ),
         ],
@@ -466,11 +483,13 @@ class _OhnePaket extends StatelessWidget {
   const _OhnePaket({
     required this.kuerzel,
     required this.onOeffnen,
+    required this.onQr,
     required this.onKuerzel,
   });
 
   final String kuerzel;
   final VoidCallback onOeffnen;
+  final VoidCallback onQr;
   final VoidCallback onKuerzel;
 
   @override
@@ -506,7 +525,8 @@ class _OhnePaket extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Im Planer unter Einstellungen → Handy-Erfassung die Datei '
+          'Im Planer unter Einstellungen → Handy-Erfassung „Per QR-Code '
+          'aufs Handy" wählen und hier scannen — oder die Datei '
           'erstellen, aufs Handy ziehen und hier öffnen.',
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyLarge?.copyWith(
@@ -515,9 +535,17 @@ class _OhnePaket extends StatelessWidget {
         ),
         const SizedBox(height: 28),
         FilledButton.icon(
+          key: const ValueKey('paket-qr'),
+          onPressed: onQr,
+          icon: const Icon(Icons.qr_code_scanner),
+          label: const Text('Per QR-Code empfangen'),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          key: const ValueKey('paket-oeffnen'),
           onPressed: onOeffnen,
           icon: const Icon(Icons.folder_open),
-          label: const Text('Paket öffnen'),
+          label: const Text('Datei öffnen'),
         ),
         const SizedBox(height: 10),
         TextButton.icon(

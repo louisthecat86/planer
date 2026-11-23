@@ -39,6 +39,9 @@ dependencies:
   # Passwort der Produktentwicklung (PBKDF2) und die Verschlüsselung ihrer
   # Daten im Backup — geprüfte Verfahren statt Eigenbau (core/utils/krypto).
   pointycastle: ^4.0.0
+  # Das Paket fürs Handy als wechselnde QR-Codes (handy_erfassung/
+  # qr_senden.dart) — kam schon mit pdf mit.
+  qr: ^3.0.2
   # Das Austauschformat mit der Android-App „Planer Erfassung" — dasselbe
   # Paket nutzt die App (erfassung_app/), so passen beide immer zusammen.
   erfassung_format:
