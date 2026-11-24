@@ -177,6 +177,20 @@ void main() {
       expect(e.bemerkung, 'Charge 2');
     });
 
+    test('die Zahl der Fotos im Planer reist im Paket mit', () {
+      final p = ErfassungsPaket.ausText(
+        beispielPaket(fotosImPlaner: {'a1': 3}).alsText(),
+      );
+      expect(p.fotosImPlanerVon('a1'), 3);
+      expect(p.fotosImPlanerVon('a2'), 0);
+      // Ein Paket aus einem älteren Planer kennt sie nicht.
+      expect(beispielPaket().alsText().contains('fotosImPlaner'), isFalse);
+      expect(
+        ErfassungsPaket.ausText(beispielPaket().alsText()).fotosImPlaner,
+        isEmpty,
+      );
+    });
+
     test('die E-Mail-Adresse übersteht Schließen und neues Paket', () {
       final s = Erfassungsstand(kuerzel: 'AB', mailAn: 'pc@example.org')
         ..paketOeffnen(beispielPaket());

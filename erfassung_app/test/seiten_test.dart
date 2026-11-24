@@ -469,6 +469,84 @@ void main() {
     expect(m.stand.fotos, hasLength(2));
   });
 
+  testWidgets('Foto schon im Programm: Knopf ausgegraut, „Trotzdem" geht',
+      (tester) async {
+    final m = ErfassungsModell(
+      stand: Erfassungsstand(kuerzel: 'AB')
+        ..paket = beispielPaket(fotosImPlaner: {'a2': 2}),
+    );
+    await zeige(
+      tester,
+      ErfassenSeite(modell: m, geplant: m.stand.paket!.produktionen.last),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.byKey(const ValueKey('foto-im-planer')), findsOneWidget);
+    expect(find.textContaining('schon 2 Fotos'), findsOneWidget);
+    expect(find.text('Foto schon im Programm'), findsOneWidget);
+    final knopf = tester.widget<ButtonStyleButton>(
+      find.byKey(const ValueKey('foto-produktion')),
+    );
+    expect(knopf.onPressed, isNull);
+    expect(find.byKey(const ValueKey('foto-trotzdem')), findsOneWidget);
+
+    // Der andere Artikel hat im Programm noch keins.
+    await zeige(
+      tester,
+      ErfassenSeite(
+        key: const ValueKey('zweite'),
+        modell: m,
+        geplant: m.stand.paket!.produktionen.first,
+      ),
+      groesse: const Size(360, 2000),
+    );
+    expect(find.byKey(const ValueKey('foto-im-planer')), findsNothing);
+    expect(find.text('Foto aufnehmen'), findsOneWidget);
+  });
+
+  testWidgets('unter der Rohware: wie lange die Produktion dauert',
+      (tester) async {
+    final m = modell();
+    // Grillwurst: 1.000 kg in 4 Stunden — 250 kg/h.
+    await zeige(
+      tester,
+      ErfassenSeite(modell: m, geplant: m.stand.paket!.produktionen.first),
+      groesse: const Size(360, 2200),
+    );
+    expect(find.byKey(const ValueKey('roh-dauer')), findsOneWidget);
+    expect(
+      find.textContaining('≈ 5:00 h'),
+      findsOneWidget,
+      reason: 'geplant sind 1.250 kg',
+    );
+    expect(find.textContaining('für die geplante Menge'), findsOneWidget);
+
+    final roh = find.byType(TextField).first;
+    await tester.enterText(roh, '500');
+    await tester.pump();
+    expect(find.textContaining('≈ 2:00 h'), findsOneWidget);
+    expect(find.textContaining('für die geplante Menge'), findsNothing);
+
+    // Auch während gerechnet wird.
+    await tester.enterText(roh, '250×4');
+    await tester.pump();
+    expect(find.textContaining('≈ 4:00 h'), findsOneWidget);
+
+    // Kochschinken wurde noch nie erfasst.
+    await zeige(
+      tester,
+      ErfassenSeite(
+        key: const ValueKey('zweite'),
+        modell: m,
+        geplant: m.stand.paket!.produktionen.last,
+      ),
+      groesse: const Size(360, 2200),
+    );
+    expect(
+      find.textContaining('noch keine Erfahrungswerte'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('Musterfoto: erst die Bezeichnung, dann die Kamera',
       (tester) async {
     final m = modell();

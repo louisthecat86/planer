@@ -588,8 +588,9 @@ der Zeitraum.
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
    und die Notiz, samt ihren Grenzen —, den Maschinenkatalog und je Artikel
    die Erfahrung aus den erfassten Produktionen (Ø Menge und Ø Zeit der
-   letzten zehn, wie in der Planung). Rezepturen und die Produktentwicklung
-   stehen nicht darin.
+   letzten zehn, wie in der Planung) und wie viele Fotos der Planer von
+   jedem Artikel schon hat (`fotosImPlaner`). Rezepturen und die
+   Produktentwicklung stehen nicht darin.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
    Planer Erfassung") oder in der App „Datei öffnen".
 
@@ -616,7 +617,12 @@ der Zeitraum.
    nach der Erfahrung dauert und wann sie fertig ist — auf die Rohware
    hochgerechnet; gibt es für den Artikel noch keine erfasste Produktion
    mit Menge und Zeit, sagt die App das. Dasselbe zeigt „Jetzt" am Start
-   in der Erfassung, und eine laufende Karte trägt „fertig gegen …".
+   in der Erfassung, und eine laufende Karte trägt „fertig gegen …". In der
+   Erfassung steht die Dauer klein auch unter der Rohware und rechnet beim
+   Tippen mit (ohne Eingabe mit der geplanten Menge). Hat der Planer schon
+   ein Foto des Artikels, ist der Foto-Knopf ausgegraut („Foto schon im
+   Programm"); ein neues gibt es in der Erfassung mit „Trotzdem ein neues
+   Foto machen".
    **„Fertig"** öffnet die Erfassung mit
    der Uhrzeit im ersten noch leeren Ende — eingetragen werden Rohware,
    davon Fleisch, Fertigware (in den Mengenfeldern lässt sich rechnen:

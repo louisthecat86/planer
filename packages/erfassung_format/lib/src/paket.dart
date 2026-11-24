@@ -21,6 +21,7 @@ class ErfassungsPaket {
     this.maschinen = const [],
     this.erfahrungen = const [],
     this.ergebnisSchluessel,
+    this.fotosImPlaner = const {},
   });
 
   /// Kennung — das Ergebnis nennt sie, damit der Planer weiß, auf welchen
@@ -47,6 +48,14 @@ class ErfassungsPaket {
   /// (ergebnis_schutz.dart) — Base64, null in einem Paket aus einem
   /// älteren Planer: Dann geht das Ergebnis offen zurück.
   final String? ergebnisSchluessel;
+
+  /// Wie viele Fotos der Planer zu einem Artikel schon hat — je
+  /// Artikel-ID, nur die mit mindestens einem. Die App graut damit den
+  /// Knopf fürs Foto aus: Ein Bild ist schon da.
+  final Map<String, int> fotosImPlaner;
+
+  /// Die Fotos im Planer zum Artikel [artikelId] — 0: keins.
+  int fotosImPlanerVon(String artikelId) => fotosImPlaner[artikelId] ?? 0;
 
   /// [ergebnisSchluessel] als Bytes — null ohne oder wenn er nicht passt.
   Uint8List? get ergebnisSchluesselBytes {
@@ -101,6 +110,7 @@ class ErfassungsPaket {
           'erfahrungen': [for (final e in erfahrungen) e.toJson()],
         if (ergebnisSchluessel != null)
           'ergebnisSchluessel': ergebnisSchluessel,
+        if (fotosImPlaner.isNotEmpty) 'fotosImPlaner': fotosImPlaner,
       };
 
   /// Die Datei als Text.
@@ -132,6 +142,7 @@ class ErfassungsPaket {
           PaketErfahrung.ausJson(e),
       ],
       ergebnisSchluessel: jsonTextOder(j, 'ergebnisSchluessel'),
+      fotosImPlaner: _anzahlen(j['fotosImPlaner']),
     );
   }
 }
@@ -215,6 +226,13 @@ class PaketProduktion {
 
 /// Ein Artikel mit den Schritten seiner Prozesskette und ihren
 /// Maschineneinstellungen.
+/// {„id": Anzahl} — was keine Zahl ist, fällt weg.
+Map<String, int> _anzahlen(Object? j) => {
+      if (j is Map)
+        for (final MapEntry(:key, :value) in j.entries)
+          if (key is String && value is num && value > 0) key: value.toInt(),
+    };
+
 class PaketArtikel {
   const PaketArtikel({
     required this.id,

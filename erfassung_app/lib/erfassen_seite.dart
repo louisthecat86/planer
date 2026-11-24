@@ -489,6 +489,19 @@ class _ErfassenSeiteState extends State<ErfassenSeite>
                         plan: plan?.rohKg,
                         onChanged: () => setState(() => _fehler = null),
                       ),
+                      if (_artikelId.isNotEmpty)
+                        _RohDauer(
+                          prognose: widget.modell.stand.prognose(
+                            artikelId: _artikelId,
+                            kg: rechneAus(_roh.text) ?? plan?.rohKg,
+                            start: _start.text,
+                          ),
+                          ausPlan: rechneAus(_roh.text) == null &&
+                              plan?.rohKg != null,
+                          kgProStunde: widget.modell.stand.paket
+                              ?.erfahrungFuer(_artikelId)
+                              ?.kgProStunde,
+                        ),
                       const SizedBox(height: 10),
                       _MengenFeld(
                         controller: _fleisch,
@@ -943,6 +956,68 @@ class _MengenFeldState extends State<_MengenFeld> {
                 ],
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Klein unter der Rohware: wie lange die Produktion nach der Erfahrung
+/// dauert — rechnet mit, während getippt wird.
+class _RohDauer extends StatelessWidget {
+  const _RohDauer({
+    required this.prognose,
+    required this.kgProStunde,
+    this.ausPlan = false,
+  });
+
+  final Prognose prognose;
+
+  /// Noch keine Rohware eingetragen — gerechnet mit der geplanten.
+  final bool ausPlan;
+
+  /// Ø Leistung aus der Erfahrung — null: keine.
+  final double? kgProStunde;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final warnung = Farben.von(context).warnung;
+    final minuten = prognose.minuten;
+    final leistung = kgProStunde;
+    final String text;
+    if (leistung == null || !leistung.isFinite) {
+      text = 'Dauer: noch keine Erfahrungswerte für diesen Artikel';
+    } else if (minuten == null) {
+      text = 'Ø ${zahlText(leistung, nachkomma: 0)} kg/h — mit der Rohware '
+          'steht hier die Dauer';
+    } else {
+      text = '≈ ${dauerText(minuten)}'
+          '${prognose.ende == null ? '' : ' · fertig gegen ${prognose.ende}'}'
+          '${ausPlan ? ' für die geplante Menge' : ''}'
+          ' (Ø ${zahlText(leistung, nachkomma: 0)} kg/h)';
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 6, 4, 0),
+      child: Row(
+        key: const ValueKey('roh-dauer'),
+        children: [
+          Icon(
+            Icons.timer_outlined,
+            size: 18,
+            color: minuten == null ? grau : warnung,
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: minuten == null ? grau : warnung,
+                fontWeight: minuten == null ? null : FontWeight.w700,
+              ),
+            ),
+          ),
         ],
       ),
     );

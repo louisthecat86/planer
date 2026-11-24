@@ -487,6 +487,10 @@ class HandyErfassungDienst {
         for (final e in await _erfahrungen())
           if (mit(e.artikelId)) e,
       ],
+      fotosImPlaner: {
+        for (final MapEntry(:key, :value) in (await _fotoAnzahlen()).entries)
+          if (mit(key)) key: value,
+      },
     );
   }
 
@@ -534,6 +538,20 @@ class HandyErfassungDienst {
             ],
           ),
     ];
+  }
+
+  /// Je Artikel, wie viele Fotos der Planer von ihm hat.
+  Future<Map<String, int>> _fotoAnzahlen() async {
+    final anzahl = _db.artikelFotos.id.count();
+    final zeilen = await (_db.selectOnly(_db.artikelFotos)
+          ..addColumns([_db.artikelFotos.productId, anzahl])
+          ..groupBy([_db.artikelFotos.productId]))
+        .get();
+    return {
+      for (final z in zeilen)
+        if ((z.read(anzahl) ?? 0) > 0)
+          z.read(_db.artikelFotos.productId)!: z.read(anzahl)!,
+    };
   }
 
   /// Je Artikel der Schnitt seiner letzten erfassten Produktionen mit

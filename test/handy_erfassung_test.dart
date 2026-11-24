@@ -428,6 +428,30 @@ void main() {
       // in die Kette nehmen.
       expect(schlank.maschinen.length, alle.maschinen.length);
 
+      // Wie viele Fotos der Planer schon hat — die App graut damit den
+      // Knopf fürs Foto aus.
+      expect(schlank.fotosImPlaner, isEmpty);
+      for (final (id, artikel) in [('f1', 'a1'), ('f2', 'a1'), ('f3', 'a2')]) {
+        await db.into(db.artikelFotos).insert(
+              ArtikelFotosCompanion.insert(
+                id: id,
+                productId: artikel,
+                aufgenommenAm: DateTime(2026, 11, 2),
+              ),
+            );
+      }
+      final mitFotos = await dienst.paketErstellen(
+        von: DateTime(2026, 11, 9),
+        bis: DateTime(2026, 11, 15),
+      );
+      expect(mitFotos.fotosImPlaner, {'a1': 2, 'a2': 1});
+      final schlankMitFotos = await dienst.paketErstellen(
+        von: DateTime(2026, 11, 9),
+        bis: DateTime(2026, 11, 15),
+        nurGeplante: true,
+      );
+      expect(schlankMitFotos.fotosImPlaner, {'a1': 2});
+
       // Und per QR-Code kommt es unverändert an.
       final s = QrSammler();
       for (final b in qrBilder(schlank, lauf: 'T1', bytesJeBild: 300)) {

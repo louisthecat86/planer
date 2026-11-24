@@ -167,6 +167,17 @@ class FotoStreifen extends StatelessWidget {
       listenable: modell,
       builder: (context, _) {
         final fotos = modell.stand.fotosVon(artikelId);
+        final imPlaner = modell.stand.paket?.fotosImPlanerVon(artikelId) ?? 0;
+        // Hat der Planer schon ein Bild und hier ist noch keins gemacht,
+        // ist der Knopf ausgegraut — ein neues geht nur mit „Trotzdem".
+        final schonDa = imPlaner > 0 && fotos.isEmpty;
+        void aufnehmen() => produktionsfotoAufnehmen(
+              context,
+              modell,
+              artikelId: artikelId,
+              artikel: artikel,
+              produktionId: produktionId,
+            );
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -190,20 +201,28 @@ class FotoStreifen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
             ],
+            if (schonDa) ...[
+              _ImPlaner(anzahl: imPlaner),
+              const SizedBox(height: 10),
+            ],
             OutlinedButton.icon(
               key: const ValueKey('foto-produktion'),
-              onPressed: () => produktionsfotoAufnehmen(
-                context,
-                modell,
-                artikelId: artikelId,
-                artikel: artikel,
-                produktionId: produktionId,
-              ),
+              onPressed: schonDa ? null : aufnehmen,
               icon: const Icon(Icons.photo_camera_outlined),
               label: Text(
-                fotos.isEmpty ? 'Foto aufnehmen' : 'Weiteres Foto aufnehmen',
+                schonDa
+                    ? 'Foto schon im Programm'
+                    : fotos.isEmpty
+                        ? 'Foto aufnehmen'
+                        : 'Weiteres Foto aufnehmen',
               ),
             ),
+            if (schonDa)
+              TextButton(
+                key: const ValueKey('foto-trotzdem'),
+                onPressed: aufnehmen,
+                child: const Text('Trotzdem ein neues Foto machen'),
+              ),
           ],
         );
       },
@@ -433,6 +452,36 @@ class _FotoKachel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// „Im Programm ist schon ein Foto" — mit Haken.
+class _ImPlaner extends StatelessWidget {
+  const _ImPlaner({required this.anzahl});
+
+  final int anzahl;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final ok = Farben.von(context).ok;
+    return Row(
+      key: const ValueKey('foto-im-planer'),
+      children: [
+        Icon(Icons.check_circle, size: 20, color: ok),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            anzahl == 1
+                ? 'Im Programm ist schon ein Foto von diesem Artikel.'
+                : 'Im Programm sind schon $anzahl Fotos von diesem Artikel.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -7,10 +7,12 @@ ErfassungsPaket beispielPaket({
   String id = 'paket-1',
   bool mitKatalog = true,
   String? ergebnisSchluessel,
+  Map<String, int> fotosImPlaner = const {},
 }) =>
     ErfassungsPaket(
       id: id,
       ergebnisSchluessel: ergebnisSchluessel,
+      fotosImPlaner: fotosImPlaner,
       erstellt: DateTime(2026, 11, 9, 17, 45),
       von: DateTime(2026, 11, 9),
       bis: DateTime(2026, 11, 15),

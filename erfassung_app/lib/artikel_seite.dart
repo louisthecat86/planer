@@ -305,21 +305,30 @@ class _SchritteSeiteState extends State<SchritteSeite> {
             artikel.schritte.map(stand.geaendertIn).fold(0, (s, n) => s + n) +
                 stand.kettenAenderungenIn(artikel.id);
         final bleiben = kette.where((k) => !k.entfernt).length;
+        final fotosHier = stand.fotosVon(artikel.id).length;
+        final fotoSchonDa = fotosHier == 0 &&
+            (stand.paket?.fotosImPlanerVon(artikel.id) ?? 0) > 0;
         return Scaffold(
           appBar: AppBar(
             actions: [
               IconButton(
                 key: const ValueKey('schritte-foto'),
-                tooltip: 'Foto aus der Produktion',
-                onPressed: () => produktionsfotoAufnehmen(
-                  context,
-                  modell,
-                  artikelId: artikel.id,
-                  artikel: artikel.name,
-                ),
+                tooltip: fotoSchonDa
+                    ? 'Im Programm ist schon ein Foto'
+                    : 'Foto aus der Produktion',
+                // Ausgegraut, wenn der Planer schon eins hat — ein neues
+                // gibt es in der Erfassung mit „Trotzdem".
+                onPressed: fotoSchonDa
+                    ? null
+                    : () => produktionsfotoAufnehmen(
+                          context,
+                          modell,
+                          artikelId: artikel.id,
+                          artikel: artikel.name,
+                        ),
                 icon: Badge(
-                  isLabelVisible: stand.fotosVon(artikel.id).isNotEmpty,
-                  label: Text('${stand.fotosVon(artikel.id).length}'),
+                  isLabelVisible: fotosHier > 0,
+                  label: Text('$fotosHier'),
                   child: const Icon(Icons.photo_camera_outlined),
                 ),
               ),
