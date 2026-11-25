@@ -366,6 +366,15 @@ class _Inhalt extends StatelessWidget {
               ),
               abteilung: abteilung,
             ),
+            NachlaufBereich(
+              auswertung: werteNachlaufAus(
+                daten.produktionen,
+                daten.artikel,
+                spanne,
+                abteilung: abteilung,
+              ),
+              onArtikel: (a) => _oeffneArtikel(context, a),
+            ),
           ],
         StatistikThema.artikel => [
             _MixBereich(

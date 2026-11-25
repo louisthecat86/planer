@@ -434,4 +434,77 @@ void main() {
       expect(h.thema, StatistikThema.artikel);
     });
   });
+
+  group('Nachlauf bis Verpackung', () {
+    test('aus Ende Auflegen und Ende VPK', () {
+      expect(nachlaufMinutenVon('13:20', '13:55'), 35);
+      // Über Mitternacht.
+      expect(nachlaufMinutenVon('23:40', '00:10'), 30);
+      expect(nachlaufMinutenVon('13:20', '13:20'), 0);
+      expect(nachlaufMinutenVon('13:20', null), isNull);
+      expect(nachlaufMinutenVon(null, '13:55'), isNull);
+      // Sieben Stunden: eher ein Tippfehler.
+      expect(nachlaufMinutenVon('06:00', '13:00'), isNull);
+    });
+
+    test('je Artikel der Median, längster zuerst, ab drei Werten', () {
+      ErfassteProduktion p(String id, int tag, double? n) => ErfassteProduktion(
+            productId: id,
+            datum: DateTime(2026, 10, tag),
+            kgRohware: 100,
+            nachlaufMinuten: n,
+          );
+      final a = werteNachlaufAus(
+        [
+          p('a1', 5, 30),
+          p('a1', 6, 40),
+          p('a1', 7, 90),
+          p('a2', 5, 50),
+          p('a2', 6, 60),
+          p('a2', 7, 55),
+          p('a2', 8, 45),
+          // Nur zwei Werte: kein Eintrag in der Liste, zählt aber mit.
+          p('a3', 5, 10),
+          p('a3', 6, 20),
+          // Ohne Ende VPK.
+          p('a1', 8, null),
+        ],
+        const {
+          'a1': wurst,
+          'a2': schinken,
+          'a3': StatistikArtikel(
+            id: 'a3',
+            artikelnummer: '9003',
+            bezeichnung: 'Testbraten',
+          ),
+        },
+        spanne,
+      );
+      expect(a.produktionen, 10);
+      expect(a.mitNachlauf, 9);
+      expect(a.median, 45);
+      expect(
+        [for (final n in a.artikel) (n.artikel.id, n.median, n.anzahl)],
+        [('a2', 52.5, 4), ('a1', 40.0, 3)],
+      );
+      expect(a.artikel.last.min, 30);
+      expect(a.artikel.last.max, 90);
+    });
+
+    test('Abteilungsfilter', () {
+      final a = werteNachlaufAus(
+        [
+          ErfassteProduktion(
+            productId: 'a2',
+            datum: DateTime(2026, 10, 5),
+            nachlaufMinuten: 20,
+          ),
+        ],
+        artikel,
+        spanne,
+        abteilung: Abteilung.bratstrasse,
+      );
+      expect(a.leer, isTrue);
+    });
+  });
 }

@@ -360,6 +360,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(AbweichungsBalken), findsOneWidget);
+    // Ohne Ende VPK noch kein Nachlauf.
+    expect(bereich('Nachlauf bis Verpackung'), findsOneWidget);
+    expect(find.textContaining('Noch keine Produktion mit'), findsOneWidget);
 
     await thema(tester, StatistikThema.artikel);
     expect(bereich('Produktmix'), findsOneWidget);

@@ -7,7 +7,7 @@ import '../../core/ui/bausteine.dart';
 import '../../core/utils/format.dart';
 import '../board/board_providers.dart' show CapacityStatus;
 import 'statistik_daten.dart';
-import 'statistik_diagramme.dart' show grauFarbe;
+import 'statistik_diagramme.dart' show SpannenBalken, grauFarbe;
 import 'statistik_ueberblick_daten.dart';
 
 // Der Kopf der Statistik-Seite: fünf Kennzahlen mit dem Vergleich zum
@@ -869,6 +869,148 @@ class _PlanIstZeile extends StatelessWidget {
             SizedBox(width: 150, child: zeit),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Nachlauf bis zur Verpackung
+// ---------------------------------------------------------------------------
+
+/// „35 min", „1:20 h".
+String _minutenText(double m) {
+  final g = m.round();
+  if (g < 60) return '$g min';
+  return '${g ~/ 60}:${(g % 60).toString().padLeft(2, '0')} h';
+}
+
+/// Wie lange die Ware nach dem Auflegen bis zum Ende der Verpackung
+/// braucht — je Artikel. Beim letzten Artikel des Tages ist das die Zeit,
+/// in der die Anlage steht, bevor gereinigt werden kann.
+class NachlaufBereich extends StatelessWidget {
+  const NachlaufBereich({
+    super.key,
+    required this.auswertung,
+    required this.onArtikel,
+  });
+
+  final NachlaufAuswertung auswertung;
+  final ValueChanged<StatistikArtikel> onArtikel;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final a = auswertung;
+    const titel = 'Nachlauf bis Verpackung';
+    const untertitel = 'Ende Auflegen bis Ende VPK · erfasste Produktionen';
+
+    if (a.leer) {
+      return const Bereich(
+        titel: titel,
+        untertitel: untertitel,
+        child: LeerHinweis(
+          'Noch keine Produktion mit „Ende Auflegen" und „Ende VPK" '
+          'erfasst. Die Handy-App erfasst beides — mit der Zeit steht hier, '
+          'wie lange jeder Artikel nachläuft.',
+          icon: Icons.hourglass_empty,
+        ),
+      );
+    }
+
+    final skala = a.artikel.fold(
+      a.median ?? 1,
+      (m, x) => math.max(m, x.max),
+    );
+    return Bereich(
+      titel: titel,
+      untertitel: untertitel,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 32,
+            runSpacing: 12,
+            children: [
+              Kennzahl(
+                wert: _minutenText(a.median!),
+                label: 'typischer Nachlauf (Median)',
+              ),
+              Kennzahl(
+                wert: '${a.mitNachlauf} von ${a.produktionen}',
+                label: 'Produktionen mit beiden Uhrzeiten',
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            a.artikel.isEmpty
+                ? 'Je Artikel ab $kNachlaufAbProduktionen Produktionen mit '
+                    'Nachlauf — noch keiner.'
+                : 'Je Artikel · längster zuerst',
+            style: theme.textTheme.labelMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: grau,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final n in a.artikel)
+            InkWell(
+              onTap: () => onArtikel(n.artikel),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 5,
+                      child: Text(
+                        '${n.artikel.artikelnummer} · '
+                        '${n.artikel.bezeichnung}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 4,
+                      child: SpannenBalken(
+                        von: n.min,
+                        mitte: n.median,
+                        bis: n.max,
+                        achseVon: 0,
+                        achseBis: skala,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 140,
+                      child: Text(
+                        '${_minutenText(n.median)} · ${n.anzahl}×',
+                        textAlign: TextAlign.right,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 10),
+          Text(
+            'Punkt = typischer Wert, Balken = kürzester bis längster. '
+            'Beim letzten Artikel des Tages steht die Anlage so lange, bevor '
+            'gereinigt werden kann. Mitten am Tag kann der Wert länger sein, '
+            'wenn sich die Verpackung staut.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: grau,
+              height: 1.35,
+            ),
+          ),
+        ],
       ),
     );
   }

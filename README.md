@@ -164,6 +164,13 @@ gemessen. Ampeln: Treue gut ab 80 %, Warnung ab 60 %; Planerfüllung gut ab
 dem Zeitraum davor. Die Grenzen stehen als Konstanten in
 `statistik_ueberblick_daten.dart`.
 
+**Nachlauf bis Verpackung** (Thema Leistung): je erfasster Produktion die
+Minuten von „Ende Auflegen" bis „Ende VPK" (über Mitternacht gerechnet,
+über 6 h gilt als Tippfehler), je Artikel ab 3 Werten der Median mit
+kürzestem und längstem Wert. Beim letzten Artikel des Tages steht die
+Anlage so lange, bevor gereinigt werden kann — die Grundlage, um diesen
+Leerlauf später in der Planung einzurechnen.
+
 ## Drucken
 
 Jeder Druck öffnet dasselbe **Druckfenster**: links, was und wie gedruckt

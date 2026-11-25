@@ -6,6 +6,7 @@ import '../../core/constants/product_groups.dart';
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/services/erledigt_service.dart' show Erledigt;
+import '../../core/services/produktion_erfassen_service.dart';
 import '../../core/services/navision_katalog.dart';
 import '../../core/utils/datum.dart';
 import '../../core/utils/format.dart';
@@ -579,6 +580,7 @@ class ErfassteProduktion {
     this.verlust,
     this.ausbeuteAngegeben = false,
     this.minuten,
+    this.nachlaufMinuten,
   });
 
   factory ErfassteProduktion.aus(ProductionHistoryData h) {
@@ -594,6 +596,7 @@ class ErfassteProduktion {
       minuten: roh != null && roh.isFinite && roh > 0
           ? produktionsMinutenVon(h, roh)
           : null,
+      nachlaufMinuten: nachlaufMinutenVon(h.endzeit, h.endeVpk),
     );
   }
 
@@ -613,6 +616,10 @@ class ErfassteProduktion {
   /// Produktionszeit in Minuten nach derselben Regel wie die Planung
   /// ([produktionsMinutenVon]) — null: keine Zeit erfasst.
   final double? minuten;
+
+  /// Nachlauf: von „Ende Auflegen" bis „Ende VPK" in Minuten — null ohne
+  /// beides oder wenn es nicht plausibel ist ([nachlaufMinutenVon]).
+  final double? nachlaufMinuten;
 
   /// kg Rohware je Stunde — null ohne Rohware oder Zeit.
   double? get kgProStunde {
@@ -1083,6 +1090,126 @@ LeistungsAuswertung werteLeistungAus(
     ],
     verglichen: vergleichbar.length,
     abweichend: abweichend.length,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Teil 4b: Nachlauf bis zur Verpackung
+// ---------------------------------------------------------------------------
+
+/// Länger als so viele Minuten ist ein Nachlauf nicht plausibel — eher
+/// ein Tippfehler in einer der beiden Uhrzeiten: 6 Stunden.
+const double kNachlaufHoechstens = 360;
+
+/// Ab so vielen Produktionen mit Nachlauf nennt die Statistik einen
+/// Artikel — wie bei der Spanne der Ausbeute.
+const int kNachlaufAbProduktionen = 3;
+
+/// So viele Artikel zeigt die Liste des Nachlaufs.
+const int kNachlaufListe = 12;
+
+/// Minuten von [endeAuflegen] bis [endeVpk] (über Mitternacht gerechnet)
+/// — null ohne beide Uhrzeiten oder über [kNachlaufHoechstens].
+double? nachlaufMinutenVon(String? endeAuflegen, String? endeVpk) {
+  final m =
+      ProduktionErfassenService.produktionszeitMinuten(endeAuflegen, endeVpk);
+  if (m == null || m < 0 || m > kNachlaufHoechstens) return null;
+  return m;
+}
+
+/// Der Median einer nicht leeren Liste.
+double _median(List<double> werte) {
+  final s = [...werte]..sort();
+  final mitte = s.length ~/ 2;
+  return s.length.isOdd ? s[mitte] : (s[mitte - 1] + s[mitte]) / 2;
+}
+
+/// Der Nachlauf eines Artikels.
+class ArtikelNachlauf {
+  const ArtikelNachlauf({
+    required this.artikel,
+    required this.anzahl,
+    required this.median,
+    required this.min,
+    required this.max,
+  });
+
+  final StatistikArtikel artikel;
+  final int anzahl;
+
+  /// Der typische Nachlauf in Minuten — der Median, damit ein Ausreißer
+  /// ihn nicht verzieht.
+  final double median;
+  final double min;
+  final double max;
+}
+
+class NachlaufAuswertung {
+  const NachlaufAuswertung({
+    required this.produktionen,
+    required this.mitNachlauf,
+    required this.median,
+    required this.artikel,
+  });
+
+  /// Erfasste Produktionen im Zeitraum (und im Filter).
+  final int produktionen;
+
+  /// Davon mit Ende Auflegen und Ende VPK.
+  final int mitNachlauf;
+
+  /// Median über alle — null ohne Wert.
+  final double? median;
+
+  /// Artikel ab [kNachlaufAbProduktionen] Werten, längster Nachlauf
+  /// zuerst.
+  final List<ArtikelNachlauf> artikel;
+
+  bool get leer => mitNachlauf == 0;
+}
+
+/// Wie lange die Ware nach dem Auflegen noch bis zum Ende der Verpackung
+/// braucht. Beim letzten Artikel des Tages ist das Leerlauf: Gereinigt
+/// werden kann erst danach. Mit [abteilung] nur Artikel mit einem Schritt
+/// dort.
+NachlaufAuswertung werteNachlaufAus(
+  List<ErfassteProduktion> produktionen,
+  Map<String, StatistikArtikel> artikel,
+  StatistikSpanne spanne, {
+  Abteilung? abteilung,
+}) {
+  var gezaehlt = 0;
+  final alle = <double>[];
+  final jeArtikel = <String, List<double>>{};
+  for (final p in produktionen) {
+    if (!_imFilter(p, artikel, spanne, abteilung)) continue;
+    gezaehlt++;
+    final n = p.nachlaufMinuten;
+    if (n == null) continue;
+    alle.add(n);
+    (jeArtikel[p.productId] ??= []).add(n);
+  }
+  final liste = [
+    for (final MapEntry(key: id, value: werte) in jeArtikel.entries)
+      if (werte.length >= kNachlaufAbProduktionen)
+        ArtikelNachlauf(
+          artikel: artikel[id]!,
+          anzahl: werte.length,
+          median: _median(werte),
+          min: werte.reduce((a, b) => a < b ? a : b),
+          max: werte.reduce((a, b) => a > b ? a : b),
+        ),
+  ]..sort((a, b) {
+      final m = b.median.compareTo(a.median);
+      return m != 0
+          ? m
+          : a.artikel.artikelnummer.compareTo(b.artikel.artikelnummer);
+    });
+  return NachlaufAuswertung(
+    produktionen: gezaehlt,
+    mitNachlauf: alle.length,
+    median: alle.isEmpty ? null : _median(alle),
+    artikel: liste.take(kNachlaufListe).toList(),
   );
 }
 
