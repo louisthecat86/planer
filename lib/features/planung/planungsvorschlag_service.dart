@@ -10,6 +10,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
         ladeBedarfsPlanung,
         restBezuege,
         teileBezuegeZu;
+import '../../core/services/reihenfolge_regeln.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 import '../whiteboard/whiteboard_provider.dart';
@@ -342,8 +343,7 @@ class VorschlagPosten {
     return kopieMit(
       mengeKg: neueMenge,
       rohwareKg: rohwareKg / (mengeKg > 0 ? mengeKg / basis : 1) * faktor,
-      dauerMinuten:
-          dauerMinuten / (mengeKg > 0 ? mengeKg / basis : 1) * faktor,
+      dauerMinuten: dauerMinuten / (mengeKg > 0 ? mengeKg / basis : 1) * faktor,
     );
   }
 }
@@ -385,8 +385,7 @@ class VorschlagTag {
   double get auslastung =>
       kapazitaetMinuten > 0 ? gesamtMinuten / kapazitaetMinuten : 0;
 
-  double get rohwareKg =>
-      posten.fold<double>(0, (s, p) => s + p.rohwareKg);
+  double get rohwareKg => posten.fold<double>(0, (s, p) => s + p.rohwareKg);
 
   VorschlagTag kopieMit({
     List<VorschlagPosten>? posten,
@@ -443,22 +442,20 @@ class Planungsrechner {
   const Planungsrechner._();
 
   /// Reihenfolge nach den Produktionsregeln: Allergene aufsteigend, Bio
-  /// vor konventionell, gegart vor roh, dann Temperatur und Höhe.
-  static List<VorschlagPosten> nachRegeln(List<VorschlagPosten> posten) {
-    return [...posten]..sort((a, b) {
-        final al = a.allergenRang.compareTo(b.allergenRang);
-        if (al != 0) return al;
-        final bio = a.bioRang.compareTo(b.bioRang);
-        if (bio != 0) return bio;
-        final roh = a.rohRang.compareTo(b.rohRang);
-        if (roh != 0) return roh;
-        final t = a.plattenTemp.compareTo(b.plattenTemp);
-        if (t != 0) return t;
-        final h = a.hoehe.compareTo(b.hoehe);
-        if (h != 0) return h;
-        return a.artikelnummer.compareTo(b.artikelnummer);
-      });
-  }
+  /// vor konventionell, gegart vor roh, dann die Temperatur ohne Zickzack
+  /// und die Höhe — dieselbe Regel wie im Board ([ordneNachRegeln]).
+  static List<VorschlagPosten> nachRegeln(List<VorschlagPosten> posten) =>
+      ordneNachRegeln(
+        posten,
+        (p) => ArtikelRegel(
+          allergenRang: p.allergenRang,
+          bioRang: p.bioRang,
+          rohRang: p.rohRang,
+          plattenTemp: p.plattenTemp,
+          hoehe: p.hoehe,
+        ),
+        (p) => p.artikelnummer,
+      );
 
   /// Nebenzeit und Wechselgrund für jeden Posten in der GEGEBENEN
   /// Reihenfolge neu bestimmen. Sortiert nicht um — wer von Hand
@@ -825,9 +822,8 @@ class PlanungsvorschlagService {
         final alle = [...planbar]..sort(_nachDringlichkeit);
         for (final k in alle) {
           final t = k.termin;
-          final bis = t == null || ueberfaellig(k)
-              ? tage.length - 1
-              : bisTermin(t);
+          final bis =
+              t == null || ueberfaellig(k) ? tage.length - 1 : bisTermin(t);
           if (!vorwaerts(k, bis)) zurueck(k, grund(k));
         }
       }
@@ -985,8 +981,7 @@ class PlanungsvorschlagService {
 
       final fehlt = <String>[
         if (p.qualitaetsstufe == null) 'Qualitätsstufe',
-        if (merkmaleAusText(p.verarbeitungsstufe).isEmpty)
-          'Verarbeitungsstufe',
+        if (merkmaleAusText(p.verarbeitungsstufe).isEmpty) 'Verarbeitungsstufe',
       ];
       final verarbeitung = merkmaleAusText(p.verarbeitungsstufe);
       final temp = await _hoechstePlattenTemperatur(fuehrendeSchritte);
@@ -1347,8 +1342,7 @@ class PlanungsvorschlagService {
 
   static DateTime _tag(DateTime d) => DateTime(d.year, d.month, d.day);
 
-  static String _schluessel(DateTime d) =>
-      '${d.year}-${d.month}-${d.day}';
+  static String _schluessel(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
   static const _wochentage = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 

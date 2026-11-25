@@ -233,12 +233,14 @@ const List<(String, String, PdfColor)> _zeitArten = [
   ('ruesten', 'Rüsten', _orange),
   ('reinigen', 'Reinigen', _petrol),
   ('sonstiges', 'Sonstiges', _lila),
+  ('nachlauf', 'Nachlauf', _grau),
 ];
 
 double _zeitWert(ZeitAnteile a, String art) => switch (art) {
       'produktion' => a.produktion,
       'ruesten' => a.ruesten,
       'reinigen' => a.reinigen,
+      'nachlauf' => a.nachlauf,
       _ => a.sonstiges,
     };
 

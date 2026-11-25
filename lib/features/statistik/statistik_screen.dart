@@ -572,12 +572,14 @@ const List<(String, String)> _zeitArten = [
   ('ruesten', 'Rüsten'),
   ('reinigen', 'Reinigen'),
   ('sonstiges', 'Sonstiges'),
+  ('nachlauf', 'Nachlauf'),
 ];
 
 double _zeitWert(ZeitAnteile a, String art) => switch (art) {
       'produktion' => a.produktion,
       'ruesten' => a.ruesten,
       'reinigen' => a.reinigen,
+      'nachlauf' => a.nachlauf,
       _ => a.sonstiges,
     };
 

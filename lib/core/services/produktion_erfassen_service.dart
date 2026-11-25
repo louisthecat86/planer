@@ -67,6 +67,19 @@ class ProduktionErfassenService {
     return diff.toDouble();
   }
 
+  /// Länger als so viele Minuten ist ein Nachlauf nicht plausibel — eher
+  /// ein Tippfehler in einer der beiden Uhrzeiten: 6 Stunden.
+  static const double nachlaufHoechstens = 360;
+
+  /// Nachlauf: Minuten von „Ende Auflegen" bis „Ende VPK" (über
+  /// Mitternacht gerechnet) — null ohne beide Uhrzeiten oder über
+  /// [nachlaufHoechstens].
+  static double? nachlaufMinuten(String? endeAuflegen, String? endeVpk) {
+    final m = produktionszeitMinuten(endeAuflegen, endeVpk);
+    if (m == null || m < 0 || m > nachlaufHoechstens) return null;
+    return m;
+  }
+
   /// Die abgeleiteten Kennzahlen einer Produktion. Fehlt etwas, bleibt die
   /// betroffene Kennzahl leer.
   static ProduktionsKennzahlen kennzahlen({

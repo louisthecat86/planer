@@ -461,6 +461,7 @@ class ZeitAnteile {
     this.ruesten = 0,
     this.reinigen = 0,
     this.sonstiges = 0,
+    this.nachlauf = 0,
   });
 
   final double produktion;
@@ -468,8 +469,12 @@ class ZeitAnteile {
   final double reinigen;
   final double sonstiges;
 
+  /// Nachlauf des letzten Artikels an der Bratstraße — Leerlauf bis zur
+  /// Reinigung.
+  final double nachlauf;
+
   /// Alle Nebenzeiten zusammen.
-  double get neben => ruesten + reinigen + sonstiges;
+  double get neben => ruesten + reinigen + sonstiges + nachlauf;
 
   double get summe => produktion + neben;
 
@@ -478,6 +483,7 @@ class ZeitAnteile {
         ruesten: ruesten + (b.zusatzMinuten['ruesten'] ?? 0),
         reinigen: reinigen + (b.zusatzMinuten['reinigen'] ?? 0),
         sonstiges: sonstiges + (b.zusatzMinuten['sonstiges'] ?? 0),
+        nachlauf: nachlauf + b.nachlaufMinuten,
       );
 }
 
@@ -1097,9 +1103,8 @@ LeistungsAuswertung werteLeistungAus(
 // Teil 4b: Nachlauf bis zur Verpackung
 // ---------------------------------------------------------------------------
 
-/// Länger als so viele Minuten ist ein Nachlauf nicht plausibel — eher
-/// ein Tippfehler in einer der beiden Uhrzeiten: 6 Stunden.
-const double kNachlaufHoechstens = 360;
+/// Länger als so viele Minuten ist ein Nachlauf nicht plausibel.
+const double kNachlaufHoechstens = ProduktionErfassenService.nachlaufHoechstens;
 
 /// Ab so vielen Produktionen mit Nachlauf nennt die Statistik einen
 /// Artikel — wie bei der Spanne der Ausbeute.
@@ -1110,12 +1115,8 @@ const int kNachlaufListe = 12;
 
 /// Minuten von [endeAuflegen] bis [endeVpk] (über Mitternacht gerechnet)
 /// — null ohne beide Uhrzeiten oder über [kNachlaufHoechstens].
-double? nachlaufMinutenVon(String? endeAuflegen, String? endeVpk) {
-  final m =
-      ProduktionErfassenService.produktionszeitMinuten(endeAuflegen, endeVpk);
-  if (m == null || m < 0 || m > kNachlaufHoechstens) return null;
-  return m;
-}
+double? nachlaufMinutenVon(String? endeAuflegen, String? endeVpk) =>
+    ProduktionErfassenService.nachlaufMinuten(endeAuflegen, endeVpk);
 
 /// Der Median einer nicht leeren Liste.
 double _median(List<double> werte) {

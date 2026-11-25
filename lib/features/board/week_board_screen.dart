@@ -14,6 +14,7 @@ import '../../core/services/auftragsbestand_deckung.dart'
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/services/entwicklung_vorgabe.dart';
 import '../../core/services/erledigt_service.dart';
+import '../../core/services/reihenfolge_regeln.dart';
 import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart'
     show ArchivAufgabe, dekodiereSnapshot, weekSnapshotProvider;
@@ -43,8 +44,7 @@ const _kWkShort = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 /// Zugeklappte Abteilungen (dbValues). Zugeklappt erscheint statt der
 /// einzelnen Anlagen-Spuren EINE Summenzeile — so bleibt die Übersicht
 /// auch bei vielen Anlagen erhalten.
-final boardZugeklapptProvider =
-    StateProvider<Set<String>>((ref) => <String>{});
+final boardZugeklapptProvider = StateProvider<Set<String>>((ref) => <String>{});
 
 /// „Passend"-Modus: skaliert das Board so weit herunter, dass ALLE Spuren
 /// ohne Scrollen sichtbar sind — die Methode, die auch Gantt- und
@@ -340,9 +340,8 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
         .write(
       ProductionTasksCompanion(
         datum: Value(ziel),
-        maschineId: anlageWechselt
-            ? Value(zielSpur.maschineId)
-            : const Value.absent(),
+        maschineId:
+            anlageWechselt ? Value(zielSpur.maschineId) : const Value.absent(),
         abteilung: abteilungWechselt
             ? Value(zielSpur.abteilung.dbValue)
             : const Value.absent(),
@@ -418,7 +417,40 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
     final neu = [...laneTasks];
     final item = neu.removeAt(von);
     neu.insert(nach, item);
+    await _speichereReihenfolge(neu);
+  }
 
+  /// Ordnet die Aufträge einer Spur an einem Tag nach den Regeln:
+  /// Allergene aufsteigend, Bio vor konventionell, gegart vor roh, an der
+  /// Bratstraße die Temperatur ohne Zickzack ([ordneNachRegeln]).
+  Future<void> _ordneNachRegeln(List<BoardTask> laneTasks) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final regeln = await ref.read(artikelRegelnProvider.future);
+    final neu = ordneNachRegeln(
+      laneTasks,
+      (t) => regeln[t.productId],
+      (t) => t.artikelnummer.isEmpty ? t.productName : t.artikelnummer,
+    );
+    var gleich = true;
+    for (var i = 0; i < neu.length; i++) {
+      if (!identical(neu[i], laneTasks[i])) gleich = false;
+    }
+    if (gleich) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Die Reihenfolge folgt schon den Regeln.'),
+        ),
+      );
+      return;
+    }
+    await _speichereReihenfolge(neu);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('Nach den Regeln geordnet.')),
+    );
+  }
+
+  /// Speichert [neu] als Reihenfolge (`sortierung`) der Aufträge.
+  Future<void> _speichereReihenfolge(List<BoardTask> neu) async {
     final db = ref.read(databaseProvider);
     final jetzt = DateTime.now();
     await db.transaction(() async {
@@ -570,8 +602,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                     ),
                   ],
                   selected: {_modus},
-                  onSelectionChanged: (s) =>
-                      setState(() => _modus = s.first),
+                  onSelectionChanged: (s) => setState(() => _modus = s.first),
                 ),
                 const Spacer(),
                 // Dichte- und Skalierungs-Umschalter: nur in der Wochenansicht.
@@ -597,9 +628,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                       final kompakt = ref.watch(boardKompaktProvider);
                       return IconButton(
                         icon: Icon(
-                          kompakt
-                              ? Icons.unfold_more
-                              : Icons.unfold_less,
+                          kompakt ? Icons.unfold_more : Icons.unfold_less,
                         ),
                         tooltip: kompakt
                             ? 'Komfort-Ansicht (mehr Details)'
@@ -658,6 +687,7 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                       day: day,
                       onTapTask: _bearbeite,
                       onReorder: _sortiere,
+                      onOrdnen: _ordneNachRegeln,
                     ),
                   ),
           ),
@@ -705,8 +735,7 @@ class _BoardGrid extends ConsumerWidget {
     // Spuren nach Abteilung gruppieren (sie liegen bereits sortiert vor).
     final gruppen = <List<BoardSpur>>[];
     for (final spur in board.spuren) {
-      if (gruppen.isEmpty ||
-          gruppen.last.first.abteilung != spur.abteilung) {
+      if (gruppen.isEmpty || gruppen.last.first.abteilung != spur.abteilung) {
         gruppen.add([spur]);
       } else {
         gruppen.last.add(spur);
@@ -848,8 +877,7 @@ class _HeaderRow extends StatelessWidget {
                       '${tage[i].day}.${tage[i].month}.',
                       style: TextStyle(
                         fontSize: 11,
-                        fontWeight:
-                            tage[i] == heute ? FontWeight.w600 : null,
+                        fontWeight: tage[i] == heute ? FontWeight.w600 : null,
                         color: tage[i] == heute
                             ? colors.primary
                             : colors.onSurfaceVariant,
@@ -1138,81 +1166,103 @@ class _TagesZelle extends ConsumerWidget {
     Color farbe,
   ) {
     final belegt = cell.tasks.isNotEmpty || cell.zusatzzeiten.isNotEmpty;
+    final vorgabe =
+        ref.watch(reinigungsVorgabenProvider).valueOrNull?[cell.abteilung];
+    final plan = vorgabe == null
+        ? null
+        : reinigungsPlan(
+            vorgabe: vorgabe,
+            belegtOhneNachlauf: cell.belegtOhneNachlauf,
+            hatAuftraege: cell.tasks.isNotEmpty,
+            nachlaufLetzter: cell.nachlaufLetzter,
+            startZeit: cell.tasks.isEmpty ? null : cell.tasks.first.startZeit,
+          );
     final knopf = _ZusatzKnopf(
       minuten: cell.zusatzMinuten,
       onTap: () => _zusatzzeitenVerwalten(context, ref),
     );
     return !belegt
-              // -- LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
-              //    freie Kapazität ist der Normalfall und muss nicht
-              //    35-mal wiederholt werden. Nur beim Ziehen erscheint
-              //    ein Hinweis.
-              ? Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: highlight
-                            ? Text(
-                                'Hier ablegen',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppFarben.von(context).info,
-                                ),
-                              )
-                            : const SizedBox.shrink(),
-                      ),
-                    ),
-                    knopf,
-                  ],
-                )
-              // -- BELEGTE ZELLE: Auslastung kompakt + Aufträge
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: _AuslastungsPille(
-                            belegt: cell.belegtMinuten,
-                            kapazitaet: cell.kapazitaetMinuten,
-                            auslastung: cell.auslastung,
-                            farbe: farbe,
-                            status: cell.status,
-                            kompakt: kompakt,
+        // -- LEERE ZELLE: bewusst ruhig. Keine Zahlen, kein Balken —
+        //    freie Kapazität ist der Normalfall und muss nicht
+        //    35-mal wiederholt werden. Nur beim Ziehen erscheint
+        //    ein Hinweis.
+        ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Center(
+                  child: highlight
+                      ? Text(
+                          'Hier ablegen',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppFarben.von(context).info,
                           ),
-                        ),
-                        knopf,
-                      ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+              ),
+              knopf,
+            ],
+          )
+        // -- BELEGTE ZELLE: Auslastung kompakt + Aufträge
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _AuslastungsPille(
+                      belegt: cell.belegtMinuten,
+                      kapazitaet: cell.kapazitaetMinuten,
+                      auslastung: cell.auslastung,
+                      farbe: farbe,
+                      status: cell.status,
+                      kompakt: kompakt,
                     ),
-                    SizedBox(height: kompakt ? 3 : 6),
-                    for (final task in cell.tasks)
-                      Padding(
-                        padding: EdgeInsets.only(bottom: kompakt ? 3 : 4),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _AuftragsKarte(
-                              task: task,
-                              kompakt: kompakt,
-                              onTap: () => onTapTask(task),
-                              onHaken: () => _abhaken(ref, task),
-                            ),
-                            if (board.nachbarnFuer(task) != null)
-                              _KettenMarker(
-                                nachbar: board.nachbarnFuer(task)!,
-                                onSprung: (datum) => ref
-                                    .read(selectedDateProvider.notifier)
-                                    .state = datum,
-                              ),
-                          ],
-                        ),
+                  ),
+                  knopf,
+                ],
+              ),
+              // Nur wenn es eng wird — sonst bliebe es 35-mal
+              // dieselbe beruhigende Zeile.
+              if (plan != null && plan.stand != ReinigungsStand.gut)
+                Padding(
+                  padding: const EdgeInsets.only(top: 3),
+                  child: _ReinigungsZeile(
+                    plan: plan,
+                    letzter: cell.tasks.last,
+                    lang: false,
+                  ),
+                ),
+              SizedBox(height: kompakt ? 3 : 6),
+              for (final task in cell.tasks)
+                Padding(
+                  padding: EdgeInsets.only(bottom: kompakt ? 3 : 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _AuftragsKarte(
+                        task: task,
+                        kompakt: kompakt,
+                        onTap: () => onTapTask(task),
+                        onHaken: () => _abhaken(ref, task),
                       ),
-                  ],
-                );
+                      if (board.nachbarnFuer(task) != null)
+                        _KettenMarker(
+                          nachbar: board.nachbarnFuer(task)!,
+                          onSprung: (datum) => ref
+                              .read(selectedDateProvider.notifier)
+                              .state = datum,
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          );
   }
 }
 
@@ -1289,8 +1339,7 @@ class _ZusatzzeitVerwaltung extends ConsumerStatefulWidget {
       _ZusatzzeitVerwaltungState();
 }
 
-class _ZusatzzeitVerwaltungState
-    extends ConsumerState<_ZusatzzeitVerwaltung> {
+class _ZusatzzeitVerwaltungState extends ConsumerState<_ZusatzzeitVerwaltung> {
   late List<Zusatzzeit> _liste = [...widget.eintraege];
 
   Future<void> _anlegen() async {
@@ -1459,8 +1508,7 @@ class _AuslastungsPille extends StatelessWidget {
             // Zeile Höhe.
             if (warnung != null)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                 decoration: BoxDecoration(
                   color: _ampelFlaeche(context, status),
                   borderRadius: AppMasse.eckenKlein,
@@ -1854,11 +1902,13 @@ class _DayList extends ConsumerWidget {
     required this.day,
     required this.onTapTask,
     required this.onReorder,
+    required this.onOrdnen,
   });
 
   final DayBoard day;
   final void Function(BoardTask) onTapTask;
   final void Function(List<BoardTask>, int, int) onReorder;
+  final void Function(List<BoardTask>) onOrdnen;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1880,6 +1930,7 @@ class _DayList extends ConsumerWidget {
             tag: day.tag,
             onTapTask: onTapTask,
             onReorder: onReorder,
+            onOrdnen: onOrdnen,
             aufgaben: gesehen.add(lane.abteilung)
                 ? aufgaben[(lane.abteilung.dbValue, day.tag)] ??
                     const <Tagesaufgabe>[]
@@ -1896,6 +1947,7 @@ class _DayDeptCard extends ConsumerWidget {
     required this.tag,
     required this.onTapTask,
     required this.onReorder,
+    required this.onOrdnen,
     this.aufgaben,
   });
 
@@ -1903,6 +1955,7 @@ class _DayDeptCard extends ConsumerWidget {
   final DateTime tag;
   final void Function(BoardTask) onTapTask;
   final void Function(List<BoardTask>, int, int) onReorder;
+  final void Function(List<BoardTask>) onOrdnen;
 
   /// Sonstige Aufgaben der Abteilung an diesem Tag. Nur an der ersten
   /// Karte einer Abteilung gesetzt, sonst null.
@@ -1913,6 +1966,21 @@ class _DayDeptCard extends ConsumerWidget {
     final colors = Theme.of(context).colorScheme;
     final farbe = _ampelFarbe(context, lane.status);
     final aufgaben = this.aufgaben;
+    final regeln = ref.watch(artikelRegelnProvider).valueOrNull;
+    final hinweise = regeln == null
+        ? const <RegelHinweis?>[]
+        : regelHinweise(lane.tasks, (t) => regeln[t.productId]);
+    final vorgabe =
+        ref.watch(reinigungsVorgabenProvider).valueOrNull?[lane.abteilung];
+    final plan = vorgabe == null
+        ? null
+        : reinigungsPlan(
+            vorgabe: vorgabe,
+            belegtOhneNachlauf: lane.belegtOhneNachlauf,
+            hatAuftraege: lane.tasks.isNotEmpty,
+            nachlaufLetzter: lane.nachlaufLetzter,
+            startZeit: lane.tasks.isEmpty ? null : lane.tasks.first.startZeit,
+          );
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       child: Padding(
@@ -1950,6 +2018,23 @@ class _DayDeptCard extends ConsumerWidget {
                     art: _ampelArt(lane.status),
                   ),
                 ],
+                if (lane.tasks.length > 1)
+                  IconButton(
+                    key: ValueKey('ordnen-${lane.spur.id}'),
+                    icon: const Icon(Icons.sort, size: 18),
+                    tooltip: 'Nach Regeln ordnen: Allergene aufsteigend, '
+                        'Bio vor konventionell, gegart vor roh, Temperatur '
+                        'ohne Zickzack',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => onOrdnen(lane.tasks),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.cleaning_services_outlined, size: 18),
+                  tooltip: 'Reinigungsbeginn für '
+                      '${lane.abteilung.anzeigeName} festlegen',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _vorgabeBearbeiten(context, ref, vorgabe),
+                ),
                 IconButton(
                   icon: const Icon(Icons.more_time, size: 18),
                   tooltip: 'Rüst-/Reinigungszeit hinzufügen',
@@ -1997,9 +2082,7 @@ class _DayDeptCard extends ConsumerWidget {
                       ),
                       label: Text(
                         '${_artName(z.art)} ${Zeit.kurz(z.minuten)}'
-                        '${(z.notiz ?? '').trim().isEmpty
-                            ? ''
-                            : ' · ${z.notiz!.trim()}'}',
+                        '${(z.notiz ?? '').trim().isEmpty ? '' : ' · ${z.notiz!.trim()}'}',
                         style: const TextStyle(fontSize: 11),
                       ),
                       onDeleted: () => _zusatzzeitLoeschen(ref, z),
@@ -2025,6 +2108,7 @@ class _DayDeptCard extends ConsumerWidget {
               for (var i = 0; i < lane.tasks.length; i++)
                 _DayTaskRow(
                   task: lane.tasks[i],
+                  hinweis: i < hinweise.length ? hinweise[i] : null,
                   onTap: () => onTapTask(lane.tasks[i]),
                   onHaken: () => _abhaken(ref, lane.tasks[i]),
                   onUp: i > 0 ? () => onReorder(lane.tasks, i, i - 1) : null,
@@ -2032,6 +2116,14 @@ class _DayDeptCard extends ConsumerWidget {
                       ? () => onReorder(lane.tasks, i, i + 1)
                       : null,
                 ),
+            if (plan != null) ...[
+              const SizedBox(height: 6),
+              _ReinigungsZeile(
+                plan: plan,
+                letzter: lane.tasks.last,
+                lang: true,
+              ),
+            ],
             if (aufgaben != null && aufgaben.isNotEmpty) ...[
               const Divider(height: 20),
               _AufgabenAbschnitt(
@@ -2046,6 +2138,31 @@ class _DayDeptCard extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Arbeitsbeginn und Reinigungsbeginn der Abteilung festlegen.
+  Future<void> _vorgabeBearbeiten(
+    BuildContext context,
+    WidgetRef ref,
+    ReinigungsVorgabe? vorgabe,
+  ) async {
+    final ergebnis = await showDialog<(ReinigungsVorgabe?,)>(
+      context: context,
+      builder: (_) => _VorgabeDialog(
+        abteilung: lane.abteilung,
+        vorgabe: vorgabe,
+      ),
+    );
+    if (ergebnis == null) return;
+    await speichereReinigungsVorgabe(
+      ref.read(databaseProvider),
+      lane.abteilung,
+      ergebnis.$1,
+    );
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Reinigungsbeginn geändert');
+    ref.invalidate(reinigungsVorgabenProvider);
   }
 
   /// Legt eine Rüst-/Reinigungszeit für diese Spur an diesem Tag an.
@@ -2160,13 +2277,15 @@ class _ZusatzzeitDialogState extends State<_ZusatzzeitDialog> {
           onPressed: (_minuten ?? 0) <= 0
               ? null
               : () {
-                  Navigator.of(context).pop((
-                    art: _art,
-                    minuten: _minuten!,
-                    notiz: _notiz.text.trim().isEmpty
-                        ? null
-                        : _notiz.text.trim(),
-                  ),);
+                  Navigator.of(context).pop(
+                    (
+                      art: _art,
+                      minuten: _minuten!,
+                      notiz: _notiz.text.trim().isEmpty
+                          ? null
+                          : _notiz.text.trim(),
+                    ),
+                  );
                 },
           child: const Text('Übernehmen'),
         ),
@@ -2192,11 +2311,15 @@ class _DayTaskRow extends StatelessWidget {
     required this.task,
     required this.onTap,
     required this.onHaken,
+    this.hinweis,
     this.onUp,
     this.onDown,
   });
 
   final BoardTask task;
+
+  /// Was an dieser Stelle gegen die Regeln der Reihenfolge geht.
+  final RegelHinweis? hinweis;
   final VoidCallback onTap;
   final VoidCallback onHaken;
   final VoidCallback? onUp;
@@ -2244,6 +2367,27 @@ class _DayTaskRow extends StatelessWidget {
             ],
           ),
         ),
+        if (hinweis != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 4),
+            child: Tooltip(
+              message: hinweis!.text,
+              child: Icon(
+                switch (hinweis!.art) {
+                  RegelArt.reinigung => Icons.warning_amber_rounded,
+                  RegelArt.temperatur => Icons.thermostat,
+                  RegelArt.ungeprueft => Icons.help_outline,
+                },
+                key: ValueKey('regel-${task.id}'),
+                size: 18,
+                color: switch (hinweis!.art) {
+                  RegelArt.reinigung => AppFarben.von(context).fehler,
+                  RegelArt.temperatur => AppFarben.von(context).warnung,
+                  RegelArt.ungeprueft => colors.onSurfaceVariant,
+                },
+              ),
+            ),
+          ),
         if (task.startZeit != null)
           Text(
             task.startZeit!,
@@ -2548,13 +2692,15 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       final t2 = gross.schritte[i].dauerMinuten;
       final steigung = (t2 - t1) / 900.0;
       if (steigung <= 0) continue; // reine Fixzeit — begrenzt nicht
-      modelle.add((
-        abteilung: klein.schritte[i].abteilungDbValue,
-        fix: t1 - steigung * 100,
-        proKg: steigung,
-        quelle: klein.schritte[i].dauerQuelle,
-        historie: klein.schritte[i].historie,
-      ),);
+      modelle.add(
+        (
+          abteilung: klein.schritte[i].abteilungDbValue,
+          fix: t1 - steigung * 100,
+          proKg: steigung,
+          quelle: klein.schritte[i].dauerQuelle,
+          historie: klein.schritte[i].historie,
+        ),
+      );
     }
     return modelle;
   }
@@ -2613,7 +2759,8 @@ class _ProduktPlanenSheetState extends ConsumerState<_ProduktPlanenSheet> {
       if (m.abteilung == _zeitAbteilung) continue;
       final minuten = m.fix + m.proKg * menge;
       if (minuten > kStandardKapazitaetMinuten) {
-        treffer.add((name: _abteilungsName(m.abteilung), stunden: minuten / 60));
+        treffer
+            .add((name: _abteilungsName(m.abteilung), stunden: minuten / 60));
       }
     }
     return treffer;
@@ -3480,8 +3627,7 @@ class _SchrittTagKarte extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: ausgewaehlt ? farbe : colors.onSurfaceVariant,
-                    decoration:
-                        ausgewaehlt ? null : TextDecoration.lineThrough,
+                    decoration: ausgewaehlt ? null : TextDecoration.lineThrough,
                   ),
                 ),
               ],
@@ -3715,8 +3861,7 @@ class _ZugeklappteZeile extends StatelessWidget {
                   ),
                   kapazitaet: spuren.fold<double>(
                     0,
-                    (s, spur) =>
-                        s + board.cellFor(spur, tag).kapazitaetMinuten,
+                    (s, spur) => s + board.cellFor(spur, tag).kapazitaetMinuten,
                   ),
                   auftraege: spuren.fold<int>(
                     0,
@@ -3732,8 +3877,7 @@ class _ZugeklappteZeile extends StatelessWidget {
                             .where((t) => t.erledigt != null)
                             .length,
                   ),
-                  aufgaben:
-                      aufgaben[(abteilung.dbValue, tag)]?.length ?? 0,
+                  aufgaben: aufgaben[(abteilung.dbValue, tag)]?.length ?? 0,
                   aufgabenErledigt: aufgaben[(abteilung.dbValue, tag)]
                           ?.where((a) => a.erledigt)
                           .length ??
@@ -3921,8 +4065,7 @@ class _BedarfVorschlaege extends ConsumerStatefulWidget {
   final void Function(BedarfInfo?) onWaehlen;
 
   @override
-  ConsumerState<_BedarfVorschlaege> createState() =>
-      _BedarfVorschlaegeState();
+  ConsumerState<_BedarfVorschlaege> createState() => _BedarfVorschlaegeState();
 }
 
 class _BedarfVorschlaegeState extends ConsumerState<_BedarfVorschlaege> {
@@ -4035,15 +4178,13 @@ class _BedarfVorschlaegeState extends ConsumerState<_BedarfVorschlaege> {
                   itemCount: gefiltert.length,
                   itemBuilder: (context, i) {
                     final info = gefiltert[i];
-                    final aktiv =
-                        widget.gewaehlt?.bedarf.id == info.bedarf.id;
+                    final aktiv = widget.gewaehlt?.bedarf.id == info.bedarf.id;
                     final farbe = info.ueberfaellig
                         ? theme.colorScheme.error
                         : theme.colorScheme.primary;
                     final f = AppFarben.von(context);
                     return InkWell(
-                      onTap: () =>
-                          widget.onWaehlen(aktiv ? null : info),
+                      onTap: () => widget.onWaehlen(aktiv ? null : info),
                       child: Container(
                         decoration: BoxDecoration(
                           color: aktiv
@@ -4172,6 +4313,215 @@ class _RohwareHinweis extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reinigungsbeginn
+// ---------------------------------------------------------------------------
+
+/// Wann an dieser Anlage gereinigt werden kann — mit dem Nachlauf des
+/// letzten Artikels. [lang] in der Tagesansicht, sonst eine kurze Zeile
+/// für die Wochenzelle.
+class _ReinigungsZeile extends StatelessWidget {
+  const _ReinigungsZeile({
+    required this.plan,
+    required this.letzter,
+    required this.lang,
+  });
+
+  final ReinigungsPlan plan;
+  final BoardTask letzter;
+  final bool lang;
+
+  @override
+  Widget build(BuildContext context) {
+    final f = AppFarben.von(context);
+    final colors = Theme.of(context).colorScheme;
+    final farbe = switch (plan.stand) {
+      ReinigungsStand.gut => f.ok,
+      ReinigungsStand.knapp => f.warnung,
+      ReinigungsStand.zuSpaet => f.fehler,
+    };
+    final ab = uhrzeit(plan.reinigungAb);
+    final v = plan.vorgabe;
+    if (!lang) {
+      return Tooltip(
+        message: 'Reinigung ab $ab — Ziel ${uhrzeit(v.ziel)}, '
+            'spätestens ${uhrzeit(v.spaetestens)}',
+        child: Row(
+          children: [
+            Icon(Icons.cleaning_services, size: 12, color: farbe),
+            const SizedBox(width: 3),
+            Flexible(
+              child: Text(
+                'Reinigung ab $ab',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: farbe,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final name = letzter.artikelnummer.isEmpty
+        ? letzter.productName
+        : letzter.artikelnummer;
+    final nachlauf = plan.nachlaufBekannt
+        ? 'Nachlauf ${Zeit.kurz(plan.nachlaufMinuten)} ($name)'
+        : 'Nachlauf von $name noch unbekannt';
+    return Container(
+      key: const ValueKey('reinigungsplan'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: farbe.withValues(alpha: 0.10),
+        borderRadius: AppMasse.ecken,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.cleaning_services, size: 18, color: farbe),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  switch (plan.stand) {
+                    ReinigungsStand.gut => 'Reinigung ab ca. $ab',
+                    ReinigungsStand.knapp => 'Reinigung ab ca. $ab — knapp',
+                    ReinigungsStand.zuSpaet => 'Reinigung erst ab ca. $ab — '
+                        '${Zeit.kurz(plan.ueberzogen)} zu spät',
+                  },
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: farbe,
+                  ),
+                ),
+                Text(
+                  'Aufgelegt bis ca. ${uhrzeit(plan.produktionsEnde)} · '
+                  '$nachlauf · Ziel ${uhrzeit(v.ziel)}, spätestens '
+                  '${uhrzeit(v.spaetestens)}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: colors.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Arbeitsbeginn, Ziel und spätester Reinigungsbeginn einer Abteilung.
+/// Liefert (neue Vorgabe,) — (null,) heißt ausschalten; null: abgebrochen.
+class _VorgabeDialog extends StatefulWidget {
+  const _VorgabeDialog({required this.abteilung, required this.vorgabe});
+
+  final Abteilung abteilung;
+  final ReinigungsVorgabe? vorgabe;
+
+  @override
+  State<_VorgabeDialog> createState() => _VorgabeDialogState();
+}
+
+class _VorgabeDialogState extends State<_VorgabeDialog> {
+  late final _beginn = TextEditingController(
+    text: uhrzeit(
+      (widget.vorgabe ?? kBratstrasseVorgabe).arbeitsbeginn,
+    ),
+  );
+  late final _ziel = TextEditingController(
+    text: uhrzeit((widget.vorgabe ?? kBratstrasseVorgabe).ziel),
+  );
+  late final _spaet = TextEditingController(
+    text: uhrzeit((widget.vorgabe ?? kBratstrasseVorgabe).spaetestens),
+  );
+  String? _fehler;
+
+  @override
+  void dispose() {
+    _beginn.dispose();
+    _ziel.dispose();
+    _spaet.dispose();
+    super.dispose();
+  }
+
+  void _speichern() {
+    final v = ReinigungsVorgabe.ausText(
+      '${_beginn.text.trim()};${_ziel.text.trim()};${_spaet.text.trim()}',
+    );
+    if (v == null) {
+      setState(
+        () => _fehler = 'Bitte Uhrzeiten wie 06:15 eintragen — der '
+            'Arbeitsbeginn vor dem Ziel, das Ziel nicht nach „spätestens".',
+      );
+      return;
+    }
+    Navigator.of(context).pop((v,));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    Widget feld(String label, TextEditingController c, String key) => Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: TextField(
+            key: ValueKey(key),
+            controller: c,
+            decoration: InputDecoration(labelText: label, hintText: '06:15'),
+            keyboardType: TextInputType.datetime,
+          ),
+        );
+    return AlertDialog(
+      title: Text('Reinigungsbeginn · ${widget.abteilung.anzeigeName}'),
+      content: SizedBox(
+        width: 380,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Ab Arbeitsbeginn zählt das Board die Aufträge und Nebenzeiten '
+              'des Tages zusammen, dazu den Nachlauf des letzten Artikels. '
+              'Daraus ergibt sich, ab wann gereinigt werden kann.',
+            ),
+            const SizedBox(height: 14),
+            feld('Arbeitsbeginn', _beginn, 'vorgabe-beginn'),
+            feld('Reinigung ab (Ziel)', _ziel, 'vorgabe-ziel'),
+            feld('Reinigung spätestens ab', _spaet, 'vorgabe-spaet'),
+            if (_fehler != null)
+              Text(
+                _fehler!,
+                style: TextStyle(color: AppFarben.von(context).fehler),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        if (widget.vorgabe != null)
+          TextButton(
+            onPressed: () => Navigator.of(context).pop((null,)),
+            child: const Text('Ausschalten'),
+          ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Abbrechen'),
+        ),
+        FilledButton(
+          onPressed: _speichern,
+          child: const Text('Speichern'),
+        ),
+      ],
     );
   }
 }

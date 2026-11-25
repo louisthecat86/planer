@@ -6,6 +6,7 @@ import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
 import '../../core/providers/daten_waechter.dart';
 import '../../core/services/erledigt_service.dart';
+import '../../core/services/reihenfolge_regeln.dart';
 import '../../core/services/tagesaufgaben_service.dart';
 import '../../core/services/week_snapshot_service.dart'
     show
@@ -49,7 +50,17 @@ mixin _Auslastung {
   double get zusatzMinuten =>
       zusatzzeiten.fold(0, (summe, z) => summe + z.minuten);
 
-  double get belegtMinuten => produktionsMinuten + zusatzMinuten;
+  /// Nachlauf des letzten Artikels an der Bratstraße — die Zeit, in der
+  /// die Anlage steht, bis die Ware verpackt ist und gereinigt werden
+  /// kann. null: kein Auftrag, keine Bratstraße oder noch nie erfasst.
+  double? get nachlaufLetzter => null;
+
+  double get nachlaufMinuten => nachlaufLetzter ?? 0;
+
+  /// Was die Anlage belegt, ohne den Nachlauf — für den Reinigungsbeginn.
+  double get belegtOhneNachlauf => produktionsMinuten + zusatzMinuten;
+
+  double get belegtMinuten => belegtOhneNachlauf + nachlaufMinuten;
 
   /// Verbleibende freie Minuten (negativ bei Überbuchung).
   double get freiMinuten => kapazitaetMinuten - belegtMinuten;
@@ -196,6 +207,7 @@ class BoardCell with _Auslastung {
     required this.tasks,
     required this.kapazitaetMinuten,
     this.zusatzzeiten = const [],
+    this.nachlaufLetzter,
   });
 
   final BoardSpur spur;
@@ -209,6 +221,8 @@ class BoardCell with _Auslastung {
   final double kapazitaetMinuten;
   @override
   final List<Zusatzzeit> zusatzzeiten;
+  @override
+  final double? nachlaufLetzter;
 }
 
 /// Ein Schritt einer Auftragskette, der AUSSERHALB der aktuell gezeigten
@@ -293,6 +307,7 @@ class DayLane with _Auslastung {
     required this.tasks,
     required this.kapazitaetMinuten,
     this.zusatzzeiten = const [],
+    this.nachlaufLetzter,
   });
 
   final BoardSpur spur;
@@ -305,6 +320,8 @@ class DayLane with _Auslastung {
   final double kapazitaetMinuten;
   @override
   final List<Zusatzzeit> zusatzzeiten;
+  @override
+  final double? nachlaufLetzter;
 }
 
 /// Die komplette Tagesübersicht (alle Abteilungen für einen Tag).
@@ -345,8 +362,8 @@ Iterable<List<String>> _idBloecke(Iterable<String> ids) sync* {
 }
 
 /// Tagesschlüssel für die Zuordnung von Nebenzeiten (ohne Uhrzeit).
-String _tagKey(DateTime d) => DateTime(d.year, d.month, d.day)
-    .toIso8601String();
+String _tagKey(DateTime d) =>
+    DateTime(d.year, d.month, d.day).toIso8601String();
 
 /// Lädt Rüst-/Reinigungszeiten im Zeitraum und gruppiert sie nach
 /// „<spurId>|<tag>". Gelöschte Einträge bleiben außen vor.
@@ -383,8 +400,8 @@ Future<Map<String, List<Zusatzzeit>>> _ladeZusatzzeiten(
 /// Verlassen und Zurückkehren lädt die Woche neu — das ist hier sogar
 /// erwünscht: So sieht man immer den aktuellen Stand und nicht das, was
 /// beim ersten Besuch galt.
-final weekBoardProvider = FutureProvider.autoDispose
-    .family<WeekBoard, DateTime>((ref, anyDayInWeek) {
+final weekBoardProvider =
+    FutureProvider.autoDispose.family<WeekBoard, DateTime>((ref, anyDayInWeek) {
   final db = ref.watch(databaseProvider);
   // Hält sich selbst aktuell — siehe daten_waechter.dart.
   neuLadenBeiAenderung(ref, db);
@@ -396,6 +413,55 @@ final weekBoardProvider = FutureProvider.autoDispose
 ///
 /// Ohne Provider, damit auch das Archivieren es nutzen kann: Es friert
 /// diesen Stand als Wochenplan ein ([archivPlanAusBoard]).
+/// Typischer Nachlauf je Artikel — aus allen erfassten Produktionen mit
+/// Ende Auflegen und Ende VPK.
+Future<Map<String, (double, int)>> _ladeNachlauf(AppDatabase db) async {
+  final historie = await (db.select(db.productionHistory)
+        ..where((h) => h.deletedAt.isNull())
+        ..where((h) => h.endeVpk.isNotNull()))
+      .get();
+  return nachlaufAusHistorie(historie);
+}
+
+/// Der Nachlauf des letzten Auftrags in [tasks] (schon in Reihenfolge) —
+/// nur an der Bratstraße: Dort wird aufgelegt, und dort steht die Anlage,
+/// bis die Ware verpackt ist.
+double? _nachlaufLetzter(
+  BoardSpur spur,
+  List<BoardTask> tasks,
+  Map<String, (double, int)> nachlauf,
+) {
+  if (spur.abteilung != Abteilung.bratstrasse || tasks.isEmpty) return null;
+  return nachlauf[tasks.last.productId]?.$1;
+}
+
+/// Die Regeln aller Artikel für die Reihenfolge im Board — Merkmale,
+/// Bratstraßen-Parameter und Nachlauf ([ladeArtikelRegeln]).
+final artikelRegelnProvider =
+    FutureProvider.autoDispose<Map<String, ArtikelRegel>>((ref) {
+  final db = ref.watch(databaseProvider);
+  neuLadenBeiAenderung(
+    ref,
+    db,
+    tabellen: [
+      db.products,
+      db.productSteps,
+      db.productStepParameters,
+      db.productionHistory,
+    ],
+  );
+  return ladeArtikelRegeln(db);
+});
+
+/// Wann je Abteilung gereinigt wird — die Bratstraße hat immer eine
+/// Vorgabe ([ladeReinigungsVorgaben]).
+final reinigungsVorgabenProvider =
+    FutureProvider.autoDispose<Map<Abteilung, ReinigungsVorgabe>>((ref) {
+  final db = ref.watch(databaseProvider);
+  neuLadenBeiAenderung(ref, db, tabellen: [db.appSettings]);
+  return ladeReinigungsVorgaben(db);
+});
+
 Future<WeekBoard> ladeWochenboard(
   AppDatabase db,
   DateTime anyDayInWeek,
@@ -451,17 +517,20 @@ Future<WeekBoard> ladeWochenboard(
     vonTag: tage.first,
     bisTag: tage.last,
   );
+  final nachlauf = await _ladeNachlauf(db);
 
   final cells = <String, BoardCell>{};
   for (final spur in spuren) {
     for (final tag in tage) {
       final key = _cellKey(spur, tag);
+      final tasks = tasksProZelle[key] ?? const <BoardTask>[];
       cells[key] = BoardCell(
         spur: spur,
         tag: tag,
-        tasks: tasksProZelle[key] ?? const [],
+        tasks: tasks,
         zusatzzeiten: zusatzProZelle['${spur.id}|${_tagKey(tag)}'] ?? const [],
         kapazitaetMinuten: spur.kapazitaetMinuten,
+        nachlaufLetzter: _nachlaufLetzter(spur, tasks, nachlauf),
       );
     }
   }
@@ -480,8 +549,8 @@ Future<WeekBoard> ladeWochenboard(
 ///
 /// `autoDispose` aus demselben Grund wie beim Wochenboard — hier sogar
 /// dringlicher, weil je aufgerufenem Tag ein eigener Eintrag entsteht.
-final dayBoardProvider = FutureProvider.autoDispose
-    .family<DayBoard, DateTime>((ref, datum) async {
+final dayBoardProvider =
+    FutureProvider.autoDispose.family<DayBoard, DateTime>((ref, datum) async {
   final db = ref.watch(databaseProvider);
   // Hält sich selbst aktuell — siehe daten_waechter.dart.
   neuLadenBeiAenderung(ref, db);
@@ -512,6 +581,7 @@ final dayBoardProvider = FutureProvider.autoDispose
   }
 
   final zusatzProSpur = await _ladeZusatzzeiten(db, vonTag: tag, bisTag: tag);
+  final nachlauf = await _ladeNachlauf(db);
 
   final lanes = <DayLane>[];
   for (final spur in spuren) {
@@ -521,9 +591,9 @@ final dayBoardProvider = FutureProvider.autoDispose
       DayLane(
         spur: spur,
         tasks: liste,
-        zusatzzeiten:
-            zusatzProSpur['${spur.id}|${_tagKey(tag)}'] ?? const [],
+        zusatzzeiten: zusatzProSpur['${spur.id}|${_tagKey(tag)}'] ?? const [],
         kapazitaetMinuten: spur.kapazitaetMinuten,
+        nachlaufLetzter: _nachlaufLetzter(spur, liste, nachlauf),
       ),
     );
   }
@@ -772,8 +842,8 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
     }
     ebene = naechste;
   }
-  final rows = jeId.values
-      .where((t) => t.deletedAt == null && t.status != 'storniert');
+  final rows =
+      jeId.values.where((t) => t.deletedAt == null && t.status != 'storniert');
 
   final vorher = <String, ({Abteilung abteilung, DateTime datum})>{};
   final nachher = <String, ({Abteilung abteilung, DateTime datum})>{};
@@ -821,7 +891,6 @@ Future<Map<String, KettenNachbar>> _ladeKettenNachbarn(
   return result;
 }
 
-
 /// Montag der Woche von [d], normalisiert auf 00:00 Uhr.
 DateTime _montag(DateTime d) => tagPlus(d, -(d.weekday - 1));
 
@@ -868,9 +937,9 @@ String _spurKey(
 /// Anlagen als Planungsressource markiert sind) oder eine Sammelspur.
 List<BoardSpur> _baueSpuren(
   List<Machine> planungsAnlagen,
-  Set<String> abteilungenMitTasksOhneAnlage,
-  {Map<String, double> abteilungskapazitaeten = const {},}
-) {
+  Set<String> abteilungenMitTasksOhneAnlage, {
+  Map<String, double> abteilungskapazitaeten = const {},
+}) {
   final anlagenJeAbteilung = <String, List<Machine>>{};
   for (final m in planungsAnlagen) {
     (anlagenJeAbteilung[m.abteilung] ??= []).add(m);
@@ -886,8 +955,7 @@ List<BoardSpur> _baueSpuren(
         BoardSpur(
           abteilung: abteilung,
           // Standardkapazität für Abteilungen ohne eigene Anlagen-Spur.
-            kapazitaetMinuten:
-              abteilungskapazitaeten[abteilung.dbValue] ??
+          kapazitaetMinuten: abteilungskapazitaeten[abteilung.dbValue] ??
               kStandardKapazitaetMinuten,
         ),
       );
@@ -902,8 +970,7 @@ List<BoardSpur> _baueSpuren(
           maschineId: m.id,
           maschineName: m.name,
           eignungHinweis: m.eignungHinweis,
-            kapazitaetMinuten:
-              abteilungskapazitaeten[abteilung.dbValue] ??
+          kapazitaetMinuten: abteilungskapazitaeten[abteilung.dbValue] ??
               m.kapazitaetMinutenProTag,
         ),
       );
@@ -916,8 +983,7 @@ List<BoardSpur> _baueSpuren(
         BoardSpur(
           abteilung: abteilung,
           // Standardkapazität für Aufträge ohne gültige Anlagen-Zuordnung.
-            kapazitaetMinuten:
-              abteilungskapazitaeten[abteilung.dbValue] ??
+          kapazitaetMinuten: abteilungskapazitaeten[abteilung.dbValue] ??
               kStandardKapazitaetMinuten,
         ),
       );
@@ -1032,6 +1098,7 @@ class SpurTagBelegung {
     required this.tag,
     required this.produktionsMinuten,
     this.zusatzMinuten = const {},
+    this.nachlaufMinuten = 0,
   });
 
   final BoardSpur spur;
@@ -1048,7 +1115,11 @@ class SpurTagBelegung {
   double get zusatzSumme =>
       zusatzMinuten.values.fold(0.0, (summe, m) => summe + m);
 
-  double get belegtMinuten => produktionsMinuten + zusatzSumme;
+  /// Nachlauf des letzten Artikels an der Bratstraße — wie im Board.
+  final double nachlaufMinuten;
+
+  double get belegtMinuten =>
+      produktionsMinuten + zusatzSumme + nachlaufMinuten;
 
   double get kapazitaetMinuten => spur.kapazitaetMinuten;
 
@@ -1095,11 +1166,17 @@ Future<List<SpurTagBelegung>> belegungImZeitraum(
   // Aufträge je Woche (für die Sammelspuren) und Minuten je Zelle.
   final tasksJeWoche = <DateTime, List<BoardTask>>{};
   final minutenJeZelle = <String, double>{};
+  final tasksJeZelle = <String, List<BoardTask>>{};
   for (final t in tasks) {
     (tasksJeWoche[_montag(t.datum)] ??= []).add(t);
     final key = '${t.spurId}|${_tagKey(t.datum)}';
     minutenJeZelle[key] = (minutenJeZelle[key] ?? 0) + t.dauerMinuten;
+    (tasksJeZelle[key] ??= []).add(t);
   }
+  for (final liste in tasksJeZelle.values) {
+    _sortiereTasks(liste);
+  }
+  final nachlauf = await _ladeNachlauf(db);
 
   final ergebnis = <SpurTagBelegung>[];
   for (var montag = start; montag.isBefore(ende); montag = tagPlus(montag, 7)) {
@@ -1128,6 +1205,12 @@ Future<List<SpurTagBelegung>> belegungImZeitraum(
             tag: tag,
             produktionsMinuten: minutenJeZelle[key] ?? 0,
             zusatzMinuten: zusatz,
+            nachlaufMinuten: _nachlaufLetzter(
+                  spur,
+                  tasksJeZelle[key] ?? const [],
+                  nachlauf,
+                ) ??
+                0,
           ),
         );
       }

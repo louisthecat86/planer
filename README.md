@@ -135,6 +135,37 @@ Die acht Abteilungen sind ein Dart-Enum in
 Kutterabteilung, Bratstraße, Schneideabteilung, Verpackung, Verpackung Tef1,
 Verpackung Tef2.
 
+## Reihenfolge und Reinigung im Board
+
+`lib/core/services/reihenfolge_regeln.dart` — für Board und
+Planungsvorschlag dieselben Regeln:
+
+- **Reihenfolge:** Allergene aufsteigend (stehen über allem), Bio vor
+  konventionell, gegart vor roh. Innerhalb eines Blocks gleicher Merkmale
+  die Plattentemperatur der Bratstraße **ohne Zickzack**: Der erste Block
+  steigt, jeder weitere läuft in die Richtung, mit der er näher an der
+  letzten Temperatur des vorigen beginnt — die Bratstraße muss nie erst
+  abkühlen und dann wieder aufheizen. Artikel ohne Temperatur stehen am
+  Ende ihres Blocks. In der Tagesansicht ordnet der Knopf mit dem
+  Sortiersymbol eine Spur so; Hoch/Runter bleibt. Bricht eine Reihenfolge
+  eine Regel, steht an der Karte ein Warnzeichen (Reinigung nötig), ein
+  Thermometer (Temperatur geht hin und her) oder ein Fragezeichen
+  (Allergene nicht gepflegt).
+- **Nachlauf:** Der letzte Auftrag einer Bratstraßen-Spur belegt die
+  Anlage zusätzlich mit seinem Nachlauf — Median der letzten 10 erfassten
+  Produktionen von „Ende Auflegen" bis „Ende VPK". So zählt er in Board,
+  Ampel und Statistik (Zeit nach Art: „Nachlauf").
+- **Reinigungsbeginn:** Je Abteilung eine Vorgabe aus Arbeitsbeginn, Ziel
+  und spätestem Reinigungsbeginn (Einstellungen, `reinigung_<abteilung>`;
+  die Bratstraße hat immer eine: 06:15, 15:00, 15:30 — ausschalten oder
+  ändern über das Reinigungssymbol der Spur in der Tagesansicht).
+  Arbeitsbeginn (oder Startzeit des ersten Auftrags) plus Aufträge und
+  Nebenzeiten plus Nachlauf des letzten Artikels ergibt „Reinigung ab ca.
+  …": grün bis zum Ziel, gelb bis „spätestens", rot danach. Die
+  Tagesansicht zeigt es immer, die Woche nur, wenn es knapp wird. Wie lange
+  gereinigt wird, rechnet der Planer bewusst nicht — das richtet sich nach
+  der Zeit, die bleibt.
+
 ## Statistik
 
 Drei Ebenen, damit die Seite nicht erschlägt (`lib/features/statistik/`):
