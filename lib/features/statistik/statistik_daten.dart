@@ -15,6 +15,7 @@ import '../articles/produktgruppen.dart';
 import '../board/board_providers.dart'
     show
         BoardSpur,
+        BoardTask,
         CapacityStatus,
         SpurTagBelegung,
         belegungImZeitraum,
@@ -87,9 +88,10 @@ DateTime _montagVon(DateTime d) => tagPlus(d, -(d.weekday - 1));
 
 /// Kalendertage von [a] bis [b] — in UTC gerechnet, damit die
 /// Zeitumstellung keinen Tag verschluckt.
-int _tageZwischen(DateTime a, DateTime b) => DateTime.utc(b.year, b.month, b.day)
-    .difference(DateTime.utc(a.year, a.month, a.day))
-    .inDays;
+int _tageZwischen(DateTime a, DateTime b) =>
+    DateTime.utc(b.year, b.month, b.day)
+        .difference(DateTime.utc(a.year, a.month, a.day))
+        .inDays;
 
 /// Der ausgewertete Zeitraum: ganze Wochen ab Montag [von] bis vor Montag
 /// [bisExkl].
@@ -171,6 +173,17 @@ class StatistikSpanne {
           '${Format.datumKurz(abschnitt)}–'
           '${Format.datumKurz(tagPlus(abschnitt, 4))}'
       : '${Format.monate[abschnitt.month - 1]} ${abschnitt.year}';
+
+  /// Der gleich lange Zeitraum direkt davor — der Vergleich für jede
+  /// Kennzahl. Bei „Alles" null: Davor gibt es nichts.
+  StatistikSpanne? get vorher {
+    if (zeitraum.wochen == null) return null;
+    return StatistikSpanne(
+      zeitraum: zeitraum,
+      von: tagPlus(von, -7 * wochen),
+      bisExkl: von,
+    );
+  }
 
   /// „20.07.2026 – 18.10.2026"
   String get beschreibung =>
@@ -610,13 +623,16 @@ class ErfassteProduktion {
   }
 }
 
-/// Eine Karte im Board — für die Planerfüllung.
+/// Eine Karte im Board — für die Planerfüllung und Plan gegen Ist.
 class PlanKarte {
   const PlanKarte({
     required this.productId,
     required this.abteilung,
     required this.datum,
     this.erledigt,
+    this.mengeKg,
+    this.dauerMinuten,
+    this.wurzel = true,
   });
 
   final String productId;
@@ -627,6 +643,17 @@ class PlanKarte {
 
   /// Erfasst, abgehakt — oder null: offen.
   final Erledigt? erledigt;
+
+  /// Geplante Menge in kg — an der Wurzel einer Kette die Rohware. null:
+  /// unbekannt.
+  final double? mengeKg;
+
+  /// Geplante Dauer in Minuten — null: unbekannt.
+  final double? dauerMinuten;
+
+  /// Ob die Karte der erste Schritt ihrer Kette ist (oder allein steht).
+  /// Nur dort steht die geplante Rohware.
+  final bool wurzel;
 }
 
 bool _imFilter(
@@ -846,7 +873,9 @@ AusbeuteAuswertung werteAusbeuteAus(
   }
   spannen.sort((a, b) {
     final s = b.spanne.compareTo(a.spanne);
-    return s != 0 ? s : a.artikel.artikelnummer.compareTo(b.artikel.artikelnummer);
+    return s != 0
+        ? s
+        : a.artikel.artikelnummer.compareTo(b.artikel.artikelnummer);
   });
 
   return AusbeuteAuswertung(
@@ -1123,9 +1152,8 @@ class ProduktmixAuswertung {
   final List<MixArtikel> topArtikel;
 
   /// Rohware von Artikeln ohne Produktgruppe.
-  double get kgOhneGruppe => gruppen
-      .where((g) => g.ohneGruppe)
-      .fold(0.0, (summe, g) => summe + g.kg);
+  double get kgOhneGruppe =>
+      gruppen.where((g) => g.ohneGruppe).fold(0.0, (summe, g) => summe + g.kg);
 }
 
 /// Wie sich die eingesetzte Rohware auf Produktgruppen und Artikel
@@ -1326,7 +1354,8 @@ ErfuellungsAuswertung werteErfuellungAus(
   for (final k in gezaehlt) {
     gesamt = gesamt.plus(k.erledigt);
     jeAbteilung[k.abteilung] =
-        (jeAbteilung[k.abteilung] ?? const ErfuellungsZahlen()).plus(k.erledigt);
+        (jeAbteilung[k.abteilung] ?? const ErfuellungsZahlen())
+            .plus(k.erledigt);
     final a = verlaufSpanne.abschnittVon(k.datum);
     jeAbschnitt[a] =
         (jeAbschnitt[a] ?? const ErfuellungsZahlen()).plus(k.erledigt);
@@ -1443,9 +1472,17 @@ class StatistikDaten {
     required this.karten,
     required this.produktionen,
     required this.artikel,
+    this.vorher,
+    this.vorschau = const [],
   });
 
   final StatistikSpanne spanne;
+
+  /// Dasselbe für den gleich langen Zeitraum davor — null bei „Alles".
+  final StatistikVorher? vorher;
+
+  /// Die Planung der nächsten Tage ab heute, für die Vorschau.
+  final List<SpurTagBelegung> vorschau;
 
   /// Wann geladen wurde — „heute" für die Planerfüllung.
   final DateTime stand;
@@ -1468,6 +1505,25 @@ class StatistikDaten {
         for (final k in karten) k.productId,
       };
 }
+
+/// Planung, Karten und Produktionen des Zeitraums vor dem gewählten.
+class StatistikVorher {
+  const StatistikVorher({
+    required this.spanne,
+    this.belegung = const [],
+    this.karten = const [],
+    this.produktionen = const [],
+  });
+
+  final StatistikSpanne spanne;
+  final List<SpurTagBelegung> belegung;
+  final List<PlanKarte> karten;
+  final List<ErfassteProduktion> produktionen;
+}
+
+/// So viele Kalendertage ab heute lädt die Vorschau — genug für zehn
+/// Werktage.
+const int kVorschauKalendertage = 15;
 
 /// Der früheste Tag mit Planung oder erfasster Produktion — null ohne
 /// beides.
@@ -1500,26 +1556,46 @@ Future<StatistikDaten> ladeStatistik(
   final jetzt = heute ?? DateTime.now();
   final fruehestes =
       zeitraum.wochen == null ? await _fruehestesDatum(db) : null;
-  final spanne =
-      StatistikSpanne.fuer(zeitraum, jetzt, fruehestes: fruehestes);
+  final spanne = StatistikSpanne.fuer(zeitraum, jetzt, fruehestes: fruehestes);
 
-  final belegung = await belegungImZeitraum(
+  // Ein Aufruf über beide Zeiträume — getrennt wird danach.
+  final davor = spanne.vorher;
+  final ab = davor?.von ?? spanne.von;
+  final belegungAlle = await belegungImZeitraum(
     db,
-    von: spanne.von,
+    von: ab,
     bisExkl: spanne.bisExkl,
   );
-  final karten = await kartenImZeitraum(
+  final kartenAlle = await kartenImZeitraum(
     db,
-    von: spanne.von,
+    von: ab,
     bisExkl: spanne.bisExkl,
   );
+  final heuteTag = tagOhneZeit(jetzt);
+  final vorschau = await belegungImZeitraum(
+    db,
+    von: heuteTag,
+    bisExkl: tagPlus(heuteTag, kVorschauKalendertage),
+  );
+  final belegung = [
+    for (final b in belegungAlle)
+      if (spanne.enthaelt(b.tag)) b,
+  ];
+  PlanKarte planKarte(BoardTask k) => PlanKarte(
+        productId: k.productId,
+        abteilung: k.abteilung,
+        datum: k.datum,
+        erledigt: k.erledigt,
+        mengeKg: k.mengeKg,
+        dauerMinuten: k.dauerMinuten,
+        wurzel: k.parentTaskId == null,
+      );
 
   // Alle Artikel mit Schritten und ALLEN erfassten Produktionen — wie die
   // Artikelliste: Ob einem Artikel eine Ausbeute oder eine Zeit fehlt,
   // hängt nicht am Zeitraum.
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
+  final produkte =
+      await (db.select(db.products)..where((p) => p.deletedAt.isNull())).get();
   final schritte = await (db.select(db.productSteps)
         ..where((s) => s.deletedAt.isNull())
         ..orderBy([(s) => OrderingTerm.asc(s.reihenfolge)]))
@@ -1566,13 +1642,8 @@ Future<StatistikDaten> ladeStatistik(
     stand: jetzt,
     belegung: belegung,
     karten: [
-      for (final k in karten)
-        PlanKarte(
-          productId: k.productId,
-          abteilung: k.abteilung,
-          datum: k.datum,
-          erledigt: k.erledigt,
-        ),
+      for (final k in kartenAlle)
+        if (spanne.enthaelt(tagOhneZeit(k.datum))) planKarte(k),
     ],
     // Produktionen gelöschter Artikel zeigt die App sonst nirgends mehr —
     // hier zählen sie auch nicht.
@@ -1583,6 +1654,26 @@ Future<StatistikDaten> ladeStatistik(
           ErfassteProduktion.aus(h),
     ],
     artikel: artikel,
+    vorher: davor == null
+        ? null
+        : StatistikVorher(
+            spanne: davor,
+            belegung: [
+              for (final b in belegungAlle)
+                if (davor.enthaelt(b.tag)) b,
+            ],
+            karten: [
+              for (final k in kartenAlle)
+                if (davor.enthaelt(tagOhneZeit(k.datum))) planKarte(k),
+            ],
+            produktionen: [
+              for (final h in historie)
+                if (artikel.containsKey(h.productId) &&
+                    davor.enthaelt(tagOhneZeit(h.datum)))
+                  ErfassteProduktion.aus(h),
+            ],
+          ),
+    vorschau: vorschau,
   );
 }
 

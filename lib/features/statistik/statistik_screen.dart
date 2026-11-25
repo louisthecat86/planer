@@ -12,19 +12,26 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart' show CapacityStatus;
-import '../whiteboard/whiteboard_provider.dart' show kLetzteProduktionen;
+import '../whiteboard/whiteboard_provider.dart'
+    show kLetzteProduktionen, selectedDateProvider;
 import 'statistik_daten.dart';
 import 'statistik_diagramme.dart';
 import 'statistik_druck.dart';
+import 'statistik_ueberblick.dart';
+import 'statistik_ueberblick_daten.dart';
 
 /// Statistik: was sich aus der Planung und den erfassten Produktionen
-/// lernen lässt — wo es eng wird, wohin die Zeit geht, wie viel der Plan
-/// erledigt wurde, wie die Ausbeute schwankt, was die Produktion schafft
-/// und trägt und wo die Stammdaten Lücken haben.
+/// lernen lässt — in drei Ebenen, damit die Seite nicht erschlägt.
 ///
-/// Oben wählt man den Zeitraum und optional eine Abteilung; jeder Teil ist
-/// ein eigener Bereich. Fehlen Daten, sagt der Bereich, was zu erfassen
-/// wäre. Artikel und Lücken führen per Klick dorthin, wo man sie pflegt.
+/// Oben der Überblick: fünf Kennzahlen mit dem Vergleich zum Zeitraum
+/// davor, was Aufmerksamkeit braucht, und wo es in den nächsten Werktagen
+/// eng wird. Darunter ein Thema (Kapazität, Plan & Ist, Ausbeute,
+/// Leistung, Artikel & Stammdaten) mit seinen Bereichen — dieselben wie
+/// früher, nur nicht mehr alle auf einmal. Artikel, Lücken, Tage und
+/// Hinweise führen per Klick dorthin, wo man handelt.
+///
+/// Oben wählt man den Zeitraum und optional eine Abteilung. Fehlen Daten,
+/// sagt der Bereich, was zu erfassen wäre.
 class StatistikScreen extends ConsumerStatefulWidget {
   const StatistikScreen({super.key});
 
@@ -35,6 +42,24 @@ class StatistikScreen extends ConsumerStatefulWidget {
 class _StatistikScreenState extends ConsumerState<StatistikScreen> {
   StatistikZeitraum _zeitraum = StatistikZeitraum.quartal;
   Abteilung? _abteilung;
+  StatistikThema _thema = StatistikThema.kapazitaet;
+
+  /// Die Themenwahl — ein Klick auf eine Kennzahl scrollt dorthin.
+  final _themenKey = GlobalKey();
+
+  void _waehleThema(StatistikThema thema, {bool hinscrollen = false}) {
+    setState(() => _thema = thema);
+    if (!hinscrollen) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ziel = _themenKey.currentContext;
+      if (ziel == null || !ziel.mounted) return;
+      Scrollable.ensureVisible(
+        ziel,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   /// Die zuletzt geladenen Daten. Beim Wechsel des Zeitraums bleiben sie
   /// blass stehen, bis die neuen da sind — statt dass die Seite springt.
@@ -80,6 +105,9 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen> {
           daten: daten,
           abteilung: _abteilung,
           onAbteilung: _waehleAbteilung,
+          thema: _thema,
+          themenKey: _themenKey,
+          onThema: _waehleThema,
         ),
       );
     } else if (fehler != null) {
@@ -245,76 +273,136 @@ class _Inhalt extends StatelessWidget {
     required this.daten,
     required this.abteilung,
     required this.onAbteilung,
+    required this.thema,
+    required this.themenKey,
+    required this.onThema,
   });
 
   final StatistikDaten daten;
   final Abteilung? abteilung;
   final ValueChanged<Abteilung?> onAbteilung;
+  final StatistikThema thema;
+  final GlobalKey themenKey;
+  final void Function(StatistikThema thema, {bool hinscrollen}) onThema;
+
+  /// Öffnet das Board an [tag].
+  void _zeigeTag(BuildContext context, DateTime tag) {
+    ProviderScope.containerOf(context, listen: false)
+        .read(selectedDateProvider.notifier)
+        .state = tag;
+    context.goNamed('board');
+  }
+
+  void _folgeHinweis(BuildContext context, StatistikHinweis h) {
+    switch (h.ziel) {
+      case HinweisZiel.board:
+        final tag = h.tag;
+        if (tag != null) _zeigeTag(context, tag);
+      case HinweisZiel.artikel:
+        final a = daten.artikel[h.artikelId];
+        if (a != null) _oeffneArtikel(context, a);
+      case HinweisZiel.thema:
+        final t = h.thema;
+        if (t != null) onThema(t, hinscrollen: true);
+      case HinweisZiel.erfassung:
+        context.goNamed('erfassung');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final spanne = daten.spanne;
+    final ueberblick = werteUeberblickAus(daten, abteilung: abteilung);
+    final bereiche = <Widget>[
+      ...switch (thema) {
+        StatistikThema.kapazitaet => [
+            _AuslastungBereich(
+              auswertung: werteAuslastungAus(
+                daten.belegung,
+                spanne,
+                abteilung: abteilung,
+              ),
+              abteilung: abteilung,
+              onAbteilung: onAbteilung,
+            ),
+            _ZeitBereich(
+              auswertung: werteZeitAus(daten.belegung, abteilung: abteilung),
+            ),
+          ],
+        StatistikThema.planIst => [
+            PlanIstBereich(
+              auswertung: ueberblick.planIst,
+              onArtikel: (a) => _oeffneArtikel(context, a),
+            ),
+            _ErfuellungBereich(
+              auswertung: werteErfuellungAus(
+                daten.karten,
+                spanne,
+                heute: daten.stand,
+                abteilung: abteilung,
+              ),
+              abteilung: abteilung,
+              onAbteilung: onAbteilung,
+            ),
+          ],
+        StatistikThema.ausbeute => [
+            _AusbeuteBereich(
+              auswertung: werteAusbeuteAus(
+                daten.produktionen,
+                daten.artikel,
+                spanne,
+                abteilung: abteilung,
+              ),
+              abteilung: abteilung,
+            ),
+          ],
+        StatistikThema.leistung => [
+            _LeistungBereich(
+              auswertung: werteLeistungAus(
+                daten.produktionen,
+                daten.artikel,
+                spanne,
+                abteilung: abteilung,
+              ),
+              abteilung: abteilung,
+            ),
+          ],
+        StatistikThema.artikel => [
+            _MixBereich(
+              auswertung: werteProduktmixAus(
+                daten.produktionen,
+                daten.artikel,
+                spanne,
+                abteilung: abteilung,
+              ),
+              abteilung: abteilung,
+            ),
+            _PflegeBereich(
+              auswertung: wertePflegeAus(daten.artikel, daten.aktiveArtikel),
+            ),
+          ],
+      },
+    ];
     return ListView(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 24),
       children: [
-        _AuslastungBereich(
-          auswertung: werteAuslastungAus(
-            daten.belegung,
-            spanne,
-            abteilung: abteilung,
-          ),
-          abteilung: abteilung,
-          onAbteilung: onAbteilung,
+        StatistikUeberblick(
+          auswertung: ueberblick,
+          vorher: daten.vorher?.spanne,
+          onThema: (t) => onThema(t, hinscrollen: true),
+          onHinweis: (h) => _folgeHinweis(context, h),
+          onTag: (t) => _zeigeTag(context, t),
         ),
-        const SizedBox(height: 12),
-        _ZeitBereich(
-          auswertung: werteZeitAus(daten.belegung, abteilung: abteilung),
+        const SizedBox(height: 24),
+        ThemenWahl(
+          key: themenKey,
+          thema: thema,
+          onThema: onThema,
         ),
-        const SizedBox(height: 12),
-        _ErfuellungBereich(
-          auswertung: werteErfuellungAus(
-            daten.karten,
-            spanne,
-            heute: daten.stand,
-            abteilung: abteilung,
-          ),
-          abteilung: abteilung,
-          onAbteilung: onAbteilung,
-        ),
-        const SizedBox(height: 12),
-        _AusbeuteBereich(
-          auswertung: werteAusbeuteAus(
-            daten.produktionen,
-            daten.artikel,
-            spanne,
-            abteilung: abteilung,
-          ),
-          abteilung: abteilung,
-        ),
-        const SizedBox(height: 12),
-        _LeistungBereich(
-          auswertung: werteLeistungAus(
-            daten.produktionen,
-            daten.artikel,
-            spanne,
-            abteilung: abteilung,
-          ),
-          abteilung: abteilung,
-        ),
-        const SizedBox(height: 12),
-        _MixBereich(
-          auswertung: werteProduktmixAus(
-            daten.produktionen,
-            daten.artikel,
-            spanne,
-            abteilung: abteilung,
-          ),
-          abteilung: abteilung,
-        ),
-        const SizedBox(height: 12),
-        _PflegeBereich(
-          auswertung: wertePflegeAus(daten.artikel, daten.aktiveArtikel),
-        ),
+        for (final b in bereiche) ...[
+          const SizedBox(height: 12),
+          b,
+        ],
       ],
     );
   }
@@ -847,8 +935,7 @@ class _ZeitTabelle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final groesste =
-        zeilen.fold(0.0, (m, z) => math.max(m, z.anteile.summe));
+    final groesste = zeilen.fold(0.0, (m, z) => math.max(m, z.anteile.summe));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

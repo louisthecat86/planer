@@ -11,9 +11,11 @@ import 'package:produktion_planer/features/board/board_providers.dart';
 import 'package:produktion_planer/features/statistik/statistik_daten.dart';
 import 'package:produktion_planer/features/statistik/statistik_diagramme.dart';
 import 'package:produktion_planer/features/statistik/statistik_screen.dart';
+import 'package:produktion_planer/features/statistik/statistik_ueberblick_daten.dart';
 
-/// Tests für die Statistik-Seite mit erfundenen Daten: Alle Bereiche
-/// erscheinen, nichts läuft über — breit und schmal, hell und dunkel —,
+/// Tests für die Statistik-Seite mit erfundenen Daten: Oben der
+/// Überblick, darunter je Thema seine Bereiche — alle erscheinen, nichts
+/// läuft über, breit und schmal, hell und dunkel —,
 /// ein Tipp auf eine Abteilung zeigt ihre Anlagen, Lücken und Artikel
 /// führen dorthin, wo man sie pflegt, und ohne Daten stehen Hinweise statt
 /// Diagrammen da.
@@ -37,8 +39,7 @@ void main() {
       datum: datum,
       kgRohware: roh,
       kgFertigware: fertig,
-      verlust:
-          verlust != null && verlust > 0 && verlust < 1 ? verlust : null,
+      verlust: verlust != null && verlust > 0 && verlust < 1 ? verlust : null,
       ausbeuteAngegeben: verlust != null,
       minuten: minuten,
     );
@@ -128,17 +129,22 @@ void main() {
               ? null
               : (rest == 1 ? Erledigt.abgehakt : Erledigt.erfasst);
           karten.addAll([
+            // Geplant: 300 kg Rohware, 80 Minuten an der Bratstraße.
             PlanKarte(
               productId: 'p1',
               abteilung: Abteilung.zerlegung,
               datum: tag,
               erledigt: stand,
+              mengeKg: 300,
             ),
             PlanKarte(
               productId: 'p1',
               abteilung: Abteilung.bratstrasse,
               datum: tag,
               erledigt: stand,
+              mengeKg: 300,
+              dauerMinuten: 80,
+              wurzel: false,
             ),
             PlanKarte(
               productId: 'p2',
@@ -289,38 +295,65 @@ void main() {
         (w) => w is BereichKopf && w.titel == titel,
       );
 
+  /// Wählt das Thema [t] unter dem Überblick.
+  Future<void> thema(WidgetTester tester, StatistikThema t) async {
+    final knopf = find.byKey(ValueKey('thema-${t.name}'));
+    await tester.ensureVisible(knopf);
+    await tester.tap(knopf);
+    await tester.pumpAndSettle();
+  }
+
   // So hoch, dass die ganze Seite gebaut wird — sonst prüfte der Test die
   // unteren Bereiche nicht.
   const breit = Size(1400, 5000);
   const schmal = Size(900, 8000);
 
-  testWidgets('breit und hell: alle sieben Bereiche mit Diagrammen',
+  testWidgets('breit und hell: Überblick und je Thema seine Bereiche',
       (tester) async {
     await zeige(tester, beispiel(), groesse: breit);
 
-    for (final titel in const [
-      'Auslastung und Engpässe',
-      'Wohin die Zeit geht',
+    // Oben der Überblick: fünf Kennzahlen, Hinweise, Vorschau.
+    expect(find.text('Wie läuft es?'), findsOneWidget);
+    for (final name in const [
+      'Ø Auslastung',
+      'Mengentreue',
+      'Zeittreue',
+      'Ø Ausbeute',
       'Planerfüllung',
-      'Ausbeute und Verlust',
-      'Leistung',
-      'Produktmix',
-      'Stammdaten-Pflege',
     ]) {
-      expect(bereich(titel), findsOneWidget, reason: titel);
+      expect(find.byKey(ValueKey('kennzahl-$name')), findsOneWidget);
     }
-    expect(find.text('Die meiste Produktionszeit'), findsOneWidget);
+    expect(find.text('BRAUCHT AUFMERKSAMKEIT'), findsOneWidget);
+    expect(find.text('WO WIRD ES ENG?'), findsOneWidget);
 
+    // Kapazität ist vorgewählt.
+    expect(bereich('Auslastung und Engpässe'), findsOneWidget);
+    expect(bereich('Wohin die Zeit geht'), findsOneWidget);
+    expect(bereich('Planerfüllung'), findsNothing);
     expect(zeile('Bratstraße'), findsWidgets);
-    // Einmal in der Auslastung, einmal in der Planerfüllung.
-    expect(zeile('Verpackung'), findsNWidgets(2));
+    expect(zeile('Verpackung'), findsOneWidget);
     expect(find.text('Je Abteilung · Ø pro Woche'), findsOneWidget);
-    expect(find.text('Größte Schwankung je Artikel'), findsOneWidget);
-    expect(find.text('Nach Produktgruppe'), findsOneWidget);
-    expect(find.byType(StatistikKreis), findsNWidgets(2));
-    // Auslastung, Planerfüllung und Verlust.
-    expect(find.byType(StatistikSaeulen), findsNWidgets(3));
+    expect(find.byType(StatistikKreis), findsOneWidget);
+    expect(find.byType(StatistikSaeulen), findsOneWidget);
 
+    await thema(tester, StatistikThema.planIst);
+    expect(bereich('Plan gegen Ist'), findsOneWidget);
+    // Die Frikadelle wird Woche für Woche mehr — bald außerhalb des Bands.
+    expect(find.text('Größte Abweichungen'), findsOneWidget);
+    expect(find.text('5001 · Testfrikadelle'), findsWidgets);
+    expect(bereich('Planerfüllung'), findsOneWidget);
+    expect(bereich('Auslastung und Engpässe'), findsNothing);
+    expect(zeile('Verpackung'), findsOneWidget);
+    expect(find.byType(StatistikSaeulen), findsOneWidget);
+
+    await thema(tester, StatistikThema.ausbeute);
+    expect(bereich('Ausbeute und Verlust'), findsOneWidget);
+    expect(find.text('Größte Schwankung je Artikel'), findsOneWidget);
+    expect(find.byType(StatistikSaeulen), findsOneWidget);
+
+    await thema(tester, StatistikThema.leistung);
+    expect(bereich('Leistung'), findsOneWidget);
+    expect(find.text('Die meiste Produktionszeit'), findsOneWidget);
     // Die Frikadelle weicht von ihren Leistungsdaten ab.
     expect(
       find.text('Abweichung von den Leistungsdaten · 1 von 1 Artikeln'),
@@ -328,6 +361,11 @@ void main() {
     );
     expect(find.byType(AbweichungsBalken), findsOneWidget);
 
+    await thema(tester, StatistikThema.artikel);
+    expect(bereich('Produktmix'), findsOneWidget);
+    expect(bereich('Stammdaten-Pflege'), findsOneWidget);
+    expect(find.text('Nach Produktgruppe'), findsOneWidget);
+    expect(find.byType(StatistikKreis), findsOneWidget);
     // Jede Lücke eine Zeile.
     for (final l in ArtikelLuecke.values) {
       expect(zeile(l.titel), findsOneWidget, reason: l.titel);
@@ -340,8 +378,15 @@ void main() {
     expect(drucken.onPressed, isNotNull);
   });
 
-  testWidgets('ein Tipp auf eine Abteilung zeigt ihre Anlagen',
-      (tester) async {
+  testWidgets('ein Klick auf eine Kennzahl wählt ihr Thema', (tester) async {
+    await zeige(tester, beispiel(), groesse: breit);
+    await tester.tap(find.byKey(const ValueKey('kennzahl-Ø Ausbeute')));
+    await tester.pumpAndSettle();
+    expect(bereich('Ausbeute und Verlust'), findsOneWidget);
+    expect(bereich('Auslastung und Engpässe'), findsNothing);
+  });
+
+  testWidgets('ein Tipp auf eine Abteilung zeigt ihre Anlagen', (tester) async {
     await zeige(tester, beispiel(), groesse: breit);
 
     // Die erste Zeile „Verpackung" steht in der Auslastung.
@@ -353,7 +398,9 @@ void main() {
     expect(zeile('Ohne Anlage'), findsWidgets);
     expect(zeile('Zerlegung'), findsNothing);
     // Die Planerfüllung zeigt nur noch die Verpackung.
+    await thema(tester, StatistikThema.planIst);
     expect(zeile('Verpackung'), findsOneWidget);
+    expect(zeile('Zerlegung'), findsNothing);
   });
 
   testWidgets('schmal und dunkel: kein Überlauf, Zeitraum umschaltbar',
@@ -364,11 +411,18 @@ void main() {
       groesse: schmal,
       theme: AppTheme.dark(),
     );
+    expect(find.text('Wie läuft es?'), findsOneWidget);
+    for (final t in StatistikThema.values) {
+      await thema(tester, t);
+    }
     expect(bereich('Produktmix'), findsOneWidget);
     expect(bereich('Stammdaten-Pflege'), findsOneWidget);
 
     await tester.tap(find.text('4 Wochen'));
     await tester.pumpAndSettle();
+    // Das Thema bleibt beim Wechsel des Zeitraums.
+    expect(bereich('Produktmix'), findsOneWidget);
+    await thema(tester, StatistikThema.kapazitaet);
     expect(bereich('Auslastung und Engpässe'), findsOneWidget);
   });
 
@@ -417,6 +471,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await thema(tester, StatistikThema.artikel);
     await tester.tap(zeile('Ohne Ausbeute'));
     await tester.pumpAndSettle();
     expect(find.text('Artikelliste: ohneAusbeute'), findsOneWidget);
@@ -431,25 +486,47 @@ void main() {
   testWidgets('ohne Daten: Hinweise statt Diagrammen', (tester) async {
     await zeige(tester, leer(), groesse: const Size(1200, 2400));
 
+    // Der Überblick sagt es auch.
+    expect(find.text('Gerade nichts Auffälliges.'), findsOneWidget);
+    expect(
+      find.text('Für die nächsten Werktage ist noch nichts geplant.'),
+      findsOneWidget,
+    );
+    expect(find.text('keine Daten im Zeitraum'), findsNWidgets(5));
+
     expect(find.text('Im Zeitraum ist nichts geplant.'), findsNWidgets(2));
+    expect(find.byType(StatistikKreis), findsNothing);
+    expect(find.byType(StatistikSaeulen), findsNothing);
+
+    await thema(tester, StatistikThema.planIst);
     expect(
       find.text('Im Zeitraum war bis gestern nichts geplant.'),
       findsOneWidget,
     );
     expect(
+      find.textContaining('keine erfasste Produktion für einen Vergleich'),
+      findsOneWidget,
+    );
+
+    await thema(tester, StatistikThema.ausbeute);
+    expect(
       find.textContaining('Im Zeitraum sind keine Produktionen erfasst.'),
       findsOneWidget,
     );
+    expect(find.byType(StatistikSaeulen), findsNothing);
+
+    await thema(tester, StatistikThema.leistung);
     expect(
       find.textContaining('Im Zeitraum ist keine Produktion mit Rohware'),
       findsOneWidget,
     );
+
+    await thema(tester, StatistikThema.artikel);
     expect(
       find.text('Im Zeitraum sind keine Produktionen mit Rohware erfasst.'),
       findsOneWidget,
     );
     expect(find.text('Es sind noch keine Artikel angelegt.'), findsOneWidget);
     expect(find.byType(StatistikKreis), findsNothing);
-    expect(find.byType(StatistikSaeulen), findsNothing);
   });
 }

@@ -35,7 +35,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
 | Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten: Verlust, kg/h; die Kette im Board wird erledigt |
 |             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
-|             | Statistik             | Engpässe, Zeitverteilung, Planerfüllung, Ausbeute, Leistung, Lücken in den Stammdaten        |
+|             | Statistik             | Überblick (5 Kennzahlen mit Vorzeitraum, Hinweise, Vorschau 10 Werktage), darunter Themen    |
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
 |             | Navision-Artikel      | Artikelübersicht aus Navision abgleichen: neue Artikel und Allergene übernehmen              |
 |             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
@@ -134,6 +134,35 @@ Die acht Abteilungen sind ein Dart-Enum in
 `lib/core/constants/abteilungen.dart`: Zerlegung, Wurstküche,
 Kutterabteilung, Bratstraße, Schneideabteilung, Verpackung, Verpackung Tef1,
 Verpackung Tef2.
+
+## Statistik
+
+Drei Ebenen, damit die Seite nicht erschlägt (`lib/features/statistik/`):
+
+1. **Überblick** (`statistik_ueberblick.dart`, Zahlen in
+   `statistik_ueberblick_daten.dart`): fünf Kennzahlen — Ø Auslastung,
+   Mengentreue, Zeittreue, Ø Ausbeute, Planerfüllung — je mit Ampel, kleiner
+   Linie und dem Vergleich zum gleich langen Zeitraum davor (bei „Alles"
+   ohne). Daneben höchstens fünf Hinweise, die zur Handlung führen
+   (überbuchte Tage der Vorschau → Board an dem Tag, Artikel mit
+   gesunkener Ausbeute → Artikel, viele zu lange Produktionen → Plan & Ist,
+   offene Karten der letzten 14 Tage → Produktionserfassung, aktive Artikel
+   mit Lücken → Stammdaten), und die Vorschau der nächsten 10 Werktage je
+   Abteilung (die vollste Anlage zählt; Klick öffnet das Board).
+2. **Themen**: Kapazität (Auslastung, Zeit), Plan & Ist (Plan gegen Ist,
+   Planerfüllung), Ausbeute, Leistung, Artikel & Stammdaten (Produktmix,
+   Pflege) — die bisherigen Bereiche, unverändert, je Thema nur die seinen.
+3. **Detail**: Artikel, Lücken und Abweichungen führen in die Stammdaten.
+
+**Plan gegen Ist** ordnet jede erfasste Produktion über Artikel und Tag den
+Karten im Board zu (wie die Planerfüllung; mehrere Produktionen eines Tages
+zählen zusammen). Mengentreue = Anteil, dessen Rohware höchstens 10 % vom
+Plan an der Wurzel der Kette abweicht; Zeittreue = Anteil, dessen Dauer
+höchstens 20 % von der Karte der Bratstraße abweicht — dort wird die Zeit
+gemessen. Ampeln: Treue gut ab 80 %, Warnung ab 60 %; Planerfüllung gut ab
+95 %, Warnung ab 85 %; Ausbeute Warnung ab 1, kritisch ab 3 Punkten unter
+dem Zeitraum davor. Die Grenzen stehen als Konstanten in
+`statistik_ueberblick_daten.dart`.
 
 ## Drucken
 
