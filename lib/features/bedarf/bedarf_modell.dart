@@ -83,5 +83,6 @@ String bedarfQuelleText(String quelle) => switch (quelle) {
       'bestand' => 'Bestand',
       'sonstiges' => 'Sonstiges',
       kQuelleAuftragsbestand => 'Auftragsbestand',
+      'wochenliste' => 'Wochenliste',
       _ => quelle,
     };

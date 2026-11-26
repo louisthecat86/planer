@@ -5,8 +5,7 @@ import '../../core/constants/abteilungen.dart';
 import '../../core/database/database.dart' show AppDatabase;
 import '../../core/druck/druck_fenster.dart';
 import '../../core/providers/database_provider.dart';
-import '../../core/services/auftragsbestand_deckung.dart'
-    show teileBezuegeZu;
+import '../../core/services/auftragsbestand_deckung.dart' show teileBezuegeZu;
 import '../../core/services/auto_backup_trigger.dart';
 import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
@@ -18,6 +17,7 @@ import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
 import 'planungsvorschlag_druck.dart';
 import 'planungsvorschlag_service.dart';
+import 'wochenliste_ansicht.dart';
 
 /// Vorschlagsansicht: fragt zuerst, welche offenen Bedarfe hinein sollen,
 /// zeigt dann, wie die nächsten Tage aussehen könnten, und überträgt
@@ -84,6 +84,10 @@ class _PlanungsvorschlagScreenState
 
   /// „Alle Tage übernehmen" läuft gerade.
   bool _uebernimmt = false;
+
+  /// Steigt nach jeder Übernahme — die Wochenliste lädt dann neu, denn
+  /// was ganz im Board steht, fällt aus ihr heraus.
+  int _wochenlisteNeu = 0;
 
   /// Die Tage mit Aufträgen, die noch nicht im Board stehen.
   List<VorschlagTag> get _offeneTage => [
@@ -294,7 +298,10 @@ class _PlanungsvorschlagScreenState
           .read(autoBackupTriggerProvider)
           .fireDebounced(reason: 'Planungsvorschlag übernommen');
       if (!mounted) return;
-      setState(() => _uebernommen.add(_key(t.tag)));
+      setState(() {
+        _uebernommen.add(_key(t.tag));
+        _wochenlisteNeu++;
+      });
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -348,7 +355,10 @@ class _PlanungsvorschlagScreenState
           .fireDebounced(reason: 'Planungsvorschlag übernommen');
     }
     if (!mounted) return;
-    setState(() => _uebernimmt = false);
+    setState(() {
+      _uebernimmt = false;
+      if (tage > 0) _wochenlisteNeu++;
+    });
     final was = '$auftraege ${auftraege == 1 ? 'Auftrag' : 'Aufträge'} an '
         '$tage ${tage == 1 ? 'Tag' : 'Tagen'} ins Board übernommen.';
     messenger.showSnackBar(
@@ -478,127 +488,169 @@ class _PlanungsvorschlagScreenState
     await _rechne();
   }
 
+  /// „Vorschlag rechnen" in der Wochenliste: Bedarfe neu laden, alle
+  /// Zeilen der Liste anhaken, die im Zeitraum dran sind, und rechnen.
+  /// Was sonst angehakt war, bleibt angehakt.
+  Future<void> _vorschlagAusWochenliste() async {
+    if (_berechnet && !await _verwerfenOk()) return;
+    if (!mounted) return;
+    if (!await _ladeBedarfe() || !mounted) return;
+    final tage = vorschlagsTage(_einstellungen);
+    setState(() {
+      _auswahl.addAll([
+        for (final b in _bedarfe)
+          if (b.ausWochenliste &&
+              (b.termin == null ||
+                  (tage.isNotEmpty && faelligBis(b, tage.last))))
+            b.bedarfId,
+      ]);
+    });
+    if (_bedarfe.isEmpty) return;
+    await _rechne();
+  }
+
   // ── Aufbau ───────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     final tage = vorschlagsTage(_einstellungen);
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Planungsvorschlag'),
-        actions: [
-          IconButton(
-            onPressed: !_laedt &&
-                    _berechnet &&
-                    _tage.any((t) => t.posten.isNotEmpty)
-                ? _drucken
-                : null,
-            icon: const Icon(Icons.print),
-            tooltip: 'Vorschlag drucken',
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Planungsvorschlag'),
+          bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
+            tabs: [
+              Tab(key: ValueKey('reiter-vorschlag'), text: 'Vorschlag'),
+              Tab(key: ValueKey('reiter-wochenliste'), text: 'Wochenliste'),
+            ],
           ),
-          IconButton(
-            onPressed: _oeffneEinstellungen,
-            icon: const Icon(Icons.tune_rounded),
-            tooltip: 'Zeiten und Zeitraum',
-          ),
-          IconButton(
-            onPressed: _laedt ? null : _neuLaden,
-            icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'Bedarfe neu laden und neu berechnen',
-          ),
-          const SizedBox(width: 8),
-        ],
+          actions: [
+            IconButton(
+              onPressed:
+                  !_laedt && _berechnet && _tage.any((t) => t.posten.isNotEmpty)
+                      ? _drucken
+                      : null,
+              icon: const Icon(Icons.print),
+              tooltip: 'Vorschlag drucken',
+            ),
+            IconButton(
+              onPressed: _oeffneEinstellungen,
+              icon: const Icon(Icons.tune_rounded),
+              tooltip: 'Zeiten und Zeitraum',
+            ),
+            IconButton(
+              onPressed: _laedt ? null : _neuLaden,
+              icon: const Icon(Icons.refresh_rounded),
+              tooltip: 'Bedarfe neu laden und neu berechnen',
+            ),
+            const SizedBox(width: 8),
+          ],
+        ),
+        body: TabBarView(
+          children: [
+            _vorschlagInhalt(tage),
+            WochenlisteAnsicht(
+              tage: tage,
+              neuLaden: _wochenlisteNeu,
+              onVorschlag: _vorschlagAusWochenliste,
+            ),
+          ],
+        ),
       ),
-      // Grauer Grund wie auf den übrigen Seiten, die Bereiche weiß darauf.
-      // Vorher war die Seite selbst weiß und die Karten hoben sich kaum ab.
-      body: _laedt
-          ? const Center(child: CircularProgressIndicator())
-          : _fehler != null
-              ? ListView(
-                  padding: const EdgeInsets.all(14),
-                  children: [
-                    HinweisBox(
-                      'Fehler: $_fehler',
-                      art: StatusArt.fehler,
-                      auswaehlbar: true,
-                    ),
-                  ],
-                )
-              : ListView(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
-                  children: [
-                    if (_bedarfe.isEmpty)
-                      const _LeerKarte(
-                        text: 'Kein offener Bedarf. Bedarfe entstehen in der '
-                            'Bedarfsliste oder im Auftragsbestand über „Zur '
-                            'Planung hinzufügen".',
-                      )
-                    else
-                      _AuswahlKarte(
-                        bedarfe: _bedarfe,
-                        auswahl: _auswahl,
-                        tage: tage,
-                        offen: _auswahlOffen || !_berechnet,
-                        berechnet: _berechnet,
-                        moeglichstSpaet: _einstellungen.moeglichstSpaet,
-                        onWaehle: _waehle,
-                        onSetze: _setzeAuswahl,
-                        onSpaet: (v) => setState(
-                          () => _einstellungen =
-                              _einstellungen.kopieMit(moeglichstSpaet: v),
-                        ),
-                        onAufklappen: () =>
-                            setState(() => _auswahlOffen = true),
-                        onZuklappen: () =>
-                            setState(() => _auswahlOffen = false),
-                        onBerechnen: _berechneAusAuswahl,
-                      ),
-                    if (_berechnet && _bedarfe.isNotEmpty) ...[
-                      const SizedBox(height: 14),
-                      _Kopfzeile(
-                        tage: _tage,
-                        einstellungen: _berechnetMit ?? _einstellungen,
-                        geaendert: _geaendert,
-                        offeneTage: _offeneTage.length,
-                        onAlle: _uebernimmt ? null : _alleUebernehmen,
-                      ),
-                      const SizedBox(height: 14),
-                      if (_tage.every((t) => t.posten.isEmpty))
-                        _LeerKarte(
-                          text: _nichtPlanbar.isNotEmpty
-                              ? 'Aus der Auswahl lässt sich gerade nichts '
-                                  'einplanen. Die Liste unten nennt zu jedem '
-                                  'Artikel den Grund.'
-                              : 'Nichts einzuplanen.',
-                        ),
-                      for (var i = 0; i < _tage.length; i++)
-                        if (_tage[i].posten.isNotEmpty)
-                          _TagKarte(
-                            tag: _tage[i],
-                            manuellSortiert:
-                                _manuell.contains(_key(_tage[i].tag)),
-                            uebernommen:
-                                _uebernommen.contains(_key(_tage[i].tag)),
-                            kannZurueck: i > 0,
-                            kannVor: i < _tage.length - 1,
-                            onReorder: (von, nach) =>
-                                _sortiereNeu(i, von, nach),
-                            onNachRegeln: () => _nachRegeln(i),
-                            onMenge: (p) => _aendereMenge(i, p),
-                            onEntfernen: (p) => _entferne(i, p),
-                            onVerschieben: (p, richtung) =>
-                                _verschiebe(i, p, richtung),
-                            onUebernehmen: () => _uebernehmen(i),
-                            onDatenblatt: (p) => _datenblatt(i, p),
-                            onDatenblaetter: () => _datenblaetter(i),
-                          ),
-                      if (_nichtPlanbar.isNotEmpty)
-                        _NichtPlanbarKarte(eintraege: _nichtPlanbar),
-                    ],
-                  ],
-                ),
     );
+  }
+
+  /// Der Reiter „Vorschlag": Auswahl, Tage, Restliste.
+  Widget _vorschlagInhalt(List<DateTime> tage) {
+    // Grauer Grund wie auf den übrigen Seiten, die Bereiche weiß darauf.
+    // Vorher war die Seite selbst weiß und die Karten hoben sich kaum ab.
+    return _laedt
+        ? const Center(child: CircularProgressIndicator())
+        : _fehler != null
+            ? ListView(
+                padding: const EdgeInsets.all(14),
+                children: [
+                  HinweisBox(
+                    'Fehler: $_fehler',
+                    art: StatusArt.fehler,
+                    auswaehlbar: true,
+                  ),
+                ],
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 40),
+                children: [
+                  if (_bedarfe.isEmpty)
+                    const _LeerKarte(
+                      text: 'Kein offener Bedarf. Bedarfe entstehen in der '
+                          'Bedarfsliste, im Auftragsbestand über „Zur '
+                          'Planung hinzufügen" oder im Reiter „Wochenliste".',
+                    )
+                  else
+                    _AuswahlKarte(
+                      bedarfe: _bedarfe,
+                      auswahl: _auswahl,
+                      tage: tage,
+                      offen: _auswahlOffen || !_berechnet,
+                      berechnet: _berechnet,
+                      moeglichstSpaet: _einstellungen.moeglichstSpaet,
+                      onWaehle: _waehle,
+                      onSetze: _setzeAuswahl,
+                      onSpaet: (v) => setState(
+                        () => _einstellungen =
+                            _einstellungen.kopieMit(moeglichstSpaet: v),
+                      ),
+                      onAufklappen: () => setState(() => _auswahlOffen = true),
+                      onZuklappen: () => setState(() => _auswahlOffen = false),
+                      onBerechnen: _berechneAusAuswahl,
+                    ),
+                  if (_berechnet && _bedarfe.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    _Kopfzeile(
+                      tage: _tage,
+                      einstellungen: _berechnetMit ?? _einstellungen,
+                      geaendert: _geaendert,
+                      offeneTage: _offeneTage.length,
+                      onAlle: _uebernimmt ? null : _alleUebernehmen,
+                    ),
+                    const SizedBox(height: 14),
+                    if (_tage.every((t) => t.posten.isEmpty))
+                      _LeerKarte(
+                        text: _nichtPlanbar.isNotEmpty
+                            ? 'Aus der Auswahl lässt sich gerade nichts '
+                                'einplanen. Die Liste unten nennt zu jedem '
+                                'Artikel den Grund.'
+                            : 'Nichts einzuplanen.',
+                      ),
+                    for (var i = 0; i < _tage.length; i++)
+                      if (_tage[i].posten.isNotEmpty)
+                        _TagKarte(
+                          tag: _tage[i],
+                          manuellSortiert:
+                              _manuell.contains(_key(_tage[i].tag)),
+                          uebernommen:
+                              _uebernommen.contains(_key(_tage[i].tag)),
+                          kannZurueck: i > 0,
+                          kannVor: i < _tage.length - 1,
+                          onReorder: (von, nach) => _sortiereNeu(i, von, nach),
+                          onNachRegeln: () => _nachRegeln(i),
+                          onMenge: (p) => _aendereMenge(i, p),
+                          onEntfernen: (p) => _entferne(i, p),
+                          onVerschieben: (p, richtung) =>
+                              _verschiebe(i, p, richtung),
+                          onUebernehmen: () => _uebernehmen(i),
+                          onDatenblatt: (p) => _datenblatt(i, p),
+                          onDatenblaetter: () => _datenblaetter(i),
+                        ),
+                    if (_nichtPlanbar.isNotEmpty)
+                      _NichtPlanbarKarte(eintraege: _nichtPlanbar),
+                  ],
+                ],
+              );
   }
 
   /// Nachfrage, bevor handgemachte Änderungen am Vorschlag verloren gehen.
@@ -869,9 +921,7 @@ class _AuswahlKarte extends StatelessWidget {
                             size: 18,
                           ),
                           label: Text(
-                            berechnet
-                                ? 'Neu berechnen'
-                                : 'Vorschlag berechnen',
+                            berechnet ? 'Neu berechnen' : 'Vorschlag berechnen',
                           ),
                         ),
                       ],
@@ -964,6 +1014,7 @@ class _AuswahlZeile extends StatelessWidget {
     'bestand': 'Bestand',
     'sonstiges': 'Sonstiges',
     'auftragsbestand': 'Auftragsbestand',
+    'wochenliste': 'Wochenliste',
   };
 
   @override
@@ -982,8 +1033,17 @@ class _AuswahlZeile extends StatelessWidget {
     final Widget terminAnzeige;
     if (termin == null) {
       terminAnzeige = Text(
-        'ohne Termin',
+        b.ausWochenliste ? 'ohne Wunschtag' : 'ohne Termin',
         style: stil?.copyWith(color: farben.onSurfaceVariant),
+      );
+    } else if (b.ausWochenliste) {
+      // Ein Wunschtag ist keine Frist — vorbei heißt nur: so bald wie
+      // möglich.
+      terminAnzeige = Text(
+        tage.isNotEmpty && _tagVon(termin).isBefore(tage.first)
+            ? 'Wunsch ${_tagKurz(termin)} · vorbei'
+            : 'Wunsch ${_tagKurz(termin)}',
+        style: zahlen,
       );
     } else if (tage.isNotEmpty && _tagVon(termin).isBefore(tage.first)) {
       terminAnzeige = StatusMarke(
@@ -1602,8 +1662,7 @@ class _PostenZeile extends StatelessWidget {
       WechselGrund.ohneUmstellung => 'kein Umstellen nötig',
       WechselGrund.umstellen =>
         'umrüsten ${Zeit.kurz(posten.nebenzeitMinuten)}',
-      WechselGrund.reinigen =>
-        'reinigen ${Zeit.kurz(posten.nebenzeitMinuten)}',
+      WechselGrund.reinigen => 'reinigen ${Zeit.kurz(posten.nebenzeitMinuten)}',
     };
 
     // Termin und Herkunft: Liegt der Tag nach dem Termin — etwa nach
@@ -1616,6 +1675,10 @@ class _PostenZeile extends StatelessWidget {
         zuSpaet
             ? 'nach dem Termin (${_tagKurz(termin)})!'
             : 'spätestens ${_tagKurz(termin)}',
+      if (posten.wunschtag case final w?)
+        posten.nichtAmWunschtag(tag)
+            ? 'Wochenliste, Wunsch ${_tagKurz(w)} — dort kein Platz'
+            : 'Wochenliste, Wunschtag',
       if (auftraege.isNotEmpty)
         'Auftragsbestand, ${auftraege.length} '
             '${auftraege.length == 1 ? 'Auftrag' : 'Aufträge'}',
@@ -1986,8 +2049,7 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
   void initState() {
     super.initState();
     final e = widget.start;
-    _ruesten =
-        TextEditingController(text: e.ruestenMinuten.round().toString());
+    _ruesten = TextEditingController(text: e.ruestenMinuten.round().toString());
     _reinigen = TextEditingController(
       text: e.zwischenreinigungMinuten.round().toString(),
     );
@@ -2202,8 +2264,7 @@ class _EinstellungenDialogState extends State<_EinstellungenDialog> {
     return d;
   }
 
-  static String _datum(DateTime d) =>
-      '${d.day.toString().padLeft(2, '0')}.'
+  static String _datum(DateTime d) => '${d.day.toString().padLeft(2, '0')}.'
       '${d.month.toString().padLeft(2, '0')}.';
 }
 

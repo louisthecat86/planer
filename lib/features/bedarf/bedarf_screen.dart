@@ -24,6 +24,7 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../datenblatt/datenblatt.dart';
 import '../datenblatt/datenblatt_drucken.dart';
+import '../planung/wochenliste.dart' show kQuelleWochenliste;
 import 'bedarf_druck.dart';
 import 'bedarf_modell.dart';
 
@@ -836,6 +837,10 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
   /// fest — die gebündelten Auftragszeilen gehören zu genau diesem Artikel.
   bool get _ausAuftragsbestand => _quelle == kQuelleAuftragsbestand;
 
+  /// Zeile der Wochenliste im Planungsvorschlag: Sie behält ihre Herkunft,
+  /// und ihr Termin ist ein Wunschtag.
+  bool get _ausWochenliste => _quelle == kQuelleWochenliste;
+
   @override
   void initState() {
     super.initState();
@@ -1066,7 +1071,7 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
             borderRadius: AppMasse.ecken,
             child: InputDecorator(
               decoration: InputDecoration(
-                labelText: 'Termin',
+                labelText: _ausWochenliste ? 'Wunschtag' : 'Termin',
                 prefixIcon: const Icon(Icons.event),
                 suffixIcon: termin == null
                     ? null
@@ -1087,6 +1092,12 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
           if (_ausAuftragsbestand)
             _AuftragsbestandHinweis(
               bezuege: AuftragsBezug.dekodiere(widget.bedarf?.auftragsZeilen),
+            )
+          else if (_ausWochenliste)
+            const HinweisBox(
+              'Aus der Wochenliste im Planungsvorschlag. Der Termin ist dort '
+              'ein Wunschtag: Ist an dem Tag kein Platz, plant der Vorschlag '
+              'den nächsten Tag mit Platz.',
             )
           else
             SegmentedButton<String>(

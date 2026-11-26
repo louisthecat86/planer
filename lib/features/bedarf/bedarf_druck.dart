@@ -97,6 +97,7 @@ DruckAuftrag bedarfDruckAuftrag(
     'bestand',
     'sonstiges',
     kQuelleAuftragsbestand,
+    'wochenliste',
   ];
   final quellen = [
     for (final q in bekannt)

@@ -407,6 +407,10 @@ class _VorschlagDruck {
         zuSpaet
             ? 'nach dem Termin (${Format.tagKurz(termin)})!'
             : 'spätestens ${Format.tagKurz(termin)}',
+      if (p.wunschtag case final w?)
+        p.nichtAmWunschtag(amTag)
+            ? 'Wunsch ${Format.tagKurz(w)} — dort kein Platz'
+            : 'Wunschtag',
       if (inhalt.auftraege && fuer.isNotEmpty)
         'für ${beschreibeBezuege(fuer)}'
       else if (belege.isNotEmpty)

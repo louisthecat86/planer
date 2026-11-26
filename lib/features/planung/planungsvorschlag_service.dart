@@ -14,6 +14,7 @@ import '../../core/services/reihenfolge_regeln.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart';
 import '../whiteboard/whiteboard_provider.dart';
+import 'wochenliste.dart' show kQuelleWochenliste;
 
 // ═══════════════════════════════════════════════════════════════════════
 // Einstellungen
@@ -176,6 +177,9 @@ class OffenerBedarf {
   final List<AuftragsBezug> auftragsBezuege;
 
   bool get ausAuftragsbestand => quelle == kQuelleAuftragsbestand;
+
+  /// Aus der Wochenliste: [termin] ist dann ein Wunschtag, keine Frist.
+  bool get ausWochenliste => quelle == kQuelleWochenliste;
 }
 
 /// Ist [b] bis [letzterTag] fällig? Ohne Termin: ja — was keinen Termin
@@ -240,6 +244,7 @@ class VorschlagPosten {
     required this.hoehe,
     required this.ausgangsMengeKg,
     this.termin,
+    this.wunschtag,
     this.auftragsBezuege = const [],
   });
 
@@ -284,6 +289,9 @@ class VorschlagPosten {
   /// Spätester Produktionstag des Bedarfs.
   final DateTime? termin;
 
+  /// Wunschtag aus der Wochenliste — ein Wunsch, keine Frist.
+  final DateTime? wunschtag;
+
   /// Auftragszeilen aus dem Auftragsbestand, für die produziert wird.
   /// Beim Übernehmen bekommt die Produktion davon so viele, wie ihre Menge
   /// bedient — der früheste Versand zuerst.
@@ -297,6 +305,13 @@ class VorschlagPosten {
     if (t == null) return false;
     return DateTime(t.year, t.month, t.day)
         .isBefore(DateTime(tag.year, tag.month, tag.day));
+  }
+
+  /// Läuft der Posten an [tag] nicht an seinem Wunschtag?
+  bool nichtAmWunschtag(DateTime tag) {
+    final w = wunschtag;
+    if (w == null) return false;
+    return w.year != tag.year || w.month != tag.month || w.day != tag.day;
   }
 
   VorschlagPosten kopieMit({
@@ -325,6 +340,7 @@ class VorschlagPosten {
       hoehe: hoehe,
       ausgangsMengeKg: ausgangsMengeKg,
       termin: termin,
+      wunschtag: wunschtag,
       auftragsBezuege: auftragsBezuege,
     );
   }
@@ -532,6 +548,7 @@ class _Kandidat {
     required this.dauerMinuten,
     required this.ausHistorie,
     required this.termin,
+    this.wunschtag,
     required this.prioritaet,
     required this.allergenRang,
     required this.bioRang,
@@ -561,6 +578,10 @@ class _Kandidat {
 
   /// Spätester Produktionstag.
   final DateTime? termin;
+
+  /// Wunschtag aus der Wochenliste: dort, wenn Platz ist, sonst am
+  /// nächsten Tag mit Platz.
+  final DateTime? wunschtag;
   final int prioritaet;
 
   /// 0 = allergenfrei, sonst Position in [kAllergene].
@@ -789,13 +810,56 @@ class PlanungsvorschlagService {
         return vorTermin(t);
       }
 
+      // 0. Wunschtage aus der Wochenliste zuerst: Der Produktionsleiter hat
+      //    sie bewusst so gelegt. Am Wunschtag, wenn dort Platz ist, sonst
+      //    am nächsten Tag mit Platz — nie davor, denn früher produziert
+      //    liegt die Ware nur im Lager. Ein Wunschtag, der schon vorbei
+      //    ist, zählt wie der erste Tag.
+      final mitWunsch = [
+        for (final k in planbar)
+          if (k.wunschtag != null) k,
+      ]..sort((a, b) {
+          final t = a.wunschtag!.compareTo(b.wunschtag!);
+          if (t != 0) return t;
+          final p = b.prioritaet.compareTo(a.prioritaet);
+          if (p != 0) return p;
+          return a.artikelnummer.compareTo(b.artikelnummer);
+        });
+      for (final k in mitWunsch) {
+        final wunsch = k.wunschtag!;
+        final ab = tage.indexWhere((t) => !t.isBefore(wunsch));
+        if (ab < 0) {
+          zurueck(
+            k,
+            'Wunschtag ${_datum(wunsch)} liegt hinter dem Zeitraum — '
+            'Zeitraum verlängern oder später rechnen',
+          );
+          continue;
+        }
+        var gelegt = false;
+        for (var i = ab; i < tage.length && !gelegt; i++) {
+          gelegt = lege(i, k);
+        }
+        if (!gelegt) {
+          zurueck(
+            k,
+            'Ab dem Wunschtag (${_datum(wunsch)}) ist im Zeitraum kein '
+            'Platz mehr frei',
+          );
+        }
+      }
+      final ohneWunsch = [
+        for (final k in planbar)
+          if (k.wunschtag == null) k,
+      ];
+
       if (e.moeglichstSpaet) {
         // 1. Mit Termin: vom Termin aus rückwärts, der späteste Termin
         //    zuerst. So bekommt jeder den spätesten Tag, der für ihn noch
         //    frei ist, und nimmt den früheren Terminen nichts weg, solange
         //    hinten Platz ist.
         final mitTermin = [
-          for (final k in planbar)
+          for (final k in ohneWunsch)
             if (k.termin != null && !ueberfaellig(k)) k,
         ]..sort((a, b) {
             final t = b.termin!.compareTo(a.termin!);
@@ -811,7 +875,7 @@ class PlanungsvorschlagService {
         // 2. Überfälliges und Bedarf ohne Termin: so früh wie möglich, in
         //    die Lücken, die jetzt noch bleiben.
         final rest = [
-          for (final k in planbar)
+          for (final k in ohneWunsch)
             if (k.termin == null || ueberfaellig(k)) k,
         ]..sort(_nachDringlichkeit);
         for (final k in rest) {
@@ -819,7 +883,7 @@ class PlanungsvorschlagService {
         }
       } else {
         // So früh wie möglich — aber auch hier nie nach dem Termin.
-        final alle = [...planbar]..sort(_nachDringlichkeit);
+        final alle = [...ohneWunsch]..sort(_nachDringlichkeit);
         for (final k in alle) {
           final t = k.termin;
           final bis =
@@ -839,6 +903,7 @@ class PlanungsvorschlagService {
             belegtVorher: belegt[i],
             endreinigung: endreinigung[i],
             e: e,
+            erster: tage.first,
           ),
       ],
       nichtPlanbar: nichtPlanbar,
@@ -997,7 +1062,13 @@ class PlanungsvorschlagService {
           rohwareKg: plan.rohwareKg,
           dauerMinuten: dauer,
           ausHistorie: ausHistorie,
-          termin: d.termin == null ? null : _tag(d.termin!),
+          // In der Wochenliste ist der Termin ein Wunschtag.
+          termin: d.termin == null || d.quelle == kQuelleWochenliste
+              ? null
+              : _tag(d.termin!),
+          wunschtag: d.termin != null && d.quelle == kQuelleWochenliste
+              ? _tag(d.termin!)
+              : null,
           prioritaet: d.prioritaet,
           allergenRang: allergenRang(p.allergene),
           // Unbekannte Qualitätsstufe wird wie konventionell behandelt —
@@ -1065,6 +1136,9 @@ class PlanungsvorschlagService {
   }
 
   // ── Kapazität und Belegung ───────────────────────────────────────────
+
+  /// Tageskapazität der Bratstraße — mit ihr rechnet der Vorschlag.
+  Future<double> tageskapazitaet() => _kapazitaetFuehrend();
 
   /// Tageskapazität der führenden Abteilung, inklusive gepflegter
   /// Abweichungen aus den Einstellungen.
@@ -1183,6 +1257,7 @@ class PlanungsvorschlagService {
     required double belegtVorher,
     required double endreinigung,
     required VorschlagEinstellungen e,
+    required DateTime erster,
   }) {
     final posten = <VorschlagPosten>[];
     final warnungen = <String>{};
@@ -1218,6 +1293,7 @@ class PlanungsvorschlagService {
           hoehe: k.hoehe,
           ausgangsMengeKg: k.mengeKg,
           termin: k.termin,
+          wunschtag: k.wunschtag,
           auftragsBezuege: k.bezuege,
         ),
       );
@@ -1229,6 +1305,16 @@ class PlanungsvorschlagService {
       if (termin != null && _tag(termin).isBefore(tag)) {
         warnungen.add('Termin von ${k.artikelnummer} war am '
             '${_datum(termin)} — schon überschritten');
+      }
+      final wunsch = k.wunschtag;
+      if (wunsch != null && wunsch.isBefore(tag)) {
+        warnungen.add(
+          wunsch.isBefore(erster)
+              ? 'Wunschtag von ${k.artikelnummer} (${_datum(wunsch)}) ist '
+                  'schon vorbei'
+              : 'Wunschtag von ${k.artikelnummer} war ${_datum(wunsch)} — '
+                  'dort war kein Platz mehr',
+        );
       }
       vorher = k;
     }

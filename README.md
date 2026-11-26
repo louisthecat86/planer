@@ -166,6 +166,30 @@ Planungsvorschlag dieselben Regeln:
   gereinigt wird, rechnet der Planer bewusst nicht — das richtet sich nach
   der Zeit, die bleibt.
 
+## Wochenliste im Planungsvorschlag
+
+Reiter „Wochenliste" im Planungsvorschlag
+(`lib/features/planung/wochenliste.dart`, Ansicht
+`wochenliste_ansicht.dart`): Artikel untereinander, je Zeile ein
+Wunschtag und **eine** Menge — Rohware, Fleischeinwaage oder Fertigware.
+
+- **Umrechnen:** Die beiden anderen Mengen kommen aus Ausbeute und
+  Fleischanteil wie im Fenster der Produktion (letzte Produktionen, sonst
+  Rezeptur). Fehlt eins davon, sagt die Zeile das, statt zu raten;
+  Fertigware ist immer planbar. Im Mengenfeld geht eine kleine Rechnung
+  (`27*10`, `100+80`).
+- **Dauer:** je Abteilung, dieselbe Rechnung wie beim Einplanen; unten die
+  Summe, die Bratstraße zusätzlich in Tagen ihrer Kapazität.
+- **Speichern:** Jede vollständige Zeile ist sofort ein Bedarf mit der
+  Herkunft `wochenliste`, der Wunschtag steht im Termin. Welches Feld
+  eingetragen wurde, steht in `app_settings` (`wochenliste_eingaben`).
+  Die Zeile bleibt, bis sie ganz im Board steht oder gelöscht wird; wird
+  die Menge in der Bedarfsliste geändert, gilt dort die Fertigware.
+- **Vorschlag:** Wunschtage werden zuerst verteilt — am Wunschtag, wenn
+  Platz ist, sonst am nächsten Tag mit Platz (mit Hinweis), nie davor.
+  Zeilen ohne Wunschtag füllen die Lücken. Reihenfolge und Übernahme wie
+  bei jedem Bedarf.
+
 ## Statistik
 
 Drei Ebenen, damit die Seite nicht erschlägt (`lib/features/statistik/`):

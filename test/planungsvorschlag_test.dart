@@ -6,6 +6,7 @@ import 'package:produktion_planer/core/database/database.dart';
 import 'package:produktion_planer/core/services/auftragsbestand_deckung.dart';
 import 'package:produktion_planer/features/auftragsbestand/auftrags_einplanung.dart';
 import 'package:produktion_planer/features/planung/planungsvorschlag_service.dart';
+import 'package:produktion_planer/features/planung/wochenliste.dart';
 
 import 'helpers/test_db.dart';
 
@@ -131,8 +132,7 @@ void main() {
       expect(tageMit(v, 'b1'), [dienstag]);
     });
 
-    test('ist vor dem Termin kein Platz, kommt es in die Restliste',
-        () async {
+    test('ist vor dem Termin kein Platz, kommt es in die Restliste', () async {
       await bedarf('b1', 'p1', 200, termin: dienstag);
       await belege(montag, 550);
       await belege(dienstag, 550);
@@ -278,7 +278,8 @@ void main() {
       expect(v.nichtPlanbar.single.grund, contains('mehr als ein ganzer Tag'));
     });
 
-    test('Rüstzeit einer zweiten Übernahme kommt dazu, Endreinigung '
+    test(
+        'Rüstzeit einer zweiten Übernahme kommt dazu, Endreinigung '
         'bleibt eine', () async {
       VorschlagPosten posten(String productId, String nummer, double neben) =>
           VorschlagPosten(
@@ -429,6 +430,84 @@ void main() {
       final rest = (await ladeVormerkungen(db))['12981']!.single;
       expect(rest.offenKg, 200);
       expect(rest.bezuege, hasLength(2));
+    });
+  });
+
+  group('Wunschtag aus der Wochenliste', () {
+    Future<void> wunsch(
+      String id,
+      String productId,
+      double kg,
+      DateTime? tag,
+    ) =>
+        db.into(db.demands).insert(
+              DemandsCompanion.insert(
+                id: id,
+                productId: productId,
+                mengeKgFertig: kg,
+                termin: Value(tag),
+                quelle: const Value(kQuelleWochenliste),
+              ),
+            );
+
+    test('am Wunschtag, auch wenn möglichst spät oder früh geplant wird',
+        () async {
+      await wunsch('w1', 'p1', 200, mittwoch);
+      for (final spaet in [true, false]) {
+        final v = await service.berechne(woche(spaet: spaet));
+        expect(tageMit(v, 'w1'), [mittwoch]);
+        final p = v.tage[2].posten.single;
+        expect(p.wunschtag, mittwoch);
+        expect(p.termin, isNull);
+        expect(p.nichtAmWunschtag(mittwoch), isFalse);
+        expect(v.tage[2].warnungen, isEmpty);
+      }
+    });
+
+    test('Wunschtag voll: der nächste Tag mit Platz, mit Hinweis', () async {
+      await wunsch('w1', 'p1', 200, mittwoch);
+      await belege(mittwoch, 550);
+
+      final v = await service.berechne(woche());
+
+      expect(tageMit(v, 'w1'), [donnerstag]);
+      final tag = v.tage[3];
+      expect(tag.posten.single.nichtAmWunschtag(donnerstag), isTrue);
+      expect(tag.warnungen.single, contains('dort war kein Platz'));
+    });
+
+    test('nie vor dem Wunschtag — dann lieber die Restliste', () async {
+      await wunsch('w1', 'p1', 200, donnerstag);
+      await belege(donnerstag, 550);
+      await belege(freitag, 550);
+
+      final v = await service.berechne(woche());
+
+      expect(tageMit(v, 'w1'), isEmpty);
+      expect(v.nichtPlanbar.single.grund, contains('Ab dem Wunschtag'));
+    });
+
+    test('vorbei: am ersten Tag; hinter dem Zeitraum: Restliste', () async {
+      await wunsch('w1', 'p1', 100, DateTime(2026, 10, 1));
+      await wunsch('w2', 'p2', 100, DateTime(2026, 10, 20));
+
+      final v = await service.berechne(woche());
+
+      expect(tageMit(v, 'w1'), [montag]);
+      expect(v.tage[0].warnungen.single, contains('schon vorbei'));
+      expect(v.nichtPlanbar.single.grund, contains('hinter dem Zeitraum'));
+    });
+
+    test('ohne Wunschtag: frei in die Lücken, Wünsche zuerst', () async {
+      await wunsch('w1', 'p1', 900, montag);
+      await wunsch('w2', 'p2', 200, null);
+
+      final v = await service.berechne(woche());
+
+      expect(tageMit(v, 'w1'), [montag]);
+      expect(tageMit(v, 'w2'), [dienstag]);
+      final offen = await service.ladeOffeneBedarfe();
+      expect(offen.every((b) => b.ausWochenliste), isTrue);
     });
   });
 
