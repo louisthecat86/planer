@@ -375,12 +375,17 @@ Map<String, String> spezifikationsWerte(
   werte['allergene'] = enthalten.isEmpty
       ? (en ? 'none' : 'keine')
       : [for (final x in enthalten.keys) allergenName(x, sprache)].join(', ');
+  // „nein" heißt: nicht enthalten — auch wenn es als Spur möglich ist.
+  // Spuren nur, wo nichts enthalten ist, und nie Sulfit (siehe
+  // betriebs_spuren.dart). Die Spuren des Betriebs hat die Quelle schon in
+  // [SpezAngaben.spuren].
+  final spurenListe =
+      wirksameSpuren(betrieb: a.spuren, enthalten: enthalten.keys).toSet();
   for (final x in kSpezAllergene) {
     final quellen = enthalten[x];
-    final spuren = quellen == null && a.spuren.contains(x);
     werte['allergen.$x.ja'] = kreuz(quellen != null);
-    werte['allergen.$x.spuren'] = kreuz(spuren);
-    werte['allergen.$x.nein'] = kreuz(quellen == null && !spuren);
+    werte['allergen.$x.spuren'] = kreuz(spurenListe.contains(x));
+    werte['allergen.$x.nein'] = kreuz(quellen == null);
     werte['allergen.$x.quelle'] = quellen?.join(', ') ?? '';
   }
   return werte;

@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/database/database.dart';
+import '../../../core/providers/database_provider.dart';
 import '../../../core/services/auto_backup_trigger.dart';
 import '../../../core/ui/bausteine.dart';
 import '../../../core/utils/fehler_text.dart';
 import '../freigabe/freigabe.dart' show FreigabeStand;
 import '../rezepturen/rezeptur_screen.dart' show TextFeld;
+import '../spezifikation/betriebs_spuren.dart';
 import '../spezifikation/spez_angaben.dart';
 import '../spezifikation/spezifikation_dialog.dart';
 import '../spezifikation/spezifikation_dienst.dart';
@@ -308,8 +310,6 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
   }
 
   Widget _angabenBereich(BuildContext context) {
-    final theme = Theme.of(context);
-    final grau = theme.colorScheme.onSurfaceVariant;
     final a = _angaben;
     final p = widget.projekt;
     const abstand = SizedBox(height: 10);
@@ -358,31 +358,10 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
             onFertig: (t) => _angabenSpeichern(_angaben.kopie(hinweise: t)),
           ),
           const SizedBox(height: 14),
-          Text('Spuren möglich von', style: theme.textTheme.labelLarge),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final x in kSpezAllergene)
-                FilterChip(
-                  label: Text(allergenName(x, SpezSprache.de)),
-                  selected: a.spuren.contains(x),
-                  onSelected: (an) => _angabenSpeichern(
-                    _angaben.kopie(
-                      spuren: an
-                          ? {..._angaben.spuren, x}
-                          : (_angaben.spuren.toSet()..remove(x)),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Was die Rezeptur enthält, steht als „ja" in der Spezifikation — '
-            'eine Spur zählt dann nicht.',
-            style: theme.textTheme.bodySmall?.copyWith(color: grau),
+          _BetriebsSpuren(
+            eigene: a.spuren,
+            onEigeneWeg: () =>
+                _angabenSpeichern(_angaben.kopie(spuren: const {})),
           ),
         ],
       ),
@@ -471,6 +450,93 @@ class _ProjektProduktState extends ConsumerState<ProjektProdukt>
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Spuren: welche Allergene der Betrieb verarbeitet — eine Liste für alle
+/// Produkte. Nicht enthaltene davon stehen in jeder Spezifikation als
+/// „nein" mit Kreuz bei „Spuren", Sulfit nie. Was ein Produkt enthält,
+/// kommt aus den Zutaten der Rezeptur.
+class _BetriebsSpuren extends ConsumerWidget {
+  const _BetriebsSpuren({required this.eigene, required this.onEigeneWeg});
+
+  /// Spuren, die früher am Produkt selbst gewählt wurden — sie gelten
+  /// weiter, bis man sie entfernt.
+  final Set<String> eigene;
+  final VoidCallback onEigeneWeg;
+
+  Future<void> _umschalten(WidgetRef ref, Set<String> alt, String x) async {
+    final neu = {...alt};
+    if (!neu.remove(x)) neu.add(x);
+    await speichereBetriebsSpuren(ref.read(databaseProvider), neu);
+    ref
+      ..invalidate(betriebsSpurenProvider)
+      ..invalidate(spezVorschauProvider);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final betrieb = ref.watch(betriebsSpurenProvider).valueOrNull;
+    final eigeneExtra = {
+      for (final x in eigene)
+        if (!(betrieb?.contains(x) ?? false)) x,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Im Betrieb verarbeitet — Spuren in allen Produkten',
+          style: theme.textTheme.labelLarge,
+        ),
+        const SizedBox(height: 6),
+        if (betrieb == null)
+          const LinearProgressIndicator()
+        else
+          Wrap(
+            key: const ValueKey('betriebs-spuren'),
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final x in kSpezAllergene)
+                if (!kNieAlsSpur.contains(x))
+                  FilterChip(
+                    label: Text(allergenName(x, SpezSprache.de)),
+                    selected: betrieb.contains(x),
+                    onSelected: (_) => _umschalten(ref, betrieb, x),
+                  ),
+            ],
+          ),
+        const SizedBox(height: 6),
+        Text(
+          'Gilt für jede Spezifikation: Was die Rezeptur enthält, steht bei '
+          '„ja". Alles andere bei „nein" — und, wenn es hier angehakt ist, '
+          'zusätzlich bei „Spuren". Sulfit ist nie eine Spur. Die Allergene '
+          'selbst kommen aus den Zutaten der Rezeptur und gehen mit der '
+          'Freigabe an den Artikel.',
+          style: theme.textTheme.bodySmall?.copyWith(color: grau),
+        ),
+        if (eigeneExtra.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Nur an diesem Produkt zusätzlich: '
+                  '${[for (final x in eigeneExtra) allergenName(x, SpezSprache.de)].join(', ')}',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              TextButton(
+                onPressed: onEigeneWeg,
+                child: const Text('Entfernen'),
+              ),
+            ],
+          ),
+        ],
+      ],
     );
   }
 }

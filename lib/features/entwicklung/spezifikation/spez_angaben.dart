@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import '../../../core/constants/artikel_merkmale.dart';
+
 // Die Angaben einer Spezifikation, die weder aus der Rezeptur noch aus der
 // Sensorik kommen: die Artikelbezeichnung, Toleranz des Stückgewichts,
 // Lagerung, Haltbarkeit, Produkthinweise, mögliche Spuren von Allergenen
@@ -322,4 +324,32 @@ class SpezAngaben {
         spuren: spuren ?? this.spuren,
         verpackung: verpackung ?? this.verpackung,
       );
+}
+
+// ── Spuren ────────────────────────────────────────────────────────────
+// Die Regel steht in betriebs_spuren.dart; hier nur die Rechnung, ohne
+// Datenbank.
+
+/// Diese Allergene sind nie eine Spur — Sulfit zählt erst ab 10 mg/kg und
+/// kann nicht aus der Umgebung ins Produkt kommen.
+const Set<String> kNieAlsSpur = {'sulfit'};
+
+/// Die Allergene, die als Spur stehen: was der Betrieb verarbeitet
+/// ([betrieb]) und was am Produkt zusätzlich eingetragen ist ([eigene]) —
+/// ohne das, was enthalten ist, und ohne [kNieAlsSpur]. In der Reihenfolge
+/// der Allergenliste.
+List<String> wirksameSpuren({
+  required Set<String> betrieb,
+  Set<String> eigene = const {},
+  required Iterable<String> enthalten,
+}) {
+  final drin = enthalten.toSet();
+  return [
+    for (final m in kAllergene)
+      if (m.dbValue != kAllergenKeine &&
+          (betrieb.contains(m.dbValue) || eigene.contains(m.dbValue)) &&
+          !drin.contains(m.dbValue) &&
+          !kNieAlsSpur.contains(m.dbValue))
+        m.dbValue,
+  ];
 }

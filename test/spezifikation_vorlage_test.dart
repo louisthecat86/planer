@@ -989,9 +989,9 @@ void main() {
         kuerzel: await dienst.kuerzel(),
       );
       expect(e.unbekannt, isEmpty);
-      // Gluten ja, Eier nein, Senf Spuren; E2-Kiste, neutral, Beutel,
-      // Vakuum.
-      expect(e.kaestchen, 7);
+      // Gluten ja, Eier nein, Senf nein und Spuren; E2-Kiste, neutral,
+      // Beutel, Vakuum.
+      expect(e.kaestchen, 8);
       // Das Foto steht verkleinert neben der Sensorik.
       expect(e.produktfoto, isTrue);
       final medium = img.decodeJpg(
@@ -1030,7 +1030,7 @@ void main() {
           for (final k in blatt.kaestchen)
             if (k.angehakt) zellName(k.zeile, k.spalte),
         },
-        {'F28', 'G29', 'H30', 'B37', 'B38', 'B42', 'D43'},
+        {'F28', 'G29', 'G30', 'H30', 'B37', 'B38', 'B42', 'D43'},
       );
       expect(
         xmlUnescape(

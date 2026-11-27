@@ -91,10 +91,11 @@ EtikettInhalt etikettAus({
   final e = ergebnis;
   String label(String a) => merkmalLabel(a, kAllergene) ?? a;
   final spuren = [
-    for (final m in kAllergene)
-      if (angaben.spuren.contains(m.dbValue) &&
-          !e.allergene.containsKey(m.dbValue))
-        m.label,
+    for (final x in wirksameSpuren(
+      betrieb: angaben.spuren,
+      enthalten: e.allergene.keys,
+    ))
+      label(x),
   ];
   final lagerung = angaben.lagerung.trim();
   final netto = angaben.verpackung.einzelNetto.trim();

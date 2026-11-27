@@ -35,6 +35,7 @@ import 'package:produktion_planer/features/entwicklung/projekte/projekt_modell.d
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/betriebs_spuren.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/beispielvorlage.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/deepl.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
@@ -300,11 +301,22 @@ void main() {
       expect(w['allergen.gluten.ja'], 'X');
       expect(w['allergen.gluten.spuren'], '');
       expect(w['allergen.gluten.nein'], '');
+      // Nicht enthalten: „nein" — und dazu „Spuren", wenn möglich.
       expect(w['allergen.senf.ja'], '');
       expect(w['allergen.senf.spuren'], 'X');
-      expect(w['allergen.senf.nein'], '');
+      expect(w['allergen.senf.nein'], 'X');
       expect(w['allergen.eier.nein'], 'X');
       expect(w['allergen.eier.spuren'], '');
+
+      // Sulfit ist nie eine Spur.
+      final sulfit = spezifikationsWerte(
+        quelle(angaben: angaben.kopie(spuren: {'sulfit', 'senf'})),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(sulfit['allergen.sulfit.spuren'], '');
+      expect(sulfit['allergen.sulfit.nein'], 'X');
+      expect(sulfit['allergen.senf.spuren'], 'X');
 
       final text = spezifikationsWerte(
         quelle(angaben: angaben.kopie(haltbarkeit: '12 Monate bei -18 °C')),
@@ -1675,6 +1687,8 @@ void main() {
             ),
             spezKuerzelProvider.overrideWith((ref) async => 'TE'),
             deeplHinterlegtProvider.overrideWith((ref) async => false),
+            // Die Spuren des Betriebs — eine Liste für alle Produkte.
+            betriebsSpurenProvider.overrideWith((ref) async => {'senf'}),
           ],
           child: MaterialApp(
             theme: theme ?? AppTheme.light(),

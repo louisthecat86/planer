@@ -4,6 +4,7 @@ import '../../../core/utils/format.dart';
 import '../daten/entwicklung_repository.dart';
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
+import '../spezifikation/betriebs_spuren.dart';
 import '../spezifikation/spez_angaben.dart';
 import 'etikett.dart';
 
@@ -27,10 +28,12 @@ final etikettProvider =
         ? null
         : await ref.watch(projektProvider(projektId).future);
     final abgeschlossen = v.abgeschlossenAm;
+    final angaben = SpezAngaben.aus(projekt?.spezifikation);
+    final betrieb = await ref.watch(betriebsSpurenProvider.future);
     return etikettAus(
       bezeichnung: r?.name ?? '',
       ergebnis: ergebnis,
-      angaben: SpezAngaben.aus(projekt?.spezifikation),
+      angaben: angaben.kopie(spuren: {...betrieb, ...angaben.spuren}),
       sensorik: Sensorik.aus(projekt?.sensorik),
       stand: [
         if (r != null) r.name,

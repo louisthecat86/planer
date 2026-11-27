@@ -1897,7 +1897,11 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
       ? 0.0
       : eingabe.positionen.fold<double>(0, (a, x) => a + x.mengeKg);
   final beffe = e.je100g.beffe;
-  final spuren = SpezAngaben.aus(s.p.spezifikation).spuren;
+  final spuren = wirksameSpuren(
+    betrieb: b.betriebsSpuren,
+    eigene: SpezAngaben.aus(s.p.spezifikation).spuren,
+    enthalten: e.allergene.keys,
+  );
   final verlustArt = Verlustart.aus(v.verlustArt);
 
   return [
@@ -2435,9 +2439,14 @@ List<pw.Widget> _kapitelProdukt(_Satz s, _Kapitel k) {
           ('Gewichtstoleranz', spez.toleranz),
           (
             'Spuren möglich',
-            spez.spuren.isEmpty
-                ? ''
-                : merkmaleLabel(spez.spuren.join(','), kAllergene),
+            switch (wirksameSpuren(
+              betrieb: s.b.betriebsSpuren,
+              eigene: spez.spuren,
+              enthalten: s.b.ergebnis?.allergene.keys ?? const [],
+            )) {
+              final x when x.isEmpty => '',
+              final x => merkmaleLabel(x.join(','), kAllergene),
+            },
           ),
         ]),
         if (hinweise.isNotEmpty) ...[

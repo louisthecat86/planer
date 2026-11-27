@@ -621,14 +621,23 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Verpackung …), setzt Platzhalter wie `{{zutaten}}` und hakt
   Kontrollkästchen an; einer Vorlage, der Platzhalter fehlen, ergänzt sie
   sie beim Erstellen. Was nicht aus Rezeptur oder Sensorik kommt
-  (Artikelbezeichnung, Lagerung, Haltbarkeit, Produkthinweise, Spuren,
-  Verpackung), steht im Reiter „Produkt", die Artikelnummer in den
+  (Artikelbezeichnung, Lagerung, Haltbarkeit, Produkthinweise,
+  Verpackung, die Spuren des Betriebs), steht im Reiter „Produkt", die Artikelnummer in den
   Stammdaten; Kürzel und Datum fragt das Fenster. Das **Produktfoto**
   kommt ins freie Feld neben der Sensorik (`{{produktbild}}`, beim
   Einrichten erkannt): gedreht, wie die Kamera es vermerkt, auf 1200 Pixel
   verkleinert, ohne EXIF-Daten; fehlt es, fragt das Fenster danach. Im
   Reiter „Produkt" zeigt eine Vorschau, was mit dem gewählten Stand
   hineinkommt, und was noch fehlt — mit dem Ort, an dem man es einträgt.
+- **Allergene und Spuren** (`spezifikation/betriebs_spuren.dart`): Was ein
+  Produkt enthält, kommt aus den Zutaten der Rezeptur — dort wird das
+  wirklich enthaltene Allergen gewählt, nie die Spur — und geht mit der
+  Freigabe an den Artikel. In der Allergentabelle steht es bei „ja".
+  Alles andere steht bei „nein" und zusätzlich bei „Spuren", wenn der
+  Betrieb es verarbeitet. Diese Liste gilt für alle Produkte (Reiter
+  „Produkt", „Im Betrieb verarbeitet", gespeichert unter
+  `entwicklung.betrieb_spuren`); Sulfit ist nie eine Spur. Etikett und
+  Projektbericht nennen dieselben Spuren.
 - **Projektbericht** (PDF, oben unter „Erstellen"): die Projektakte zum
   Nachschlagen — für ein laufendes wie für ein abgeschlossenes Projekt.
   Vorn ein Steckbrief mit Phase, Produktfoto, dem Stand auf einen Blick

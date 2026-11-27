@@ -10,6 +10,7 @@ import '../projekte/fliessdiagramm_liste.dart';
 import '../projekte/projekt_checkliste.dart';
 import '../rechenkern/rechen_modell.dart';
 import '../rechenkern/rechenkern.dart';
+import '../spezifikation/betriebs_spuren.dart';
 
 export 'bericht_pdf.dart' show baueProjektPdf;
 
@@ -57,9 +58,13 @@ class ProjektBericht {
     this.etikettDatei,
     this.etikettBilder = const [],
     this.etikettAusschnitt,
+    this.betriebsSpuren = const {},
   });
 
   final EntwicklungsProjekt projekt;
+
+  /// Die Allergene, die der Betrieb verarbeitet — Spuren in jedem Produkt.
+  final Set<String> betriebsSpuren;
   final String? rezepturName;
 
   /// Der Stand, um den es geht: der neueste der Rezeptur, wie sie ihn
@@ -437,6 +442,7 @@ Future<ProjektBericht> berichtLaden(
 
   return ProjektBericht(
     projekt: projekt,
+    betriebsSpuren: await ladeBetriebsSpuren(db),
     rezepturName: rezeptur?.name,
     version: version,
     eingabe: version == null ? null : eingaben[version.id],

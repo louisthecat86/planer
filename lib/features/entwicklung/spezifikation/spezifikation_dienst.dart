@@ -13,6 +13,7 @@ import '../freigabe/freigabe.dart' show FreigabeStand;
 import '../projekte/projekt_modell.dart';
 import '../projekte/projekt_repository.dart';
 import '../rechenkern/rechenkern.dart';
+import 'betriebs_spuren.dart';
 import 'deepl.dart';
 import 'spez_angaben.dart';
 import 'spezifikation_werte.dart';
@@ -379,7 +380,14 @@ class SpezifikationDienst {
               ..where((p) => p.id.equals(artikelId))
               ..where((p) => p.deletedAt.isNull()))
             .getSingleOrNull();
-    final angaben = SpezAngaben.aus(projekt.spezifikation);
+    // Die Spuren des Betriebs gelten für jedes Produkt — dazu, was am
+    // Produkt selbst steht (aus der Zeit, als sie je Produkt gewählt
+    // wurden).
+    final gespeichert = SpezAngaben.aus(projekt.spezifikation);
+    final betrieb = await ladeBetriebsSpuren(_db);
+    final angaben = gespeichert.kopie(
+      spuren: {...betrieb, ...gespeichert.spuren},
+    );
     final eigene = angaben.bezeichnung.trim();
     final nummer = artikel?.artikelnummer ?? projekt.artikelnummer;
     return SpezifikationsQuelle(
