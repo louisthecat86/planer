@@ -102,12 +102,12 @@ class _Ziel {
 }
 
 /// Die Bereiche, nach Arbeitsschritten gruppiert. `null` als Titel: ohne
-/// Überschrift (die Übersicht ganz oben).
+/// Überschrift (das Cockpit ganz oben).
 const List<(String?, List<_Ziel>)> _gruppen = [
   (
     null,
     [
-      _Ziel('home', 'Übersicht', Icons.space_dashboard_outlined, ['/home']),
+      _Ziel('home', 'Cockpit', Icons.space_dashboard_outlined, ['/home']),
     ],
   ),
   (
@@ -202,7 +202,7 @@ final List<(String?, List<_Ziel>)> _entwicklungsGruppen = [
   ('Auswerten', [_Ziel.entwicklung(EntwicklungsBereich.statistik)]),
 ];
 
-/// Aus der Produktentwicklung zurück zur Übersicht des Planers.
+/// Aus der Produktentwicklung zurück zum Cockpit des Planers.
 const _Ziel _zumPlaner = _Ziel(
   'home',
   'Zum Planer',

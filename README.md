@@ -28,7 +28,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 
 | Gruppe      | Bereich               | Wofür                                                                                       |
 | ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
-|             | Übersicht             | Der heutige Tag: Aufträge und Auslastung aller Abteilungen, „Artikel planen"                 |
+|             | Cockpit               | Vier Kennzahlen mit Ampel, der heutige Tag, Hinweise; „Wochenbericht", „Artikel planen"      |
 | Planen      | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
 |             | Planungsvorschlag     | Reiter Vorschlag (Entwurf samt Rüst-/Reinigungszeiten, ins Board), Wochenliste, Bedarfsliste |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
@@ -162,6 +162,32 @@ Planungsvorschlag dieselben Regeln:
   Tagesansicht zeigt es immer, die Woche nur, wenn es knapp wird. Wie lange
   gereinigt wird, rechnet der Planer bewusst nicht — das richtet sich nach
   der Zeit, die bleibt.
+
+## Cockpit und Wochenbericht
+
+Die Startseite (`lib/features/shell/home_screen.dart`) zeigt oben vier
+Kacheln, darunter den Tag wie bisher:
+
+- **Lieferfähigkeit** (`lib/features/auftragsbestand/lieferfaehigkeit.dart`):
+  Anteil der Auftragsmenge mit Versand in den nächsten 7 Tagen, der
+  rechtzeitig gedeckt ist — Lager plus Produktion, die bis zum Versandtag
+  fertig ist, gerechnet wie auf der Seite Auftragsbestand. Grün ab 98 %,
+  gelb ab 90 %; ist der Bericht älter als 3 Tage, bleibt die Ampel grau.
+  Darunter, wie viele Versandtage gefährdet sind. Klick: Auftragsbestand.
+- **Ø Auslastung, Zeittreue, Ø Ausbeute**: die Kennzahlen der Statistik
+  für die letzten 4 Wochen gegen die 4 davor. Klick: Statistik mit dem
+  passenden Thema.
+- **Hinweise**: die des Tages und die der Statistik in einer Liste; was
+  doppelt wäre (offene Erfassungen, Überbuchung des Tages), steht nur
+  einmal.
+
+**Wochenbericht** (`lib/features/statistik/wochenbericht_druck.dart`), Knopf
+oben im Cockpit: eine Seite für die Geschäftsführung — die laufende Woche,
+montags die Vorwoche, jeweils gegen die Woche davor. Kennzahlen mit
+Bewertung und Maßstab, Auslastung je Abteilung, die größten Abweichungen
+Plan/Ist, gefährdete Versandtage, Hinweise, Ausblick und ein Feld für
+Bemerkungen; jeder Teil lässt sich im Druckfenster abwählen. Die Statistik
+kennt dafür den Zeitraum „Woche".
 
 ## Wochenliste im Planungsvorschlag
 

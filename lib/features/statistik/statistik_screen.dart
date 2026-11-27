@@ -37,10 +37,14 @@ import 'statistik_ueberblick_daten.dart';
 /// Zweiter Reiter: das Wochenarchiv — die eingefrorenen Wochenpläne, vorher
 /// ein eigener Punkt „Wochen-Historie" in der Leiste.
 class StatistikScreen extends ConsumerStatefulWidget {
-  const StatistikScreen({super.key, this.reiter});
+  const StatistikScreen({super.key, this.reiter, this.thema});
 
   /// `'archiv'` öffnet gleich das Wochenarchiv.
   final String? reiter;
+
+  /// Name eines [StatistikThema] — die Seite öffnet mit diesem Thema
+  /// (ein Klick auf eine Kennzahl im Cockpit).
+  final String? thema;
 
   @override
   ConsumerState<StatistikScreen> createState() => _StatistikScreenState();
@@ -66,7 +70,10 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen>
 
   StatistikZeitraum _zeitraum = StatistikZeitraum.quartal;
   Abteilung? _abteilung;
-  StatistikThema _thema = StatistikThema.kapazitaet;
+  late StatistikThema _thema = StatistikThema.values.firstWhere(
+    (t) => t.name == widget.thema,
+    orElse: () => StatistikThema.kapazitaet,
+  );
 
   /// Die Themenwahl — ein Klick auf eine Kennzahl scrollt dorthin.
   final _themenKey = GlobalKey();

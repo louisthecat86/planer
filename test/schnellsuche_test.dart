@@ -98,7 +98,7 @@ void main() {
     test('Planer: die ersten neun mit Strg+1 … Strg+9', () {
       final ziele = schnellZiele(entwicklung: false);
 
-      expect(ziele.first.titel, 'Übersicht');
+      expect(ziele.first.titel, 'Cockpit');
       expect(ziele.first.kuerzel, 'Strg+1');
       expect(ziele[1].titel, 'Auftragsbestand');
       expect(ziele[2].titel, 'Planungsvorschlag');

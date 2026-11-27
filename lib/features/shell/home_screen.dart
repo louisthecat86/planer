@@ -22,8 +22,18 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/kalenderwoche.dart';
 import '../../core/utils/zeit.dart';
+import '../../core/druck/druck_fenster.dart';
+import '../../core/utils/datum.dart';
+import '../auftragsbestand/auftragsbestand_screen.dart'
+    show auftragsbestandProvider;
+import '../auftragsbestand/lieferfaehigkeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
+import '../statistik/statistik_daten.dart';
+import '../statistik/statistik_ueberblick.dart' show KennzahlKachel;
+import '../statistik/statistik_ueberblick_daten.dart';
+import '../statistik/wochenbericht_druck.dart';
+import '../whiteboard/whiteboard_provider.dart' show selectedDateProvider;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten der Tagesübersicht
@@ -82,7 +92,13 @@ class _Auslastung {
 enum _Art { warnung, info, gut }
 
 class _Hinweis {
-  const _Hinweis(this.art, this.text, {this.ziel, this.aktion});
+  const _Hinweis(
+    this.art,
+    this.text, {
+    this.ziel,
+    this.aktion,
+    this.oeffnen,
+  });
 
   final _Art art;
   final String text;
@@ -90,6 +106,10 @@ class _Hinweis {
   /// Route, zu der ein Tippen führt — null, wenn es nichts zu tun gibt.
   final String? ziel;
   final String? aktion;
+
+  /// Statt [ziel]: was ein Tippen öffnet — für die Hinweise aus der
+  /// Statistik (ein Tag im Board, ein Artikel, ein Thema).
+  final void Function(BuildContext context)? oeffnen;
 }
 
 class _Uebersicht {
@@ -395,6 +415,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  /// Druckt den Wochenbericht: die laufende Woche, montags die Woche
+  /// davor — dann ist die laufende noch leer.
+  Future<void> _wochenbericht() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final db = ref.read(databaseProvider);
+    final heute = ref.read(heuteProvider);
+    final bezug = heute.weekday == DateTime.monday ? tagPlus(heute, -7) : heute;
+    try {
+      final daten = await ladeStatistik(
+        db,
+        StatistikZeitraum.woche,
+        bezugstag: bezug,
+      );
+      final liefer = await ref.read(_lieferProvider.future);
+      if (!mounted) return;
+      await druckFensterOeffnen(
+        context,
+        wochenberichtDruckAuftrag(daten, liefer),
+      );
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          duration: const Duration(seconds: 8),
+          content: Text(
+            'Der Wochenbericht ließ sich nicht erstellen. (${fehlerText(e)})',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final daten = ref.watch(_uebersichtProvider(_tag));
@@ -403,8 +454,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final DateTime tag = _tag ?? ref.watch(heuteProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Übersicht'),
+        title: const Text('Cockpit'),
         actions: [
+          // Eine Seite für die Geschäftsführung — montags die Vorwoche.
+          OutlinedButton.icon(
+            key: const ValueKey('wochenbericht'),
+            onPressed: _wochenbericht,
+            icon: const Icon(Icons.print_outlined, size: 18),
+            label: const Text('Wochenbericht'),
+          ),
+          const SizedBox(width: 8),
           // Öffnet das Board gleich mit dem Planen-Fenster.
           FilledButton.icon(
             onPressed: () => context.goNamed('boardPlanen'),
@@ -421,6 +480,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return ListView(
             padding: EdgeInsets.fromLTRB(rand, 16, rand, 24),
             children: [
+              const _CockpitKennzahlen(),
               _Kopf(
                 tag: tag,
                 istHeute: _istHeute,
@@ -608,7 +668,7 @@ class _Tagesbereich extends StatelessWidget {
       auslastung: u.auslastung,
       titel: istHeute ? 'Auslastung heute' : 'Auslastung',
     );
-    final hinweise = _HinweisKarte(hinweise: u.hinweise);
+    final hinweise = _HinweisKarte(hinweise: u.hinweise, tag: u.heute);
     // Nur, wenn es für den Tag welche gibt — eingetragen wird im Board.
     final aufgaben =
         u.aufgaben.isEmpty ? null : _AufgabenKarte(aufgaben: u.aufgaben);
@@ -1288,13 +1348,22 @@ class _AufgabeZeile extends StatelessWidget {
   }
 }
 
-class _HinweisKarte extends StatelessWidget {
-  const _HinweisKarte({required this.hinweise});
+class _HinweisKarte extends ConsumerWidget {
+  const _HinweisKarte({required this.hinweise, required this.tag});
 
   final List<_Hinweis> hinweise;
 
+  /// Der angezeigte Tag.
+  final DateTime tag;
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Dazu die Hinweise der Statistik — eine Liste statt zwei Stellen.
+    final statistik = ref.watch(_cockpitProvider).valueOrNull;
+    final hinweise = [
+      ...this.hinweise,
+      if (statistik != null) ..._ausStatistik(statistik.hinweise, tag),
+    ];
     return Bereich(
       titel: 'Hinweise',
       innenAbstand: const EdgeInsets.fromLTRB(4, 2, 4, 6),
@@ -1326,9 +1395,14 @@ class _HinweisZeile extends StatelessWidget {
     };
     final ziel = h.ziel;
     final aktion = h.aktion;
+    final oeffnen = h.oeffnen;
 
     return InkWell(
-      onTap: ziel == null ? null : () => context.goNamed(ziel),
+      onTap: oeffnen != null
+          ? () => oeffnen(context)
+          : ziel == null
+              ? null
+              : () => context.goNamed(ziel),
       borderRadius: AppMasse.ecken,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
@@ -1380,4 +1454,169 @@ String _wann(DateTime t) {
   if (tage <= 0) return 'heute ${Format.uhrzeit(t)}';
   if (tage == 1) return 'gestern ${Format.uhrzeit(t)}';
   return 'vor $tage Tagen';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Cockpit: Kennzahlen und Hinweise der Statistik
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Der Überblick der letzten vier Wochen — dieselbe Rechnung wie oben in
+/// der Statistik.
+final _cockpitProvider =
+    FutureProvider.autoDispose<UeberblickAuswertung>((ref) async {
+  final daten =
+      await ref.watch(statistikProvider(StatistikZeitraum.vierWochen).future);
+  return werteUeberblickAus(daten);
+});
+
+/// Die Lieferfähigkeit der nächsten Tage aus dem Auftragsbestand.
+final _lieferProvider =
+    FutureProvider.autoDispose<Lieferfaehigkeit>((ref) async {
+  final bestand = await ref.watch(auftragsbestandProvider.future);
+  return werteLieferfaehigkeitAus(bestand, heute: ref.watch(heuteProvider));
+});
+
+/// Welche Kennzahlen der Statistik das Cockpit zeigt — die Lieferfähigkeit
+/// steht davor.
+const List<String> kCockpitKennzahlen = [
+  'Ø Auslastung',
+  'Zeittreue',
+  'Ø Ausbeute',
+];
+
+/// Oben im Cockpit: vier Kacheln — Lieferfähigkeit, Auslastung,
+/// Plan-Treue der Zeit und Ausbeute. Ein Klick führt dorthin, wo man mehr
+/// sieht. Fehlt etwas, fehlt nur die Kachel; der Tag darunter steht
+/// trotzdem.
+class _CockpitKennzahlen extends ConsumerWidget {
+  const _CockpitKennzahlen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final ueberblick = ref.watch(_cockpitProvider).valueOrNull;
+    final liefer = ref.watch(_lieferProvider).valueOrNull;
+    if (ueberblick == null && liefer == null) return const SizedBox.shrink();
+
+    final kacheln = <Widget>[
+      if (liefer != null)
+        KennzahlKachel(
+          key: const ValueKey('cockpit-lieferfaehigkeit'),
+          kennzahl: UeberblickKennzahl(
+            name: 'Lieferfähigkeit',
+            thema: StatistikThema.planIst,
+            wert: liefer.anteil,
+            ampel: liefer.ampel,
+            verlauf: const [],
+            ziel: liefer.herkunftText ?? 'Auftragsbestand einlesen',
+          ),
+          unter: liefer.unterText,
+          onTap: () => context.goNamed('auftragsbestand'),
+        ),
+      if (ueberblick != null)
+        for (final name in kCockpitKennzahlen)
+          for (final k in ueberblick.kennzahlen)
+            if (k.name == name)
+              KennzahlKachel(
+                kennzahl: k,
+                onTap: () => context.goNamed(
+                  'statistik',
+                  queryParameters: {'thema': k.thema.name},
+                ),
+              ),
+    ];
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Wrap(
+              spacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.end,
+              children: [
+                Text(
+                  'Wie läuft es?',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Lieferfähigkeit der nächsten $kLieferTage Tage · sonst '
+                  'die letzten 4 Wochen, verglichen mit den 4 davor',
+                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                ),
+              ],
+            ),
+          ),
+          LayoutBuilder(
+            builder: (context, c) {
+              final spalten = c.maxWidth >= 900 ? 4 : 2;
+              const abstand = 12.0;
+              final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
+              return Wrap(
+                spacing: abstand,
+                runSpacing: abstand,
+                children: [
+                  for (final k in kacheln) SizedBox(width: breite, child: k),
+                ],
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Die Hinweise der Statistik als Hinweise des Cockpits. Weg bleibt, was
+/// das Cockpit schon selbst meldet: offene Erfassungen und die Überbuchung
+/// des angezeigten Tags.
+List<_Hinweis> _ausStatistik(List<StatistikHinweis> hinweise, DateTime tag) {
+  bool gleicherTag(DateTime? a) =>
+      a != null &&
+      a.year == tag.year &&
+      a.month == tag.month &&
+      a.day == tag.day;
+  return [
+    for (final h in hinweise)
+      if (h.ziel != HinweisZiel.erfassung &&
+          !(h.ziel == HinweisZiel.board && gleicherTag(h.tag)))
+        _Hinweis(
+          h.schwere == HinweisSchwere.info ? _Art.info : _Art.warnung,
+          h.text,
+          aktion: switch (h.ziel) {
+            HinweisZiel.board => 'Zum Board',
+            HinweisZiel.artikel => 'Artikel',
+            HinweisZiel.thema => 'Statistik',
+            HinweisZiel.erfassung => 'Erfassen',
+          },
+          oeffnen: (context) {
+            switch (h.ziel) {
+              case HinweisZiel.board:
+                final t = h.tag;
+                if (t != null) {
+                  ProviderScope.containerOf(context, listen: false)
+                      .read(selectedDateProvider.notifier)
+                      .state = t;
+                }
+                context.goNamed('board');
+              case HinweisZiel.artikel:
+                final id = h.artikelId;
+                if (id != null) _oeffneArtikel(context, id);
+              case HinweisZiel.thema:
+                context.goNamed(
+                  'statistik',
+                  queryParameters: {
+                    if (h.thema != null) 'thema': h.thema!.name,
+                  },
+                );
+              case HinweisZiel.erfassung:
+                context.goNamed('erfassung');
+            }
+          },
+        ),
+  ];
 }

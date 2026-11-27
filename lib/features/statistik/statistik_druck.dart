@@ -370,7 +370,8 @@ class _Statistik {
     // im Titel.
     final zeile = [
       s.zeitraum.label,
-      s.zeitraum == StatistikZeitraum.vierWochen
+      s.zeitraum == StatistikZeitraum.vierWochen ||
+              s.zeitraum == StatistikZeitraum.woche
           ? s.beschreibung
           : '${s.beschreibung} (${s.wochen} '
               '${s.wochen == 1 ? 'Woche' : 'Wochen'})',

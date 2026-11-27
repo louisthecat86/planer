@@ -105,7 +105,7 @@ class StatistikUeberblick extends StatelessWidget {
                 for (final k in auswertung.kennzahlen)
                   SizedBox(
                     width: breite,
-                    child: _KennzahlKachel(
+                    child: KennzahlKachel(
                       kennzahl: k,
                       onTap: () => onThema(k.thema),
                     ),
@@ -176,11 +176,22 @@ class _Karte extends StatelessWidget {
   }
 }
 
-class _KennzahlKachel extends StatelessWidget {
-  const _KennzahlKachel({required this.kennzahl, required this.onTap});
+/// Eine Kennzahl als Kachel: Name mit Ampel, Wert, Vergleich, kleine
+/// Linie, Maßstab. Auch im Cockpit.
+class KennzahlKachel extends StatelessWidget {
+  const KennzahlKachel({
+    super.key,
+    required this.kennzahl,
+    required this.onTap,
+    this.unter,
+  });
 
   final UeberblickKennzahl kennzahl;
   final VoidCallback onTap;
+
+  /// Statt des Vergleichs mit dem Zeitraum davor — etwa „3 von 42
+  /// Versandtagen gefährdet".
+  final String? unter;
 
   @override
   Widget build(BuildContext context) {
@@ -231,11 +242,12 @@ class _KennzahlKachel extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            w == null
-                ? 'keine Daten im Zeitraum'
-                : d == null
-                    ? 'kein Vergleich'
-                    : differenzText(d),
+            unter ??
+                (w == null
+                    ? 'keine Daten im Zeitraum'
+                    : d == null
+                        ? 'kein Vergleich'
+                        : differenzText(d)),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall?.copyWith(

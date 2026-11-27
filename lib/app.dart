@@ -214,6 +214,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) => NoTransitionPage(
               child: StatistikScreen(
                 reiter: state.uri.queryParameters['reiter'],
+                thema: state.uri.queryParameters['thema'],
               ),
             ),
           ),

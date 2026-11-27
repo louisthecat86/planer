@@ -51,7 +51,7 @@ void main() {
       (tester) async {
     await zeige(tester, ort: '/board', groesse: const Size(1600, 1000));
 
-    expect(find.text('Übersicht'), findsOneWidget);
+    expect(find.text('Cockpit'), findsOneWidget);
     expect(find.text('Auftragsbestand'), findsOneWidget);
     expect(find.text('Einstellungen'), findsOneWidget);
     expect(find.text('PLANEN'), findsOneWidget);
@@ -161,7 +161,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Leiste einklappen'));
     await tester.pump();
-    expect(find.byTooltip('Übersicht'), findsOneWidget);
+    expect(find.byTooltip('Cockpit'), findsOneWidget);
   });
 
   testWidgets('Bereich: langer Titel und Zusatz werden gekürzt',

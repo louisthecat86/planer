@@ -46,6 +46,9 @@ import '../whiteboard/whiteboard_provider.dart'
 /// Zeiträume der Statistik — jeweils bis einschließlich der laufenden
 /// Woche.
 enum StatistikZeitraum {
+  /// Die laufende Woche, verglichen mit der Woche davor — für den
+  /// Wochenbericht und den schnellen Blick.
+  woche('Woche', 1),
   vierWochen('4 Wochen', 4),
   quartal('Quartal', 13),
   zwoelfMonate('12 Monate', 52),
@@ -1680,11 +1683,19 @@ Future<StatistikDaten> ladeStatistik(
   AppDatabase db,
   StatistikZeitraum zeitraum, {
   DateTime? heute,
+  DateTime? bezugstag,
 }) async {
   final jetzt = heute ?? DateTime.now();
   final fruehestes =
       zeitraum.wochen == null ? await _fruehestesDatum(db) : null;
-  final spanne = StatistikSpanne.fuer(zeitraum, jetzt, fruehestes: fruehestes);
+  // [bezugstag]: der Zeitraum endet mit dessen Woche statt mit der
+  // laufenden — etwa der Wochenbericht der Vorwoche am Montag. Stand,
+  // Erfüllung und Vorschau rechnen weiter von heute aus.
+  final spanne = StatistikSpanne.fuer(
+    zeitraum,
+    bezugstag ?? jetzt,
+    fruehestes: fruehestes,
+  );
 
   // Ein Aufruf über beide Zeiträume — getrennt wird danach.
   final davor = spanne.vorher;
