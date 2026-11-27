@@ -33,6 +33,9 @@ export 'spez_angaben.dart' show kNieAlsSpur, wirksameSpuren;
 const String kBetriebsSpurenSchluessel = '${kEntwicklungPraefix}betrieb_spuren';
 
 /// Die Allergene, die der Betrieb verarbeitet.
+///
+/// Solange nichts gespeichert ist, gilt [kBetriebsSpurenStandard] — man
+/// muss nichts anhaken.
 Future<Set<String>> ladeBetriebsSpuren(AppDatabase db) async {
   final zeile = await (db.select(db.appSettings)
         ..where((s) => s.key.equals(kBetriebsSpurenSchluessel)))
@@ -40,9 +43,25 @@ Future<Set<String>> ladeBetriebsSpuren(AppDatabase db) async {
   return betriebsSpurenAusText(zeile?.value);
 }
 
-/// Liest die gespeicherte Liste — Unbekanntes fällt weg.
+/// Ab Werk: die Allergene, die üblicherweise im Betrieb verarbeitet werden
+/// — alle Allergene der Tabelle außer Sulfit. Krebstiere, Fisch,
+/// Erdnüsse, Lupinen und Weichtiere werden nicht verarbeitet.
+const Set<String> kBetriebsSpurenStandard = {
+  'gluten',
+  'eier',
+  'soja',
+  'milch',
+  'schalenfruechte',
+  'sellerie',
+  'senf',
+  'sesam',
+};
+
+/// Liest die gespeicherte Liste — Unbekanntes fällt weg. Nichts
+/// gespeichert: [kBetriebsSpurenStandard]. Eine gespeicherte leere Liste
+/// bleibt leer.
 Set<String> betriebsSpurenAusText(String? text) {
-  if (text == null || text.trim().isEmpty) return {};
+  if (text == null || text.trim().isEmpty) return kBetriebsSpurenStandard;
   try {
     final liste = jsonDecode(text);
     if (liste is! List) return {};
@@ -56,14 +75,8 @@ Set<String> betriebsSpurenAusText(String? text) {
   }
 }
 
-/// Speichert die Liste — leer löscht die Einstellung.
+/// Speichert die Liste — auch leer: Dann gibt es keine Spuren.
 Future<void> speichereBetriebsSpuren(AppDatabase db, Set<String> spuren) async {
-  if (spuren.isEmpty) {
-    await (db.delete(db.appSettings)
-          ..where((s) => s.key.equals(kBetriebsSpurenSchluessel)))
-        .go();
-    return;
-  }
   final sortiert = [
     for (final m in kAllergene)
       if (spuren.contains(m.dbValue)) m.dbValue,

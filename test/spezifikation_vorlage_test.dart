@@ -11,6 +11,7 @@ import 'package:produktion_planer/features/entwicklung/daten/dateien.dart';
 import 'package:produktion_planer/features/entwicklung/daten/entwicklung_repository.dart';
 import 'package:produktion_planer/features/entwicklung/entwicklung_zugang.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/projekt_repository.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/betriebs_spuren.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_werte.dart';
@@ -980,6 +981,8 @@ void main() {
       );
       await dienst.kuerzelSpeichern(' TE ');
       expect(await dienst.kuerzel(), 'TE');
+      // Keine Spuren aus dem Betrieb — nur die am Produkt (Senf).
+      await speichereBetriebsSpuren(db, const {});
 
       final e = await dienst.erstellen(
         projekt: (await projekte.projekt(id))!,

@@ -636,7 +636,9 @@ eigenen Passwort gesperrt; seine Daten liegen in eigenen Tabellen
   Alles andere steht bei „nein" und zusätzlich bei „Spuren", wenn der
   Betrieb es verarbeitet. Diese Liste gilt für alle Produkte (Reiter
   „Produkt", „Im Betrieb verarbeitet", gespeichert unter
-  `entwicklung.betrieb_spuren`); Sulfit ist nie eine Spur. Etikett und
+  `entwicklung.betrieb_spuren`); Sulfit ist nie eine Spur. Ab Werk sind
+  Gluten, Eier, Soja, Milch, Schalenfrüchte, Sellerie, Senf und Sesam
+  gesetzt — am einzelnen Produkt muss nichts angehakt werden. Etikett und
   Projektbericht nennen dieselben Spuren.
 - **Projektbericht** (PDF, oben unter „Erstellen"): die Projektakte zum
   Nachschlagen — für ein laufendes wie für ein abgeschlossenes Projekt.

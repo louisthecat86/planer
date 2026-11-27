@@ -19,6 +19,7 @@ import 'package:produktion_planer/features/entwicklung/projekte/projekt_reposito
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechenkern.dart';
 import 'package:produktion_planer/features/entwicklung/rezepturen/stand_vergleich.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/betriebs_spuren.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spez_angaben.dart';
 
 import 'helpers/test_db.dart';
@@ -716,6 +717,8 @@ void main() {
       final v1 = (await rezepte.neuesteVersion(a.rezeptur))!;
       await rezepte.positionHinzufuegen(v1.id, zutatId: a.fleisch, mengeKg: 9);
       await rezepte.positionHinzufuegen(v1.id, zutatId: a.senf, mengeKg: 1);
+      // Keine Spuren aus dem Betrieb — nur die am Produkt (Sellerie).
+      await speichereBetriebsSpuren(db, const {});
 
       final container = ProviderContainer(
         overrides: [databaseProvider.overrideWithValue(db)],
