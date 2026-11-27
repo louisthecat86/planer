@@ -28,7 +28,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 
 | Gruppe      | Bereich               | Wofür                                                                                       |
 | ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
-|             | Übersicht             | Der heutige Tag: Aufträge, Auslastung, Hinweise; „Wochenbericht", „Artikel planen"           |
+|             | Übersicht             | Fortschritt, Reinigung, nächster Tag; Aufträge, Auslastung, Hinweise; „Wochenbericht"        |
 | Planen      | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
 |             | Planungsvorschlag     | Reiter Vorschlag (Entwurf samt Rüst-/Reinigungszeiten, ins Board), Wochenliste, Bedarfsliste |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
@@ -164,9 +164,22 @@ Planungsvorschlag dieselben Regeln:
 
 ## Übersicht und Wochenbericht
 
-Die Hinweise der Übersicht (`lib/features/shell/home_screen.dart`) sind die
-des Tages und die der Statistik in einer Liste; was doppelt wäre (offene
-Erfassungen, Überbuchung des Tages), steht nur einmal.
+Über der Tagesliste der Übersicht (`lib/features/shell/home_screen.dart`,
+Rechnung in `tagesblick.dart`) stehen drei Karten:
+
+- **Fortschritt:** wie viele Produktionen des Tages erledigt sind (wie im
+  Board: abgehakt oder erfasst), wie viel Rohware davon durch ist und
+  wie viele schon erfasst sind.
+- **Reinigung:** der Reinigungsbeginn je Anlage mit Vorgabe — dieselbe
+  Rechnung und dieselben Farben wie im Board. Klick: Board an dem Tag.
+- **Morgen / Als Nächstes:** der nächste Tag mit Planung (bis zwei Wochen
+  voraus, also über das Wochenende hinweg) — Rohware gesamt,
+  Produktionen und je Abteilung der erste Artikel samt Startzeit, wenn
+  eine eingetragen ist. Klick: Board an dem Tag.
+
+Die Hinweise sind die des Tages und die der Statistik in einer Liste; was
+doppelt wäre (offene Erfassungen, Überbuchung des Tages), steht nur
+einmal.
 
 **Wochenbericht** (`lib/features/statistik/wochenbericht_druck.dart`), Knopf
 oben in der Übersicht: eine Seite für die Geschäftsführung — die laufende Woche,

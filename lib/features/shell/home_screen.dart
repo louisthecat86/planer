@@ -28,11 +28,17 @@ import '../auftragsbestand/auftragsbestand_screen.dart'
     show auftragsbestandProvider;
 import '../auftragsbestand/lieferfaehigkeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
-import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
+import '../../core/services/reihenfolge_regeln.dart';
+import '../board/board_providers.dart'
+    show
+        dayBoardProvider,
+        reinigungsVorgabenProvider,
+        tageskapazitaetJeAbteilung;
 import '../statistik/statistik_daten.dart';
 import '../statistik/statistik_ueberblick_daten.dart';
 import '../statistik/wochenbericht_druck.dart';
 import '../whiteboard/whiteboard_provider.dart' show selectedDateProvider;
+import 'tagesblick.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Daten der Tagesübersicht
@@ -118,9 +124,18 @@ class _Uebersicht {
     required this.auslastung,
     required this.aufgaben,
     required this.hinweise,
+    required this.fortschritt,
+    this.naechster,
   });
 
   final DateTime heute;
+
+  /// Wie weit der Tag ist.
+  final TagesFortschritt fortschritt;
+
+  /// Der nächste Tag mit Planung — null: in den nächsten zwei Wochen
+  /// nichts.
+  final NaechsterTag? naechster;
   final List<_Auftrag> auftraege;
 
   /// Sonstige Aufgaben des Tages — wie im Board je Abteilung, hier in
@@ -210,6 +225,29 @@ final _uebersichtProvider = FutureProvider.autoDispose
         erledigt: erledigt[t.id],
       ),
   ];
+
+  // ── Fortschritt ───────────────────────────────────────────────────
+  final fortschritt = TagesFortschritt.aus([
+    for (final t in heuteTasks)
+      if (t.parentTaskId == null)
+        (
+          rohKg: t.mengeKg,
+          erledigt: erledigt[t.id],
+          erfasst: istErfasst(t.productId, heute),
+        ),
+  ]);
+
+  // ── Nächster Tag mit Planung ──────────────────────────────────────
+  final spaeter = await (db.select(db.productionTasks)
+        ..where((t) => t.deletedAt.isNull())
+        ..where((t) => t.status.isNotIn(const ['storniert']))
+        ..where((t) => t.datum.isBiggerOrEqualValue(morgen))
+        ..where(
+          (t) =>
+              t.datum.isSmallerThanValue(tagPlus(morgen, kNaechsterTagSuche)),
+        ))
+      .get();
+  final naechster = naechsterTagAus(heute, spaeter, produktVon);
 
   // ── Auslastung ────────────────────────────────────────────────────
   final kapazitaet = await tageskapazitaetJeAbteilung(db, wochenStart: montag);
@@ -374,6 +412,8 @@ final _uebersichtProvider = FutureProvider.autoDispose
     auslastung: auslastung,
     aufgaben: aufgabenHeute,
     hinweise: hinweise,
+    fortschritt: fortschritt,
+    naechster: naechster,
   );
 });
 
@@ -671,10 +711,14 @@ class _Tagesbereich extends StatelessWidget {
     final aufgaben =
         u.aufgaben.isEmpty ? null : _AufgabenKarte(aufgaben: u.aufgaben);
 
+    final blick = _TagesBlick(uebersicht: u, breit: breit, istHeute: istHeute);
+
     if (!breit) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          blick,
+          const SizedBox(height: 12),
           heute,
           const SizedBox(height: 12),
           auslastung,
@@ -687,6 +731,22 @@ class _Tagesbereich extends StatelessWidget {
         ],
       );
     }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        blick,
+        const SizedBox(height: 16),
+        _tagesZeile(heute, auslastung, aufgaben, hinweise),
+      ],
+    );
+  }
+
+  Widget _tagesZeile(
+    Widget heute,
+    Widget auslastung,
+    Widget? aufgaben,
+    Widget hinweise,
+  ) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1524,3 +1584,279 @@ List<_Hinweis> _ausStatistik(List<StatistikHinweis> hinweise, DateTime tag) {
         ),
   ];
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tagesblick: Fortschritt, Reinigung, nächster Tag
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Drei kleine Karten über der Tagesliste: wie weit der Tag ist, wann an
+/// der Bratstraße gereinigt werden kann, und was als Nächstes ansteht.
+class _TagesBlick extends StatelessWidget {
+  const _TagesBlick({
+    required this.uebersicht,
+    required this.breit,
+    required this.istHeute,
+  });
+
+  final _Uebersicht uebersicht;
+  final bool breit;
+  final bool istHeute;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = uebersicht;
+    final karten = [
+      _FortschrittKarte(fortschritt: u.fortschritt, istHeute: istHeute),
+      _ReinigungKarte(tag: u.heute, istHeute: istHeute),
+      _NaechsterKarte(naechster: u.naechster, tag: u.heute),
+    ];
+    if (!breit) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, k) in karten.indexed) ...[
+            if (i > 0) const SizedBox(height: 12),
+            k,
+          ],
+        ],
+      );
+    }
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, k) in karten.indexed) ...[
+            if (i > 0) const SizedBox(width: 16),
+            Expanded(child: k),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Öffnet das Board an [tag].
+void _boardAn(BuildContext context, DateTime tag) {
+  ProviderScope.containerOf(context, listen: false)
+      .read(selectedDateProvider.notifier)
+      .state = tag;
+  context.goNamed('board');
+}
+
+/// „7 von 12 Produktionen erledigt", dazu Rohware und Erfassung.
+class _FortschrittKarte extends StatelessWidget {
+  const _FortschrittKarte({required this.fortschritt, required this.istHeute});
+
+  final TagesFortschritt fortschritt;
+  final bool istHeute;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final f = fortschritt;
+    return Bereich(
+      key: const ValueKey('uebersicht-fortschritt'),
+      titel: istHeute ? 'Fortschritt heute' : 'Fortschritt',
+      icon: Icons.task_alt,
+      child: f.leer
+          ? const LeerHinweis('Keine Produktion geplant.')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${f.erledigt} von ${f.produktionen} '
+                  '${f.produktionen == 1 ? 'Produktion' : 'Produktionen'} '
+                  'erledigt',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: f.anteil.clamp(0.0, 1.0),
+                    minHeight: 6,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    color: AppFarben.von(context).ok,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                if (f.rohKg > 0)
+                  Text(
+                    '${_tonnen(f.rohKgErledigt)} von ${_tonnen(f.rohKg)} '
+                    'Rohware',
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                Text(
+                  f.erfasst == f.produktionen
+                      ? 'alle erfasst'
+                      : '${f.erfasst} von ${f.produktionen} erfasst',
+                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// Reinigungsbeginn je Spur mit Vorgabe — wie im Board.
+class _ReinigungKarte extends ConsumerWidget {
+  const _ReinigungKarte({required this.tag, required this.istHeute});
+
+  final DateTime tag;
+  final bool istHeute;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final farben = AppFarben.von(context);
+    final board = ref.watch(dayBoardProvider(tag)).valueOrNull;
+    final vorgaben = ref.watch(reinigungsVorgabenProvider).valueOrNull;
+    final zeilen = <(String, ReinigungsPlan)>[];
+    if (board != null && vorgaben != null) {
+      for (final lane in board.lanes) {
+        final v = vorgaben[lane.abteilung];
+        if (v == null) continue;
+        final plan = reinigungsPlan(
+          vorgabe: v,
+          belegtOhneNachlauf: lane.belegtOhneNachlauf,
+          hatAuftraege: lane.tasks.isNotEmpty,
+          nachlaufLetzter: lane.nachlaufLetzter,
+          startZeit: lane.tasks.isEmpty ? null : lane.tasks.first.startZeit,
+        );
+        if (plan != null) zeilen.add((lane.spur.anzeigeName, plan));
+      }
+    }
+    return Bereich(
+      key: const ValueKey('uebersicht-reinigung'),
+      titel: istHeute ? 'Reinigung heute' : 'Reinigung',
+      icon: Icons.cleaning_services_outlined,
+      child: board == null || vorgaben == null
+          ? const SizedBox(height: 40)
+          : zeilen.isEmpty
+              ? const LeerHinweis(
+                  'An den Anlagen mit Reinigungsvorgabe ist nichts geplant.',
+                )
+              : InkWell(
+                  onTap: () => _boardAn(context, tag),
+                  borderRadius: AppMasse.ecken,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final (name, p) in zeilen) ...[
+                        Text(
+                          switch (p.stand) {
+                            ReinigungsStand.gut =>
+                              '$name: ab ca. ${uhrzeit(p.reinigungAb)}',
+                            ReinigungsStand.knapp =>
+                              '$name: ab ca. ${uhrzeit(p.reinigungAb)} — knapp',
+                            ReinigungsStand.zuSpaet =>
+                              '$name: erst ab ca. ${uhrzeit(p.reinigungAb)} — '
+                                  '${Zeit.kurz(p.ueberzogen)} zu spät',
+                          },
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: switch (p.stand) {
+                              ReinigungsStand.gut => farben.ok,
+                              ReinigungsStand.knapp => farben.warnung,
+                              ReinigungsStand.zuSpaet => farben.fehler,
+                            },
+                          ),
+                        ),
+                        Text(
+                          'Ziel ${uhrzeit(p.vorgabe.ziel)}, spätestens '
+                          '${uhrzeit(p.vorgabe.spaetestens)}'
+                          '${p.nachlaufBekannt ? '' : ' · Nachlauf unbekannt'}',
+                          style:
+                              theme.textTheme.bodySmall?.copyWith(color: grau),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                    ],
+                  ),
+                ),
+    );
+  }
+}
+
+/// Der nächste Tag mit Planung: Rohware gesamt, je Abteilung der erste
+/// Artikel — zum Vorbereiten.
+class _NaechsterKarte extends StatelessWidget {
+  const _NaechsterKarte({required this.naechster, required this.tag});
+
+  final NaechsterTag? naechster;
+  final DateTime tag;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final grau = theme.colorScheme.onSurfaceVariant;
+    final n = naechster;
+    final morgen = tagPlus(tag, 1);
+    final titel = n == null
+        ? 'Als Nächstes'
+        : n.tag == morgen
+            ? 'Morgen · ${Format.wochentage[n.tag.weekday - 1]} '
+                '${n.tag.day}.${n.tag.month}.'
+            : 'Als Nächstes · ${Format.wochentage[n.tag.weekday - 1]} '
+                '${n.tag.day}.${n.tag.month}.';
+    return Bereich(
+      key: const ValueKey('uebersicht-naechster'),
+      titel: titel,
+      icon: Icons.event_outlined,
+      child: n == null
+          ? const LeerHinweis(
+              'In den nächsten zwei Wochen ist nichts geplant.',
+            )
+          : InkWell(
+              onTap: () => _boardAn(context, n.tag),
+              borderRadius: AppMasse.ecken,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${_tonnen(n.rohKg)} Rohware · ${n.produktionen} '
+                    '${n.produktionen == 1 ? 'Produktion' : 'Produktionen'}',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  for (final a in n.abteilungen.take(5))
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 3),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          AbteilungsMarke(abteilung: a.abteilung),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${a.startZeit == null ? '' : 'ab ${a.startZeit} · '}'
+                              '${a.nummer} ${a.name}'
+                              '${a.anzahl > 1 ? ' · +${a.anzahl - 1}' : ''}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (n.abteilungen.length > 5)
+                    Text(
+                      '… und ${n.abteilungen.length - 5} weitere Abteilungen',
+                      style: theme.textTheme.bodySmall?.copyWith(color: grau),
+                    ),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+/// „4,8 t" ab einer Tonne, sonst „640 kg".
+String _tonnen(double kg) => kg >= 1000
+    ? '${(kg / 1000).toStringAsFixed(1).replaceAll('.', ',')} t'
+    : Format.kg(kg.roundToDouble());
