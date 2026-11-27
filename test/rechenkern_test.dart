@@ -649,6 +649,34 @@ void main() {
     });
   });
 
+  group('Wild', () {
+    test('Grenzwerte nach LMIV Anhang VII Teil B', () {
+      for (final art in [Tierart.hirsch, Tierart.reh, Tierart.wild]) {
+        expect((art.fettGrenze, art.bindegewebeGrenze), (25.0, 25.0));
+      }
+      // Wildschwein: Kategorie „Schweine".
+      expect(
+        (Tierart.wildschwein.fettGrenze, Tierart.wildschwein.bindegewebeGrenze),
+        (30.0, 25.0),
+      );
+      expect(Tierart.hirsch.fleischName, 'Hirschfleisch');
+      expect(Tierart.wild.fleischName, 'Wildfleisch');
+    });
+
+    test('Hirsch steht als Hirschfleisch in der Liste', () {
+      const keule = RechenZutat(
+        id: 'h',
+        name: 'Hirschkeule',
+        istFleisch: true,
+        tierart: Tierart.hirsch,
+      );
+      final e = berechne(rezeptur([z(keule, 10)]));
+      expect(e.tierarten.single.tierart, Tierart.hirsch);
+      expect(e.zutatenliste, startsWith('Hirschfleisch'));
+      expect(e.warnungen.where((w) => w.contains('ohne Tierart')), isEmpty);
+    });
+  });
+
   group('Rundung für das Etikett', () {
     test('nach dem Leitfaden der EU-Kommission', () {
       expect(naehrwertGerundet(Naehrstoff.energieKj, 1046.4), '1046');
@@ -709,6 +737,16 @@ void main() {
       expect(Tierart.aus('Kalbsleberwurst'), Tierart.kalb);
       expect(Tierart.aus('Rinderhack'), Tierart.rind);
       expect(Tierart.aus('Hähnchenbrust'), Tierart.huhn);
+      expect(Tierart.aus('hirsch'), Tierart.hirsch);
+      expect(Tierart.aus('Hirschkeule ohne Knochen'), Tierart.hirsch);
+      expect(Tierart.aus('Rehrücken'), Tierart.reh);
+      expect(Tierart.aus('Hirsch-Reh-Mischung'), Tierart.hirsch);
+      expect(Tierart.aus('Wildschweinkeule'), Tierart.wildschwein);
+      expect(Tierart.aus('Wildgulasch'), Tierart.wild);
+      expect(Tierart.aus('wild boar'), Tierart.wildschwein);
+      // „reh" mitten im Wort ist kein Reh.
+      expect(Tierart.aus('Schwein gedreht'), Tierart.schwein);
+      expect(Tierart.aus('Gedrehtes'), isNull);
       expect(Tierart.aus(''), isNull);
       expect(Tierart.aus(null), isNull);
     });

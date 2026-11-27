@@ -60,6 +60,38 @@ enum Tierart {
   ),
   kalb('kalb', 'Kalb', 'Kalbfleisch', 'Kalbsfett', 'Kalbsbindegewebe', 25, 25),
   lamm('lamm', 'Lamm', 'Lammfleisch', 'Lammfett', 'Lammbindegewebe', 25, 25),
+
+  // Wild: Hirsch und Reh sind „Säugetiere außer Kaninchen und Schweinen"
+  // (25 % / 25 %). Das Wildschwein ist dieselbe Art wie das Hausschwein
+  // (Sus scrofa) und zählt deshalb zu den „Schweinen" (30 % / 25 %).
+  hirsch(
+    'hirsch',
+    'Hirsch',
+    'Hirschfleisch',
+    'Hirschfett',
+    'Hirschbindegewebe',
+    25,
+    25,
+  ),
+  reh('reh', 'Reh', 'Rehfleisch', 'Rehfett', 'Rehbindegewebe', 25, 25),
+  wildschwein(
+    'wildschwein',
+    'Wildschwein',
+    'Wildschweinfleisch',
+    'Wildschweinfett',
+    'Wildschweinbindegewebe',
+    30,
+    25,
+  ),
+  wild(
+    'wild',
+    'Wild (gemischt)',
+    'Wildfleisch',
+    'Wildfett',
+    'Wildbindegewebe',
+    25,
+    25,
+  ),
   saeugetier(
     'saeugetier',
     'Säugetier (gemischt)',
@@ -153,9 +185,19 @@ enum Tierart {
       'duck': Tierart.ente,
       'poultry': Tierart.gefluegel,
       'rabbit': Tierart.kaninchen,
+      'venison': Tierart.hirsch,
+      'deer': Tierart.hirsch,
+      'roe deer': Tierart.reh,
+      'wild boar': Tierart.wildschwein,
+      'game': Tierart.wild,
     };
     final ausEnglisch = englisch[t];
     if (ausEnglisch != null) return ausEnglisch;
+    // Wild zuerst — „Wildschweinkeule" ist kein Hausschwein. „Reh" nur am
+    // Wortanfang, sonst zählte „gedreht" mit.
+    if (t.contains('wildschwein')) return Tierart.wildschwein;
+    if (t.contains('hirsch')) return Tierart.hirsch;
+    if (RegExp(r'(^|[^a-zäöüß])reh').hasMatch(t)) return Tierart.reh;
     // Wörter, die die Tierart nennen — in dieser Reihenfolge, damit
     // „Kalbsleberwurst" nicht als Rind zählt.
     const woerter = [
@@ -174,6 +216,7 @@ enum Tierart {
       ('hase', Tierart.kaninchen),
       ('geflügel', Tierart.gefluegel),
       ('gefluegel', Tierart.gefluegel),
+      ('wild', Tierart.wild),
     ];
     for (final (wort, art) in woerter) {
       if (t.contains(wort)) return art;
