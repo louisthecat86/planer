@@ -55,10 +55,9 @@ class ArchivWochenplanScreen extends ConsumerWidget {
     final snapAsync = ref.watch(weekSnapshotProvider(snapshotId));
     final geladen = snapAsync.valueOrNull;
     // Drucken lässt sich nur, wo es einen Plan gibt.
-    final druckbar =
-        geladen != null && dekodiereSnapshot(geladen).plan != null
-            ? geladen
-            : null;
+    final druckbar = geladen != null && dekodiereSnapshot(geladen).plan != null
+        ? geladen
+        : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -118,8 +117,7 @@ class ArchivWochenplanScreen extends ConsumerWidget {
           );
           final aufgaben = <String, List<ArchivAufgabe>>{};
           for (final a in plan.aufgaben) {
-            (aufgaben[_aufgabenSchluessel(a.abteilung, a.datum)] ??= [])
-                .add(a);
+            (aufgaben[_aufgabenSchluessel(a.abteilung, a.datum)] ??= []).add(a);
           }
           return Column(
             children: [
@@ -163,9 +161,6 @@ class _ArchivLeiste extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
-    final passend = ref.watch(boardPassendProvider);
-    final kompakt = ref.watch(boardKompaktProvider);
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
       child: Row(
@@ -181,23 +176,8 @@ class _ArchivLeiste extends ConsumerWidget {
               style: theme.textTheme.bodySmall?.copyWith(color: grau),
             ),
           ),
-          IconButton(
-            icon: Icon(passend ? Icons.zoom_out_map : Icons.fit_screen),
-            tooltip: passend
-                ? 'Originalgröße (scrollen)'
-                : 'Passend skalieren (alles auf eine Seite)',
-            onPressed: () =>
-                ref.read(boardPassendProvider.notifier).state = !passend,
-          ),
-          IconButton(
-            icon: Icon(kompakt ? Icons.unfold_more : Icons.unfold_less),
-            tooltip: kompakt
-                ? 'Komfort-Ansicht (mehr Details)'
-                : 'Kompakt-Ansicht (ganzer Tag ohne Scrollen)',
-            onPressed: () =>
-                ref.read(boardKompaktProvider.notifier).state = !kompakt,
-          ),
-          const SizedBox(width: 4),
+          const BoardAnsichtSchalter(),
+          const SizedBox(width: 8),
           const _Legende(),
         ],
       ),
@@ -231,8 +211,7 @@ class _ArchivRaster extends ConsumerWidget {
     // Spuren nach Abteilung gruppieren (sie liegen bereits sortiert vor).
     final gruppen = <List<BoardSpur>>[];
     for (final spur in board.spuren) {
-      if (gruppen.isEmpty ||
-          gruppen.last.first.abteilung != spur.abteilung) {
+      if (gruppen.isEmpty || gruppen.last.first.abteilung != spur.abteilung) {
         gruppen.add([spur]);
       } else {
         gruppen.last.add(spur);
@@ -453,8 +432,7 @@ class _ArchivNebenzeit extends StatelessWidget {
     final farbe = Theme.of(context).colorScheme.primary;
     final minuten = eintraege.fold<double>(0, (s, z) => s + z.minuten);
     return Tooltip(
-      message: [for (final z in eintraege) _archivNebenzeitZeile(z)]
-          .join('\n'),
+      message: [for (final z in eintraege) _archivNebenzeitZeile(z)].join('\n'),
       child: Padding(
         padding: const EdgeInsets.all(4),
         child: Row(

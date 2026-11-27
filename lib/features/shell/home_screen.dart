@@ -125,9 +125,8 @@ class _Uebersicht {
 /// Parameter ist der angezeigte Tag. Ohne Angabe (`null`) der heutige —
 /// so bleibt „heute" die Voreinstellung und der Provider wird beim
 /// Blättern für jeden Tag einzeln gehalten.
-final _uebersichtProvider =
-    FutureProvider.autoDispose.family<_Uebersicht, DateTime?>(
-        (ref, gewaehlterTag) async {
+final _uebersichtProvider = FutureProvider.autoDispose
+    .family<_Uebersicht, DateTime?>((ref, gewaehlterTag) async {
   final db = ref.watch(databaseProvider);
   // Hält sich selbst aktuell — siehe daten_waechter.dart.
   neuLadenBeiAenderung(ref, db);
@@ -144,9 +143,8 @@ final _uebersichtProvider =
         ..where((t) => t.datum.isBiggerOrEqualValue(montag))
         ..where((t) => t.datum.isSmallerThanValue(wochenEnde)))
       .get();
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
+  final produkte =
+      await (db.select(db.products)..where((p) => p.deletedAt.isNull())).get();
   final produktVon = {for (final p in produkte) p.id: p};
   final historie = await (db.select(db.productionHistory)
         ..where((h) => h.deletedAt.isNull())
@@ -195,8 +193,7 @@ final _uebersichtProvider =
   ];
 
   // ── Auslastung ────────────────────────────────────────────────────
-  final kapazitaet =
-      await tageskapazitaetJeAbteilung(db, wochenStart: montag);
+  final kapazitaet = await tageskapazitaetJeAbteilung(db, wochenStart: montag);
   final produktion = <String, double>{};
   for (final t in heuteTasks) {
     produktion[t.abteilung] =
@@ -679,13 +676,8 @@ class _HeuteKarte extends StatefulWidget {
   /// „Heute in der Produktion" oder, beim Blättern, das Datum.
   final String titel;
 
-  /// Zoomstufe überlebt den Wechsel auf eine andere Seite und zurück —
-  /// wer sich die Liste kleiner gestellt hat, will sie nicht bei jedem
-  /// Besuch neu verkleinern.
-  static double _skala = 1.0;
-
   /// Ausgeblendete Abteilungen, als dbValue. Gilt nur für diese Liste
-  /// und überlebt wie die Zoomstufe den Seitenwechsel. Absichtlich eine
+  /// und überlebt den Seitenwechsel. Absichtlich eine
   /// Ausblend- und keine Einblendliste: Kommt später eine Abteilung
   /// dazu, ist sie sichtbar, statt still zu fehlen.
   static final Set<String> _versteckt = <String>{};
@@ -698,21 +690,12 @@ class _HeuteKarteState extends State<_HeuteKarte> {
   /// Ab dieser Höhe wird gescrollt statt die Seite länger zu machen.
   static const double _maxHoehe = 560;
 
-  static const double _minSkala = 0.7;
-  static const double _maxSkala = 1.2;
-
   final _scroll = ScrollController();
 
   @override
   void dispose() {
     _scroll.dispose();
     super.dispose();
-  }
-
-  void _zoom(double delta) {
-    final neu = (_HeuteKarte._skala + delta).clamp(_minSkala, _maxSkala);
-    if (neu == _HeuteKarte._skala) return;
-    setState(() => _HeuteKarte._skala = neu);
   }
 
   /// Abteilungen, die heute überhaupt vorkommen — nur die stehen im
@@ -740,7 +723,9 @@ class _HeuteKarteState extends State<_HeuteKarte> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final skala = _HeuteKarte._skala;
+    // Ein eigener Zoom der Liste entfällt: Die Anzeigegröße in den
+    // Einstellungen gilt für die ganze App.
+    const skala = 1.0;
     final sichtbare = _sichtbare;
     final ausgeblendet = widget.auftraege.length - sichtbare.length;
 
@@ -773,27 +758,6 @@ class _HeuteKarteState extends State<_HeuteKarte> {
           versteckt: _HeuteKarte._versteckt,
           onGeaendert: () => setState(() {}),
         ),
-        IconButton(
-          onPressed: skala > _minSkala ? () => _zoom(-0.1) : null,
-          icon: const Icon(Icons.remove, size: 18),
-          tooltip: 'Kleiner anzeigen',
-          visualDensity: VisualDensity.compact,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        ),
-        Text(
-          '${(skala * 100).round()} %',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-            fontFeatures: _ziffern,
-          ),
-        ),
-        IconButton(
-          onPressed: skala < _maxSkala ? () => _zoom(0.1) : null,
-          icon: const Icon(Icons.add, size: 18),
-          tooltip: 'Größer anzeigen',
-          visualDensity: VisualDensity.compact,
-          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        ),
         const SizedBox(width: 4),
         zumBoard,
       ],
@@ -803,8 +767,8 @@ class _HeuteKarteState extends State<_HeuteKarte> {
         mainAxisSize: MainAxisSize.min,
         children: [
           // Spaltenköpfe stehen fest, nur die Zeilen scrollen.
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
+          const Padding(
+            padding: EdgeInsets.only(right: 8),
             child: _TabellenKopf(skala: skala),
           ),
           // Deckel auf der Höhe: Sonst wächst die Liste mit jeder
@@ -1299,8 +1263,7 @@ class _AufgabeZeile extends StatelessWidget {
                 child: Icon(
                   a.erledigt ? Icons.check_box : Icons.check_box_outline_blank,
                   size: 18,
-                  color:
-                      a.erledigt ? f.ok : theme.colorScheme.onSurfaceVariant,
+                  color: a.erledigt ? f.ok : theme.colorScheme.onSurfaceVariant,
                 ),
               ),
               const SizedBox(width: 10),
@@ -1312,9 +1275,8 @@ class _AufgabeZeile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
-                    color: a.erledigt
-                        ? theme.colorScheme.onSurfaceVariant
-                        : null,
+                    color:
+                        a.erledigt ? theme.colorScheme.onSurfaceVariant : null,
                   ),
                 ),
               ),

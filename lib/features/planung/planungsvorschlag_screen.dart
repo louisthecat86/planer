@@ -482,9 +482,14 @@ class _PlanungsvorschlagScreenState
     });
   }
 
+  /// „Vorschlag berechnen" / „Neu berechnen": lädt die Bedarfe immer
+  /// frisch — nach Änderungen in der Bedarfsliste, im Auftragsbestand oder
+  /// im Board — und rechnet dann. Ein eigener Knopf zum Neuladen entfällt.
   Future<void> _berechneAusAuswahl() async {
     if (_berechnet && !await _verwerfenOk()) return;
     if (!mounted) return;
+    if (!await _ladeBedarfe() || !mounted) return;
+    if (_auswahl.isEmpty) return;
     await _rechne();
   }
 
@@ -541,11 +546,6 @@ class _PlanungsvorschlagScreenState
               onPressed: _oeffneEinstellungen,
               icon: const Icon(Icons.tune_rounded),
               tooltip: 'Zeiten und Zeitraum',
-            ),
-            IconButton(
-              onPressed: _laedt ? null : _neuLaden,
-              icon: const Icon(Icons.refresh_rounded),
-              tooltip: 'Bedarfe neu laden und neu berechnen',
             ),
             const SizedBox(width: 8),
           ],
@@ -677,17 +677,6 @@ class _PlanungsvorschlagScreenState
       ),
     );
     return weiter ?? false;
-  }
-
-  /// Bedarfe neu laden — nach Änderungen in der Bedarfsliste, im
-  /// Auftragsbestand oder im Board — und, wenn schon gerechnet war, neu
-  /// rechnen.
-  Future<void> _neuLaden() async {
-    if (_berechnet && !await _verwerfenOk()) return;
-    if (!mounted) return;
-    final ok = await _ladeBedarfe();
-    if (!mounted) return;
-    if (ok && _berechnet && _bedarfe.isNotEmpty) await _rechne();
   }
 
   Future<void> _oeffneEinstellungen() async {

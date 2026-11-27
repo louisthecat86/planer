@@ -54,6 +54,44 @@ final boardPassendProvider = StateProvider<bool>((ref) => true);
 
 final boardKompaktProvider = StateProvider<bool>((ref) => true);
 
+/// EIN Schalter für die Ansicht der Woche — vorher zwei Knöpfe
+/// („Passend skalieren" und „Kompakt") mit fast derselben Wirkung.
+/// „Ganze Woche": skaliert und kompakt, alles auf einen Blick.
+/// „Details": Originalgröße mit allen Angaben, dafür mit Scrollen.
+class BoardAnsichtSchalter extends ConsumerWidget {
+  const BoardAnsichtSchalter({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final uebersicht =
+        ref.watch(boardPassendProvider) && ref.watch(boardKompaktProvider);
+    return SegmentedButton<bool>(
+      key: const ValueKey('board-ansicht'),
+      style: const ButtonStyle(visualDensity: VisualDensity.compact),
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(
+          value: true,
+          label: Text('Ganze Woche'),
+          icon: Icon(Icons.fit_screen, size: 16),
+          tooltip: 'Alles auf einen Blick, ohne Scrollen',
+        ),
+        ButtonSegment(
+          value: false,
+          label: Text('Details'),
+          icon: Icon(Icons.unfold_more, size: 16),
+          tooltip: 'Originalgröße mit allen Angaben, mit Scrollen',
+        ),
+      ],
+      selected: {uebersicht},
+      onSelectionChanged: (s) {
+        ref.read(boardPassendProvider.notifier).state = s.first;
+        ref.read(boardKompaktProvider.notifier).state = s.first;
+      },
+    );
+  }
+}
+
 enum _Modus { woche, tag }
 
 String _fmtTagTitel(DateTime d) =>
@@ -605,41 +643,10 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
                   onSelectionChanged: (s) => setState(() => _modus = s.first),
                 ),
                 const Spacer(),
-                // Dichte- und Skalierungs-Umschalter: nur in der Wochenansicht.
+                // Ein Schalter für die Ansicht: nur in der Wochenansicht.
                 if (_modus == _Modus.woche) ...[
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final passend = ref.watch(boardPassendProvider);
-                      return IconButton(
-                        icon: Icon(
-                          passend ? Icons.zoom_out_map : Icons.fit_screen,
-                        ),
-                        tooltip: passend
-                            ? 'Originalgröße (scrollen)'
-                            : 'Passend skalieren (alles auf eine Seite)',
-                        onPressed: () => ref
-                            .read(boardPassendProvider.notifier)
-                            .state = !passend,
-                      );
-                    },
-                  ),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final kompakt = ref.watch(boardKompaktProvider);
-                      return IconButton(
-                        icon: Icon(
-                          kompakt ? Icons.unfold_more : Icons.unfold_less,
-                        ),
-                        tooltip: kompakt
-                            ? 'Komfort-Ansicht (mehr Details)'
-                            : 'Kompakt-Ansicht (ganzer Tag ohne Scrollen)',
-                        onPressed: () => ref
-                            .read(boardKompaktProvider.notifier)
-                            .state = !kompakt,
-                      );
-                    },
-                  ),
-                  const SizedBox(width: 4),
+                  const BoardAnsichtSchalter(),
+                  const SizedBox(width: 8),
                 ],
                 // Legende: erklärt die Balkenfarben ohne Vorwissen
                 const _Legende(),
