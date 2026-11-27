@@ -144,10 +144,12 @@ void main() {
     bool mitHilfsstoff = true,
     SpezAngaben angaben = const SpezAngaben(),
     String? kuerzel,
+    RechenRezeptur? rezeptur,
   }) =>
       SpezifikationsQuelle(
         projektName: 'Frikadelle Testart',
-        ergebnis: berechne(frikadelle(mitHilfsstoff: mitHilfsstoff)),
+        ergebnis:
+            berechne(rezeptur ?? frikadelle(mitHilfsstoff: mitHilfsstoff)),
         verlustProzent: 10,
         artikelnummer: 'T-200',
         kunde: 'Muster GmbH',
@@ -211,6 +213,28 @@ void main() {
       expect(w['hilfsstoff.1.name'], 'Siliziumdioxid');
       expect(w['hilfsstoff.1.quelle'], 'Gewürzmischung');
       expect(w['hilfsstoff.2.name'], '');
+    });
+
+    test('Hilfsstoff: Quelle ist die Zutat, nicht ihre Unterzutaten', () {
+      const hilfe = RechenZutat(
+        id: 'p',
+        name: 'Pökelhilfe Muster 7',
+        etikettName: 'Dextrose, Salz, Säureregulator Natriumcitrat',
+        verarbeitungshilfsstoffe: ['Trennmittel E551'],
+      );
+      final w = spezifikationsWerte(
+        quelle(
+          rezeptur: const RechenRezeptur(
+            id: 'r2',
+            name: 'Muster',
+            positionen: [RechenPosition.zutat(hilfe, mengeKg: 1)],
+          ),
+        ),
+        sprache: SpezSprache.de,
+        datum: datum,
+      );
+      expect(w['hilfsstoff.1.name'], 'Trennmittel E551');
+      expect(w['hilfsstoff.1.quelle'], 'Pökelhilfe Muster 7');
     });
 
     test('englisch: Punkt, Datum mit Schrägstrichen, Version, days', () {

@@ -196,11 +196,11 @@ class RezepturErgebnis {
 
   /// Wie [allergene], aber mit dem Namen der Zutat im Katalog statt dem
   /// Namen auf dem Etikett — für Ansicht, Rezepturblatt und Projektbericht:
-  /// „aus Pökelhilfe X" statt der Unterzutaten. Die Spezifikation für den
-  /// Kunden bleibt bei [allergene].
+  /// „aus Pökelhilfe X" statt der Unterzutaten.
   final Map<String, List<String>> allergeneJeZutat;
 
-  /// Wie [verarbeitungshilfsstoffe], mit dem Namen der Zutat im Katalog.
+  /// Wie [verarbeitungshilfsstoffe], mit dem Namen der Zutat im Katalog —
+  /// so auch in der Spezifikation.
   final Map<String, List<String>> hilfsstoffeJeZutat;
 
   final List<String> warnungen;

@@ -360,8 +360,9 @@ Map<String, String> spezifikationsWerte(
   };
 
   // Verarbeitungshilfsstoffe: der erste Platz sagt „keine", wenn es keine
-  // gibt — wie in den Spezifikationen der Suite.
-  final hilfsstoffe = e.verarbeitungshilfsstoffe.entries.toList();
+  // gibt — wie in den Spezifikationen der Suite. Als Quelle die Zutat mit
+  // ihrem Namen, nicht ihre Unterzutaten vom Etikett.
+  final hilfsstoffe = e.hilfsstoffeJeZutat.entries.toList();
   for (var i = 1; i <= kHilfsstoffPlaetze; i++) {
     final h = i <= hilfsstoffe.length ? hilfsstoffe[i - 1] : null;
     werte['hilfsstoff.$i.name'] = h?.key ??
