@@ -691,14 +691,15 @@ der Anlage: Produktionen, Maschineneinstellungen und Fotos werden dort
 erfasst, wo sie anfallen. Der Weg vom PC aufs Handy ist ein QR-Code am
 Bildschirm oder eine Datei, zurück eine E-Mail mit der Ergebnis-Datei oder
 die Datei selbst — kein Server; die App hat nicht einmal die Berechtigung
-fürs Internet (die E-Mail schickt die E-Mail-App des Handys). Die Seite
-Produktionserfassung → „Vom Handy einlesen" hat dafür drei Kacheln: „Per QR-Code aufs
-Handy", „Als Datei aufs Handy" und „Ergebnis vom Handy einlesen"; darüber
-der Zeitraum.
+fürs Internet (die E-Mail schickt die E-Mail-App des Handys). Hin geht
+es dort, wo geplant wird: im **Planungsboard „Aufs Handy"** — für die
+gezeigte Woche oder den gezeigten Tag, per QR-Code oder als Datei
+(`lib/features/handy_erfassung/aufs_handy.dart`). Zurück in der
+**Produktionserfassung „Vom Handy einlesen"**.
 
-1. **Planer → Produktionserfassung → „Vom Handy einlesen" → „Als Datei aufs Handy":** Das Paket
+1. **Planer → Planungsboard → „Aufs Handy" → „Als Datei":** Das Paket
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
-   der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
+   der gezeigten Woche (oder des Tages) und die Maschineneinstellungen aller Artikel mit
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter
    und die Notiz, samt ihren Grenzen —, den Maschinenkatalog und je Artikel
    die Erfahrung aus den erfassten Produktionen (Ø Menge und Ø Zeit der
@@ -708,12 +709,12 @@ der Zeitraum.
 2. **Aufs Handy** ziehen (Kabel, Freigabe …) und dort antippen („Öffnen mit
    Planer Erfassung") oder in der App „Datei öffnen".
 
-   **Oder per QR-Code:** „Per QR-Code aufs Handy …" zeigt dasselbe Paket
+   **Oder per QR-Code:** „Per QR-Code" zeigt dasselbe Paket
    gepackt (gzip) als Folge wechselnder QR-Codes, in der App „Per QR-Code
    empfangen" (oder im Menü „Paket per QR-Code") sammelt sie mit der Kamera
    ein — in beliebiger Reihenfolge; ein verpasstes Bild kommt in der
    nächsten Runde wieder, gzip prüft am Ende, dass nichts verfälscht ist.
-   Ohne Haken bei „alle Artikel mitschicken" stehen nur die Artikel der
+   Ohne Haken bei „Auch Artikel ohne Produktion mitschicken" stehen nur die Artikel der
    geplanten Produktionen darin (eine Woche: rund 15 Bilder, wenige
    Sekunden), mit Haken alle (gut 450 Bilder, gut eine Minute je Runde).
    „Sicher" zeigt kleinere Codes, falls ein Handy die großen nicht liest.
@@ -803,8 +804,8 @@ der Zeitraum.
    Ergebnis (`Planer-Erfassung-Ergebnis_….json`) im Download-Ordner oder
    dort, woher zuletzt eins kam, bietet die Kachel es mit „Jetzt einlesen"
    an; übernommene bietet sie nicht wieder an (gemerkt wird der Zeitstempel
-   aus dem Namen). Zum Einlesen führt auch „Vom Handy einlesen" oben in
-   der Produktionserfassung. Unter „Ergebnis vom Handy einlesen" zeigt der
+   aus dem Namen). Die Seite öffnet „Vom Handy einlesen" oben in der
+   Produktionserfassung. Unter „Ergebnis vom Handy einlesen" zeigt der
    Planer, was sich ändern würde, und übernimmt nur, was angehakt ist:
    Produktionen landen in
    der Produktionserfassung (mit denselben Kennzahlen),

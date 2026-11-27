@@ -23,6 +23,7 @@ import '../../core/ui/bausteine.dart';
 import '../bedarf/bedarf_screen.dart';
 import '../whiteboard/task_detail_sheet.dart';
 import '../whiteboard/whiteboard_provider.dart';
+import '../handy_erfassung/aufs_handy.dart';
 import 'board_druck_dialog.dart';
 import '../../core/utils/sheet_utils.dart';
 import '../../core/utils/datum.dart';
@@ -608,6 +609,23 @@ class _WeekBoardScreenState extends ConsumerState<WeekBoardScreen> {
             icon: const Icon(Icons.chevron_right),
             tooltip: istWoche ? 'Nächste Woche' : 'Nächster Tag',
             onPressed: _vor,
+          ),
+          const SizedBox(width: 8),
+          // Der Plan für die App „Planer Erfassung" an der Anlage — die
+          // gezeigte Woche oder der gezeigte Tag. Zurück kommt das Ergebnis
+          // in der Produktionserfassung („Vom Handy einlesen").
+          OutlinedButton.icon(
+            key: const ValueKey('board-aufs-handy'),
+            onPressed: () => aufsHandyZeigen(
+              context,
+              von: istWoche ? montag : sel,
+              bis: istWoche ? tagPlus(montag, 6) : sel,
+              zeitraum: istWoche
+                  ? 'KW ${isoKalenderwoche(montag)}'
+                  : _fmtTagTitel(sel),
+            ),
+            icon: const Icon(Icons.phone_android, size: 18),
+            label: const Text('Aufs Handy'),
           ),
           const SizedBox(width: 8),
           // Oben rechts wie in der Übersicht statt als schwebender Knopf —

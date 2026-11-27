@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:erfassung_format/erfassung_format.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,7 +12,6 @@ import '../../core/ui/ablage.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/ui/foto_kachel.dart';
 import '../../core/utils/datei_wahl.dart';
-import '../../core/utils/datum.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../articles/article_detail_providers.dart'
@@ -26,23 +24,11 @@ import '../erfassung/produktion_erfassung_screen.dart'
     show erfassungWocheDatenProvider;
 import 'ergebnis_suche.dart';
 import 'handy_erfassung_dienst.dart';
-import 'qr_senden.dart';
 
-// Produktionserfassung → „Vom Handy einlesen": die Datei fürs Handy
-// erstellen und das Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
-// aufgenommen wurden. Der Weg ist eine Datei wie beim Backup — per Kabel,
-// Freigabe oder wie es passt.
-
-/// Wie weit das Paket nach vorn reicht.
-enum _Zeitraum {
-  dieseWoche('Diese Woche'),
-  zweiWochen('Diese und nächste Woche'),
-  frei('Eigener Zeitraum');
-
-  const _Zeitraum(this.label);
-
-  final String label;
-}
+// Produktionserfassung → „Vom Handy einlesen": das Ergebnis vom Handy
+// einlesen — Produktionen, Maschineneinstellungen und die Fotos, die an
+// der Anlage aufgenommen wurden. Aufs Handy kommt der Plan im
+// Planungsboard („Aufs Handy", siehe aufs_handy.dart).
 
 class HandyErfassungScreen extends ConsumerStatefulWidget {
   const HandyErfassungScreen({super.key});
@@ -53,15 +39,7 @@ class HandyErfassungScreen extends ConsumerStatefulWidget {
 }
 
 class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
-  _Zeitraum _zeitraum = _Zeitraum.dieseWoche;
-  late DateTime _von = _montag;
-  late DateTime _bis = tagPlus(_montag, 6);
-
   bool _arbeitet = false;
-
-  /// Per QR-Code auch die Artikel ohne geplante Produktion mitschicken —
-  /// dann lassen sich am Handy alle Einstellungen ändern, es dauert aber.
-  bool _qrAlleArtikel = false;
 
   /// Was zuletzt geschah — oder schiefging.
   String? _meldung;
@@ -107,17 +85,6 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     await _ergebnisLesen(bytes);
   }
 
-  static DateTime get _montag {
-    final heute = tagOhneZeit(DateTime.now());
-    return tagPlus(heute, -(heute.weekday - 1));
-  }
-
-  (DateTime, DateTime) get _tage => switch (_zeitraum) {
-        _Zeitraum.dieseWoche => (_montag, tagPlus(_montag, 6)),
-        _Zeitraum.zweiWochen => (_montag, tagPlus(_montag, 13)),
-        _Zeitraum.frei => _von.isAfter(_bis) ? (_bis, _von) : (_von, _bis),
-      };
-
   void _melde(String text, {bool fehler = false}) {
     if (!mounted) return;
     setState(() {
@@ -125,81 +92,6 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
       _meldung = text;
       _fehler = fehler;
     });
-  }
-
-  Future<void> _tagWaehlen({required bool von}) async {
-    final gewaehlt = await showDatePicker(
-      context: context,
-      initialDate: von ? _von : _bis,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-    );
-    if (gewaehlt == null) return;
-    setState(() => von ? _von = gewaehlt : _bis = gewaehlt);
-  }
-
-  Future<void> _paketErstellen() async {
-    setState(() {
-      _arbeitet = true;
-      _meldung = null;
-    });
-    try {
-      final (von, bis) = _tage;
-      final paket = await HandyErfassungDienst(ref.read(databaseProvider))
-          .paketErstellen(von: von, bis: bis);
-      final ziel = await FilePicker.saveFile(
-        dialogTitle: 'Datei fürs Handy speichern',
-        fileName: paket.dateiname,
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-      if (ziel == null) {
-        if (mounted) setState(() => _arbeitet = false);
-        return;
-      }
-      await File(ziel).writeAsString(paket.alsText());
-      final n = paket.produktionen.length;
-      _melde(
-        'Datei gespeichert: ${n == 1 ? '1 Produktion' : '$n Produktionen'} '
-        'und die Maschineneinstellungen von ${paket.artikel.length} '
-        'Artikeln. Jetzt aufs Handy ziehen und dort mit „Planer Erfassung" '
-        'öffnen.\n$ziel',
-      );
-    } catch (e) {
-      _melde(
-        'Die Datei ließ sich nicht erstellen: ${fehlerText(e)}',
-        fehler: true,
-      );
-    }
-  }
-
-  /// Dasselbe Paket als wechselnde QR-Codes zum Abfotografieren.
-  Future<void> _qrSenden() async {
-    setState(() {
-      _arbeitet = true;
-      _meldung = null;
-    });
-    try {
-      final (von, bis) = _tage;
-      final paket = await HandyErfassungDienst(ref.read(databaseProvider))
-          .paketErstellen(von: von, bis: bis, nurGeplante: !_qrAlleArtikel);
-      final daten = qrPacken(paket);
-      if (!mounted) return;
-      setState(() => _arbeitet = false);
-      final n = paket.produktionen.length;
-      await qrSendenZeigen(
-        context,
-        daten: daten,
-        info: '${n == 1 ? '1 Produktion' : '$n Produktionen'}, die '
-            'Maschineneinstellungen von ${paket.artikel.length} Artikeln '
-            '· ${groesseText(daten.length)}',
-      );
-    } catch (e) {
-      _melde(
-        'Die QR-Codes ließen sich nicht erstellen: ${fehlerText(e)}',
-        fehler: true,
-      );
-    }
   }
 
   /// Die Endungen, die sich hier einlesen lassen.
@@ -345,7 +237,7 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
   Widget build(BuildContext context) {
     final vorschau = _vorschau;
     return Scaffold(
-      appBar: AppBar(title: const Text('Handy-Erfassung')),
+      appBar: AppBar(title: const Text('Vom Handy einlesen')),
       // Das Ergebnis kann man auch aufs Fenster ziehen — solange noch
       // keines zum Übernehmen offen ist. Die Zone wartet nicht auf das
       // Einlesen; die Seite zeigt selbst, dass sie arbeitet.
@@ -372,8 +264,6 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
                       const SizedBox(height: 12),
                     ],
                     if (vorschau == null) ...[
-                      _zeitraumBereich(context),
-                      const SizedBox(height: 12),
                       _kacheln(context),
                       const SizedBox(height: 12),
                       const _Anleitung(),
@@ -389,89 +279,15 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
     );
   }
 
-  Widget _zeitraumBereich(BuildContext context) {
-    final theme = Theme.of(context);
-    final (von, bis) = _tage;
-    return Bereich(
-      titel: 'Welche Produktionen aufs Handy?',
-      icon: Icons.date_range_outlined,
-      untertitel: 'für QR-Code und Datei',
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (final z in _Zeitraum.values)
-            ChoiceChip(
-              label: Text(z.label),
-              selected: _zeitraum == z,
-              onSelected: (_) => setState(() => _zeitraum = z),
-            ),
-          const SizedBox(width: 8),
-          if (_zeitraum == _Zeitraum.frei) ...[
-            OutlinedButton(
-              onPressed: () => _tagWaehlen(von: true),
-              child: Text('von ${Format.datum(_von)}'),
-            ),
-            OutlinedButton(
-              onPressed: () => _tagWaehlen(von: false),
-              child: Text('bis ${Format.datum(_bis)}'),
-            ),
-          ] else
-            Text(
-              '${Format.datum(von)} bis ${Format.datum(bis)}',
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// Die drei Wege: per QR-Code aufs Handy, als Datei aufs Handy, das
-  /// Ergebnis zurück. Nebeneinander, auf schmalen Fenstern untereinander.
+  /// Das Ergebnis vom Handy: wählen, aufs Fenster ziehen — oder, was
+  /// schon im Download-Ordner liegt, gleich einlesen. Darunter der
+  /// Hinweis, wo der Plan aufs Handy kommt.
   Widget _kacheln(BuildContext context) {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
     final frei = !_arbeitet;
     final gefunden = _gefunden;
     final kacheln = [
-      _Kachel(
-        key: const ValueKey('handy-qr'),
-        icon: Icons.qr_code_2,
-        titel: 'Per QR-Code aufs Handy',
-        text: 'Das Handy auf den Bildschirm halten — ohne Kabel, in '
-            'Sekunden.',
-        onTap: frei ? _qrSenden : null,
-        unten: InkWell(
-          key: const ValueKey('handy-qr-alle'),
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => setState(() => _qrAlleArtikel = !_qrAlleArtikel),
-          child: Row(
-            children: [
-              Checkbox(
-                value: _qrAlleArtikel,
-                onChanged: (v) => setState(() => _qrAlleArtikel = v ?? false),
-              ),
-              Expanded(
-                child: Text(
-                  'Alle Artikel mitschicken (dauert gut eine Minute)',
-                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-      _Kachel(
-        key: const ValueKey('handy-paket'),
-        icon: Icons.save_alt,
-        titel: 'Als Datei aufs Handy',
-        text: 'Speichern und per Kabel oder Freigabe aufs Handy bringen. '
-            'Mit allen Artikeln.',
-        onTap: frei ? _paketErstellen : null,
-      ),
       _Kachel(
         key: const ValueKey('handy-ergebnis'),
         icon: Icons.move_to_inbox_outlined,
@@ -505,31 +321,25 @@ class _HandyErfassungScreenState extends ConsumerState<HandyErfassungScreen> {
               ),
       ),
     ];
-    return LayoutBuilder(
-      builder: (context, box) {
-        if (box.maxWidth < 720) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (i, k) in kacheln.indexed) ...[
-                if (i > 0) const SizedBox(height: 12),
-                k,
-              ],
-            ],
-          );
-        }
-        return IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (i, k) in kacheln.indexed) ...[
-                if (i > 0) const SizedBox(width: 12),
-                Expanded(child: k),
-              ],
-            ],
-          ),
-        );
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ...kacheln,
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Icon(Icons.info_outline, size: 16, color: grau),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Aufs Handy kommt der Plan im Planungsboard: „Aufs Handy" '
+                'oben rechts — für die gezeigte Woche oder den Tag.',
+                style: theme.textTheme.bodySmall?.copyWith(color: grau),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -823,14 +633,15 @@ class _Anleitung extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     const schritte = [
-      'Aufs Handy: „Per QR-Code" und in der App „Per QR-Code empfangen" '
-          '— oder die Datei aufs Handy bringen und dort öffnen.',
+      'Im Planungsboard „Aufs Handy": per QR-Code (in der App „Per '
+          'QR-Code empfangen") oder als Datei, die du dort öffnest.',
       'An der Anlage erfassen: Produktionen, Maschineneinstellungen und '
           'Fotos — ohne Netz, alles bleibt auf dem Handy.',
       'In der App „An PC" → „Per E-Mail an den PC": Die E-Mail-App öffnet '
           'sich mit dem Ergebnis als Anhang, nur noch absenden.',
       'Am PC den Anhang speichern — liegt er im Download-Ordner, bietet '
-          'ihn diese Seite von selbst an — und einlesen.',
+          'ihn diese Seite von selbst an — und einlesen. Vor dem '
+          'Übernehmen siehst du, was sich ändert.',
     ];
     return Bereich(
       titel: 'So geht’s',
