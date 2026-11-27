@@ -33,14 +33,13 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 |             | Bedarf                | Offene Bedarfe; geplant ist, was an verknüpften Aufträgen im Board steht                     |
 |             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise oder ganz ins Board |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
-| Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten: Verlust, kg/h; die Kette im Board wird erledigt |
+| Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten, „Vom Handy einlesen"; die Kette wird erledigt   |
 |             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
 |             | Statistik             | Überblick (5 Kennzahlen mit Vorzeitraum, Hinweise, Vorschau 10 Werktage), darunter Themen    |
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
-|             | Navision-Artikel      | Artikelübersicht aus Navision abgleichen: neue Artikel und Allergene übernehmen              |
 |             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
 | Entwickeln  | Produktentwicklung    | Eigene Leiste: Übersicht, Projekte, Kunden, Rezepturen, Zutaten, Statistik — mit Passwort    |
-|             | Einstellungen         | Kapazität je Abteilung, Darstellung, Stammdaten-Mappe, Backups, Zurücksetzen                 |
+|             | Einstellungen         | Kapazität, Darstellung, Import/Export (auch Navision-Abgleich), Backups, Zurücksetzen        |
 
 Im Board zeigt jede Abteilung je Tag einen Balken bis zu ihrer Kapazität
 (grau = frei, grün = gut gefüllt, rot = überbucht). Erledigtes wird grün:
@@ -669,11 +668,11 @@ erfasst, wo sie anfallen. Der Weg vom PC aufs Handy ist ein QR-Code am
 Bildschirm oder eine Datei, zurück eine E-Mail mit der Ergebnis-Datei oder
 die Datei selbst — kein Server; die App hat nicht einmal die Berechtigung
 fürs Internet (die E-Mail schickt die E-Mail-App des Handys). Die Seite
-Einstellungen → Handy-Erfassung hat dafür drei Kacheln: „Per QR-Code aufs
+Produktionserfassung → „Vom Handy einlesen" hat dafür drei Kacheln: „Per QR-Code aufs
 Handy", „Als Datei aufs Handy" und „Ergebnis vom Handy einlesen"; darüber
 der Zeitraum.
 
-1. **Planer → Einstellungen → Handy-Erfassung → „Als Datei aufs Handy":** Das Paket
+1. **Planer → Produktionserfassung → „Vom Handy einlesen" → „Als Datei aufs Handy":** Das Paket
    (`Planer-Erfassung_….json`) enthält die noch nicht erfassten Produktionen
    der gewählten Wochen und die Maschineneinstellungen aller Artikel mit
    Prozesskette — Steckbrief-Felder, Plattentemperaturen, weitere Parameter

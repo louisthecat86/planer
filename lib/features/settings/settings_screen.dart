@@ -58,8 +58,8 @@ class SettingsScreen extends ConsumerWidget {
                     _EinstellungsZeile(
                       icon: Icons.swap_vert_rounded,
                       titel: 'Import / Export',
-                      text: 'Artikel, Maschinen-Katalog und Backup sichern '
-                          'oder einlesen',
+                      text: 'Artikel, Maschinen-Katalog, Navision-Abgleich '
+                          'und Backup',
                       onTap: () => context.pushNamed('data'),
                     ),
                     _EinstellungsZeile(
@@ -68,13 +68,6 @@ class SettingsScreen extends ConsumerWidget {
                       text: 'Feste Prozessketten für Arten von Artikeln — '
                           'am Artikel wählen oder vielen auf einmal zuordnen',
                       onTap: () => context.pushNamed('prozessvorlagen'),
-                    ),
-                    _EinstellungsZeile(
-                      icon: Icons.phone_android,
-                      titel: 'Handy-Erfassung',
-                      text: 'Datei für die App „Planer Erfassung" erstellen '
-                          'und ihr Ergebnis einlesen',
-                      onTap: () => context.pushNamed('handy'),
                     ),
                     _EinstellungsZeile(
                       icon: Icons.schedule_rounded,

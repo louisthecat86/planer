@@ -30,7 +30,8 @@ import '../entwicklung/entwicklung_zugang.dart'
 /// - Backup erstellen / wiederherstellen
 /// - Speicherort der DB / Backups anzeigen
 ///
-/// Erreichbar über die Einstellungen („Import / Export").
+/// Erreichbar über die Einstellungen („Import / Export"); dort liegt auch
+/// der Navision-Abgleich.
 class DataManagementScreen extends ConsumerStatefulWidget {
   const DataManagementScreen({super.key});
 

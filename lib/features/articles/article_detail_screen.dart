@@ -87,15 +87,6 @@ class ArticleDetailScreen extends ConsumerWidget {
           ),
           actions: [
             IconButton(
-              icon: const Icon(Icons.cleaning_services_outlined),
-              tooltip: 'Doppelte Parameter bereinigen',
-              onPressed: () => bereinigeDoppelteParameter(
-                context,
-                ref,
-                productId,
-              ),
-            ),
-            IconButton(
               icon: const Icon(Icons.print_outlined),
               tooltip: 'Prozessblatt drucken',
               onPressed: () async {

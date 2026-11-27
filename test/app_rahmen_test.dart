@@ -67,10 +67,18 @@ void main() {
   testWidgets('Unterseiten heben ihren Bereich hervor', (tester) async {
     await zeige(tester, ort: '/article/p1', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Artikel'), FontWeight.w600);
-    expect(gewicht(tester, 'Navision-Artikel'), FontWeight.w400);
+    expect(gewicht(tester, 'Maschinen-Katalog'), FontWeight.w400);
 
     await zeige(tester, ort: '/data', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Einstellungen'), FontWeight.w600);
+
+    // Der Navision-Abgleich liegt unter Import / Export, die
+    // Handy-Erfassung gehört zur Produktionserfassung.
+    await zeige(tester, ort: '/navision', groesse: const Size(1600, 1000));
+    expect(gewicht(tester, 'Einstellungen'), FontWeight.w600);
+    expect(find.text('Navision-Artikel'), findsNothing);
+    await zeige(tester, ort: '/handy', groesse: const Size(1600, 1000));
+    expect(gewicht(tester, 'Produktionserfassung'), FontWeight.w600);
   });
 
   testWidgets('Produktentwicklung: ihre Bereiche und der Weg zurück',

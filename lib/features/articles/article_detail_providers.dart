@@ -2,8 +2,6 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/constants/parameter_namen.dart';
-
 // Die Plattenerkennung lebt in core/, weil auch Generator und Importer sie
 // brauchen. Hier weitergereicht, damit alle bisherigen Nutzer dieser Datei
 // unverändert weiterlaufen.
@@ -11,7 +9,6 @@ export '../../core/constants/parameter_namen.dart'
     show istDampftunnelMaschine, istPlattenMaschine, istVerstecktesPlattenParam;
 import '../../core/database/database.dart';
 import '../../core/providers/database_provider.dart';
-import '../../core/services/auto_backup_trigger.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
@@ -32,11 +29,8 @@ import '../../core/utils/zeit.dart';
 /// dbValue der Abteilung Bratstraße (Schema nur dort anbieten).
 const String kAbteilungBratstrasseDb = 'bratstrasse';
 
-
-
 bool istBratstrasseMaschine(String maschineName) =>
     maschineName.toLowerCase().contains('bratstra');
-
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -212,8 +206,7 @@ Future<String?> wertDialogMitPruefung(
             setState(() {
               fehlerText =
                   r.status == _GrenzenStatus.blockiert ? r.meldung : null;
-              warnText =
-                  r.status == _GrenzenStatus.warnung ? r.meldung : null;
+              warnText = r.status == _GrenzenStatus.warnung ? r.meldung : null;
             });
           }
 
@@ -302,187 +295,3 @@ String fmtKg(double? v) {
 String fmtProzent(double anteil) => Format.prozent(anteil);
 
 String fmtDauer(double? minuten) => Zeit.lang(minuten);
-
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
-
-/// Räumt Parameter auf, die für denselben Schritt doppelt existieren —
-/// einmal in der Gruppe der Anlage (aus der Excel importiert) und einmal in
-/// „MASCHINENEINSTELLUNGEN" (von der App angelegt, bevor der Abgleich
-/// namensbasiert wurde).
-///
-/// Behalten wird die Zeile in der Anlagen-Gruppe: Sie steht im Excel-Export
-/// an der richtigen Stelle. Ihr Wert wird — falls sie leer ist oder die
-/// andere Zeile neuer gepflegt wurde — aus der Dublette übernommen; die
-/// überzählige Zeile wird anschließend soft-deleted.
-Future<void> bereinigeDoppelteParameter(
-  BuildContext context,
-  WidgetRef ref,
-  String productId,
-) async {
-  final db = ref.read(databaseProvider);
-
-  final schritte = await (db.select(db.productSteps)
-        ..where((s) => s.productId.equals(productId))
-        ..where((s) => s.deletedAt.isNull()))
-      .get();
-  if (schritte.isEmpty) {
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Dieser Artikel hat keine Schritte.')),
-      );
-    }
-    return;
-  }
-
-  // Je Schritt die Parameter nach Namen bündeln.
-  final aufgaben = <({
-    ProductStepParameter behalten,
-    List<ProductStepParameter> entfernen,
-    String? neuerWert,
-  })>[];
-
-  for (final s in schritte) {
-    final params = await (db.select(db.productStepParameters)
-          ..where((p) => p.stepId.equals(s.id))
-          ..where((p) => p.deletedAt.isNull()))
-        .get();
-
-    final nachName = <String, List<ProductStepParameter>>{};
-    for (final p in params) {
-      if (p.istCustom) continue;
-      nachName
-          .putIfAbsent(p.parameterName.trim().toLowerCase(), () => [])
-          .add(p);
-    }
-
-    for (final gruppe in nachName.values) {
-      if (gruppe.length < 2) continue;
-
-      // Behalten: bevorzugt die Zeile in der Anlagen-Gruppe.
-      final behalten = gruppe.firstWhere(
-        (p) => p.parameterGruppe != kMaschinenNotizGruppe,
-        orElse: () => gruppe.first,
-      );
-
-      // Wert: den zuletzt gepflegten, nicht leeren nehmen.
-      ProductStepParameter? bester;
-      for (final p in gruppe) {
-        if ((p.wert ?? '').trim().isEmpty) continue;
-        if (bester == null || p.updatedAt.isAfter(bester.updatedAt)) {
-          bester = p;
-        }
-      }
-
-      final rest = gruppe.where((p) => p.id != behalten.id).toList();
-      aufgaben.add(
-        (
-          behalten: behalten,
-          entfernen: rest,
-          neuerWert: bester?.wert,
-        ),
-      );
-    }
-  }
-
-  if (!context.mounted) return;
-
-  if (aufgaben.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Keine doppelten Parameter gefunden — alles sauber.'),
-      ),
-    );
-    return;
-  }
-
-  final anzahlZeilen =
-      aufgaben.fold<int>(0, (s, a) => s + a.entfernen.length);
-  final beispiele = aufgaben
-      .take(5)
-      .map((a) => '• ${a.behalten.parameterName}')
-      .join('\n');
-
-  final ok = await showDialog<bool>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text('$anzahlZeilen doppelte Zeile(n) bereinigen?'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '${aufgaben.length} Parameter kommen doppelt vor. Behalten wird '
-            'jeweils die Zeile in der Anlagen-Gruppe (sie steht im '
-            'Excel-Export an der richtigen Stelle), mit dem zuletzt '
-            'gepflegten Wert.',
-          ),
-          const SizedBox(height: 12),
-          Text(
-            beispiele +
-                (aufgaben.length > 5
-                    ? '\n• … und ${aufgaben.length - 5} weitere'
-                    : ''),
-            style: const TextStyle(fontSize: 12.5),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Abbrechen'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Bereinigen'),
-        ),
-      ],
-    ),
-  );
-  if (ok != true) return;
-
-  final jetzt = DateTime.now();
-  await db.transaction(() async {
-    for (final a in aufgaben) {
-      if ((a.neuerWert ?? '').trim() != (a.behalten.wert ?? '').trim()) {
-        await (db.update(db.productStepParameters)
-              ..where((p) => p.id.equals(a.behalten.id)))
-            .write(
-          ProductStepParametersCompanion(
-            wert: Value(a.neuerWert),
-            updatedAt: Value(jetzt),
-          ),
-        );
-      }
-      for (final weg in a.entfernen) {
-        await (db.update(db.productStepParameters)
-              ..where((p) => p.id.equals(weg.id)))
-            .write(
-          ProductStepParametersCompanion(
-            deletedAt: Value(jetzt),
-            updatedAt: Value(jetzt),
-          ),
-        );
-      }
-    }
-  });
-
-  ref.read(autoBackupTriggerProvider).fireDebounced(
-        reason: 'Doppelte Parameter bereinigt',
-      );
-  for (final s in schritte) {
-    ref.invalidate(stepParametersProvider(s.id));
-  }
-  ref.invalidate(productStepsProvider(productId));
-
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: Text('$anzahlZeilen doppelte Zeile(n) entfernt.'),
-    ),
-  );
-}
-
-
-

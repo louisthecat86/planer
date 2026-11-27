@@ -28,8 +28,8 @@ import 'ergebnis_suche.dart';
 import 'handy_erfassung_dienst.dart';
 import 'qr_senden.dart';
 
-// Einstellungen → Handy-Erfassung: die Datei fürs Handy erstellen und das
-// Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
+// Produktionserfassung → „Vom Handy einlesen": die Datei fürs Handy
+// erstellen und das Ergebnis vom Handy einlesen — samt der Fotos, die an der Anlage
 // aufgenommen wurden. Der Weg ist eine Datei wie beim Backup — per Kabel,
 // Freigabe oder wie es passt.
 

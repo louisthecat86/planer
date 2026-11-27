@@ -87,7 +87,7 @@ class _ProduktionErfassungScreenState
             onPressed: () => _drucken(montag),
           ),
           // Was an der Anlage mit der App „Planer Erfassung" erfasst wurde,
-          // kommt hier herein — derselbe Weg wie über die Einstellungen.
+          // kommt hier herein — der einzige Weg dorthin.
           if (MediaQuery.sizeOf(context).width < 720)
             IconButton(
               icon: const Icon(Icons.phone_android),

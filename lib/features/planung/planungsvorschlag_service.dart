@@ -1203,23 +1203,19 @@ class PlanungsvorschlagService {
 
   // ── Sortierung und Nebenzeiten ───────────────────────────────────────
 
-  /// Die Regeln aus dem Klassenkopf, in genau dieser Rangfolge.
-  static List<_Kandidat> _sortiere(List<_Kandidat> liste) {
-    final sortiert = [...liste]..sort((a, b) {
-        final al = a.allergenRang.compareTo(b.allergenRang);
-        if (al != 0) return al;
-        final bio = a.bioRang.compareTo(b.bioRang);
-        if (bio != 0) return bio;
-        final roh = a.rohRang.compareTo(b.rohRang);
-        if (roh != 0) return roh;
-        final temp = a.plattenTemp.compareTo(b.plattenTemp);
-        if (temp != 0) return temp;
-        final h = a.hoehe.compareTo(b.hoehe);
-        if (h != 0) return h;
-        return a.artikelnummer.compareTo(b.artikelnummer);
-      });
-    return sortiert;
-  }
+  /// Die Regeln aus dem Klassenkopf — dieselbe Ordnung wie im Board und
+  /// beim Knopf „Nach Regeln sortieren" (ohne Zickzack der Temperatur).
+  static List<_Kandidat> _sortiere(List<_Kandidat> liste) => ordneNachRegeln(
+        liste,
+        (k) => ArtikelRegel(
+          allergenRang: k.allergenRang,
+          bioRang: k.bioRang,
+          rohRang: k.rohRang,
+          plattenTemp: k.plattenTemp,
+          hoehe: k.hoehe,
+        ),
+        (k) => k.artikelnummer,
+      );
 
   static double _nebenzeit(
     _Kandidat aktuell,

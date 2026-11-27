@@ -138,7 +138,9 @@ const List<(String?, List<_Ziel>)> _gruppen = [
         'erfassung',
         'Produktionserfassung',
         Icons.fact_check_outlined,
-        ['/erfassung'],
+        // Die Handy-Erfassung ist ein Teil davon: Paket fürs Handy, Ergebnis
+        // zurück.
+        ['/erfassung', '/handy'],
       ),
       _Ziel(
         'wochenHistorie',
@@ -162,12 +164,6 @@ const List<(String?, List<_Ziel>)> _gruppen = [
         'Artikel',
         Icons.inventory_2_outlined,
         ['/articles', '/article'],
-      ),
-      _Ziel(
-        'navisionImport',
-        'Navision-Artikel',
-        Icons.swap_horiz_outlined,
-        ['/navision'],
       ),
       _Ziel(
         'maschinen',
@@ -225,7 +221,9 @@ const _Ziel _einstellungen = _Ziel(
   'settings',
   'Einstellungen',
   Icons.settings_outlined,
-  ['/settings', '/data', '/handy', '/prozessvorlagen'],
+  // Der Navision-Abgleich ist ein Import wie die anderen — er liegt unter
+  // „Import / Export" und hatte vorher zusätzlich einen eigenen Eintrag.
+  ['/settings', '/data', '/navision', '/prozessvorlagen'],
 );
 
 /// Die Ziffern für Strg+1 … Strg+9.
