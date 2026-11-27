@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' hide Column;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/database/database.dart';
@@ -193,9 +194,7 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
   /// sonst die eingeplante.
   double get _aktuelleMenge {
     final v = _auftragsMenge;
-    return (v != null && v.isFinite && v > 0)
-        ? v
-        : widget.wbTask.task.mengeKg;
+    return (v != null && v.isFinite && v > 0) ? v : widget.wbTask.task.mengeKg;
   }
 
   /// Rechnet die Dauer aus der neuen Menge hoch — nach denselben Regeln
@@ -813,6 +812,39 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
     ];
   }
 
+  /// Schließt die Karte und öffnet den Artikel. Was hier noch nicht
+  /// gespeichert ist, fragt vorher nach.
+  Future<void> _zumArtikel() async {
+    final router = GoRouter.maybeOf(context);
+    if (router == null) return;
+    final weiter = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Zum Artikel wechseln?'),
+        content: const Text(
+          'Die Karte schließt sich. Änderungen, die du hier noch nicht '
+          'mit „Speichern" gesichert hast, gehen dabei verloren.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Abbrechen'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Zum Artikel'),
+          ),
+        ],
+      ),
+    );
+    if (weiter != true || !mounted) return;
+    Navigator.of(context).pop(false);
+    await router.pushNamed(
+      'articleDetail',
+      pathParameters: {'productId': widget.wbTask.task.productId},
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final abt = widget.wbTask.abteilungEnum;
@@ -867,6 +899,14 @@ class _TaskDetailSheetState extends ConsumerState<_TaskDetailSheet> {
                         ),
                       ],
                     ),
+                  ),
+                  // In die Stammdaten des Artikels — wie aus der
+                  // Artikelliste. Schließt die Karte ohne zu speichern.
+                  TextButton.icon(
+                    key: const ValueKey('karte-zum-artikel'),
+                    onPressed: _isSaving ? null : _zumArtikel,
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18),
+                    label: const Text('Zum Artikel'),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),

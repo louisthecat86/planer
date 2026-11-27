@@ -98,14 +98,15 @@ void main() {
     test('Planer: die ersten neun mit Strg+1 … Strg+9', () {
       final ziele = schnellZiele(entwicklung: false);
 
-      expect(ziele.first.titel, 'Cockpit');
+      expect(ziele.first.titel, 'Übersicht');
       expect(ziele.first.kuerzel, 'Strg+1');
       expect(ziele[1].titel, 'Auftragsbestand');
       expect(ziele[2].titel, 'Planungsvorschlag');
       expect(ziele[3].titel, 'Planungsboard');
       expect(ziele[3].kuerzel, 'Strg+4');
+      // Neun Bereiche — Einstellungen als letzter mit Strg+9.
+      expect(ziele, hasLength(9));
       expect(ziele[8].kuerzel, 'Strg+9');
-      expect(ziele[9].kuerzel, isNull);
       expect(ziele.last.titel, 'Einstellungen');
       // Jeder Bereich hat eine Route — und keine doppelt.
       expect(ziele.every((z) => z.route != null), isTrue);

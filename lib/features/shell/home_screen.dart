@@ -30,7 +30,6 @@ import '../auftragsbestand/lieferfaehigkeit.dart';
 import '../bedarf/bedarf_screen.dart' show bedarfProvider, heuteProvider;
 import '../board/board_providers.dart' show tageskapazitaetJeAbteilung;
 import '../statistik/statistik_daten.dart';
-import '../statistik/statistik_ueberblick.dart' show KennzahlKachel;
 import '../statistik/statistik_ueberblick_daten.dart';
 import '../statistik/wochenbericht_druck.dart';
 import '../whiteboard/whiteboard_provider.dart' show selectedDateProvider;
@@ -454,7 +453,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final DateTime tag = _tag ?? ref.watch(heuteProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cockpit'),
+        title: const Text('Übersicht'),
         actions: [
           // Eine Seite für die Geschäftsführung — montags die Vorwoche.
           OutlinedButton.icon(
@@ -480,7 +479,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return ListView(
             padding: EdgeInsets.fromLTRB(rand, 16, rand, 24),
             children: [
-              const _CockpitKennzahlen(),
               _Kopf(
                 tag: tag,
                 istHeute: _istHeute,
@@ -1457,11 +1455,11 @@ String _wann(DateTime t) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Cockpit: Kennzahlen und Hinweise der Statistik
+// Hinweise der Statistik und Lieferfähigkeit (Wochenbericht)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Der Überblick der letzten vier Wochen — dieselbe Rechnung wie oben in
-/// der Statistik.
+/// der Statistik. Die Übersicht nimmt daraus die Hinweise.
 final _cockpitProvider =
     FutureProvider.autoDispose<UeberblickAuswertung>((ref) async {
   final daten =
@@ -1469,110 +1467,16 @@ final _cockpitProvider =
   return werteUeberblickAus(daten);
 });
 
-/// Die Lieferfähigkeit der nächsten Tage aus dem Auftragsbestand.
+/// Die Lieferfähigkeit der nächsten Tage aus dem Auftragsbestand — für den
+/// Wochenbericht.
 final _lieferProvider =
     FutureProvider.autoDispose<Lieferfaehigkeit>((ref) async {
   final bestand = await ref.watch(auftragsbestandProvider.future);
   return werteLieferfaehigkeitAus(bestand, heute: ref.watch(heuteProvider));
 });
 
-/// Welche Kennzahlen der Statistik das Cockpit zeigt — die Lieferfähigkeit
-/// steht davor.
-const List<String> kCockpitKennzahlen = [
-  'Ø Auslastung',
-  'Zeittreue',
-  'Ø Ausbeute',
-];
-
-/// Oben im Cockpit: vier Kacheln — Lieferfähigkeit, Auslastung,
-/// Plan-Treue der Zeit und Ausbeute. Ein Klick führt dorthin, wo man mehr
-/// sieht. Fehlt etwas, fehlt nur die Kachel; der Tag darunter steht
-/// trotzdem.
-class _CockpitKennzahlen extends ConsumerWidget {
-  const _CockpitKennzahlen();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final grau = theme.colorScheme.onSurfaceVariant;
-    final ueberblick = ref.watch(_cockpitProvider).valueOrNull;
-    final liefer = ref.watch(_lieferProvider).valueOrNull;
-    if (ueberblick == null && liefer == null) return const SizedBox.shrink();
-
-    final kacheln = <Widget>[
-      if (liefer != null)
-        KennzahlKachel(
-          key: const ValueKey('cockpit-lieferfaehigkeit'),
-          kennzahl: UeberblickKennzahl(
-            name: 'Lieferfähigkeit',
-            thema: StatistikThema.planIst,
-            wert: liefer.anteil,
-            ampel: liefer.ampel,
-            verlauf: const [],
-            ziel: liefer.herkunftText ?? 'Auftragsbestand einlesen',
-          ),
-          unter: liefer.unterText,
-          onTap: () => context.goNamed('auftragsbestand'),
-        ),
-      if (ueberblick != null)
-        for (final name in kCockpitKennzahlen)
-          for (final k in ueberblick.kennzahlen)
-            if (k.name == name)
-              KennzahlKachel(
-                kennzahl: k,
-                onTap: () => context.goNamed(
-                  'statistik',
-                  queryParameters: {'thema': k.thema.name},
-                ),
-              ),
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Wrap(
-              spacing: 12,
-              crossAxisAlignment: WrapCrossAlignment.end,
-              children: [
-                Text(
-                  'Wie läuft es?',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  'Lieferfähigkeit der nächsten $kLieferTage Tage · sonst '
-                  'die letzten 4 Wochen, verglichen mit den 4 davor',
-                  style: theme.textTheme.bodySmall?.copyWith(color: grau),
-                ),
-              ],
-            ),
-          ),
-          LayoutBuilder(
-            builder: (context, c) {
-              final spalten = c.maxWidth >= 900 ? 4 : 2;
-              const abstand = 12.0;
-              final breite = (c.maxWidth - abstand * (spalten - 1)) / spalten;
-              return Wrap(
-                spacing: abstand,
-                runSpacing: abstand,
-                children: [
-                  for (final k in kacheln) SizedBox(width: breite, child: k),
-                ],
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Die Hinweise der Statistik als Hinweise des Cockpits. Weg bleibt, was
-/// das Cockpit schon selbst meldet: offene Erfassungen und die Überbuchung
+/// Die Hinweise der Statistik als Hinweise der Übersicht. Weg bleibt, was
+/// die Übersicht schon selbst meldet: offene Erfassungen und die Überbuchung
 /// des angezeigten Tags.
 List<_Hinweis> _ausStatistik(List<StatistikHinweis> hinweise, DateTime tag) {
   bool gleicherTag(DateTime? a) =>

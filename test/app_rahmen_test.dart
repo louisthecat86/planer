@@ -51,7 +51,7 @@ void main() {
       (tester) async {
     await zeige(tester, ort: '/board', groesse: const Size(1600, 1000));
 
-    expect(find.text('Cockpit'), findsOneWidget);
+    expect(find.text('Übersicht'), findsOneWidget);
     expect(find.text('Auftragsbestand'), findsOneWidget);
     expect(find.text('Einstellungen'), findsOneWidget);
     expect(find.text('PLANEN'), findsOneWidget);
@@ -70,7 +70,8 @@ void main() {
   testWidgets('Unterseiten heben ihren Bereich hervor', (tester) async {
     await zeige(tester, ort: '/article/p1', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Artikel'), FontWeight.w600);
-    expect(gewicht(tester, 'Maschinen-Katalog'), FontWeight.w400);
+    // Der Maschinen-Katalog steht unter den Einstellungen.
+    expect(find.text('Maschinen-Katalog'), findsNothing);
 
     await zeige(tester, ort: '/data', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Einstellungen'), FontWeight.w600);
@@ -161,7 +162,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('Leiste einklappen'));
     await tester.pump();
-    expect(find.byTooltip('Cockpit'), findsOneWidget);
+    expect(find.byTooltip('Übersicht'), findsOneWidget);
   });
 
   testWidgets('Bereich: langer Titel und Zusatz werden gekürzt',

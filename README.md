@@ -28,16 +28,15 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 
 | Gruppe      | Bereich               | Wofür                                                                                       |
 | ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
-|             | Cockpit               | Vier Kennzahlen mit Ampel, der heutige Tag, Hinweise; „Wochenbericht", „Artikel planen"      |
+|             | Übersicht             | Der heutige Tag: Aufträge, Auslastung, Hinweise; „Wochenbericht", „Artikel planen"           |
 | Planen      | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
 |             | Planungsvorschlag     | Reiter Vorschlag (Entwurf samt Rüst-/Reinigungszeiten, ins Board), Wochenliste, Bedarfsliste |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
 | Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten, „Vom Handy einlesen"; die Kette wird erledigt   |
 |             | Statistik             | Auswertung (5 Kennzahlen, Hinweise, Vorschau, Themen) und Wochenarchiv (eingefrorene Pläne)  |
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
-|             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
 | Entwickeln  | Produktentwicklung    | Eigene Leiste: Übersicht, Projekte, Kunden, Rezepturen, Zutaten, Statistik — mit Passwort    |
-|             | Einstellungen         | Kapazität, Darstellung, Import/Export (auch Navision-Abgleich), Backups, Zurücksetzen        |
+|             | Einstellungen         | Kacheln: Ansicht, Import/Export, Produktion einrichten (Vorlagen, Kapazität, Maschinen), Gefahrenzone |
 
 Im Board zeigt jede Abteilung je Tag einen Balken bis zu ihrer Kapazität
 (grau = frei, grün = gut gefüllt, rot = überbucht). Erledigtes wird grün:
@@ -163,30 +162,23 @@ Planungsvorschlag dieselben Regeln:
   gereinigt wird, rechnet der Planer bewusst nicht — das richtet sich nach
   der Zeit, die bleibt.
 
-## Cockpit und Wochenbericht
+## Übersicht und Wochenbericht
 
-Die Startseite (`lib/features/shell/home_screen.dart`) zeigt oben vier
-Kacheln, darunter den Tag wie bisher:
-
-- **Lieferfähigkeit** (`lib/features/auftragsbestand/lieferfaehigkeit.dart`):
-  Anteil der Auftragsmenge mit Versand in den nächsten 7 Tagen, der
-  rechtzeitig gedeckt ist — Lager plus Produktion, die bis zum Versandtag
-  fertig ist, gerechnet wie auf der Seite Auftragsbestand. Grün ab 98 %,
-  gelb ab 90 %; ist der Bericht älter als 3 Tage, bleibt die Ampel grau.
-  Darunter, wie viele Versandtage gefährdet sind. Klick: Auftragsbestand.
-- **Ø Auslastung, Zeittreue, Ø Ausbeute**: die Kennzahlen der Statistik
-  für die letzten 4 Wochen gegen die 4 davor. Klick: Statistik mit dem
-  passenden Thema.
-- **Hinweise**: die des Tages und die der Statistik in einer Liste; was
-  doppelt wäre (offene Erfassungen, Überbuchung des Tages), steht nur
-  einmal.
+Die Hinweise der Übersicht (`lib/features/shell/home_screen.dart`) sind die
+des Tages und die der Statistik in einer Liste; was doppelt wäre (offene
+Erfassungen, Überbuchung des Tages), steht nur einmal.
 
 **Wochenbericht** (`lib/features/statistik/wochenbericht_druck.dart`), Knopf
-oben im Cockpit: eine Seite für die Geschäftsführung — die laufende Woche,
+oben in der Übersicht: eine Seite für die Geschäftsführung — die laufende Woche,
 montags die Vorwoche, jeweils gegen die Woche davor. Kennzahlen mit
 Bewertung und Maßstab, Auslastung je Abteilung, die größten Abweichungen
 Plan/Ist, gefährdete Versandtage, Hinweise, Ausblick und ein Feld für
-Bemerkungen; jeder Teil lässt sich im Druckfenster abwählen. Die Statistik
+Bemerkungen; jeder Teil lässt sich im Druckfenster abwählen. Die
+**Lieferfähigkeit** (`lib/features/auftragsbestand/lieferfaehigkeit.dart`)
+ist der Anteil der Auftragsmenge mit Versand in den nächsten 7 Tagen, der
+rechtzeitig gedeckt ist — Lager plus Produktion, die bis zum Versandtag
+fertig ist. Grün ab 98 %, gelb ab 90 %; ist der Bericht älter als 3 Tage,
+bleibt die Bewertung offen. Die Statistik
 kennt dafür den Zeitraum „Woche".
 
 ## Wochenliste im Planungsvorschlag

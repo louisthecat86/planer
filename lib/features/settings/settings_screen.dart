@@ -34,54 +34,72 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('Einstellungen')),
       body: LayoutBuilder(
         builder: (context, c) {
-          // Nicht über die ganze Breite: Titel und Pfeil einer Zeile lägen
-          // sonst weit auseinander.
-          final seite = math.max(14.0, (c.maxWidth - 900) / 2);
-          return ListView(
-            padding: EdgeInsets.fromLTRB(seite, 12, seite, 24),
-            children: [
-              // Die Einstellungen als Liste in einem Bereich — wie die
-              // Einrichtung in Navision. Vorher Kacheln mit bunten,
-              // runden Symbolflächen.
-              Bereich(
-                titel: 'Einrichtung',
-                innenAbstand: EdgeInsets.zero,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _EinstellungsZeile(
-                      icon: Icons.palette_outlined,
-                      titel: 'Ansicht',
-                      text: 'Hell/Dunkel und Anzeigegröße der App',
-                      onTap: () => _zeigeAnsichtSheet(context),
-                    ),
-                    _EinstellungsZeile(
-                      icon: Icons.swap_vert_rounded,
-                      titel: 'Import / Export',
-                      text: 'Artikel, Maschinen-Katalog, Navision-Abgleich '
-                          'und Backup',
-                      onTap: () => context.pushNamed('data'),
-                    ),
-                    _EinstellungsZeile(
-                      icon: Icons.account_tree_outlined,
-                      titel: 'Prozessvorlagen',
-                      text: 'Feste Prozessketten für Arten von Artikeln — '
-                          'am Artikel wählen oder vielen auf einmal zuordnen',
-                      onTap: () => context.pushNamed('prozessvorlagen'),
-                    ),
-                    _EinstellungsZeile(
-                      icon: Icons.schedule_rounded,
-                      titel: 'Abteilungskapazität',
-                      text: 'Tagesstunden je Abteilung festlegen und '
-                          'übersteuern',
-                      onTap: () => _zeigeKapazitaetSheet(context),
-                      letzte: true,
+          // Nicht über die ganze Breite: Vier Kacheln reichen.
+          final seite = math.max(14.0, (c.maxWidth - 960) / 2);
+          final breit = c.maxWidth - 2 * seite;
+          final spalten = breit >= 760 ? 4 : 2;
+          const abstand = 12.0;
+          final kachelBreite = (breit - abstand * (spalten - 1)) / spalten;
+          final kacheln = [
+            _EinstellungsKachel(
+              key: const ValueKey('einstellung-ansicht'),
+              icon: Icons.palette_outlined,
+              titel: 'Ansicht',
+              text: 'Hell oder dunkel, Anzeigegröße der App',
+              onTap: () => _zeigeAnsichtSheet(context),
+            ),
+            _EinstellungsKachel(
+              key: const ValueKey('einstellung-daten'),
+              icon: Icons.swap_vert_rounded,
+              titel: 'Import / Export',
+              text: 'Artikel, Maschinen-Katalog, Navision-Abgleich und '
+                  'Backup',
+              onTap: () => context.pushNamed('data'),
+            ),
+            _EinstellungsKachel(
+              key: const ValueKey('einstellung-produktion'),
+              icon: Icons.precision_manufacturing_outlined,
+              titel: 'Produktion einrichten',
+              text: 'Prozessvorlagen, Abteilungskapazität und '
+                  'Maschinen-Katalog',
+              onTap: () => _zeigeEinrichtung(context),
+            ),
+            _EinstellungsKachel(
+              key: const ValueKey('einstellung-gefahr'),
+              icon: Icons.delete_forever_outlined,
+              titel: 'Gefahrenzone',
+              text: 'Alle Daten der Planung löschen — mit doppelter '
+                  'Nachfrage',
+              gefahr: true,
+              onTap: () => showDialog<void>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  contentPadding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                  content: const SizedBox(
+                    width: 520,
+                    child: _GefahrenZone(),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text('Schließen'),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
-              const _GefahrenZone(),
+            ),
+          ];
+          return ListView(
+            padding: EdgeInsets.fromLTRB(seite, 16, seite, 24),
+            children: [
+              Wrap(
+                spacing: abstand,
+                runSpacing: abstand,
+                children: [
+                  for (final k in kacheln)
+                    SizedBox(width: kachelBreite, child: k),
+                ],
+              ),
               const SizedBox(height: 24),
               Center(
                 child: Text(
@@ -95,6 +113,144 @@ class SettingsScreen extends ConsumerWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+/// „Produktion einrichten": die drei Einrichtungen der Produktion in
+/// einem Fenster — Prozessvorlagen, Abteilungskapazität und
+/// Maschinen-Katalog (vorher ein eigener Punkt in der Leiste).
+void _zeigeEinrichtung(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Produktion einrichten'),
+      contentPadding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+      content: SizedBox(
+        width: 520,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _EinstellungsZeile(
+              icon: Icons.account_tree_outlined,
+              titel: 'Prozessvorlagen',
+              text: 'Feste Prozessketten für Arten von Artikeln — am Artikel '
+                  'wählen oder vielen auf einmal zuordnen',
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.pushNamed('prozessvorlagen');
+              },
+            ),
+            _EinstellungsZeile(
+              icon: Icons.schedule_rounded,
+              titel: 'Abteilungskapazität',
+              text: 'Tagesstunden je Abteilung festlegen und übersteuern',
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _zeigeKapazitaetSheet(context);
+              },
+            ),
+            _EinstellungsZeile(
+              icon: Icons.precision_manufacturing_outlined,
+              titel: 'Maschinen-Katalog',
+              text: 'Anlagen, Steckbriefe ihrer Parameter und '
+                  'Plausibilitätsgrenzen',
+              onTap: () {
+                Navigator.of(ctx).pop();
+                context.goNamed('maschinen');
+              },
+              letzte: true,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: const Text('Schließen'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Ein Punkt der Einstellungen als Kachel: Symbol, Titel, ein Satz. Die
+/// Gefahrenzone rot.
+class _EinstellungsKachel extends StatelessWidget {
+  const _EinstellungsKachel({
+    super.key,
+    required this.icon,
+    required this.titel,
+    required this.text,
+    required this.onTap,
+    this.gefahr = false,
+  });
+
+  final IconData icon;
+  final String titel;
+  final String text;
+  final VoidCallback onTap;
+  final bool gefahr;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final f = theme.colorScheme;
+    final rand = gefahr ? f.error : f.outline;
+    return Material(
+      color: f.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: rand, width: gefahr ? 1.5 : 1),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: SizedBox(
+            height: 150,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: gefahr ? f.errorContainer : f.primaryContainer,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    icon,
+                    size: 26,
+                    color: gefahr ? f.onErrorContainer : f.onPrimaryContainer,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  titel,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: gefahr ? f.error : null,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: Text(
+                    text,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: f.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

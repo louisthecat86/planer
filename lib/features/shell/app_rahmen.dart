@@ -102,12 +102,12 @@ class _Ziel {
 }
 
 /// Die Bereiche, nach Arbeitsschritten gruppiert. `null` als Titel: ohne
-/// Überschrift (das Cockpit ganz oben).
+/// Überschrift (die Übersicht ganz oben).
 const List<(String?, List<_Ziel>)> _gruppen = [
   (
     null,
     [
-      _Ziel('home', 'Cockpit', Icons.space_dashboard_outlined, ['/home']),
+      _Ziel('home', 'Übersicht', Icons.space_dashboard_outlined, ['/home']),
     ],
   ),
   (
@@ -159,12 +159,6 @@ const List<(String?, List<_Ziel>)> _gruppen = [
         Icons.inventory_2_outlined,
         ['/articles', '/article'],
       ),
-      _Ziel(
-        'maschinen',
-        'Maschinen-Katalog',
-        Icons.precision_manufacturing_outlined,
-        ['/maschinen', '/grenzen'],
-      ),
     ],
   ),
   (
@@ -202,7 +196,7 @@ final List<(String?, List<_Ziel>)> _entwicklungsGruppen = [
   ('Auswerten', [_Ziel.entwicklung(EntwicklungsBereich.statistik)]),
 ];
 
-/// Aus der Produktentwicklung zurück zum Cockpit des Planers.
+/// Aus der Produktentwicklung zurück zur Übersicht des Planers.
 const _Ziel _zumPlaner = _Ziel(
   'home',
   'Zum Planer',
@@ -217,7 +211,15 @@ const _Ziel _einstellungen = _Ziel(
   Icons.settings_outlined,
   // Der Navision-Abgleich ist ein Import wie die anderen — er liegt unter
   // „Import / Export" und hatte vorher zusätzlich einen eigenen Eintrag.
-  ['/settings', '/data', '/navision', '/prozessvorlagen'],
+  // Maschinen-Katalog und Grenzwerte stehen unter „Produktion einrichten".
+  [
+    '/settings',
+    '/data',
+    '/navision',
+    '/prozessvorlagen',
+    '/maschinen',
+    '/grenzen',
+  ],
 );
 
 /// Die Ziffern für Strg+1 … Strg+9.
@@ -524,8 +526,7 @@ class _Eintrag extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 13.5,
-                          fontWeight:
-                              aktiv ? FontWeight.w600 : FontWeight.w400,
+                          fontWeight: aktiv ? FontWeight.w600 : FontWeight.w400,
                           color: aktiv
                               ? farben.onPrimaryContainer
                               : farben.onSurface,
