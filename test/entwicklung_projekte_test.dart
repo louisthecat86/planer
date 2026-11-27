@@ -24,6 +24,7 @@ import 'package:produktion_planer/features/entwicklung/projekte/projekt_verlauf.
 import 'package:produktion_planer/features/entwicklung/projekte/projekte_ansicht.dart';
 import 'package:produktion_planer/features/entwicklung/projekte/zeitstrahl.dart';
 import 'package:produktion_planer/features/entwicklung/rechenkern/rechen_modell.dart';
+import 'package:produktion_planer/features/entwicklung/spezifikation/betriebs_spuren.dart';
 import 'package:produktion_planer/features/entwicklung/spezifikation/spezifikation_dienst.dart';
 
 import 'helpers/test_db.dart';
@@ -491,6 +492,9 @@ void main() {
           // Der Reiter „Produkt": noch kein Stand für die Spezifikation.
           spezStaendeProvider.overrideWith((ref, id) async => const []),
           spezVorschauProvider.overrideWith((ref, a) async => null),
+          // Die Spuren des Betriebs — sonst öffnete der Reiter die echte
+          // Datenbank.
+          betriebsSpurenProvider.overrideWith((ref) async => const {}),
         ];
 
     Finder bereich(String titel, [String? untertitel]) =>
