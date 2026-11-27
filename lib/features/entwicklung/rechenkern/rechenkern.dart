@@ -154,6 +154,8 @@ class RezepturErgebnis {
     required this.warnungen,
     required this.ohneNaehrwerte,
     this.ohneBeffe = const [],
+    this.allergeneJeZutat = const {},
+    this.hilfsstoffeJeZutat = const {},
   });
 
   /// Summe der Positionen: Zutaten roh, Unterrezepturen mit der
@@ -191,6 +193,15 @@ class RezepturErgebnis {
 
   /// Verarbeitungshilfsstoff → Zutaten, aus denen er kommt.
   final Map<String, List<String>> verarbeitungshilfsstoffe;
+
+  /// Wie [allergene], aber mit dem Namen der Zutat im Katalog statt dem
+  /// Namen auf dem Etikett — für Ansicht, Rezepturblatt und Projektbericht:
+  /// „aus Pökelhilfe X" statt der Unterzutaten. Die Spezifikation für den
+  /// Kunden bleibt bei [allergene].
+  final Map<String, List<String>> allergeneJeZutat;
+
+  /// Wie [verarbeitungshilfsstoffe], mit dem Namen der Zutat im Katalog.
+  final Map<String, List<String>> hilfsstoffeJeZutat;
 
   final List<String> warnungen;
 
@@ -390,15 +401,19 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
   // ── Allergene und Hilfsstoffe mit Herkunft ──────────────────────────
   final allergene = <String, Set<String>>{};
   final hilfsstoffe = <String, Set<String>>{};
+  final allergeneZutat = <String, Set<String>>{};
+  final hilfsstoffeZutat = <String, Set<String>>{};
   for (final b in blaetter) {
     for (final a in b.zutat.allergene) {
       if (a == kAllergenKeine) continue;
       allergene.putIfAbsent(a, () => {}).add(b.anzeigeName);
+      allergeneZutat.putIfAbsent(a, () => {}).add(b.zutat.name);
     }
     for (final h in b.zutat.verarbeitungshilfsstoffe) {
       final name = h.trim();
       if (name.isEmpty) continue;
       hilfsstoffe.putIfAbsent(name, () => {}).add(b.anzeigeName);
+      hilfsstoffeZutat.putIfAbsent(name, () => {}).add(b.zutat.name);
     }
   }
   // Nach der Rangfolge der Planung, wie überall im Planer.
@@ -442,6 +457,14 @@ RezepturErgebnis berechne(RechenRezeptur rezeptur) {
     warnungen: warnungen,
     ohneNaehrwerte: teil.ohneNaehrwerte.toList()..sort(),
     ohneBeffe: ohneBeffe,
+    allergeneJeZutat: {
+      for (final a in allergenSchluessel)
+        a: allergeneZutat[a]!.toList()..sort(),
+    },
+    hilfsstoffeJeZutat: {
+      for (final MapEntry(:key, :value) in hilfsstoffeZutat.entries)
+        key: value.toList()..sort(),
+    },
   );
 }
 
@@ -821,9 +844,8 @@ _Teil _rechne(
       );
     }
     if (fettVorher > 0) {
-      gramm[_Stoff.gesaettigt] = (gramm[_Stoff.gesaettigt] ?? 0) *
-          (fettVorher - fettWeg) /
-          fettVorher;
+      gramm[_Stoff.gesaettigt] =
+          (gramm[_Stoff.gesaettigt] ?? 0) * (fettVorher - fettWeg) / fettVorher;
     }
 
     final rest = verlustG - fettWeg;

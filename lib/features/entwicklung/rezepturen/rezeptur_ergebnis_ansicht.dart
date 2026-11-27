@@ -375,8 +375,8 @@ class _Allergene extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final grau = theme.colorScheme.onSurfaceVariant;
-    final allergene = ergebnis.allergene;
-    final hilfsstoffe = ergebnis.verarbeitungshilfsstoffe;
+    final allergene = ergebnis.allergeneJeZutat;
+    final hilfsstoffe = ergebnis.hilfsstoffeJeZutat;
     return Bereich(
       titel: 'Allergene und Hilfsstoffe',
       child: Column(

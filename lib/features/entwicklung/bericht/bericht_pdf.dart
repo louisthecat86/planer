@@ -1993,7 +1993,8 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
           e.allergene.isEmpty
               ? 'keine'
               : [
-                  for (final MapEntry(:key, :value) in e.allergene.entries)
+                  for (final MapEntry(:key, :value)
+                      in e.allergeneJeZutat.entries)
                     '${merkmalLabel(key, kAllergene) ?? key} '
                         '(${value.join(', ')})',
                 ].join('; '),
@@ -2005,8 +2006,7 @@ List<pw.Widget> _kapitelRezeptur(_Satz s, _Kapitel k) {
         (
           'Verarbeitungshilfsstoffe',
           [
-            for (final MapEntry(:key, :value)
-                in e.verarbeitungshilfsstoffe.entries)
+            for (final MapEntry(:key, :value) in e.hilfsstoffeJeZutat.entries)
               '$key (${value.join(', ')})',
           ].join('; '),
         ),

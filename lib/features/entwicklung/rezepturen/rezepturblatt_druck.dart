@@ -913,8 +913,8 @@ class _Rezepturblatt {
   }
 
   List<pw.Widget> allergene(DruckRahmen r) {
-    final a = ergebnis.allergene;
-    final h = ergebnis.verarbeitungshilfsstoffe;
+    final a = ergebnis.allergeneJeZutat;
+    final h = ergebnis.hilfsstoffeJeZutat;
     return druckGruppe(
       [
         pw.SizedBox(height: _abstand),

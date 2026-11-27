@@ -624,6 +624,29 @@ void main() {
         'Trennmittel': ['Weizenmehl'],
       });
     });
+
+    test('Herkunft je Zutat: der Name im Katalog, nicht der auf dem Etikett',
+        () {
+      const hilfe = RechenZutat(
+        id: 'p',
+        name: 'Pökelhilfe Muster 7',
+        etikettName: 'Dextrose, Salz, Säureregulator Natriumcitrat',
+        allergene: {'senf'},
+        verarbeitungshilfsstoffe: ['Trennmittel E551'],
+      );
+      final e = berechne(rezeptur([z(hilfe, 2)]));
+      // Spezifikation und Etikett: wie auf dem Etikett.
+      expect(e.verarbeitungshilfsstoffe['Trennmittel E551'], [
+        'Dextrose, Salz, Säureregulator Natriumcitrat',
+      ]);
+      // Ansicht, Rezepturblatt und Projektbericht: die Zutat.
+      expect(e.hilfsstoffeJeZutat, {
+        'Trennmittel E551': ['Pökelhilfe Muster 7'],
+      });
+      expect(e.allergeneJeZutat, {
+        'senf': ['Pökelhilfe Muster 7'],
+      });
+    });
   });
 
   group('Rundung für das Etikett', () {
