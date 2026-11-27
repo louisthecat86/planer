@@ -113,20 +113,19 @@ const List<(String?, List<_Ziel>)> _gruppen = [
   (
     'Planen',
     [
-      // In der Reihenfolge der Arbeit: Bericht einlesen, Bedarf ansehen,
-      // Vorschlag rechnen, im Board planen.
+      // In der Reihenfolge der Arbeit: Bericht einlesen, Vorschlag rechnen
+      // (mit Wochenliste und Bedarfsliste als Reiter), im Board planen.
       _Ziel(
         'auftragsbestand',
         'Auftragsbestand',
         Icons.local_shipping_outlined,
         ['/auftragsbestand'],
       ),
-      _Ziel('bedarf', 'Bedarf', Icons.assignment_outlined, ['/bedarf']),
       _Ziel(
         'planungsvorschlag',
         'Planungsvorschlag',
         Icons.auto_awesome_outlined,
-        ['/planungsvorschlag'],
+        ['/planungsvorschlag', '/bedarf'],
       ),
       _Ziel('board', 'Planungsboard', Icons.view_week_outlined, ['/board']),
     ],
@@ -143,16 +142,11 @@ const List<(String?, List<_Ziel>)> _gruppen = [
         ['/erfassung', '/handy'],
       ),
       _Ziel(
-        'wochenHistorie',
-        'Wochen-Historie',
-        Icons.history_outlined,
-        ['/history'],
-      ),
-      _Ziel(
         'statistik',
         'Statistik',
         Icons.insights_outlined,
-        ['/statistik'],
+        // Das Wochenarchiv ist ein Reiter der Statistik.
+        ['/statistik', '/history'],
       ),
     ],
   ),

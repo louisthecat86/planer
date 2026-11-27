@@ -12,6 +12,7 @@ import '../../core/utils/fehler_text.dart';
 import '../../core/utils/format.dart';
 import '../../core/utils/zeit.dart';
 import '../board/board_providers.dart' show CapacityStatus;
+import '../history/week_snapshot_archive_screen.dart';
 import '../whiteboard/whiteboard_provider.dart'
     show kLetzteProduktionen, selectedDateProvider;
 import 'statistik_daten.dart';
@@ -32,14 +33,37 @@ import 'statistik_ueberblick_daten.dart';
 ///
 /// Oben wählt man den Zeitraum und optional eine Abteilung. Fehlen Daten,
 /// sagt der Bereich, was zu erfassen wäre.
+///
+/// Zweiter Reiter: das Wochenarchiv — die eingefrorenen Wochenpläne, vorher
+/// ein eigener Punkt „Wochen-Historie" in der Leiste.
 class StatistikScreen extends ConsumerStatefulWidget {
-  const StatistikScreen({super.key});
+  const StatistikScreen({super.key, this.reiter});
+
+  /// `'archiv'` öffnet gleich das Wochenarchiv.
+  final String? reiter;
 
   @override
   ConsumerState<StatistikScreen> createState() => _StatistikScreenState();
 }
 
-class _StatistikScreenState extends ConsumerState<StatistikScreen> {
+class _StatistikScreenState extends ConsumerState<StatistikScreen>
+    with SingleTickerProviderStateMixin {
+  /// Auswertung oder Wochenarchiv. Drucken und Neu laden der Kopfleiste
+  /// gehören zur Auswertung; das Archiv hat seine Knöpfe selbst.
+  late final TabController _reiter = TabController(
+    length: 2,
+    vsync: this,
+    initialIndex: widget.reiter == 'archiv' ? 1 : 0,
+  )..addListener(() {
+      if (!_reiter.indexIsChanging) setState(() {});
+    });
+
+  @override
+  void dispose() {
+    _reiter.dispose();
+    super.dispose();
+  }
+
   StatistikZeitraum _zeitraum = StatistikZeitraum.quartal;
   Abteilung? _abteilung;
   StatistikThema _thema = StatistikThema.kapazitaet;
@@ -130,41 +154,59 @@ class _StatistikScreenState extends ConsumerState<StatistikScreen> {
       inhalt = const Center(child: CircularProgressIndicator());
     }
 
+    final auswertung = _reiter.index == 0;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Statistik'),
+        bottom: TabBar(
+          controller: _reiter,
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
+          tabs: const [
+            Tab(key: ValueKey('reiter-auswertung'), text: 'Auswertung'),
+            Tab(key: ValueKey('reiter-archiv'), text: 'Wochenarchiv'),
+          ],
+        ),
         actions: [
-          IconButton(
-            key: const ValueKey('statistik-drucken'),
-            onPressed: neu == null ? null : () => _drucken(neu),
-            icon: const Icon(Icons.print),
-            tooltip: 'Statistik drucken',
-          ),
-          IconButton(
-            onPressed: () => ref.invalidate(statistikProvider(_zeitraum)),
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Neu laden',
-          ),
-          const SizedBox(width: 8),
+          if (auswertung) ...[
+            IconButton(
+              key: const ValueKey('statistik-drucken'),
+              onPressed: neu == null ? null : () => _drucken(neu),
+              icon: const Icon(Icons.print),
+              tooltip: 'Statistik drucken',
+            ),
+            IconButton(
+              onPressed: () => ref.invalidate(statistikProvider(_zeitraum)),
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Neu laden',
+            ),
+            const SizedBox(width: 8),
+          ],
         ],
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      body: TabBarView(
+        controller: _reiter,
         children: [
-          _Filterleiste(
-            zeitraum: _zeitraum,
-            abteilung: _abteilung,
-            spanne: daten?.spanne,
-            onZeitraum: (z) => setState(() => _zeitraum = z),
-            onAbteilung: _waehleAbteilung,
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Filterleiste(
+                zeitraum: _zeitraum,
+                abteilung: _abteilung,
+                spanne: daten?.spanne,
+                onZeitraum: (z) => setState(() => _zeitraum = z),
+                onAbteilung: _waehleAbteilung,
+              ),
+              SizedBox(
+                height: 2,
+                child: async.isLoading && daten != null
+                    ? const LinearProgressIndicator(minHeight: 2)
+                    : null,
+              ),
+              Expanded(child: inhalt),
+            ],
           ),
-          SizedBox(
-            height: 2,
-            child: async.isLoading && daten != null
-                ? const LinearProgressIndicator(minHeight: 2)
-                : null,
-          ),
-          Expanded(child: inhalt),
+          const WeekSnapshotArchiveScreen(eingebettet: true),
         ],
       ),
     );

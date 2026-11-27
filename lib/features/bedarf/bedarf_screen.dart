@@ -72,14 +72,12 @@ final bedarfProvider = FutureProvider<List<BedarfInfo>>((ref) async {
   // Um Mitternacht erneuert sich der Tag — und damit diese Liste.
   final heuteNorm = ref.watch(heuteProvider);
 
-  final bedarfe = await (db.select(db.demands)
-        ..where((b) => b.deletedAt.isNull()))
-      .get();
+  final bedarfe =
+      await (db.select(db.demands)..where((b) => b.deletedAt.isNull())).get();
   if (bedarfe.isEmpty) return [];
 
-  final produkte = await (db.select(db.products)
-        ..where((p) => p.deletedAt.isNull()))
-      .get();
+  final produkte =
+      await (db.select(db.products)..where((p) => p.deletedAt.isNull())).get();
   final nameById = {for (final p in produkte) p.id: p};
 
   // Geplante Fertigmengen je Bedarf — dieselbe Rechnung wie im
@@ -137,7 +135,11 @@ final offeneBedarfeProvider = FutureProvider<List<BedarfInfo>>((ref) async {
 // ---------------------------------------------------------------------------
 
 class BedarfScreen extends ConsumerWidget {
-  const BedarfScreen({super.key});
+  const BedarfScreen({super.key, this.eingebettet = false});
+
+  /// Als Reiter im Planungsvorschlag: ohne eigene Kopfleiste, die Knöpfe
+  /// stehen in einer Zeile über der Liste.
+  final bool eingebettet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -146,180 +148,195 @@ class BedarfScreen extends ConsumerWidget {
     // Schmale Fenster: der Knopf der Kopfleiste nur als Symbol.
     final schmal = MediaQuery.sizeOf(context).width < 720;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Bedarfsliste'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.print),
-            tooltip: 'Bedarfsliste drucken',
-            onPressed: geladen == null || geladen.isEmpty
-                ? null
-                : () => druckFensterOeffnen(
-                      context,
-                      bedarfDruckAuftrag(
-                        geladen,
-                        heute: ref.read(heuteProvider),
-                      ),
-                    ),
-          ),
-          const SizedBox(width: 4),
-          // Die Hauptaktion der Seite oben rechts — wie „Neuer Artikel" in
-          // der Artikelliste.
-          if (schmal)
-            IconButton(
-              icon: const Icon(Icons.add),
-              tooltip: 'Bedarf hinzufügen',
-              onPressed: () => _bearbeiten(context, ref, null),
-            )
-          else
-            FilledButton.icon(
-              onPressed: () => _bearbeiten(context, ref, null),
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Bedarf hinzufügen'),
+    final aktionen = <Widget>[
+      IconButton(
+        icon: const Icon(Icons.print),
+        tooltip: 'Bedarfsliste drucken',
+        onPressed: geladen == null || geladen.isEmpty
+            ? null
+            : () => druckFensterOeffnen(
+                  context,
+                  bedarfDruckAuftrag(
+                    geladen,
+                    heute: ref.read(heuteProvider),
+                  ),
+                ),
+      ),
+      const SizedBox(width: 4),
+      // Die Hauptaktion der Seite oben rechts — wie „Neuer Artikel" in
+      // der Artikelliste.
+      if (schmal)
+        IconButton(
+          icon: const Icon(Icons.add),
+          tooltip: 'Bedarf hinzufügen',
+          onPressed: () => _bearbeiten(context, ref, null),
+        )
+      else
+        FilledButton.icon(
+          onPressed: () => _bearbeiten(context, ref, null),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Bedarf hinzufügen'),
+        ),
+      const SizedBox(width: 12),
+    ];
+
+    final Widget koerper = async.when(
+      // Beim Neuladen bleibt der Stand stehen.
+      skipLoadingOnReload: true,
+      data: (liste) {
+        if (liste.isEmpty) {
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: LeerHinweis(
+                'Noch kein Bedarf erfasst. Trage hier ein, was produziert '
+                'werden muss — Bestellungen oder Bestandsauffüllung. Beim '
+                'Planen wählst du dann direkt daraus aus.',
+                icon: Icons.playlist_add,
+                aktion: FilledButton.icon(
+                  onPressed: () => _bearbeiten(context, ref, null),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('Ersten Bedarf anlegen'),
+                ),
+              ),
             ),
-          const SizedBox(width: 12),
-        ],
-      ),
-      body: async.when(
-        // Beim Neuladen bleibt der Stand stehen.
-        skipLoadingOnReload: true,
-        data: (liste) {
-          if (liste.isEmpty) {
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 520),
-                child: LeerHinweis(
-                  'Noch kein Bedarf erfasst. Trage hier ein, was produziert '
-                  'werden muss — Bestellungen oder Bestandsauffüllung. Beim '
-                  'Planen wählst du dann direkt daraus aus.',
-                  icon: Icons.playlist_add,
-                  aktion: FilledButton.icon(
-                    onPressed: () => _bearbeiten(context, ref, null),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Ersten Bedarf anlegen'),
-                  ),
-                ),
-              ),
-            );
-          }
-
-          final farben = Theme.of(context).colorScheme;
-          final offen = liste.where((b) => !b.erledigt).toList();
-          final offenSumme =
-              offen.fold<double>(0, (s, b) => s + b.offenKg);
-          final ueberfaellig = offen.where((b) => b.ueberfaellig).length;
-          final erledigt = liste.length - offen.length;
-          final altNavision = [
-            for (final b in offen)
-              if (ausAltemNavisionImport(b.bedarf)) b,
-          ];
-
-          return Column(
-            children: [
-              // Kennzahlen in einem Bereich wie im Auftragsbestand — vorher
-              // ein grau hinterlegter Streifen.
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                child: Bereich(
-                  titel: 'Offener Bedarf',
-                  icon: Icons.assignment_outlined,
-                  untertitel: erledigt == 0 ? null : '$erledigt erledigt',
-                  innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                  child: Wrap(
-                    spacing: 28,
-                    runSpacing: 10,
-                    children: [
-                      Kennzahl(wert: '${offen.length}', label: 'offen'),
-                      Kennzahl(
-                        wert: '${offenSumme.round()} kg',
-                        label: 'noch einzuplanen',
-                      ),
-                      if (ueberfaellig > 0)
-                        Kennzahl(
-                          wert: '$ueberfaellig',
-                          label: 'überfällig',
-                          farbe: AppFarben.von(context).fehler,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-              if (altNavision.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                  child: HinweisBox(
-                    altNavision.length == 1
-                        ? '1 offener Bedarf stammt noch aus dem früheren '
-                            'Navision-Import. Bedarf aus Navision entsteht '
-                            'jetzt im Auftragsbestand.'
-                        : '${altNavision.length} offene Bedarfe stammen noch '
-                            'aus dem früheren Navision-Import. Bedarf aus '
-                            'Navision entsteht jetzt im Auftragsbestand.',
-                    art: StatusArt.warnung,
-                    icon: Icons.history_toggle_off_rounded,
-                    aktion: TextButton(
-                      onPressed: () =>
-                          _altNavisionErledigen(context, ref, altNavision),
-                      child: const Text('Als erledigt markieren …'),
-                    ),
-                  ),
-                ),
-              // Die Bedarfe als Zeilen einer weißen Fläche mit Spaltenkopf —
-              // wie die Listen in Navision. Vorher stand jeder Bedarf auf
-              // einer eigenen Karte.
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                  child: Material(
-                    color: farben.surface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: AppMasse.ecken,
-                      side: BorderSide(color: farben.outline),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        // Ab dieser Breite steht der Fortschritt als Balken
-                        // in der Zeile.
-                        final breit = constraints.maxWidth >= 900;
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            _BedarfKopf(breit: breit),
-                            Expanded(
-                              child: ListView.builder(
-                                itemCount: liste.length,
-                                itemBuilder: (context, i) {
-                                  final info = liste[i];
-                                  return _BedarfZeile(
-                                    info: info,
-                                    breit: breit,
-                                    onTap: () =>
-                                        _bearbeiten(context, ref, info.bedarf),
-                                    onErledigt: () =>
-                                        _erledigtUmschalten(ref, info),
-                                    onLoeschen: () =>
-                                        _loeschen(context, ref, info),
-                                    onDatenblatt: () =>
-                                        _datenblatt(context, ref, info),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ],
           );
-        },
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
-      ),
+        }
+
+        final farben = Theme.of(context).colorScheme;
+        final offen = liste.where((b) => !b.erledigt).toList();
+        final offenSumme = offen.fold<double>(0, (s, b) => s + b.offenKg);
+        final ueberfaellig = offen.where((b) => b.ueberfaellig).length;
+        final erledigt = liste.length - offen.length;
+        final altNavision = [
+          for (final b in offen)
+            if (ausAltemNavisionImport(b.bedarf)) b,
+        ];
+
+        return Column(
+          children: [
+            // Kennzahlen in einem Bereich wie im Auftragsbestand — vorher
+            // ein grau hinterlegter Streifen.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+              child: Bereich(
+                titel: 'Offener Bedarf',
+                icon: Icons.assignment_outlined,
+                untertitel: erledigt == 0 ? null : '$erledigt erledigt',
+                innenAbstand: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                child: Wrap(
+                  spacing: 28,
+                  runSpacing: 10,
+                  children: [
+                    Kennzahl(wert: '${offen.length}', label: 'offen'),
+                    Kennzahl(
+                      wert: '${offenSumme.round()} kg',
+                      label: 'noch einzuplanen',
+                    ),
+                    if (ueberfaellig > 0)
+                      Kennzahl(
+                        wert: '$ueberfaellig',
+                        label: 'überfällig',
+                        farbe: AppFarben.von(context).fehler,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            if (altNavision.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+                child: HinweisBox(
+                  altNavision.length == 1
+                      ? '1 offener Bedarf stammt noch aus dem früheren '
+                          'Navision-Import. Bedarf aus Navision entsteht '
+                          'jetzt im Auftragsbestand.'
+                      : '${altNavision.length} offene Bedarfe stammen noch '
+                          'aus dem früheren Navision-Import. Bedarf aus '
+                          'Navision entsteht jetzt im Auftragsbestand.',
+                  art: StatusArt.warnung,
+                  icon: Icons.history_toggle_off_rounded,
+                  aktion: TextButton(
+                    onPressed: () =>
+                        _altNavisionErledigen(context, ref, altNavision),
+                    child: const Text('Als erledigt markieren …'),
+                  ),
+                ),
+              ),
+            // Die Bedarfe als Zeilen einer weißen Fläche mit Spaltenkopf —
+            // wie die Listen in Navision. Vorher stand jeder Bedarf auf
+            // einer eigenen Karte.
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Material(
+                  color: farben.surface,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: AppMasse.ecken,
+                    side: BorderSide(color: farben.outline),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // Ab dieser Breite steht der Fortschritt als Balken
+                      // in der Zeile.
+                      final breit = constraints.maxWidth >= 900;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _BedarfKopf(breit: breit),
+                          Expanded(
+                            child: ListView.builder(
+                              itemCount: liste.length,
+                              itemBuilder: (context, i) {
+                                final info = liste[i];
+                                return _BedarfZeile(
+                                  info: info,
+                                  breit: breit,
+                                  onTap: () =>
+                                      _bearbeiten(context, ref, info.bedarf),
+                                  onErledigt: () =>
+                                      _erledigtUmschalten(ref, info),
+                                  onLoeschen: () =>
+                                      _loeschen(context, ref, info),
+                                  onDatenblatt: () =>
+                                      _datenblatt(context, ref, info),
+                                );
+                              },
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => Center(child: Text('Fehler: ${fehlerText(e)}')),
+    );
+
+    if (eingebettet) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: aktionen,
+            ),
+          ),
+          Expanded(child: koerper),
+        ],
+      );
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Bedarfsliste'), actions: aktionen),
+      body: koerper,
     );
   }
 
@@ -398,7 +415,9 @@ class BedarfScreen extends ConsumerWidget {
         updatedAt: Value(DateTime.now()),
       ),
     );
-    ref.read(autoBackupTriggerProvider).fireDebounced(reason: 'Bedarf geändert');
+    ref
+        .read(autoBackupTriggerProvider)
+        .fireDebounced(reason: 'Bedarf geändert');
     ref.invalidate(bedarfProvider);
   }
 
@@ -985,8 +1004,7 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                         : IconButton(
                             icon: const Icon(Icons.close),
                             tooltip: 'Anderen Artikel wählen',
-                            onPressed: () =>
-                                setState(() => _productId = null),
+                            onPressed: () => setState(() => _productId = null),
                           ),
                   ),
                 );
@@ -997,9 +1015,7 @@ class _BedarfEditorState extends ConsumerState<_BedarfEditor> {
                   : produkte
                       .where(
                         (p) =>
-                            p.artikelbezeichnung
-                                .toLowerCase()
-                                .contains(q) ||
+                            p.artikelbezeichnung.toLowerCase().contains(q) ||
                             p.artikelnummer.toLowerCase().contains(q),
                       )
                       .toList();

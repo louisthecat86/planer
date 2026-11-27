@@ -29,7 +29,11 @@ import '../whiteboard/whiteboard_provider.dart' show selectedDateProvider;
 /// sich aufklappen und zeigt die Kennzahlen je Abteilung (geplante Stunden,
 /// Auslastung gegen die eingefrorene Kapazität, kg, Anzahl Aufträge).
 class WeekSnapshotArchiveScreen extends ConsumerStatefulWidget {
-  const WeekSnapshotArchiveScreen({super.key});
+  const WeekSnapshotArchiveScreen({super.key, this.eingebettet = false});
+
+  /// Als Reiter „Wochenarchiv" in der Statistik: ohne eigene Kopfleiste,
+  /// Drucken und Archivieren stehen neben dem Umschalter Kalender/Liste.
+  final bool eingebettet;
 
   @override
   ConsumerState<WeekSnapshotArchiveScreen> createState() =>
@@ -220,58 +224,57 @@ class _WeekSnapshotArchiveScreenState
       child: CircularProgressIndicator(strokeWidth: 2),
     );
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Wochen-Historie'),
-        actions: [
-          IconButton(
-            key: const ValueKey('historie-drucken'),
-            onPressed: snaps.isEmpty ? null : () => _drucken(snaps),
-            icon: const Icon(Icons.print),
-            tooltip: 'Wochen im Überblick drucken',
+    final aktionen = <Widget>[
+      IconButton(
+        key: const ValueKey('historie-drucken'),
+        onPressed: snaps.isEmpty ? null : () => _drucken(snaps),
+        icon: const Icon(Icons.print),
+        tooltip: 'Wochen im Überblick drucken',
+      ),
+      const SizedBox(width: 4),
+      // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
+      // vorher ein schwebender Knopf, der unten die letzte Woche
+      // verdeckte.
+      if (schmal)
+        IconButton(
+          onPressed: _busy ? null : _archiviere,
+          icon: _busy ? kreisel : const Icon(Icons.archive_outlined),
+          tooltip: 'Woche archivieren',
+        )
+      else
+        FilledButton.icon(
+          onPressed: _busy ? null : _archiviere,
+          icon: _busy ? kreisel : const Icon(Icons.archive_outlined, size: 18),
+          label: const Text('Woche archivieren …'),
+        ),
+    ];
+
+    final Widget koerper = snapsAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (e, _) => ListView(
+        padding: const EdgeInsets.all(14),
+        children: [
+          HinweisBox(
+            'Fehler: ${fehlerText(e)}',
+            art: StatusArt.fehler,
+            auswaehlbar: true,
           ),
-          const SizedBox(width: 4),
-          // Die Hauptaktion oben rechts wie auf den übrigen Seiten —
-          // vorher ein schwebender Knopf, der unten die letzte Woche
-          // verdeckte.
-          if (schmal)
-            IconButton(
-              onPressed: _busy ? null : _archiviere,
-              icon: _busy ? kreisel : const Icon(Icons.archive_outlined),
-              tooltip: 'Woche archivieren',
-            )
-          else
-            FilledButton.icon(
-              onPressed: _busy ? null : _archiviere,
-              icon: _busy
-                  ? kreisel
-                  : const Icon(Icons.archive_outlined, size: 18),
-              label: const Text('Woche archivieren …'),
-            ),
-          const SizedBox(width: 12),
         ],
       ),
-      body: snapsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => ListView(
-          padding: const EdgeInsets.all(14),
+      data: (snaps) {
+        return Column(
           children: [
-            HinweisBox(
-              'Fehler: ${fehlerText(e)}',
-              art: StatusArt.fehler,
-              auswaehlbar: true,
-            ),
-          ],
-        ),
-        data: (snaps) {
-          return Column(
-            children: [
-              // Umschalter: Kalender oder Liste
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 2),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: SegmentedButton<bool>(
+            // Umschalter: Kalender oder Liste
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                14,
+                widget.eingebettet ? 8 : 12,
+                widget.eingebettet ? 12 : 14,
+                2,
+              ),
+              child: Row(
+                children: [
+                  SegmentedButton<bool>(
                     segments: const [
                       ButtonSegment(
                         value: true,
@@ -292,34 +295,44 @@ class _WeekSnapshotArchiveScreenState
                       visualDensity: VisualDensity.compact,
                     ),
                   ),
-                ),
+                  const Spacer(),
+                  if (widget.eingebettet) ...aktionen,
+                ],
               ),
-              Expanded(
-                child: _kalender
-                    ? _buildKalender(context, snaps)
-                    : (snaps.isEmpty
-                        ? const Center(
-                            child: LeerHinweis(
-                              'Noch keine archivierten Wochen. Mit „Woche '
-                              'archivieren" oben rechts frierst du den '
-                              'aktuellen Plan einer Woche ein.',
-                              icon: Icons.history,
-                            ),
-                          )
-                        : ListView.builder(
-                            padding:
-                                const EdgeInsets.fromLTRB(14, 10, 14, 24),
-                            itemCount: snaps.length,
-                            itemBuilder: (context, i) => _SnapshotKarte(
-                              snap: snaps[i],
-                              onDelete: () => _loeschen(snaps[i]),
-                            ),
-                          )),
-              ),
-            ],
-          );
-        },
+            ),
+            Expanded(
+              child: _kalender
+                  ? _buildKalender(context, snaps)
+                  : (snaps.isEmpty
+                      ? const Center(
+                          child: LeerHinweis(
+                            'Noch keine archivierten Wochen. Mit „Woche '
+                            'archivieren" frierst du den aktuellen Plan '
+                            'einer Woche ein.',
+                            icon: Icons.history,
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 24),
+                          itemCount: snaps.length,
+                          itemBuilder: (context, i) => _SnapshotKarte(
+                            snap: snaps[i],
+                            onDelete: () => _loeschen(snaps[i]),
+                          ),
+                        )),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (widget.eingebettet) return koerper;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Wochenarchiv'),
+        actions: [...aktionen, const SizedBox(width: 12)],
       ),
+      body: koerper,
     );
   }
 
@@ -456,8 +469,18 @@ class _WeekSnapshotArchiveScreenState
   static String _tagKey(DateTime d) => '${d.year}-${d.month}-${d.day}';
 
   static String _monatsName(int m) => const [
-        'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli',
-        'August', 'September', 'Oktober', 'November', 'Dezember',
+        'Januar',
+        'Februar',
+        'März',
+        'April',
+        'Mai',
+        'Juni',
+        'Juli',
+        'August',
+        'September',
+        'Oktober',
+        'November',
+        'Dezember',
       ][m - 1];
 }
 

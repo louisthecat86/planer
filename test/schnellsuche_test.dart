@@ -101,8 +101,9 @@ void main() {
       expect(ziele.first.titel, 'Übersicht');
       expect(ziele.first.kuerzel, 'Strg+1');
       expect(ziele[1].titel, 'Auftragsbestand');
-      expect(ziele[4].titel, 'Planungsboard');
-      expect(ziele[4].kuerzel, 'Strg+5');
+      expect(ziele[2].titel, 'Planungsvorschlag');
+      expect(ziele[3].titel, 'Planungsboard');
+      expect(ziele[3].kuerzel, 'Strg+4');
       expect(ziele[8].kuerzel, 'Strg+9');
       expect(ziele[9].kuerzel, isNull);
       expect(ziele.last.titel, 'Einstellungen');

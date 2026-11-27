@@ -58,7 +58,10 @@ void main() {
     expect(find.text('ENTWICKELN'), findsOneWidget);
     expect(find.text('Produktentwicklung'), findsOneWidget);
     expect(gewicht(tester, 'Planungsboard'), FontWeight.w600);
-    expect(gewicht(tester, 'Bedarf'), FontWeight.w400);
+    expect(gewicht(tester, 'Planungsvorschlag'), FontWeight.w400);
+    // Bedarf und Wochen-Historie sind Reiter, keine eigenen Punkte mehr.
+    expect(find.text('Bedarf'), findsNothing);
+    expect(find.text('Wochen-Historie'), findsNothing);
     // Ganz oben die Schnellsuche mit ihrem Tastenkürzel.
     expect(find.text('Suchen'), findsOneWidget);
     expect(find.text('Strg+K'), findsOneWidget);
@@ -79,6 +82,10 @@ void main() {
     expect(find.text('Navision-Artikel'), findsNothing);
     await zeige(tester, ort: '/handy', groesse: const Size(1600, 1000));
     expect(gewicht(tester, 'Produktionserfassung'), FontWeight.w600);
+
+    // Auswertung einer archivierten Woche: unter der Statistik.
+    await zeige(tester, ort: '/history/s1', groesse: const Size(1600, 1000));
+    expect(gewicht(tester, 'Statistik'), FontWeight.w600);
   });
 
   testWidgets('Produktentwicklung: ihre Bereiche und der Weg zurück',

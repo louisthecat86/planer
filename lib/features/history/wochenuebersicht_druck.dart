@@ -257,7 +257,7 @@ class _Uebersicht {
             gedruckt: gedruckt,
           ),
           fuss: (ctx) => druckFuss(
-            'Wochen-Historie · $titelZusatz',
+            'Wochenarchiv · $titelZusatz',
             r.seitenText(ctx),
           ),
           inhalt: (ctx) => teile,

@@ -21,7 +21,7 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
                                                     ▼
                                       Produktionserfassung (Ist)
                                                     │
-                     Wochen-Historie · Statistik ◀──┴──▶ genauere Dauer
+               Statistik (mit Wochenarchiv) ◀──┴──▶ genauere Dauer
 ```
 
 ## Bereiche
@@ -30,12 +30,10 @@ Navision (Excel)                      Stammdaten (Artikel, Prozessketten,
 | ----------- | --------------------- | ------------------------------------------------------------------------------------------- |
 |             | Übersicht             | Der heutige Tag: Aufträge und Auslastung aller Abteilungen, „Artikel planen"                 |
 | Planen      | Auftragsbestand       | Navision-Bericht „Auftragsbestand" einlesen, Deckung aus Lager und Produktion, Änderungen    |
-|             | Bedarf                | Offene Bedarfe; geplant ist, was an verknüpften Aufträgen im Board steht                     |
-|             | Planungsvorschlag     | Entwurf für die nächsten Tage samt Rüst- und Reinigungszeiten, tageweise oder ganz ins Board |
+|             | Planungsvorschlag     | Reiter Vorschlag (Entwurf samt Rüst-/Reinigungszeiten, ins Board), Wochenliste, Bedarfsliste |
 |             | Planungsboard         | Woche (Abteilungen × Tage mit Kapazitätsbalken) und Tag (Zeitbalken), Ziehen, Drucken        |
 | Auswerten   | Produktionserfassung  | Ist-Mengen samt Fleischeinwaage und -Zeiten, „Vom Handy einlesen"; die Kette wird erledigt   |
-|             | Wochen-Historie       | Eingefrorene Wochenpläne mit Kennzahlen je Abteilung                                         |
-|             | Statistik             | Überblick (5 Kennzahlen mit Vorzeitraum, Hinweise, Vorschau 10 Werktage), darunter Themen    |
+|             | Statistik             | Auswertung (5 Kennzahlen, Hinweise, Vorschau, Themen) und Wochenarchiv (eingefrorene Pläne)  |
 | Stammdaten  | Artikel               | Prozesskette (Stationen und Anlagen), Parameter, Leistungsdaten, Produktionen, Datenblatt    |
 |             | Maschinen-Katalog     | Anlagen, Steckbriefe ihrer Parameter, Plausibilitätsgrenzen                                  |
 | Entwickeln  | Produktentwicklung    | Eigene Leiste: Übersicht, Projekte, Kunden, Rezepturen, Zutaten, Statistik — mit Passwort    |
@@ -250,7 +248,7 @@ Standard. Strg+P druckt.
     Kürzel und Bemerkung —, welche Tage und Abteilungen, die Tage
     untereinander oder jeder auf eigenem Blatt zum Aushängen, was geplant
     ist, leere Zeilen zum Nachtragen.
-  - **Archivierter Wochenplan** (Wochen-Historie, Wochenplan einer
+  - **Archivierter Wochenplan** (Statistik → Wochenarchiv, Wochenplan einer
     archivierten Woche): der Plan, wie er beim Archivieren stand — mit
     „Archiv" und dem Stand in Kopf und Fuß, damit er nicht für den
     aktuellen gehalten wird; Übersicht oder je Abteilung ein Blatt, welche
@@ -260,7 +258,7 @@ Standard. Strg+P druckt.
     Archivieren, die Aufträge Tag für Tag (auf Wunsch mit ihren Notizen),
     Rüst-, Reinigungs- und sonstige Zeiten einzeln, die Erkenntnisse — so,
     wie sie gerade im Feld stehen —, welche Abteilungen.
-  - **Wochen im Überblick** (Wochen-Historie): je archivierte Woche eine
+  - **Wochen im Überblick** (Statistik → Wochenarchiv): je archivierte Woche eine
     Zeile mit Aufträgen, Menge, Belegung und Auslastung, auf Wunsch je
     Abteilung, dazu die Erkenntnisse; der Monat im Kalender, die letzten
     4, 13 oder 52 Wochen oder alle.

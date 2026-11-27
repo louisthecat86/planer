@@ -11,7 +11,7 @@ import '../../core/theme/app_stil.dart';
 import '../../core/ui/bausteine.dart';
 import '../../core/utils/fehler_text.dart';
 import '../../core/utils/zeit.dart';
-import '../bedarf/bedarf_screen.dart' show bedarfProvider;
+import '../bedarf/bedarf_screen.dart' show BedarfScreen, bedarfProvider;
 import '../datenblatt/datenblatt.dart';
 import '../datenblatt/datenblatt_drucken.dart';
 import '../whiteboard/whiteboard_provider.dart' show dailyTasksProvider;
@@ -35,7 +35,10 @@ import 'wochenliste_ansicht.dart';
 /// Nebenzeiten neu, sodass sofort sichtbar ist, was eine Umstellung
 /// kostet oder spart.
 class PlanungsvorschlagScreen extends ConsumerStatefulWidget {
-  const PlanungsvorschlagScreen({super.key});
+  const PlanungsvorschlagScreen({super.key, this.reiter});
+
+  /// `'wochenliste'` oder `'bedarf'` öffnet gleich diesen Reiter.
+  final String? reiter;
 
   @override
   ConsumerState<PlanungsvorschlagScreen> createState() =>
@@ -520,8 +523,29 @@ class _PlanungsvorschlagScreenState
   Widget build(BuildContext context) {
     final tage = vorschlagsTage(_einstellungen);
 
+    // Ändert sich die Bedarfsliste (Reiter „Bedarfsliste", Wochenliste),
+    // liest die Auswahl sie neu — solange noch nicht gerechnet ist; danach
+    // holt „Neu berechnen" sie.
+    ref.listen(bedarfProvider, (vorher, jetzt) {
+      // Erst bei einer Änderung, nicht beim ersten Laden: Das erledigt
+      // schon initState.
+      final geaendert = vorher != null && vorher.hasValue;
+      if (geaendert &&
+          jetzt.hasValue &&
+          !jetzt.isLoading &&
+          !_berechnet &&
+          !_laedt) {
+        _ladeBedarfe();
+      }
+    });
+
     return DefaultTabController(
-      length: 2,
+      length: 3,
+      initialIndex: switch (widget.reiter) {
+        'wochenliste' => 1,
+        'bedarf' => 2,
+        _ => 0,
+      },
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Planungsvorschlag'),
@@ -531,23 +555,43 @@ class _PlanungsvorschlagScreenState
             tabs: [
               Tab(key: ValueKey('reiter-vorschlag'), text: 'Vorschlag'),
               Tab(key: ValueKey('reiter-wochenliste'), text: 'Wochenliste'),
+              // Vorher ein eigener Punkt „Bedarf" in der Leiste.
+              Tab(key: ValueKey('reiter-bedarf'), text: 'Bedarfsliste'),
             ],
           ),
           actions: [
-            IconButton(
-              onPressed:
-                  !_laedt && _berechnet && _tage.any((t) => t.posten.isNotEmpty)
-                      ? _drucken
-                      : null,
-              icon: const Icon(Icons.print),
-              tooltip: 'Vorschlag drucken',
+            // Drucken und Zeitraum gehören zu Vorschlag und Wochenliste; die
+            // Bedarfsliste hat ihre Knöpfe selbst.
+            Builder(
+              builder: (context) {
+                final reiter = DefaultTabController.of(context);
+                return AnimatedBuilder(
+                  animation: reiter,
+                  builder: (context, _) => reiter.index == 2
+                      ? const SizedBox.shrink()
+                      : Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              onPressed: !_laedt &&
+                                      _berechnet &&
+                                      _tage.any((t) => t.posten.isNotEmpty)
+                                  ? _drucken
+                                  : null,
+                              icon: const Icon(Icons.print),
+                              tooltip: 'Vorschlag drucken',
+                            ),
+                            IconButton(
+                              onPressed: _oeffneEinstellungen,
+                              icon: const Icon(Icons.tune_rounded),
+                              tooltip: 'Zeiten und Zeitraum',
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                );
+              },
             ),
-            IconButton(
-              onPressed: _oeffneEinstellungen,
-              icon: const Icon(Icons.tune_rounded),
-              tooltip: 'Zeiten und Zeitraum',
-            ),
-            const SizedBox(width: 8),
           ],
         ),
         body: TabBarView(
@@ -558,6 +602,7 @@ class _PlanungsvorschlagScreenState
               neuLaden: _wochenlisteNeu,
               onVorschlag: _vorschlagAusWochenliste,
             ),
+            const BedarfScreen(eingebettet: true),
           ],
         ),
       ),

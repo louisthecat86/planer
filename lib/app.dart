@@ -17,7 +17,6 @@ import 'features/articles/artikel_luecken.dart';
 import 'features/articles/produktgruppen.dart';
 import 'features/auftragsbestand/aenderungen_screen.dart';
 import 'features/auftragsbestand/auftragsbestand_screen.dart';
-import 'features/bedarf/bedarf_screen.dart';
 import 'features/navision/navision_import_screen.dart';
 import 'features/erfassung/produktion_erfassung_screen.dart';
 import 'features/board/week_board_screen.dart';
@@ -29,7 +28,6 @@ import 'features/entwicklung/projekte/gesamtprojekt_screen.dart';
 import 'features/entwicklung/projekte/projekt_screen.dart';
 import 'features/entwicklung/rezepturen/rezeptur_screen.dart';
 import 'features/entwicklung/werkzeuge/rueckrechnung_screen.dart';
-import 'features/history/week_snapshot_archive_screen.dart';
 import 'features/history/week_snapshot_detail_screen.dart';
 import 'features/intro/intro_screen.dart';
 import 'features/handy_erfassung/handy_erfassung_screen.dart';
@@ -110,12 +108,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             },
           ),
           // Bedarfsliste: WAS muss produziert werden (Auslöser der Planung).
+          // Ein Reiter im Planungsvorschlag — die alte Adresse führt dorthin,
+          // damit Links (etwa die Hinweise der Übersicht) weiter passen.
           GoRoute(
             path: '/bedarf',
             name: 'bedarf',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: BedarfScreen(),
-            ),
+            redirect: (context, state) => '/planungsvorschlag?reiter=bedarf',
           ),
           // Planungsvorschlag: rechnet aus dem offenen Bedarf mögliche Tage
           // und überträgt sie auf Wunsch ins Board. Bewusst eine eigene Seite
@@ -123,8 +121,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/planungsvorschlag',
             name: 'planungsvorschlag',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: PlanungsvorschlagScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: PlanungsvorschlagScreen(
+                reiter: state.uri.queryParameters['reiter'],
+              ),
             ),
           ),
           // Navision-Artikel: die Artikelübersicht aus der Warenwirtschaft mit
@@ -179,12 +179,13 @@ final routerProvider = Provider<GoRouter>((ref) {
               child: WeekBoardScreen(oeffnePlanenDirekt: true),
             ),
           ),
+          // Das Wochenarchiv ist ein Reiter der Statistik; die alte Adresse
+          // führt dorthin. Auswertung und Plan einer Woche bleiben eigene
+          // Seiten darunter.
           GoRoute(
             path: '/history',
             name: 'wochenHistorie',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: WeekSnapshotArchiveScreen(),
-            ),
+            redirect: (context, state) => '/statistik?reiter=archiv',
           ),
           GoRoute(
             path: '/history/:snapshotId',
@@ -210,8 +211,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/statistik',
             name: 'statistik',
-            pageBuilder: (context, state) => const NoTransitionPage(
-              child: StatistikScreen(),
+            pageBuilder: (context, state) => NoTransitionPage(
+              child: StatistikScreen(
+                reiter: state.uri.queryParameters['reiter'],
+              ),
             ),
           ),
           // Produktentwicklung: Übersicht, Projekte, Kunden, Rezepturen,
